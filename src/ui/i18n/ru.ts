@@ -17,6 +17,7 @@ export const ru: Catalogue = {
   nav: {
     apiResources: "API-ресурсы",
     myAccess: "Ваш доступ",
+    audit: "Аудит",
     changes: "Изменения",
     selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все пространства имён",
@@ -1277,6 +1278,7 @@ export const ru: Catalogue = {
     goToHelm: "Перейти к Helm",
     goToApiResources: "Перейти к API-ресурсам",
     goToMyAccess: "Перейти к вашему доступу",
+    goToAudit: "Перейти к аудиту",
     goToSettings: "Перейти к настройкам",
     paletteRecent: "Недавнее",
     paletteNavigation: "Навигация",
@@ -1870,6 +1872,275 @@ export const ru: Catalogue = {
       "{container} не может принять exec: {why}. «Запустить» создаст копию пода без его меток, спросит из неё и удалит её, когда ответ получен.",
     runsAsExec:
       "«Запустить» выполняет exec в контейнер {container}, как kubectl exec, и ничего не создаёт в кластере.",
+  },
+  audit: {
+    title: "Аудит",
+    caption:
+      "Шаблоны подов и конфигурация, сверенные с Pod Security Standards и общепринятой практикой. Сверяется то, что объявлено: admission-вебхук может изменить то, что запускается. Отсюда в кластере ничего не меняется.",
+    byRule: "По правилам",
+    byObject: "По объектам",
+    grouping: "Группировать находки",
+    rule: "Правило",
+    severity: "Важность",
+    category: "Категория",
+    standard: "Стандарт",
+    objects: "Объекты",
+    findings: "Находки",
+    everyCategory: "Все категории",
+    everySeverity: "Любая важность",
+    everyRule: "Все правила",
+    high: "Высокая",
+    medium: "Средняя",
+    low: "Низкая",
+    security: "Безопасность",
+    reliability: "Надёжность",
+    efficiency: "Эффективность",
+    baseline: "Baseline",
+    restricted: "Restricted",
+    checked: "Проверено: {list}",
+    checkedKind: "{kind} {n}",
+    notCheckedTitle: "Не проверено",
+    notCheckedAcross: "{kind} по всему кластеру: {why}",
+    notCheckedIn: "{kind} в {namespace}: {why}",
+    blinds: "Без ответа остаются: {rules}",
+    whyReading: "ещё читается",
+    whyQueued:
+      "ждёт наблюдения: открыто столько, сколько приложение себе позволяет",
+    whyRefused: "отказано: {message}",
+    whyFailed: "не удалось прочитать: {message}",
+    whyNotAudited: "этот вид Аудит не читает",
+    pickNamespaces:
+      "Выберите в списке пространств имён те, что вам доступны, и они будут прочитаны по одному.",
+    late: "{kind} {where}: как было прочитано в {since}, с тех пор наблюдение не работает.",
+    lateAcross: "по всему кластеру",
+    lateIn: "в {namespace}",
+    nothingFound:
+      "В {scope} сообщать не о чем: всё прочитанное сверено по {rules}.",
+    rulesCount: {
+      one: "{n} правилу",
+      few: "{n} правилам",
+      many: "{n} правилам",
+      other: "{n} правилам",
+    },
+    nothingFoundPartly:
+      "В том, что удалось прочитать, ничего не найдено. Что не прочитано, перечислено выше, и о нём ничего не известно.",
+    nothingMatches: "Под эти фильтры не подходит ни одна находка.",
+    reading: {
+      one: "{n} под без нагрузки, которую читает Аудит, ещё читается",
+      few: "{n} пода без нагрузки, которую читает Аудит, ещё читаются",
+      many: "{n} подов без нагрузки, которую читает Аудит, ещё читаются",
+      other: "{n} пода без нагрузки, которую читает Аудит, ещё читаются",
+    },
+    unattributed: {
+      one: "{n} под не проверен: его контроллер не удалось прочитать",
+      few: "{n} пода не проверены: их контроллеры не удалось прочитать",
+      many: "{n} подов не проверены: их контроллеры не удалось прочитать",
+      other: "{n} пода не проверены: их контроллеры не удалось прочитать",
+    },
+    systemFold: {
+      one: "Системные пространства имён и роли: {n} находка",
+      few: "Системные пространства имён и роли: {n} находки",
+      many: "Системные пространства имён и роли: {n} находок",
+      other: "Системные пространства имён и роли: {n} находки",
+    },
+    systemShown: "Показаны системные пространства имён и роли",
+    systemBack: "Вернуться к остальным",
+    enforced: "{namespace} требует уровень Pod Security {level}",
+    why: "Почему это важно",
+    fix: "Как исправить",
+    copyFix: "Скопировать",
+    objectsOf: {
+      one: "{n} объект",
+      few: "{n} объекта",
+      many: "{n} объектов",
+      other: "{n} объекта",
+    },
+    uncheckedOf: {
+      one: "{n} не проверен",
+      few: "{n} не проверены",
+      many: "{n} не проверены",
+      other: "{n} не проверены",
+    },
+    showMore: "Показать ещё",
+    tab: "Аудит",
+    tabNone: "Ничего не найдено",
+    judgedOn: "Шаблон этого {kind} проверяется в составе {object}.",
+    notCheckedHere: "Здесь не проверено",
+    uncheckedLine: "{rule}: {kind} {where}, {why}",
+    peekMore: {
+      one: "и ещё {n} на вкладке «Аудит»",
+      few: "и ещё {n} на вкладке «Аудит»",
+      many: "и ещё {n} на вкладке «Аудит»",
+      other: "и ещё {n} на вкладке «Аудит»",
+    },
+    couldNotRead: "Аудиту не удалось прочитать кластер: {error}",
+    noneOpen:
+      "Выберите строку, чтобы увидеть, почему это важно и как исправить.",
+    thePod: "под",
+    container: "контейнер {name}",
+    initContainer: "init-контейнер {name}",
+    ephemeralContainer: "эфемерный контейнер {name}",
+    wSet: "{at}: {field} = {value}",
+    wUnset: "{at}: не задано {field}",
+    wVolume: "том {volume} имеет тип {source}",
+    wHostPath: "том {volume} монтирует {path} с узла",
+    wSocket: "том {volume} монтирует {path}, где лежит {socket}",
+    wEnvLiteral:
+      "{at} задаёт {variable} значением прямо в шаблоне; имя похоже на секрет",
+    wKey: "ключ {key} хранит закрытый ключ, {net}",
+    netContent: "судя по содержимому",
+    netName: "судя по имени",
+    netDeclared: "как объявляет его тип",
+    netHelm: "внутри релиза Helm, который там хранится",
+    wImage: "{at} запускает {image}, где версия не закреплена",
+    wReplicas: {
+      one: "держит {n} реплику",
+      few: "держит {n} реплики",
+      many: "держит {n} реплик",
+      other: "держит {n} реплики",
+    },
+    wReplicasBy: {
+      one: "автомасштабирование {autoscaler} держит не меньше {n} реплики",
+      few: "автомасштабирование {autoscaler} держит не меньше {n} реплик",
+      many: "автомасштабирование {autoscaler} держит не меньше {n} реплик",
+      other: "автомасштабирование {autoscaler} держит не меньше {n} реплики",
+    },
+    wBudget: "требует {required} здоровых из {selected} выбранных",
+    wTokenPod: "под задаёт automountServiceAccountToken: true",
+    wTokenAccount:
+      "ServiceAccount default задаёт automountServiceAccountToken: true",
+    wTokenDefault:
+      "ни под, ни ServiceAccount default не отключают монтирование токена",
+    wSubject: "выдаёт {role} субъекту {kind} {name}",
+    wSubjectIn: "выдаёт {role} субъекту {kind} {name} в {namespace}",
+    wWildcard: "разрешает любое действие с любым ресурсом групп API {groups}",
+    wCoreGroup: "core",
+    wRange: "масштабирует от {min} до {max}",
+    wTarget: "масштабирует {kind} {name}, которого нет",
+    wPods: {
+      one: "здесь работает {n} под, а NetworkPolicy в пространстве имён нет",
+      few: "здесь работают {n} пода, а NetworkPolicy в пространстве имён нет",
+      many: "здесь работают {n} подов, а NetworkPolicy в пространстве имён нет",
+      other: "здесь работают {n} пода, а NetworkPolicy в пространстве имён нет",
+    },
+    wTrafficService: "Service {name} отправляет ему трафик",
+    wTrafficNone: "ни один Service не отправляет ему трафик",
+    wTrafficUnread: "отправляет ли ему трафик Service, не прочитано: {why}",
+    pssHostProcess: "Запускается как HostProcess Windows",
+    pssHostProcessWhy:
+      "Контейнер HostProcess работает с правами самого узла Windows. Профиль Baseline это запрещает.",
+    pssHostNamespaces: "Делит пространства имён узла",
+    pssHostNamespacesWhy:
+      "С hostNetwork, hostPID или hostIPC под видит сеть, процессы или общую память узла и достаёт туда, куда другим подам нельзя. Профиль Baseline запрещает все три.",
+    pssPrivileged: "Запускает привилегированный контейнер",
+    pssPrivilegedWhy:
+      "У привилегированного контейнера есть все capabilities и устройства узла: выбраться из него значит захватить узел. Профиль Baseline это запрещает.",
+    pssCapabilities: "Добавляет capabilities сверх набора Baseline",
+    pssCapabilitiesWhy:
+      "Capabilities вроде SYS_ADMIN или NET_ADMIN дают контейнеру полномочия ядра, которые почти равны root на узле. Профиль Baseline разрешает короткий список.",
+    pssHostPath: "Монтирует каталог узла",
+    pssHostPathWhy:
+      "Том hostPath читает и пишет собственные файлы узла: контейнер, который туда пишет, может изменить узел и данные других подов. Профиль Baseline это запрещает.",
+    pssHostPorts: "Занимает порт узла",
+    pssHostPortsWhy:
+      "hostPort привязывает под к одному порту его узла: две реплики не уживутся на одном узле, а порт открыт мимо любой NetworkPolicy. Профиль Baseline этого не допускает.",
+    pssHostProbes: "Проверки или хуки обращаются к другому хосту",
+    pssHostProbesWhy:
+      "Проверка или lifecycle-хук с полем host заставляет kubelet слать запросы с узла по адресу, который выбрал под. Профиль Baseline этого не допускает с Kubernetes 1.34.",
+    pssApparmor: "Отключает AppArmor",
+    pssApparmorWhy:
+      "Профиль AppArmor среды выполнения по умолчанию ограничивает, что контейнер может делать на хосте, а Unconfined его снимает. Профиль Baseline разрешает RuntimeDefault или профиль Localhost.",
+    pssSelinux: "Задаёт свой тип, пользователя или роль SELinux",
+    pssSelinuxWhy:
+      "Метки SELinux решают, к чему контейнер может прикоснуться на хосте, а свой тип, пользователь или роль могут это снять. Профиль Baseline разрешает только типы для контейнеров.",
+    pssProcMount: "Снимает маску с /proc",
+    pssProcMountWhy:
+      "Стандартное монтирование /proc скрывает от контейнера часть состояния ядра, а Unmasked её показывает. Профиль Baseline требует Default.",
+    pssSeccompUnconfined: "Отключает seccomp",
+    pssSeccompUnconfinedWhy:
+      "Seccomp фильтрует системные вызовы контейнера, а Unconfined разрешает их все. Профиль Baseline это запрещает.",
+    pssSysctls: "Задаёт небезопасный sysctl",
+    pssSysctlsWhy:
+      "sysctl вне безопасного набора меняет ядро для всех подов узла, а не только для этого. Профиль Baseline разрешает только безопасный набор, и он растёт с версией Kubernetes.",
+    pssVolumeTypes: "Использует тип тома вне набора Restricted",
+    pssVolumeTypesWhy:
+      "Профиль Restricted разрешает тома ConfigMap, CSI, downwardAPI, emptyDir, ephemeral, PersistentVolumeClaim, projected и Secret; остальные выходят за то, что даёт поду его собственная заявка.",
+    pssPrivilegeEscalation: "Разрешает повышение привилегий",
+    pssPrivilegeEscalationWhy:
+      "Пока allowPrivilegeEscalation не false, процесс может получить больше прав, чем у родителя, через setuid-файл. Профиль Restricted требует false.",
+    pssRunAsNonRoot: "Не требует запуска не от root",
+    pssRunAsNonRootWhy:
+      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. Явное false означает root нарочно и обходится дороже. Профиль Restricted требует true.",
+    pssRunAsUserRoot: "Запускается от пользователя 0",
+    pssRunAsUserRootWhy:
+      "runAsUser: 0 означает root, заданный нарочно. Профиль Restricted это запрещает.",
+    pssSeccompRequired: "Не задаёт профиль seccomp",
+    pssSeccompRequiredWhy:
+      "Без профиля системные вызовы контейнера не фильтруются, если узел не применяет профиль сам. Профиль Restricted требует RuntimeDefault или профиль Localhost.",
+    pssDropCapabilities: "Оставляет capabilities Linux",
+    pssDropCapabilitiesWhy:
+      "Контейнер стартует с capabilities среды выполнения по умолчанию. Профиль Restricted требует сбросить ALL и вернуть не больше NET_BIND_SERVICE.",
+    runtimeSocket: "Монтирует сокет среды выполнения контейнеров",
+    runtimeSocketWhy:
+      "Кто может говорить с сокетом среды выполнения, тот запускает на узле любой контейнер, привилегированный и с любым монтированием: владеть сокетом значит владеть узлом.",
+    configMapPrivateKey: "Хранит закрытый ключ в ConfigMap",
+    configMapPrivateKeyWhy:
+      "ConfigMap не Secret: ключ прочитает любой, кто читает ConfigMap в этом пространстве имён, а инструменты показывают ConfigMap открытым текстом. Приложение значение не показывает.",
+    envSecretLiteral: "Пишет похожее на секрет значение в шаблон",
+    envSecretLiteralWhy:
+      "Имя переменной похоже на секрет, а значение записано прямо в шаблоне: его прочитает любой, кто читает нагрузку, и его хранит каждая ревизия. Secret, на который ссылается valueFrom, держит его вне шаблона. Имя служит лишь подсказкой, значение приложение не читает.",
+    writableRootFilesystem: "Корневая файловая система доступна для записи",
+    writableRootFilesystemWhy:
+      "На записываемой корневой файловой системе тот, кто попал в контейнер, может подменить его программы и оставить свои. readOnlyRootFilesystem: true и emptyDir там, где нужно писать, это предотвращают.",
+    clusterAdminBinding: "Привязывает cluster-admin",
+    clusterAdminBindingWhy:
+      "cluster-admin может что угодно с любым объектом. Если эта роль у субъекта не из самой системы, весь кластер отделяет один украденный токен.",
+    wildcardRole: "Разрешает любое действие с любым ресурсом",
+    wildcardRoleWhy:
+      "Роль с * в глаголах и * в ресурсах даёт всё, что есть сейчас, и всё, что поставят потом, включая право раздавать права.",
+    defaultServiceAccountToken: "Монтирует токен ServiceAccount default",
+    defaultServiceAccountTokenWhy:
+      "Поды под ServiceAccount default делят одну учётную запись, а смонтированный токен служит пропуском к API-серверу в каждом из них. Поду, который не обращается к API, токен не нужен.",
+    namespaceWithoutNetworkPolicy: "В пространстве имён нет NetworkPolicy",
+    namespaceWithoutNetworkPolicyWhy:
+      "Без NetworkPolicy каждый под здесь принимает трафик от любого пода кластера. Политика, которая по умолчанию запрещает, ограничивает, куда дотянется один взломанный под.",
+    noReadinessProbe: "Нет проверки готовности",
+    noReadinessProbeWhy:
+      "Без readiness-проверки под готов сразу после старта: Service шлёт ему запросы раньше, чем он может ответить, а выкатка идёт дальше раньше, чем новая версия заработала. Дороже там, где трафик поду шлёт Service.",
+    noLivenessProbe: "Нет проверки живости",
+    noLivenessProbeWhy:
+      "Без liveness-проверки процесс, который завис и не завершился, никогда не перезапускается.",
+    imageTagLatest: "Версия образа не закреплена",
+    imageTagLatestWhy:
+      "latest или отсутствие тега тянут то, что запушили последним: два пода одной нагрузки могут работать на разном коде, а откат ничего не восстанавливает.",
+    singleReplica: "Одна реплика",
+    singleReplicaWhy:
+      "С одной репликой каждая выкатка, вывод узла из работы или падение означают простой.",
+    noDisruptionBudget: "Нет PodDisruptionBudget",
+    noDisruptionBudgetWhy:
+      "Без бюджета вывод узла из работы может выселить все реплики разом.",
+    budgetBlocksDisruption:
+      "PodDisruptionBudget не разрешает ни одного выселения",
+    budgetBlocksDisruptionWhy:
+      "Он требует, чтобы все выбранные поды оставались здоровыми, поэтому даже когда все работают, лишнего нет: вывод узла из работы будет ждать его вечно.",
+    noSpread: "Все реплики могут оказаться на одном узле",
+    noSpreadWhy:
+      "Без topologySpreadConstraints и pod anti-affinity планировщик может поставить все реплики на один узел, и потеря узла унесёт их все.",
+    noMemoryLimit: "Нет лимита памяти",
+    noMemoryLimitWhy:
+      "Контейнер без лимита памяти может занять память узла, пока ядро кого-нибудь не убьёт, и это может быть другой под.",
+    autoscalerPinned: "Автомасштабирование не может масштабировать",
+    autoscalerPinnedWhy:
+      "Нижняя граница равна верхней, поэтому оно ничего не масштабирует: число реплик закреплено, хотя кластер говорит, что оно автоматическое.",
+    autoscalerTargetMissing: "Цели автомасштабирования нет",
+    autoscalerTargetMissingWhy:
+      "Оно масштабирует нагрузку, которой нет, и не масштабирует ничего. Обычно нагрузку переименовали или удалили.",
+    noCpuRequest: "Нет запроса CPU",
+    noCpuRequestWhy:
+      "Без запроса CPU планировщик размещает под так, будто процессор ему не нужен, а при нехватке он получает его меньше всех.",
+    noMemoryRequest: "Нет запроса памяти",
+    noMemoryRequestWhy:
+      "Без запроса памяти планировщик размещает под так, будто память ему не нужна, а когда её на узле не хватает, его выселяют одним из первых.",
   },
   changes: {
     title: "Изменения",
@@ -8774,6 +9045,7 @@ export const ru: Catalogue = {
     events: "событие, события",
     helm: "хелм, релиз, релизы",
     apiResources: "ресурсы api, kind'ы",
+    audit: "проверки, аудит, безопасность, лучшие практики",
     myAccess: "мой доступ, мои права, права, что я могу, доступ",
     settings: "настройки, параметры",
     ports: "порты, проброс",

@@ -40,6 +40,8 @@ const SAFE_PARAMS = new Set([
   "type",
   "rule",
   "monitor",
+  "open",
+  "part",
   // Which namespace the window looks at: a read the reader could ask for.
   "namespace",
   // Narrow rows the page has already read, by text, kind, time or name.
@@ -50,6 +52,8 @@ const SAFE_PARAMS = new Set([
   "since",
   "names",
   "listOf",
+  "severity",
+  "category",
   // Narrow the Pods list by label, matched in the page; a selector the app
   // cannot read shows no pod and says so.
   "selector",

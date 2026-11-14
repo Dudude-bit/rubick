@@ -13,6 +13,7 @@ import {
   Plug,
   Route,
   Settings,
+  ShieldCheck,
   ShieldUser,
   type LucideIcon,
   History,
@@ -166,6 +167,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       { labelKey: "overview", path: clusterLink(), icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
       { labelKey: "changes", path: pageLink("changes"), icon: History },
+      { labelKey: "audit", path: pageLink("audit"), icon: ShieldCheck },
     ],
   },
   {

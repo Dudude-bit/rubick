@@ -65,6 +65,8 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DaemonSetDetailInfo, PodInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
 import { useT } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 
 export function DaemonSetDetail() {
   const t = useT();
@@ -229,7 +231,12 @@ export function DaemonSetDetail() {
     refresh: "slow",
   });
 
-  const share = useDaemonSetShare(daemonSet, pods, podsError);
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "DaemonSet", namespace, name } : null,
+    daemonSet ? daemonSet.uid : null,
+    !!daemonSet
+  );
+  const share = useDaemonSetShare(daemonSet, pods, podsError, audit);
 
   const tabs = useMemo(
     () => [
@@ -449,6 +456,7 @@ export function DaemonSetDetail() {
           </Section>
         ),
       },
+      auditTab(audit, t),
       eventsTab(events, t, { kind: ResourceType.DaemonSet, name: name ?? "" }),
       yamlTab({
         yaml,
@@ -460,6 +468,7 @@ export function DaemonSetDetail() {
       }),
     ],
     [
+      audit,
       events,
       daemonSet,
       pods,

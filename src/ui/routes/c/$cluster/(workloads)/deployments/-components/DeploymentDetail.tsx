@@ -103,6 +103,8 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 
 function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
   const Icon = ROLE_ICON[role];
@@ -393,11 +395,17 @@ export function DeploymentDetail() {
     refresh: "slow",
   });
 
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "Deployment", namespace, name } : null,
+    deployment ? `${deployment.uid}/${deployment.generation ?? ""}` : null,
+    !!deployment
+  );
   const share = useDeploymentShare(
     deployment,
     revisionsError ? null : revisions,
     pods,
-    podsError
+    podsError,
+    audit
   );
 
   const replicas = deployment?.replicas;
@@ -655,6 +663,7 @@ export function DeploymentDetail() {
         </Section>
       ),
     },
+    auditTab(audit, t),
     eventsTab(events, t, { kind: ResourceType.Deployment, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Deployment" }),

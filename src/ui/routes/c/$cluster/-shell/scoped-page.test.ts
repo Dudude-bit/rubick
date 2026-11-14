@@ -4,12 +4,13 @@ import { readsScope } from "./scoped-page";
 
 describe("which pages read the window's namespaces", () => {
   /** Fails if a page that draws a namespace's contents is left to read a missing one as empty. */
-  it("counts the Overview, Events, Changes and every namespaced list", () => {
+  it("counts the Overview, Events, Changes, Audit and every namespaced list", () => {
     for (const path of [
       "/c/prod",
       "/c/prod/",
       "/c/prod/events",
       "/c/prod/changes",
+      "/c/prod/audit",
       "/c/prod/helm",
       "/c/prod/pods",
       "/c/prod/persistentvolumeclaims",

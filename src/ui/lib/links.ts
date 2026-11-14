@@ -312,6 +312,7 @@ export function pageLink(
   page:
     | "events"
     | "changes"
+    | "audit"
     | "integrations"
     | "routes"
     | "helm"

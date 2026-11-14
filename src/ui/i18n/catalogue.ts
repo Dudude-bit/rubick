@@ -36,6 +36,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language: "Pods", not "Поды".
   nav: {
+    audit: "Audit",
     changes: "Changes",
     apiResources: "API resources",
     myAccess: "Your access",
@@ -1272,6 +1273,7 @@ export const en = {
     goToHelm: "Go to Helm",
     goToApiResources: "Go to API resources",
     goToMyAccess: "Go to your access",
+    goToAudit: "Go to Audit",
     goToSettings: "Go to Settings",
     paletteRecent: "Recent",
     paletteNavigation: "Navigation",
@@ -1825,6 +1827,250 @@ export const en = {
       "{container} cannot take an exec: {why}. Run creates a copy of the pod without its labels, asks from it and deletes it when the answer is in.",
     runsAsExec:
       "Run is an exec into {container}, as kubectl exec is: it creates nothing in the cluster.",
+  },
+  audit: {
+    title: "Audit",
+    caption:
+      "Pod templates and configuration, judged against the Pod Security Standards and common practice. Judged as declared: an admission webhook may change what runs. Nothing here changes the cluster.",
+    byRule: "By rule",
+    byObject: "By object",
+    grouping: "Group findings",
+    rule: "Rule",
+    severity: "Severity",
+    category: "Category",
+    standard: "Standard",
+    objects: "Objects",
+    findings: "Findings",
+    everyCategory: "Every category",
+    everySeverity: "Every severity",
+    everyRule: "Every rule",
+    high: "High",
+    medium: "Medium",
+    low: "Low",
+    security: "Security",
+    reliability: "Reliability",
+    efficiency: "Efficiency",
+    baseline: "Baseline",
+    restricted: "Restricted",
+    checked: "Checked: {list}",
+    checkedKind: "{kind} {n}",
+    notCheckedTitle: "Not checked",
+    notCheckedAcross: "{kind} across the cluster: {why}",
+    notCheckedIn: "{kind} in {namespace}: {why}",
+    blinds: "Leaves unanswered: {rules}",
+    whyReading: "still being read",
+    whyQueued:
+      "waiting for a watch, as many as this app allows itself are open",
+    whyRefused: "refused: {message}",
+    whyFailed: "could not be read: {message}",
+    whyNotAudited: "a kind Audit does not read",
+    pickNamespaces:
+      "Pick the namespaces you can read in the namespace picker, and they are read one by one.",
+    late: "{kind} {where} as read at {since}; the watch has failed since.",
+    lateAcross: "across the cluster",
+    lateIn: "in {namespace}",
+    nothingFound:
+      "Nothing to report in {scope}: everything read was checked against {rules}.",
+    rulesCount: { one: "{n} rule", other: "{n} rules" },
+    nothingFoundPartly:
+      "Nothing found in what could be read. What was not read is listed above, and nothing is known about it.",
+    nothingMatches: "No finding matches these filters.",
+    reading: {
+      one: "{n} pod with no workload Audit reads is still being read",
+      other: "{n} pods with no workload Audit reads are still being read",
+    },
+    unattributed: {
+      one: "{n} pod was not judged: its controller could not be read",
+      other: "{n} pods were not judged: their controllers could not be read",
+    },
+    systemFold: {
+      one: "System namespaces and roles: {n} finding",
+      other: "System namespaces and roles: {n} findings",
+    },
+    systemShown: "Showing the system's namespaces and roles",
+    systemBack: "Back to the rest",
+    enforced: "{namespace} enforces Pod Security {level}",
+    why: "Why",
+    fix: "How to fix",
+    copyFix: "Copy",
+    objectsOf: {
+      one: "{n} object",
+      other: "{n} objects",
+    },
+    uncheckedOf: {
+      one: "{n} not checked",
+      other: "{n} not checked",
+    },
+    showMore: "Show more",
+    tab: "Audit",
+    tabNone: "Nothing found",
+    judgedOn: "This {kind}'s template is judged as part of {object}.",
+    notCheckedHere: "Not checked here",
+    uncheckedLine: "{rule}: {kind} {where}, {why}",
+    peekMore: {
+      one: "and {n} more on the Audit tab",
+      other: "and {n} more on the Audit tab",
+    },
+    couldNotRead: "Audit could not read this cluster: {error}",
+    noneOpen: "Pick a row to see why it matters and how to fix it.",
+    thePod: "the pod",
+    container: "container {name}",
+    initContainer: "init container {name}",
+    ephemeralContainer: "ephemeral container {name}",
+    wSet: "{at} sets {field}: {value}",
+    wUnset: "{at} does not set {field}",
+    wVolume: "volume {volume} is {source}",
+    wHostPath: "volume {volume} mounts {path} from the node",
+    wSocket: "volume {volume} mounts {path}, which holds {socket}",
+    wEnvLiteral:
+      "{at} sets {variable} to a value written in the template; the name suggests a secret",
+    wKey: "key {key} holds a private key, {net}",
+    netContent: "by its content",
+    netName: "by its name",
+    netDeclared: "as its type declares",
+    netHelm: "inside the Helm release it stores",
+    wImage: "{at} runs {image}, which pins no version",
+    wReplicas: {
+      one: "keeps {n} replica",
+      other: "keeps {n} replicas",
+    },
+    wReplicasBy: {
+      one: "autoscaler {autoscaler} keeps at least {n} replica",
+      other: "autoscaler {autoscaler} keeps at least {n} replicas",
+    },
+    wBudget: "requires {required} healthy of {selected} selected",
+    wTokenPod: "the pod sets automountServiceAccountToken: true",
+    wTokenAccount:
+      "ServiceAccount default sets automountServiceAccountToken: true",
+    wTokenDefault:
+      "neither the pod nor ServiceAccount default turns the token off",
+    wSubject: "grants {role} to {kind} {name}",
+    wSubjectIn: "grants {role} to {kind} {name} in {namespace}",
+    wWildcard: "grants every verb on every resource of API groups {groups}",
+    wCoreGroup: "core",
+    wRange: "scales between {min} and {max}",
+    wTarget: "scales {kind} {name}, which does not exist",
+    wPods: {
+      one: "runs {n} pod, and no NetworkPolicy is in the namespace",
+      other: "runs {n} pods, and no NetworkPolicy is in the namespace",
+    },
+    wTrafficService: "Service {name} sends it traffic",
+    wTrafficNone: "no Service sends it traffic",
+    wTrafficUnread: "whether a Service sends it traffic was not read: {why}",
+    pssHostProcess: "Runs as a Windows HostProcess",
+    pssHostProcessWhy:
+      "A HostProcess container runs with the Windows node's own privileges. The Baseline profile forbids it.",
+    pssHostNamespaces: "Shares the node's namespaces",
+    pssHostNamespacesWhy:
+      "With hostNetwork, hostPID or hostIPC the pod sees the node's network, processes or shared memory, and reaches what other pods cannot. The Baseline profile forbids all three.",
+    pssPrivileged: "Runs a privileged container",
+    pssPrivilegedWhy:
+      "A privileged container has every capability and the node's devices: escaping it is taking the node. The Baseline profile forbids it.",
+    pssCapabilities: "Adds capabilities beyond the Baseline set",
+    pssCapabilitiesWhy:
+      "Capabilities such as SYS_ADMIN or NET_ADMIN give a container kernel powers that mostly amount to root on the node. The Baseline profile allows a short list.",
+    pssHostPath: "Mounts a directory of the node",
+    pssHostPathWhy:
+      "A hostPath volume reads or writes the node's own files: a container that writes there can change the node and other pods' data. The Baseline profile forbids it.",
+    pssHostPorts: "Binds a port of the node",
+    pssHostPortsWhy:
+      "A hostPort ties the pod to one port of its node: two replicas cannot share a node, and the port is open past any NetworkPolicy. The Baseline profile disallows it.",
+    pssHostProbes: "Probes or hooks another host",
+    pssHostProbesWhy:
+      "A probe or lifecycle hook with a host field has the kubelet send requests from the node to an address the pod chooses. The Baseline profile disallows it from Kubernetes 1.34.",
+    pssApparmor: "Turns AppArmor off",
+    pssApparmorWhy:
+      "The runtime's default AppArmor profile limits what a container may do on the host, and Unconfined removes it. The Baseline profile allows RuntimeDefault or a Localhost profile.",
+    pssSelinux: "Sets its own SELinux type, user or role",
+    pssSelinuxWhy:
+      "SELinux labels decide what a container may touch on the host, and a custom type, user or role can lift that. The Baseline profile allows the container types only.",
+    pssProcMount: "Unmasks /proc",
+    pssProcMountWhy:
+      "The default /proc mount hides parts of the kernel's state from the container, and Unmasked shows them. The Baseline profile requires Default.",
+    pssSeccompUnconfined: "Turns seccomp off",
+    pssSeccompUnconfinedWhy:
+      "Seccomp filters the system calls a container can make, and Unconfined allows all of them. The Baseline profile forbids it.",
+    pssSysctls: "Sets an unsafe sysctl",
+    pssSysctlsWhy:
+      "A sysctl outside the safe set changes the kernel for every pod on the node, not for this one alone. The Baseline profile allows the safe set only, which grows with the Kubernetes version.",
+    pssVolumeTypes: "Uses a volume type outside the Restricted set",
+    pssVolumeTypesWhy:
+      "The Restricted profile allows ConfigMap, CSI, downwardAPI, emptyDir, ephemeral, PersistentVolumeClaim, projected and Secret volumes; the others reach past what the pod's own claims grant.",
+    pssPrivilegeEscalation: "Allows privilege escalation",
+    pssPrivilegeEscalationWhy:
+      "Unless allowPrivilegeEscalation is false, a process can gain more privileges than its parent through a setuid binary. The Restricted profile requires false.",
+    pssRunAsNonRoot: "Does not require a non-root user",
+    pssRunAsNonRootWhy:
+      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, it runs as root on purpose, which costs more. The Restricted profile requires true.",
+    pssRunAsUserRoot: "Runs as user 0",
+    pssRunAsUserRootWhy:
+      "runAsUser: 0 is root, stated on purpose. The Restricted profile forbids it.",
+    pssSeccompRequired: "Sets no seccomp profile",
+    pssSeccompRequiredWhy:
+      "With no profile the container's system calls are not filtered unless the node applies one by default. The Restricted profile requires RuntimeDefault or a Localhost profile.",
+    pssDropCapabilities: "Keeps Linux capabilities",
+    pssDropCapabilitiesWhy:
+      "A container starts with the runtime's default capabilities. The Restricted profile requires dropping ALL and adding back NET_BIND_SERVICE at most.",
+    runtimeSocket: "Mounts the container runtime's socket",
+    runtimeSocketWhy:
+      "Whoever can talk to the runtime's socket can start any container on the node, privileged and with any mount: holding the socket is holding the node.",
+    configMapPrivateKey: "Keeps a private key in a ConfigMap",
+    configMapPrivateKeyWhy:
+      "A ConfigMap is not a Secret: whoever can read ConfigMaps in the namespace reads the key, and tools show ConfigMaps in plain text. This app withholds the value.",
+    envSecretLiteral: "Writes a secret-looking value into the template",
+    envSecretLiteralWhy:
+      "The variable's name suggests a secret, and its value is written in the template: whoever can read the workload reads it, and every revision keeps it. A Secret referenced through valueFrom keeps it out. The name is a suggestion; this app does not read the value.",
+    writableRootFilesystem: "Root filesystem is writable",
+    writableRootFilesystemWhy:
+      "On a writable root filesystem whoever gets into the container can change its binaries and leave tools behind. readOnlyRootFilesystem: true, with an emptyDir where it needs to write, prevents it.",
+    clusterAdminBinding: "Binds cluster-admin",
+    clusterAdminBindingWhy:
+      "cluster-admin may do anything to any object. A subject other than the system's own holding it is one stolen token away from the whole cluster.",
+    wildcardRole: "Grants every verb on every resource",
+    wildcardRoleWhy:
+      "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
+    defaultServiceAccountToken: "Mounts the default ServiceAccount's token",
+    defaultServiceAccountTokenWhy:
+      "Pods under the default ServiceAccount share one identity, and a mounted token is a credential for the API server inside every one of them. A pod that does not call the API needs none.",
+    namespaceWithoutNetworkPolicy: "No NetworkPolicy in the namespace",
+    namespaceWithoutNetworkPolicyWhy:
+      "With no NetworkPolicy every pod here accepts traffic from every pod in the cluster. A policy that denies by default limits what one compromised pod can reach.",
+    noReadinessProbe: "No readiness probe",
+    noReadinessProbeWhy:
+      "Without a readiness probe a pod is ready the moment it starts: a Service sends it requests before it can answer, and a rollout moves on before the new version works. It costs more where a Service sends the pod traffic.",
+    noLivenessProbe: "No liveness probe",
+    noLivenessProbeWhy:
+      "Without a liveness probe a process that hangs without exiting is never restarted.",
+    imageTagLatest: "Image pins no version",
+    imageTagLatestWhy:
+      "latest, or no tag at all, pulls whatever was pushed last: two pods of one workload can run different code, and a rollback restores nothing.",
+    singleReplica: "Runs one replica",
+    singleReplicaWhy:
+      "With one replica every rollout, node drain or crash is an outage.",
+    noDisruptionBudget: "No PodDisruptionBudget",
+    noDisruptionBudgetWhy:
+      "Without a budget a node drain may evict every replica at once.",
+    budgetBlocksDisruption: "PodDisruptionBudget allows no eviction",
+    budgetBlocksDisruptionWhy:
+      "It requires every pod it selects to stay healthy, so even with all of them up there is none to spare: a node drain waits on it for good.",
+    noSpread: "Replicas may all land on one node",
+    noSpreadWhy:
+      "With no topology spread constraint and no pod anti-affinity the scheduler may put every replica on one node, and losing that node loses them all.",
+    noMemoryLimit: "No memory limit",
+    noMemoryLimitWhy:
+      "A container with no memory limit can take the node's memory until the kernel kills something, and that may be another pod.",
+    autoscalerPinned: "Autoscaler cannot scale",
+    autoscalerPinnedWhy:
+      "Its floor is its ceiling, so it scales nothing: the replica count is fixed while the cluster says it is autoscaled.",
+    autoscalerTargetMissing: "Autoscaler's target does not exist",
+    autoscalerTargetMissingWhy:
+      "It scales a workload that is not there, so nothing is scaled. Usually the workload was renamed or deleted.",
+    noCpuRequest: "No CPU request",
+    noCpuRequestWhy:
+      "Without a CPU request the scheduler places the pod as if it needs no CPU, and under contention it gets the least of it.",
+    noMemoryRequest: "No memory request",
+    noMemoryRequestWhy:
+      "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
   },
   changes: {
     title: "Changes",
@@ -7962,6 +8208,7 @@ export const en = {
     events: "",
     helm: "releases, charts",
     apiResources: "api-resources, kinds",
+    audit: "checks, best practices, lint, security",
     myAccess: "my access, can i, permissions, rbac, auth can-i",
     settings: "preferences, options",
     ports: "port-forward, tunnel",

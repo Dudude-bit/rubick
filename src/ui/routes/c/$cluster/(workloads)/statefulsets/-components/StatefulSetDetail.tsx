@@ -80,6 +80,8 @@ import {
   watchedWorkload,
 } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 
 export function StatefulSetDetail() {
   const t = useT();
@@ -269,7 +271,12 @@ export function StatefulSetDetail() {
     refresh: "slow",
   });
 
-  const share = useStatefulSetShare(statefulSet, pods, podsError);
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "StatefulSet", namespace, name } : null,
+    statefulSet ? statefulSet.uid : null,
+    !!statefulSet
+  );
+  const share = useStatefulSetShare(statefulSet, pods, podsError, audit);
 
   const tabs = useMemo(
     () => [
@@ -455,6 +462,7 @@ export function StatefulSetDetail() {
           </Section>
         ),
       },
+      auditTab(audit, t),
       eventsTab(events, t, {
         kind: ResourceType.StatefulSet,
         name: name ?? "",
@@ -469,6 +477,7 @@ export function StatefulSetDetail() {
       }),
     ],
     [
+      audit,
       events,
       t,
       statefulSet,
