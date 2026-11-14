@@ -297,6 +297,18 @@ kubectl delete ns audit-test audit-clean && kubectl delete clusterrolebinding au
 PodDisruptionBudgets in `audit-test`; `kubectl create token audit-reader -n audit-test`
 makes a token for a kubeconfig user that sees Audit say "not checked".
 
+`audit-upgrade.yaml` adds two Helm releases to `audit-test`, stored the way
+Helm 3 stores them: `legacy-web` names versions Kubernetes removed (High) and
+`moved-on` dropped its old one in the deployed revision (nothing).
+`audit-upgrade-1.31.yaml`, on a 1.31 cluster or older, writes a FlowSchema
+through `flowcontrol.apiserver.k8s.io/v1beta3`, which 1.32 removes (Medium).
+`audit-reader` may not list Secrets, so for it the releases are not checked.
+
+```bash
+kubectl apply -f audit-upgrade.yaml
+kubectl -n audit-test delete secret -l owner=helm
+```
+
 ## Troubleshooting
 
 ### The StatefulSet stays pending

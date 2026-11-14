@@ -1,0 +1,51 @@
+# Audit, Upgrade: Helm releases stored the way Helm 3 stores them.
+# Apply after audit.yaml (it makes the namespace): kubectl apply -f tests/manifests/audit-upgrade.yaml
+# Clean up: kubectl -n audit-test delete secret -l owner=helm
+#
+# legacy-web, deployed: its stored manifest names extensions/v1beta1 Ingress
+# (gone in 1.22), policy/v1beta1 PodDisruptionBudget (gone in 1.25) and a
+# Widget whose group no cluster serves. Audit: High, with the plugin to map it.
+# moved-on: revision 1 (superseded) named networking.k8s.io/v1beta1, revision
+# 2 (deployed) does not. Helm upgrades from revision 2, so Audit finds nothing.
+# Generated; the release blobs are base64 of gzip of the release JSON.
+apiVersion: v1
+kind: Secret
+type: helm.sh/release.v1
+metadata:
+  name: sh.helm.release.v1.legacy-web.v1
+  namespace: audit-test
+  labels:
+    owner: helm
+    name: legacy-web
+    status: deployed
+    version: "1"
+stringData:
+  release: H4sIAAAAAAAC/41TQWrDMBD8ilCvsSOHHopuLbnkUgItLRRDWUubVESWhSQ7MSF/r+RQJ7SBGnRYdkY7M/bqSA3USDnVuAXRZ3us6GzoeQsiAdBKFbKAPkSgQ+dVYygvZlSZTUP5kfoAofWRKdHqpkcZeRvlfPgcG5wu2OI+Y0VWsNeCcZbOR+RpmEST6IVTNgzSdGWipNZENLXVGJCeZlR8gQvJTY0BJARI9a1oYwLK8iJnsQNWvY3NbkFPcVwNRm1SZE6zLCvNHXlpWieQk8uwecCoD/HLzM8JajQh76HWpbnM5ASs9fOuKM1OGcnJcuSW5scsLw0hye31/NJMkVZm69D7G7p4CGhSmdSrqDRaWJ3v/KvvLYoBqkDsMN5MNSEeXacEPv/hX4HrxgVOHti0EFZWNwLYRivR/za/buRSedcO2/DUyi2G6UFqZR47UBoqHSnFNHd7lURuGDwDPh+eSI4HSPuYx7W8+t3vapJDevoGV+79TYoDAAA=
+---
+apiVersion: v1
+kind: Secret
+type: helm.sh/release.v1
+metadata:
+  name: sh.helm.release.v1.moved-on.v1
+  namespace: audit-test
+  labels:
+    owner: helm
+    name: moved-on
+    status: superseded
+    version: "1"
+stringData:
+  release: H4sIAAAAAAAC/42QwWrDMBBEf0Vsr5YjhR6K/iDnlh6KoWytTStir4y0dgkh/951SpJDLwUdxOzTzoxOwDgSBBjzQtFmhuai1An7VcY5JrFCVXSwUKlJkeAbSLzPEE5QBWWuStZ50jFFikruU6nyHmka8lGFAFu3fbTOW+9evAtuPW/KDfgvLFLtS5rkYg47VtNhMH0ep4GE4NxA/4VF1jwjCUYUXO9/q90agGt961TBKb3exGULZ102Iqf9WjmAtbbjB/Oc59JTMNdVGyH1Rv2XTeLPQrW2RxyHju/rgmGS71wOCrSHp9qmvFn8h8bzHasYg9n9Pu34Gjp0bMya+u7UMZx/ALPcjtylAQAA
+---
+apiVersion: v1
+kind: Secret
+type: helm.sh/release.v1
+metadata:
+  name: sh.helm.release.v1.moved-on.v2
+  namespace: audit-test
+  labels:
+    owner: helm
+    name: moved-on
+    status: deployed
+    version: "2"
+stringData:
+  release: H4sIAAAAAAAC/42QwWrDMBBEf0Vsr5Yjmx6K/iDnhh6KoSzWuhWxV0Zau4Tgf6+UEufQS0EHafQ0M6srME4EFqawktOBobopaca+yLg4L1ooSb5YKSafEdtW4HkIYK+QBGVJmXQ0j+FCLnODj0k+dsFCa9pnbRrdmFNjrCnrPXMj/gtzlProZ7lFw5Fz5DiqPkzzSEKwVdB/YZTSZiJBh4Jl/3ewvT+Yuq1NVnD2b7u4trBlswnZD2VgC1rrjp/Ua1hiT1bdrQ5CORvzrxw8f0ZKqb7gNHb8sLOKSb5DPGegPr+k2ofD2nScz86q4++rju99bcdKlcKPkI5h+wFjWaWdngEAAA==

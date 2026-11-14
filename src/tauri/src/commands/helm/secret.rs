@@ -202,6 +202,144 @@ fn row_of(winner: Winner, read: std::result::Result<HelmSecretRelease, String>) 
     }
 }
 
+/// One revision of a release, as the metadata of its Secret names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseRevision {
+    pub namespace: String,
+    pub release: String,
+    pub secret: String,
+    /// The Secret's `resourceVersion`: it moves when the Secret is rewritten.
+    pub version: String,
+    pub revision: i32,
+    pub status: String,
+}
+
+/// One object a release's stored manifest names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseObject {
+    pub api: String,
+    pub kind: String,
+    pub name: String,
+}
+
+/// The revision of each release that `helm upgrade` diffs the next one
+/// against: the last where it is deployed, else the newest deployed, else
+/// the last where it failed or was superseded (helm `pkg/action/upgrade.go`,
+/// the same in Helm 3 and 4). A release with none of those has nothing an
+/// upgrade would build from.
+#[must_use]
+pub fn upgraded_from(revisions: Vec<ReleaseRevision>) -> Vec<ReleaseRevision> {
+    let mut releases: HashMap<(String, String), Vec<ReleaseRevision>> = HashMap::new();
+    for revision in revisions {
+        releases
+            .entry((revision.namespace.clone(), revision.release.clone()))
+            .or_default()
+            .push(revision);
+    }
+    let mut picked: Vec<ReleaseRevision> = releases
+        .into_values()
+        .filter_map(|mut history| {
+            history.sort_by_key(|revision| revision.revision);
+            let last = history.last()?;
+            if last.status == "deployed" {
+                return Some(last.clone());
+            }
+            let deployed = history.iter().rev().find(|r| r.status == "deployed");
+            deployed
+                .or_else(|| {
+                    ["failed", "superseded"]
+                        .contains(&last.status.as_str())
+                        .then_some(last)
+                })
+                .cloned()
+        })
+        .collect();
+    picked.sort_by(|a, b| (&a.namespace, &a.release).cmp(&(&b.namespace, &b.release)));
+    picked
+}
+
+/// Every release in `reach` at the revision an upgrade builds from, from
+/// the Secrets' metadata alone.
+///
+/// # Errors
+///
+/// The list was refused or failed.
+pub async fn upgraded_from_in(
+    client: &kube::Client,
+    reach: Option<&str>,
+) -> Result<Vec<ReleaseRevision>> {
+    let secrets: Api<Secret> = api_in(client, reach);
+    let metas = secrets
+        .list_metadata(&ListParams::default().labels("owner=helm"))
+        .await?;
+    let revisions = metas.items.into_iter().filter_map(|meta| {
+        let labels = meta.metadata.labels.as_ref()?;
+        Some(ReleaseRevision {
+            namespace: meta.metadata.namespace.clone()?,
+            release: labels.get("name")?.clone(),
+            secret: meta.metadata.name.clone()?,
+            version: meta.metadata.resource_version.clone().unwrap_or_default(),
+            revision: labels.get("version")?.parse().ok()?,
+            status: labels.get("status").cloned().unwrap_or_default(),
+        })
+    });
+    Ok(upgraded_from(revisions.collect()))
+}
+
+/// What a decoded release's manifest names, read through the rule that
+/// withholds a key, or the YAML parser's words where a document would not
+/// read. A `List` names its items.
+fn objects_of(release: &HelmSecretRelease) -> std::result::Result<Vec<ReleaseObject>, String> {
+    fn named(value: &serde_json::Value, into: &mut Vec<ReleaseObject>) {
+        let text = |key: &str| value.get(key).and_then(serde_json::Value::as_str);
+        if let Some(items) = value.get("items").and_then(serde_json::Value::as_array) {
+            for item in items {
+                named(item, into);
+            }
+            return;
+        }
+        if let (Some(api), Some(kind)) = (text("apiVersion"), text("kind")) {
+            let name = value
+                .pointer("/metadata/name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            into.push(ReleaseObject {
+                api: api.to_string(),
+                kind: kind.to_string(),
+                name: name.to_string(),
+            });
+        }
+    }
+    let shown = release.shown();
+    let mut objects = Vec::new();
+    for document in crate::resources::manifest_documents(&shown.manifest) {
+        if document.body.trim().is_empty() {
+            continue;
+        }
+        let value: serde_json::Value =
+            serde_yaml::from_str(document.body).map_err(|e| e.to_string())?;
+        named(&value, &mut objects);
+    }
+    Ok(objects)
+}
+
+/// The objects one release Secret's manifest names; `None` where the
+/// Secret is gone, and the decoder's words where it would not read.
+///
+/// # Errors
+///
+/// The read was refused or failed.
+pub async fn release_objects(
+    client: &kube::Client,
+    namespace: &str,
+    secret: &str,
+) -> Result<Option<std::result::Result<Vec<ReleaseObject>, String>>> {
+    let got = Api::<Secret>::namespaced(client.clone(), namespace)
+        .get_opt(secret)
+        .await?;
+    Ok(got.map(|secret| release_in(&secret).and_then(|release| objects_of(&release))))
+}
+
 #[cfg(test)]
 mod tests {
     /// Vendor, release name, and the labels that vendor stamped on it.
@@ -599,6 +737,150 @@ mod tests {
                     "frontend".to_string(),
                     "sh.helm.release.v1.api.v5".to_string()
                 ),
+            ]
+        );
+    }
+
+    fn revision(release: &str, revision: i32, status: &str) -> ReleaseRevision {
+        ReleaseRevision {
+            namespace: "shop".to_string(),
+            release: release.to_string(),
+            secret: secret_name(release, revision),
+            version: format!("{revision}0"),
+            revision,
+            status: status.to_string(),
+        }
+    }
+
+    fn picked(history: &[(i32, &str)]) -> Option<i32> {
+        let revisions = history
+            .iter()
+            .map(|(n, status)| revision("web", *n, status))
+            .collect();
+        let picked = upgraded_from(revisions);
+        assert!(picked.len() <= 1);
+        picked.first().map(|r| r.revision)
+    }
+
+    /// `helm upgrade` diffs against the last revision where it is deployed,
+    /// else the newest deployed one, else the last where it failed or was
+    /// superseded, and against nothing while only a pending or uninstalled
+    /// revision exists. Would break if the newest revision were taken
+    /// whatever its status, as the Helm page's row does.
+    #[test]
+    fn a_release_is_judged_at_the_revision_helm_upgrade_diffs_against() {
+        assert_eq!(picked(&[(1, "superseded"), (2, "deployed")]), Some(2));
+        assert_eq!(
+            picked(&[(1, "superseded"), (2, "deployed"), (3, "failed")]),
+            Some(2)
+        );
+        assert_eq!(picked(&[(1, "deployed"), (2, "pending-upgrade")]), Some(1));
+        assert_eq!(picked(&[(1, "failed"), (2, "failed")]), Some(2));
+        assert_eq!(picked(&[(9, "deployed"), (10, "failed")]), Some(9));
+        assert_eq!(picked(&[(1, "pending-install")]), None);
+        assert_eq!(picked(&[(1, "uninstalled")]), None);
+    }
+
+    /// The release Secret Helm writes, holding `manifest`.
+    fn holding(manifest: &str) -> serde_json::Value {
+        let payload = serde_json::json!({
+            "name": "web", "namespace": "shop", "version": 2,
+            "info": { "status": "deployed" },
+            "chart": { "metadata": { "name": "web", "version": "1.0.0" } },
+            "manifest": manifest,
+        });
+        serde_json::json!({
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": { "name": secret_name("web", 2), "namespace": "shop" },
+            "data": { "release": STANDARD.encode(STANDARD.encode(payload.to_string())) },
+        })
+    }
+
+    /// Every object a stored manifest names comes back with its version and
+    /// kind, the items of a `List` among them, and a Secret that is gone is
+    /// none rather than a failure. Would break if the documents were split
+    /// on `---` inside a value, or a `List` were taken as one object.
+    #[tokio::test]
+    async fn the_objects_a_release_stores_are_named_with_the_version_they_were_written_at() {
+        let manifest = "---\n# Source: web/templates/ingress.yaml\napiVersion: extensions/v1beta1\nkind: Ingress\nmetadata:\n  name: web\n  annotations:\n    note: \"--- not a document\"\n---\n# Source: web/templates/list.yaml\napiVersion: v1\nkind: List\nitems:\n  - apiVersion: policy/v1beta1\n    kind: PodDisruptionBudget\n    metadata:\n      name: web\n  - apiVersion: apps/v1\n    kind: Deployment\n    metadata:\n      name: web\n---\n# Source: web/templates/empty.yaml\n";
+        let path = "/api/v1/namespaces/shop/secrets/sh.helm.release.v1.web.v2";
+        let client = cluster(vec![
+            (path, 200, holding(manifest)),
+            (
+                "/api/v1/namespaces/shop/secrets/gone",
+                404,
+                says(404, "NotFound"),
+            ),
+        ]);
+
+        let objects = release_objects(&client, "shop", &secret_name("web", 2))
+            .await
+            .expect("read")
+            .expect("there")
+            .expect("decoded");
+        let named: Vec<(&str, &str, &str)> = objects
+            .iter()
+            .map(|o| (o.api.as_str(), o.kind.as_str(), o.name.as_str()))
+            .collect();
+        assert_eq!(
+            named,
+            vec![
+                ("extensions/v1beta1", "Ingress", "web"),
+                ("policy/v1beta1", "PodDisruptionBudget", "web"),
+                ("apps/v1", "Deployment", "web"),
+            ]
+        );
+        let gone = release_objects(&client, "shop", "gone")
+            .await
+            .expect("read");
+        assert!(gone.is_none());
+    }
+
+    /// The live check's releases decode as the app reads a cluster's: the
+    /// Secret's bytes are its `stringData` text. Would break if the fixture
+    /// were stored in a shape Helm does not write, and the check then showed
+    /// the release as unreadable instead of what it names.
+    #[test]
+    fn the_live_checks_releases_read_as_helm_stores_them() {
+        use serde::Deserialize;
+        const FIXTURE: &str = include_str!("../../../../../tests/manifests/audit-upgrade.yaml");
+        let mut named = Vec::new();
+        for document in serde_yaml::Deserializer::from_str(FIXTURE) {
+            let value = serde_json::Value::deserialize(document).expect("yaml");
+            let text = value["stringData"]["release"].as_str().expect("release");
+            let secret: Secret = serde_json::from_value(serde_json::json!({
+                "metadata": value["metadata"],
+                "data": { "release": STANDARD.encode(text) },
+            }))
+            .expect("secret");
+            let release = release_in(&secret).expect("decodes");
+            let objects = objects_of(&release).expect("reads");
+            named.push((
+                release.name.clone(),
+                release.version,
+                objects.into_iter().map(|o| o.api).collect::<Vec<_>>(),
+            ));
+        }
+        let apis = |list: &[&str]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(
+            named,
+            vec![
+                (
+                    "legacy-web".to_string(),
+                    1,
+                    apis(&[
+                        "apps/v1",
+                        "extensions/v1beta1",
+                        "policy/v1beta1",
+                        "widgets.audit.example.com/v1",
+                    ])
+                ),
+                (
+                    "moved-on".to_string(),
+                    1,
+                    apis(&["networking.k8s.io/v1beta1"])
+                ),
+                ("moved-on".to_string(), 2, apis(&["networking.k8s.io/v1"])),
             ]
         );
     }
