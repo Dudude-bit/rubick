@@ -74,6 +74,11 @@ export class TopologyStore {
 
   apply(pieces: readonly TopologyPiece[]) {
     const started = perf.recording ? performance.now() : 0;
+    // New maps, the same node objects: a reader keyed on the map sees it
+    // change, and a node no piece named is still the object it was.
+    this.nodes = new Map(this.nodes);
+    this.edges = new Map(this.edges);
+    this.reads = new Map(this.reads);
     let kinds = this.current.kinds;
     for (const piece of pieces) {
       switch (piece.is) {

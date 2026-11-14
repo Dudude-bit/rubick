@@ -41,8 +41,11 @@ describe("what a map stream has sent", () => {
       { is: "node", node: data },
       { is: "node", node: logs },
     ]);
+    const before = store.snapshot().nodes;
     store.apply([{ is: "node", node: node("data", "Bound") }]);
     const nodes = store.snapshot().nodes;
+    // A reader memoised on the map has to see it move.
+    expect(nodes).not.toBe(before);
     expect(nodes.get(logs.id)).toBe(logs);
     expect(nodes.get(data.id)).not.toBe(data);
     store.apply([{ is: "nodeGone", id: data.id }]);
