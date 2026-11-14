@@ -37,6 +37,7 @@ export const en = {
   // noun that reads the same in every language: "Pods", not "Поды".
   nav: {
     changes: "Changes",
+    cost: "Cost",
     apiResources: "API resources",
     myAccess: "Your access",
     selectsLabels: "selects {selector}",
@@ -1269,6 +1270,7 @@ export const en = {
     goToConfigMaps: "Go to ConfigMaps",
     goToSecrets: "Go to Secrets",
     goToEvents: "Go to Events",
+    goToCost: "Go to Cost",
     goToHelm: "Go to Helm",
     goToApiResources: "Go to API resources",
     goToMyAccess: "Go to your access",
@@ -1926,6 +1928,166 @@ export const en = {
       one: "{n} more row not drawn",
       other: "{n} more rows not drawn",
     },
+  },
+  cost: {
+    title: "Cost",
+    perHour: "Per hour",
+    perMonth: "Per month",
+    monthNote: "Projected: the hourly rate × 730 hours, not a bill.",
+    idle: "Idle",
+    idleCluster: "Idle in the cluster",
+    idleNote: "Paid for and allocated to nobody.",
+    reservedNote:
+      "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
+    theCluster: "The cluster",
+    ofCluster: "{share} of the cluster",
+    unclaimed: "Volumes nobody claims",
+    fee: "Cluster management fee",
+    atLeast: "at least {amount}",
+    notKnown: "Not known",
+    notPriced: "not priced",
+    notMeasured: "not measured",
+    fromOpenCost:
+      "From OpenCost's series in Prometheus at {endpoint}, in the currency OpenCost is set to. A workload is charged the larger of what it requests and what it uses.",
+    fromPrices:
+      "Estimated from the prices entered for {context}: {prices}. A workload's share follows what its pods request.",
+    priceCpu: "{price} per vCPU-hour",
+    priceMemory: "{price} per GiB of memory per hour",
+    priceStorage: "{price} per GiB of storage per month",
+    priceNoStorage: "no price for storage",
+    priceGpu: "{price} per GPU-hour",
+    byNamespace: "By namespace",
+    byWorkload: "By workload",
+    byNode: "By node",
+    share: "Share",
+    cpu: "CPU",
+    memory: "Memory",
+    gpu: "GPU",
+    storage: "Storage",
+    loadBalancers: "Load balancers",
+    workload: "Workload",
+    cpuRequested: "CPU requested",
+    cpuUsed: "CPU used, {window}",
+    memoryRequested: "Memory requested",
+    memoryUsed: "Memory used, {window}",
+    usedAvgPeak: "{avg} average · {peak} peak",
+    efficiency: "Efficiency",
+    effMeasured: "{avg} average, {peak} peak",
+    effNoSupplier: "not measured: needs Prometheus",
+    effReading: "reading…",
+    effFailed: "could not read use: {said}",
+    effNoSamples: "no samples in {window}",
+    effUnrequested: "nothing requested",
+    overRequested:
+      "Its peak over 24 hours stayed under half of what it requests.",
+    instanceType: "Instance type",
+    spot: "Spot",
+    spotYes: "spot",
+    spotNo: "on demand",
+    allocated: "Allocated",
+    reserved: "Kept by the system",
+    noRows: "Nothing in this scope runs on a node.",
+    rest: {
+      one: "Showing the {kept} workloads that request most; {n} more costs {amount} per hour. Narrow the namespaces to see it.",
+      other:
+        "Showing the {kept} workloads that request most; {n} more cost {amount} per hour together. Narrow the namespaces to see them.",
+    },
+    trendTitle: "Cost per hour",
+    trendCaption:
+      "One point every {step}; a gap is a stretch Prometheus holds no samples for.",
+    trendNoSupplier:
+      "A connected Prometheus would draw how this changed over 6 hours, a day and a week.",
+    trendEmptyOpenCost: "Prometheus holds no OpenCost samples in this window.",
+    trendEmptyEstimate:
+      "Prometheus holds no kube_node_status_capacity in this window; kube-state-metrics writes it.",
+    trendFailed: "Could not read the trend from {endpoint}: {said}",
+    trendNoSample: "no sample",
+    trendReadings: {
+      one: "{n} reading, {gaps} gaps, peak {peak} per hour",
+      other: "{n} readings, {gaps} gaps, peak {peak} per hour",
+    },
+    nothing:
+      "Two ways to see what this cluster costs. Connect the Prometheus that holds OpenCost's or Kubecost's series, and this page reads their prices: {integrations}. Or {prices}, what a vCPU, a GiB of memory and a GiB of storage cost you, and this page estimates from node capacity and what each workload requests.",
+    integrationsLink: "Integrations › Prometheus",
+    enterPrices: "enter prices",
+    pricesOffer:
+      "Or {prices}, and this page estimates from node capacity and what each workload requests.",
+    noSeries:
+      "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost or Kubecost writes them when its /metrics is scraped into this Prometheus.",
+    unreachable: "Prometheus at {endpoint} did not answer: {said}",
+    failed: "Could not read cost from Prometheus at {endpoint}: {said}",
+    estimateMeanwhile:
+      "The numbers below are an estimate from the prices entered for this cluster.",
+    basisQuestion: "What does this cluster hold that costs money?",
+    podsLabel: "pods",
+    nodesUnpriced: {
+      one: "{n} node states no capacity to price: {names}.",
+      other: "{n} nodes state no capacity to price: {names}.",
+    },
+    nodesUnpricedOpenCost: {
+      one: "{n} node carries no price in OpenCost: {names}.",
+      other: "{n} nodes carry no price in OpenCost: {names}.",
+    },
+    gpusUnpriced: "GPUs on {names} have no price entered.",
+    storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
+    storageUnpricedOpenCost:
+      "Storage has no price in this Prometheus: {volumes}, {size}. A scrape that keeps only node_, kube_, container_ and kubecost_ series drops pv_hourly_cost.",
+    volumesUnpriced: {
+      one: "{n} volume has a size and no price: {names}.",
+      other: "{n} volumes have a size and no price: {names}.",
+    },
+    volumesUnsized: {
+      one: "{n} volume has a price and no size: {names}.",
+      other: "{n} volumes have a price and no size: {names}.",
+    },
+    nodesNotChecked:
+      "Whether every node carries a price was not checked: the nodes could not be listed ({said}).",
+    nodesUnread:
+      "There is no cluster total: the nodes could not be listed ({said}).",
+    missingLabels:
+      "Some of OpenCost's series lack the labels this page joins them on: {labels}.",
+    workloadsFailed:
+      "Could not read what each workload costs: {said}. The totals stand.",
+    unplaced: {
+      one: "{amount} per hour in {namespace} is for {n} pod the cluster does not list on a node.",
+      other:
+        "{amount} per hour in {namespace} is for {n} pods the cluster does not list on a node.",
+    },
+    waiting: {
+      one: "{n} pod waits for a node and costs nothing until it is placed.",
+      other: "{n} pods wait for a node and cost nothing until they are placed.",
+    },
+    pricesEnter: "Enter prices…",
+    pricesEdit: "Prices…",
+    pricesTitle: "Prices for {context}",
+    pricesHint:
+      "What this cluster's resources cost you. The Cost page estimates from them where no Prometheus holds OpenCost's series. The currency is a label and is never converted.",
+    pricesNotUsed:
+      "OpenCost's series answer for this cluster, so the page shows their prices, not these.",
+    fieldCpu: "Per vCPU, per hour",
+    fieldMemory: "Per GiB of memory, per hour",
+    fieldStorage: "Per GiB of storage, per month",
+    fieldGpu: "Per GPU, per hour",
+    fieldCurrency: "Currency",
+    optional: "optional",
+    pricesWrong:
+      "A price is a number, zero or more, and CPU and memory need one.",
+    pricesForget: "Forget these prices",
+    settingsPrices:
+      "Cost estimated at {cpu} per vCPU-hour and {memory} per GiB-hour.",
+    settingsNoPrices: "No prices entered for the cost estimate.",
+    linePerHour: "{amount} per hour",
+    linePerMonth: "{amount} per month projected",
+    lineShare: "{share} of the cluster",
+    lineShareAtMost: "at most {share} of the cluster",
+    lineFromOpenCost: "from OpenCost",
+    lineFromPrices: "estimated from entered prices",
+    lineNotPriced: "No OpenCost series priced its pods.",
+    lineNothingOnANode:
+      "Nothing of it runs on a node, so nothing is billed to it now.",
+    lineCut:
+      "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
+    lineUnread: "Could not read what this costs.",
   },
   hints: {
     mostLikely: "Most likely",
@@ -3253,7 +3415,7 @@ export const en = {
       "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
     lokiGives: "logs from before the current pod existed",
     prometheusGives:
-      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped; every PrometheusRule with whether the connected Prometheus has loaded it and what is firing from it, and the alerts firing about an object on its own page",
+      "usage history, volume fullness and traffic on pods and workloads from an address, and what the cluster costs where OpenCost's series are in it; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped; every PrometheusRule with whether the connected Prometheus has loaded it and what is firing from it, and the alerts firing about an object on its own page",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
 
@@ -7960,6 +8122,7 @@ export const en = {
     Node: "machine, machines, host, hosts",
     overview: "home, dashboard",
     events: "",
+    cost: "price, prices, spend, spending, billing, opencost, kubecost",
     helm: "releases, charts",
     apiResources: "api-resources, kinds",
     myAccess: "my access, can i, permissions, rbac, auth can-i",

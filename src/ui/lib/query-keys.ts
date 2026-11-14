@@ -573,6 +573,44 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  /** What the scope holds that a price can be put on: `cost_basis`. */
+  costBasis: (
+    namespaces: readonly string[] | null,
+    heldOnNodes: boolean
+  ): string[] => [
+    "cost-basis",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+    heldOnNodes ? "held" : "not-held",
+  ],
+  /** A supplier's prices over the same scope, on the basis's own rows. */
+  costReading: (
+    namespaces: readonly string[] | null,
+    nodes: boolean,
+    rows: string
+  ): string[] => [
+    "cost-reading",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+    nodes ? "nodes" : "no-nodes",
+    rows,
+  ],
+  costTrend: (
+    namespaces: readonly string[] | null,
+    range: string,
+    prices: string
+  ): string[] => [
+    "cost-trend",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+    range,
+    prices,
+  ],
+  workloadUsage: (
+    namespaces: readonly string[] | null,
+    rows: string
+  ): string[] => [
+    "workload-usage",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+    rows,
+  ],
   serviceBacking: (namespaces: readonly string[] | null): string[] => [
     "service-backing",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   Activity,
   Box,
+  Coins,
   FileText,
   LayoutDashboard,
   Library,
@@ -114,6 +115,7 @@ const quickActions: Array<{
     path: pageLink("events"),
   },
   { icon: Package, label: "goToHelm", words: "helm", path: pageLink("helm") },
+  { icon: Coins, label: "goToCost", words: "cost", path: pageLink("cost") },
   {
     icon: Library,
     label: "goToApiResources",

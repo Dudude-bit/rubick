@@ -148,6 +148,7 @@ describe("the palette's entries with nothing typed", () => {
       "nav:goToSecrets",
       "nav:goToEvents",
       "nav:goToHelm",
+      "nav:goToCost",
       "nav:goToApiResources",
       "nav:goToMyAccess",
       "settings",
@@ -169,6 +170,7 @@ describe("the palette's entries with nothing typed", () => {
       "/c/k3d-dev/secrets",
       "/c/k3d-dev/events",
       "/c/k3d-dev/helm",
+      "/c/k3d-dev/cost",
       "/c/k3d-dev/api-resources",
       "/c/k3d-dev/my-access",
     ]);

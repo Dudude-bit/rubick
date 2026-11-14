@@ -17,6 +17,7 @@ import { EyeOff } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageBlock } from "../../-usage/usage-block";
+import { WorkloadCostLine } from "../../-cost/cost-line";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
@@ -25,6 +26,15 @@ import type { UsageScope } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import type { PodInfo, ResourceConnections } from "@/generated/types";
 import type { WorkloadTemplate } from "./workload-ceiling";
+
+/** The API group of each kind this block is drawn for. */
+const WORKLOAD_GROUP: Record<string, string> = {
+  Deployment: "apps",
+  StatefulSet: "apps",
+  DaemonSet: "apps",
+  Job: "batch",
+  CronJob: "batch",
+};
 
 /**
  * A pod that has terminated is not using anything, and metrics-server has
@@ -175,7 +185,16 @@ export function WorkloadUsage({
       status={podStatus}
       connections={connections}
       history={scope}
-    />
+    >
+      {name && namespace && (
+        <WorkloadCostLine
+          group={WORKLOAD_GROUP[kind] ?? ""}
+          kind={kind}
+          name={name}
+          namespace={namespace}
+        />
+      )}
+    </UsageBlock>
   );
 }
 

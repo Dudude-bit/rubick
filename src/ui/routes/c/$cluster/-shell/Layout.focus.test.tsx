@@ -190,7 +190,7 @@ describe("the shell's Tab order", () => {
       await user.click(row("Pods").querySelector("span")!);
       expect(document.activeElement).toBe(row("Pods"));
       fireEvent.keyDown(document.activeElement!, webkitShiftTab);
-      expect(document.activeElement).toBe(row("Changes"));
+      expect(document.activeElement).toBe(row("Cost"));
 
       await user.click(row("Overview").querySelector("span")!);
       fireEvent.keyDown(document.activeElement!, webkitShiftTab);
