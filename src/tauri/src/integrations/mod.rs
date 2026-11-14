@@ -21,6 +21,7 @@
 //! One folder per extension. Nothing outside this module imports one by name
 //! — the frontend asks for a capability and a lint rule keeps that true.
 pub mod cert_manager;
+pub mod hubble;
 pub mod ingress_nginx;
 pub mod loki;
 pub mod prometheus;

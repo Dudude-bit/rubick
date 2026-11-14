@@ -161,6 +161,10 @@ http-body = "1"
 memchr = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen"] }
+tonic-prost = "0.14.9"
+prost = "0.14.6"
+prost-types = "0.14.6"
 
 
 # kill(2) on a process group: the login-shell probe in `shell::env` has to
@@ -181,3 +185,5 @@ p521 = { version = "0.13", default-features = false, features = [
   "ecdsa",
   "getrandom",
 ] }
+protox = "0.10.0"
+tonic-prost-build = "0.14.9"

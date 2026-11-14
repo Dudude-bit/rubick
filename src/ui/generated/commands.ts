@@ -214,6 +214,18 @@ export async function getCertificateIssuance(
   });
 }
 
+export async function openHubbleFlows(scope: string[] | null): Promise<string> {
+  return invoke<string>("open_hubble_flows", { scope });
+}
+
+export async function hubbleFlowsSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("hubble_flows_subscribed", { streamId });
+}
+
+export async function closeHubbleFlows(streamId: string): Promise<void> {
+  return invoke<void>("close_hubble_flows", { streamId });
+}
+
 export async function detectInClusterExtensions(): Promise<
   DetectedExtension[]
 > {

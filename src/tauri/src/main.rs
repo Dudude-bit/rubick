@@ -333,6 +333,9 @@ fn main() {
             integrations::prometheus::prometheus_query_range,
             integrations::prometheus::by_workload::prometheus_by_workload,
             integrations::prometheus::flows::prometheus_flows,
+            integrations::hubble::open_hubble_flows,
+            integrations::hubble::hubble_flows_subscribed,
+            integrations::hubble::close_hubble_flows,
             integrations::prometheus::prometheus_targets,
             integrations::prometheus::prometheus_rules,
             integrations::loki::get_loki_connection,
@@ -1059,10 +1062,11 @@ mod tests {
     /// touch only memory, or if one of these names a way to the disk.
     #[test]
     fn a_command_on_the_window_thread_touches_only_memory() {
-        const ON_THE_WINDOW_THREAD: [&str; 28] = [
+        const ON_THE_WINDOW_THREAD: [&str; 30] = [
             "cancel_auth_session",
             "cancel_node_drain",
             "cancel_resource_search",
+            "close_hubble_flows",
             "close_terminal",
             "close_topology",
             "connection_attempt",
@@ -1071,6 +1075,7 @@ mod tests {
             "files_subscribed",
             "focus_cluster",
             "get_app_info",
+            "hubble_flows_subscribed",
             "list_port_forwards",
             "list_terminal_sessions",
             "log_stream_subscribed",

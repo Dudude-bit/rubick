@@ -177,6 +177,8 @@ pub struct AppState {
     pub feeds: Arc<crate::feeds::Feeds>,
     /// Cluster maps being drawn.
     pub topology_streams: streams::Streams,
+    /// Live flows from Hubble Relay, one stream per Traffic page.
+    pub hubble_streams: streams::Streams,
 }
 
 impl AppState {
@@ -228,6 +230,7 @@ impl AppState {
             feeds: Arc::new(crate::feeds::Feeds::new(ownership.budget())),
             ownership,
             topology_streams: streams::Streams::default(),
+            hubble_streams: streams::Streams::default(),
         })
     }
 

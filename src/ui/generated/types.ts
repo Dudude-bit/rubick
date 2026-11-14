@@ -143,6 +143,44 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
+export interface RelayAt {
+  namespace: string;
+  service: string;
+  pod: string;
+}
+
+export interface LivePair {
+  from: FlowEnd;
+  to: FlowEnd;
+  forwarded: number;
+  dropped: number;
+  drops: LiveDrop[];
+  requests: number | null;
+  errors: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  protocols: string[];
+}
+
+export interface LiveDrop {
+  reason: string;
+  rate: number;
+  policies: PolicyRef[];
+}
+
+export interface PolicyRef {
+  group: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface LiveKey {
+  from: FlowEnd;
+  to: FlowEnd;
+}
+
 export interface MapKindState {
   kind: string;
   reading: MapKindReading;
@@ -2950,7 +2988,44 @@ export type AppEvent =
     }
   | { channel: "topology-batch"; stream_id: string; pieces: TopologyPiece[] }
   | { channel: "topology-ready"; stream_id: string }
-  | { channel: "topology-ended"; stream_id: string; end: TopologyEnd };
+  | { channel: "topology-ended"; stream_id: string; end: TopologyEnd }
+  | {
+      channel: "hubble-flows";
+      stream_id: string;
+      pairs: LivePair[];
+      gone: LiveKey[];
+      relay: RelayAt | null;
+      lost: number;
+      untracked: number;
+    }
+  | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd };
+
+export type LiveEnd =
+  | { says: "closed" }
+  | { says: "unsubscribed" }
+  | { says: "notEnabled" }
+  | { says: "notLooked"; said: string }
+  | { says: "servesTls"; namespace: string }
+  | { says: "noPod"; namespace: string; service: string }
+  | { says: "relayEnded" }
+  | { says: "failed"; said: string };
+
+export type FlowEnd =
+  | { is: "workload"; key: WorkloadKey }
+  | { is: "ambiguous"; namespace: string; name: string; kinds: string[] }
+  | {
+      is: "notListed";
+      namespace: string;
+      name: string;
+      kind: string | null;
+      why: NotListedWhy;
+    }
+  | { is: "service"; namespace: string | null; name: string }
+  | { is: "node"; name: string }
+  | { is: "address"; address: string }
+  | { is: "unidentified"; namespace: string | null; word: string };
+
+export type NotListedWhy = "noSuch" | "podsUnread";
 
 export type TopologyEnd =
   | { says: "closed" }
@@ -3640,23 +3715,6 @@ export type Measure =
   | "bytes"
   | "events"
   | "drops";
-
-export type FlowEnd =
-  | { is: "workload"; key: WorkloadKey }
-  | { is: "ambiguous"; namespace: string; name: string; kinds: string[] }
-  | {
-      is: "notListed";
-      namespace: string;
-      name: string;
-      kind: string | null;
-      why: NotListedWhy;
-    }
-  | { is: "service"; namespace: string | null; name: string }
-  | { is: "node"; name: string }
-  | { is: "address"; address: string }
-  | { is: "unidentified"; namespace: string | null; word: string };
-
-export type NotListedWhy = "noSuch" | "podsUnread";
 
 export type EndIs = "pod" | "node" | "service" | "address";
 
