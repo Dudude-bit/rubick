@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -150,7 +150,8 @@ describe("what a card says about a way in", () => {
     await mount();
 
     expect(screen.getByText("https://shop.example.com")).toBeVisible();
-    expect(screen.getByText(/not read yet|не читали/i)).toBeVisible();
+    const way = screen.getByText("https://shop.example.com").closest("li")!;
+    expect(within(way).getByText(/not read yet|не читали/i)).toBeVisible();
   });
 
   /** And a Service read to have nothing behind it still says so, in warning. */
@@ -503,5 +504,60 @@ describe("what a card offers Share", () => {
           section.id === `pin:${pin.kind}/${pin.namespace}/${pin.name}`
       )
     ).toBe(true);
+  });
+});
+
+describe("the last change a card names", () => {
+  /**
+   * A timeline the card could not read is not one that saw nothing. Fails
+   * if a read that failed says "nothing seen", on the card or in Share, or
+   * one that answered does not name the newest change.
+   */
+  it("says the timeline was not read rather than that nothing changed", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { useClusterStore } = await import("@/stores/clusterStore");
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "timeline_read") throw new Error("disk refused");
+      return undefined;
+    });
+    await mount();
+    expect(await screen.findByText("not read yet")).toBeInTheDocument();
+    expect(screen.queryByText(/nothing seen/)).toBeNull();
+    const words = (latest: Parameters<typeof pinShare>[4]) => {
+      const section = pinShare(
+        pin,
+        { state: "ready", ready: 1, total: 1 },
+        { entries: [], known: true },
+        [],
+        latest,
+        [],
+        t
+      );
+      const rows = section.body.type === "facts" ? section.body.rows : [];
+      return rows.find((row) => row.label === "Last change")?.values[0].text;
+    };
+    expect(words(undefined)).toBe("not read yet");
+    expect(words(null)).toBe("nothing seen while this app was watching");
+    expect(
+      words({
+        id: "1",
+        seq: 1,
+        at: 1,
+        kind: "Deployment",
+        group: "apps",
+        namespace: "shop",
+        name: "payments",
+        what: {
+          says: "changed",
+          fields: [
+            { says: "moved", path: "spec.replicas", from: "1", to: "2" },
+          ],
+          more: 0,
+          before: null,
+        },
+        atRelist: false,
+      })
+    ).toBe("spec.replicas 1 → 2");
   });
 });

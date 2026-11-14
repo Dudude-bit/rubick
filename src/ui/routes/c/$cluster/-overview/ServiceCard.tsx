@@ -124,10 +124,9 @@ export function ServiceCard({
   const unread = openQuestionsOf(connections.data);
   const waiting = useMemo(() => waitingFor(watches, pin), [watches, pin]);
   // Not read yet, or not readable, is not "nothing seen".
-  const latest =
-    timeline.isPending || timeline.error
-      ? undefined
-      : (timeline.rows.find(isChange) ?? null);
+  const latest = timeline.read
+    ? (timeline.rows.find(isChange) ?? null)
+    : undefined;
   const [allWays, setAllWays] = useState(false);
   const shownWays = allWays ? ways.entries : ways.entries.slice(0, WAYS_SHOWN);
 

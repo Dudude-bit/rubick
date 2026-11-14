@@ -39,6 +39,8 @@ export interface TimelineAsk {
 
 /** What a surface draws from: the rows read so far, newest first, and what is not known about the rest. */
 export interface TimelineRead {
+  /** Whether anything was read at all: no rows before it is not "none". */
+  read: boolean;
   rows: readonly TimelineRow[];
   spans: SpanSets | undefined;
   letGo: LetGoes | undefined;
@@ -192,6 +194,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
   }, [client, key, question]);
 
   return {
+    read: data !== undefined,
     rows: data?.rows ?? NO_ROWS,
     spans: data?.spans,
     letGo: data?.letGo,
