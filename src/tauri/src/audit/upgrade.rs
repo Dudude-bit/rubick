@@ -357,8 +357,13 @@ async fn releases(
     read: &mut Read,
 ) -> Vec<(ReleaseRevision, Arc<Result<Vec<ReleaseObject>, Why>>)> {
     let mut revisions = Vec::new();
-    for reach in reaches(scope, true) {
-        match upgraded_from_in(client, reach.as_deref()).await {
+    let listed = futures::stream::iter(reaches(scope, true))
+        .map(|reach| async move { (upgraded_from_in(client, reach.as_deref()).await, reach) })
+        .buffered(6)
+        .collect::<Vec<_>>()
+        .await;
+    for (found, reach) in listed {
+        match found {
             Ok(found) => revisions.extend(found),
             Err(error) => read.not_checked.push(NotChecked {
                 kind: RELEASE_STORE.to_string(),
