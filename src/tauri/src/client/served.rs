@@ -419,7 +419,7 @@ pub(crate) mod test_server {
     pub(crate) async fn answering(
         answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> (Client, Hits) {
-        let (url, hits) = listening(answer).await;
+        let (url, hits) = listening(move |path, _, nth| answer(path, nth)).await;
         let config = kube::Config::new(url.parse().expect("cluster url"));
         (Client::try_from(config).expect("client"), hits)
     }
@@ -439,7 +439,7 @@ pub(crate) mod test_server {
         served: super::ServedIndex,
         answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> (crate::state::AppState, Hits, kube::config::Kubeconfig) {
-        let (url, hits) = listening(answer).await;
+        let (url, hits) = listening(move |path, _, nth| answer(path, nth)).await;
         let mut state = crate::state::AppState::new().expect("state");
         state.client_manager = Arc::new(crate::client::K8sClientManager::with_served(served));
         let kubeconfig = kube::config::Kubeconfig::from_yaml(&format!(
@@ -458,6 +458,15 @@ pub(crate) mod test_server {
         (state, hits, kubeconfig)
     }
 
+    /// A server that answers by path and query string, `answer(path,
+    /// query)`, at the address it returns: for a reader that is not a
+    /// Kubernetes client, such as Prometheus.
+    pub(crate) async fn answering_query(
+        answer: impl Fn(&str, &str) -> (u16, String) + Send + Sync + 'static,
+    ) -> (String, Hits) {
+        listening(move |path, query, _| answer(path, query)).await
+    }
+
     /// A failure as the API server words it.
     pub(crate) fn failure(code: u16, reason: &str) -> (u16, String) {
         (
@@ -474,7 +483,7 @@ pub(crate) mod test_server {
     }
 
     async fn listening(
-        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+        answer: impl Fn(&str, &str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> (String, Hits) {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
@@ -491,14 +500,9 @@ pub(crate) mod test_server {
                     let mut buf = vec![0u8; 8192];
                     let n = socket.read(&mut buf).await.unwrap_or(0);
                     let request = String::from_utf8_lossy(&buf[..n]);
-                    let path = request
-                        .split_whitespace()
-                        .nth(1)
-                        .unwrap_or("")
-                        .split('?')
-                        .next()
-                        .unwrap_or("")
-                        .to_string();
+                    let target = request.split_whitespace().nth(1).unwrap_or("");
+                    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+                    let (path, query) = (path.to_string(), query.to_string());
                     let nth = {
                         let mut seen = seen.lock().unwrap();
                         let count = seen.entry(path.clone()).or_default();
@@ -507,7 +511,7 @@ pub(crate) mod test_server {
                     };
                     // Slow enough that callers arriving together overlap.
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    let (status, body) = answer(&path, nth);
+                    let (status, body) = answer(&path, &query, nth);
                     let reply = format!(
                         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                         body.len()

@@ -71,6 +71,8 @@ pub enum RuleId {
     NoMemoryRequest,
     RemovedApiInHelmRelease,
     DeprecatedApiWriter,
+    CrdVersionDeprecated,
+    DeprecatedApiRequested,
 }
 
 pub struct Rule {
@@ -169,6 +171,8 @@ pub const RULES: &[Rule] = &[
     rule(R::NoMemoryRequest, Efficiency, Medium, None, &[LIMIT_RANGE]),
     rule(R::RemovedApiInHelmRelease, Upgrade, High, None, &[]),
     rule(R::DeprecatedApiWriter, Upgrade, Medium, None, &[]),
+    rule(R::CrdVersionDeprecated, Upgrade, Low, None, &[]),
+    rule(R::DeprecatedApiRequested, Upgrade, Medium, None, &[]),
 ];
 
 pub const POD: &str = "Pod";
@@ -217,5 +221,6 @@ mod tests {
             assert_eq!(id.rule().id, id, "RULES is out of the enum's order");
         }
         assert_eq!(contract["helmRelease"], super::super::HELM_RELEASE);
+        assert_eq!(contract["deprecatedApi"], super::super::DEPRECATED_API);
     }
 }

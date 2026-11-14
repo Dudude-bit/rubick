@@ -742,9 +742,11 @@ fn judges(rule: RuleId, kind: &str) -> bool {
         R::AutoscalerPinned | R::AutoscalerTargetMissing => kind == AUTOSCALER,
         R::BudgetBlocksDisruption => kind == BUDGET,
         // Read by their own pass, not through the kind's feed.
-        R::NamespaceWithoutNetworkPolicy | R::RemovedApiInHelmRelease | R::DeprecatedApiWriter => {
-            false
-        }
+        R::NamespaceWithoutNetworkPolicy
+        | R::RemovedApiInHelmRelease
+        | R::DeprecatedApiWriter
+        | R::CrdVersionDeprecated
+        | R::DeprecatedApiRequested => false,
         _ => template,
     }
 }

@@ -3234,7 +3234,9 @@ export type Why =
   | { says: "refused"; message: string }
   | { says: "failed"; message: string }
   | { says: "notAudited" }
-  | { says: "unserved" };
+  | { says: "unserved" }
+  | { says: "noPrometheus" }
+  | { says: "notScraped" };
 
 export type RuleId =
   | "pss-host-process"
@@ -3276,7 +3278,9 @@ export type RuleId =
   | "no-cpu-request"
   | "no-memory-request"
   | "removed-api-in-helm-release"
-  | "deprecated-api-writer";
+  | "deprecated-api-writer"
+  | "crd-version-deprecated"
+  | "deprecated-api-requested";
 
 export type What =
   | { says: "set"; at: At | null; field: string; value: string }
@@ -3317,7 +3321,29 @@ export type What =
       time: string | null;
       api: string;
       removal: Removal;
-    };
+    }
+  | {
+      says: "deprecated";
+      version: string;
+      warning: string | null;
+      stored: boolean;
+      storage: boolean;
+    }
+  | {
+      says: "storedAs";
+      group: string;
+      kind: string;
+      storage: string | null;
+      stored: string[];
+      current: string[];
+    }
+  | {
+      says: "requested";
+      kind: string | null;
+      removed: string | null;
+      replacement: string | null;
+    }
+  | { says: "requestedToday"; requests: number };
 
 export type TrafficBy =
   | { says: "service"; name: string }

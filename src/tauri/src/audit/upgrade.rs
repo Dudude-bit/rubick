@@ -20,6 +20,7 @@ use kube::Client;
 use serde::{Deserialize, Serialize};
 
 use super::answer::{in_scope, Audited, NotChecked, World};
+use super::deprecated::{count, count_unread, groups_of, judge_requested, read_crds, Prometheus};
 use super::{is_system, AuditFinding, AuditSeverity, RuleId, Subject, Unchecked, What, Why};
 use crate::client::served::{ServedIndex, ServedKind};
 use crate::commands::helm::{release_objects, upgraded_from_in, ReleaseObject, ReleaseRevision};
@@ -331,12 +332,16 @@ pub struct Read {
 /// A release decoded, kept while its Secret's `resourceVersion` holds.
 type Kept = (String, Arc<Result<Vec<ReleaseObject>, Why>>);
 
-/// Releases decoded, by namespace and Secret.
+/// Releases decoded, by namespace and Secret, and CRDs judged, by name:
+/// kept for a context across visits to the page.
 #[derive(Default)]
 pub struct Decoded {
     held: HashMap<(String, String), Kept>,
     /// Release Secrets fetched whole, ever: what a pass costs.
     pub fetched: u64,
+    crds: super::deprecated::KeptCrds,
+    /// CRDs fetched whole, ever.
+    pub crds_fetched: u64,
 }
 
 fn reaches(scope: Option<&[String]>, namespaced: bool) -> Vec<Option<String>> {
@@ -469,12 +474,38 @@ pub async fn read(
     scope: Option<&[String]>,
     now: Option<u32>,
     decoded: &mut Decoded,
+    prometheus: &Prometheus,
 ) -> Read {
     let mut read = Read {
         scope: scope.map(<[String]>::to_vec),
         ..Read::default()
     };
     let releases = releases(client, scope, decoded, &mut read).await;
+
+    // A CRD and the API server's count are the cluster's, read only where
+    // the whole cluster is asked for, as every cluster-wide kind is.
+    let mut counted = None;
+    if scope.is_none() {
+        read_crds(
+            client,
+            &mut decoded.crds,
+            &mut decoded.crds_fetched,
+            &mut read,
+        )
+        .await;
+        let unread = match prometheus {
+            Prometheus::NotConnected => Some(Why::NoPrometheus),
+            Prometheus::Unusable(why) => Some(why.clone()),
+            Prometheus::Connected(entry) => match count(entry).await {
+                Ok(found) => {
+                    counted = Some(found);
+                    None
+                }
+                Err(why) => Some(why),
+            },
+        };
+        read.not_checked.extend(unread.map(count_unread));
+    }
 
     let mut groups: BTreeSet<String> = BTreeSet::new();
     for (_, objects) in &releases {
@@ -486,7 +517,13 @@ pub async fn read(
     for kind in &kinds {
         groups.extend(pending_groups(kind, now));
     }
+    if let Some(counted) = &counted {
+        groups.extend(groups_of(counted));
+    }
     let groups = discover(served, context, client, groups).await;
+    if let Some(counted) = &counted {
+        read.objects.extend(judge_requested(counted, &groups));
+    }
 
     for (revision, objects) in &releases {
         let subject = Subject {
@@ -1164,7 +1201,8 @@ mod tests {
                 ),
             ),
             "/apis/flowcontrol.apiserver.k8s.io/v1/flowschemas" => (200, flow_schemas()),
-            "/apis/flowcontrol.apiserver.k8s.io/v1/prioritylevelconfigurations" => (
+            "/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
+            | "/apis/flowcontrol.apiserver.k8s.io/v1/prioritylevelconfigurations" => (
                 200,
                 json!({ "kind": "PartialObjectMetadataList", "apiVersion": "meta.k8s.io/v1",
                         "metadata": {}, "items": [] })
@@ -1176,7 +1214,16 @@ mod tests {
         let served = ServedIndex::default();
         let mut decoded = Decoded::default();
 
-        let first = read(&client, &served, "fake", None, Some(31), &mut decoded).await;
+        let first = read(
+            &client,
+            &served,
+            "fake",
+            None,
+            Some(31),
+            &mut decoded,
+            &Prometheus::NotConnected,
+        )
+        .await;
 
         let release = first
             .objects
@@ -1206,25 +1253,50 @@ mod tests {
         assert_eq!(writers, vec!["legacy"]);
         assert_eq!(first.checked["FlowSchema"], 2);
         assert_eq!(first.checked[HELM_RELEASE], 1);
-        assert!(first.not_checked.is_empty(), "{:?}", first.not_checked);
+        assert_eq!(
+            first.not_checked,
+            vec![count_unread(Why::NoPrometheus)],
+            "{:?}",
+            first.not_checked
+        );
         assert!(!hits
             .lock()
             .unwrap()
             .contains_key("/apis/apps/v1/deployments"));
         assert_eq!(decoded.fetched, 1);
 
-        let second = read(&client, &served, "fake", None, Some(31), &mut decoded).await;
+        let second = read(
+            &client,
+            &served,
+            "fake",
+            None,
+            Some(31),
+            &mut decoded,
+            &Prometheus::NotConnected,
+        )
+        .await;
         assert_eq!(decoded.fetched, 1);
         assert_eq!(second.objects.len(), first.objects.len());
 
-        read(&client, &served, "fake", None, Some(31), &mut decoded).await;
+        read(
+            &client,
+            &served,
+            "fake",
+            None,
+            Some(31),
+            &mut decoded,
+            &Prometheus::NotConnected,
+        )
+        .await;
         assert_eq!(decoded.fetched, 2);
         assert_eq!(hits.lock().unwrap()[SECRET], 2);
     }
 
     /// A namespace whose release Secrets would not list is named as not
     /// checked with the cluster's words, and the namespaces that did list
-    /// are judged. Would break if a refused list read as "no releases".
+    /// are judged; under a selection of namespaces the cluster's CRDs and the
+    /// API server's count are neither read nor said unread, as for every
+    /// cluster-wide kind. Would break if a refused list read as "no releases".
     #[tokio::test]
     async fn a_namespace_whose_releases_would_not_list_is_named_not_none() {
         let (client, _) = answering(|path, _| match path {
@@ -1249,6 +1321,7 @@ mod tests {
             Some(&scope),
             Some(33),
             &mut decoded,
+            &Prometheus::NotConnected,
         )
         .await;
 

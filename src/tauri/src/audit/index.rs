@@ -617,6 +617,9 @@ pub struct AuditIndexes {
     pub(super) besides: DashMap<(String, String), (Instant, Arc<Beside>)>,
     /// Each cluster's namespaces that enforce a Pod Security level, and when read.
     pub(super) enforced: DashMap<String, (Instant, Vec<super::Enforced>)>,
+    /// What the upgrade rules decoded per cluster, kept across visits so a
+    /// return to the page fetches only what changed.
+    decoded: DashMap<String, Arc<tokio::sync::Mutex<super::upgrade::Decoded>>>,
 }
 
 impl AuditIndexes {
@@ -627,6 +630,7 @@ impl AuditIndexes {
             events,
             besides: DashMap::new(),
             enforced: DashMap::new(),
+            decoded: DashMap::new(),
         }
     }
 
@@ -693,7 +697,13 @@ impl AuditIndexes {
         *lease = Some(subscription.lease);
         drop(lease);
         spawn_reader(index.clone(), subscription.updates);
-        spawn_upgrade(index.clone(), state.client_manager.clone());
+        let decoded = self.decoded.entry(context.clone()).or_default().clone();
+        spawn_upgrade(
+            index.clone(),
+            state.client_manager.clone(),
+            state.port_forward_sessions.clone(),
+            decoded,
+        );
         spawn_announcer(index.clone(), self.events.clone());
         spawn_reaper(self.clusters.clone(), context, index.clone());
         Ok(index)
@@ -708,6 +718,7 @@ impl AuditIndexes {
     pub fn forget(&self, context: &str) {
         self.besides.retain(|(held, _), _| held != context);
         self.enforced.remove(context);
+        self.decoded.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
             index.lease.lock().take();
@@ -717,6 +728,7 @@ impl AuditIndexes {
     pub fn forget_all(&self) {
         self.besides.clear();
         self.enforced.clear();
+        self.decoded.clear();
         for entry in self.clusters.iter() {
             entry.stop.cancel();
             entry.lease.lock().take();
@@ -743,11 +755,17 @@ fn spawn_reader(index: Arc<AuditIndex>, mut updates: mpsc::Receiver<Update>) {
 
 /// Reads the upgrade rules' kinds on start, every few minutes after, and
 /// at once when the scope moves.
-fn spawn_upgrade(index: Arc<AuditIndex>, clients: Arc<crate::client::K8sClientManager>) {
+fn spawn_upgrade(
+    index: Arc<AuditIndex>,
+    clients: Arc<crate::client::K8sClientManager>,
+    tunnels: Arc<DashMap<String, crate::state::PortForwardSession>>,
+    decoded: Arc<tokio::sync::Mutex<super::upgrade::Decoded>>,
+) {
     tokio::spawn(async move {
-        let mut decoded = super::upgrade::Decoded::default();
         loop {
             let scope = index.scope.lock().clone();
+            let prometheus = prometheus_of(&index.context, &tunnels).await;
+            let mut decoded = decoded.lock().await;
             let pass = super::upgrade::read(
                 &index.client,
                 clients.served(),
@@ -755,12 +773,14 @@ fn spawn_upgrade(index: Arc<AuditIndex>, clients: Arc<crate::client::K8sClientMa
                 scope.as_deref(),
                 index.minor,
                 &mut decoded,
+                &prometheus,
             );
             let read = tokio::select! {
                 biased;
                 () = index.stop.cancelled() => break,
                 read = pass => read,
             };
+            drop(decoded);
             *index.upgrade.write() = Some(Arc::new(read));
             index.changed();
             if !next_pass(&index, UPGRADE_EVERY, ASKED_WITHIN).await {
@@ -768,6 +788,21 @@ fn spawn_upgrade(index: Arc<AuditIndex>, clients: Arc<crate::client::K8sClientMa
             }
         }
     });
+}
+
+/// This cluster's Prometheus as Settings holds it, read again each pass so
+/// one connected while the page is open is asked from the next.
+async fn prometheus_of(
+    context: &str,
+    tunnels: &DashMap<String, crate::state::PortForwardSession>,
+) -> super::deprecated::Prometheus {
+    use super::deprecated::Prometheus;
+    match crate::integrations::prometheus::connection_for(context, tunnels).await {
+        Ok(None) => Prometheus::NotConnected,
+        Ok(Some(Ok(entry))) => Prometheus::Connected(entry),
+        Ok(Some(Err(reason))) => Prometheus::Unusable(Why::Failed { message: reason }),
+        Err(error) => Prometheus::Unusable(super::why_of(&error)),
+    }
 }
 
 /// Waits for the next upgrade pass: a few minutes on, or at once when the

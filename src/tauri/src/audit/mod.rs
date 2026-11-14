@@ -7,6 +7,7 @@
 
 mod answer;
 mod context;
+mod deprecated;
 mod detail;
 mod index;
 mod names;
@@ -28,6 +29,7 @@ pub use answer::{
     AuditPage, AuditQuery, AuditRow, AuditSummary, Enforced, Grouping, KindChecked, NotChecked,
     ObjectAudit, RuleCount, UpgradeRead,
 };
+pub use deprecated::DEPRECATED_API;
 pub use detail::object_audit;
 pub use index::AuditIndexes;
 pub use rules::{AuditSeverity, Category, RuleId, Standard};
@@ -175,6 +177,34 @@ pub enum What {
         api: String,
         removal: Removal,
     },
+    /// A served version its CRD marks deprecated, with the CRD's own
+    /// warning, and whether objects may be stored at it.
+    Deprecated {
+        version: String,
+        warning: Option<String>,
+        stored: bool,
+        storage: bool,
+    },
+    /// Where a CRD's objects are stored: the storage version, every version
+    /// they may still be stored at, and the served versions not deprecated.
+    StoredAs {
+        group: String,
+        kind: String,
+        storage: Option<String>,
+        stored: Vec<String>,
+        current: Vec<String>,
+    },
+    /// The API server counted a request to this deprecated API since it
+    /// started, and names the release that removes it where it does.
+    Requested {
+        kind: Option<String>,
+        removed: Option<String>,
+        replacement: Option<String>,
+    },
+    /// Its requests in the last day, as the API server counted them.
+    RequestedToday {
+        requests: u64,
+    },
 }
 
 /// One rule an object breaks, and where.
@@ -216,6 +246,10 @@ pub enum Why {
     NotAudited,
     /// A kind this cluster does not serve.
     Unserved,
+    /// No Prometheus is connected to this cluster, where a rule reads one.
+    NoPrometheus,
+    /// The connected Prometheus holds none of the API server's metrics.
+    NotScraped,
 }
 
 /// Why a read did not answer: refused, or failed in the server's words.

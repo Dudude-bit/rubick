@@ -303,6 +303,9 @@ Helm 3 stores them: `legacy-web` names versions Kubernetes removed (High) and
 `audit-upgrade-1.31.yaml`, on a 1.31 cluster or older, writes a FlowSchema
 through `flowcontrol.apiserver.k8s.io/v1beta3`, which 1.32 removes (Medium).
 `audit-reader` may not list Secrets, so for it the releases are not checked.
+`audit-upgrade-crd.yaml` adds a CRD whose `v1alpha1` is served and marked
+deprecated (Low; Medium once `storedVersions` names it, the patch is in the
+file) and a CronTab written at that version.
 
 ```bash
 kubectl apply -f audit-upgrade.yaml
