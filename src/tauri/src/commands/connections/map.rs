@@ -81,7 +81,8 @@ struct Workload {
     subject: ObjectRef,
     labels: BTreeMap<String, String>,
     template_labels: BTreeMap<String, String>,
-    annotations: BTreeMap<String, String>,
+    /// Its metadata, for what it says to a delivery tool.
+    meta: kube::core::ObjectMeta,
     /// The template as its pods run it, by [`as_run`].
     spec: Option<PodSpec>,
     owners: Vec<OwnerReference>,
@@ -126,7 +127,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             &snapshot,
             &mut out,
         );
-        if let Some(policies) = snapshot.policies.as_ref().ok() {
+        if let Ok(policies) = snapshot.policies.as_ref() {
             for policy in policies {
                 let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
                 if Selector::Query(selector).matches(template) == Some(true) {
@@ -152,7 +153,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 pods: pods_read.then(|| tally(&own)),
                 cover: Some(cover_of(template, &snapshot, ns)),
                 labels: workload.labels.clone(),
-                annotations: workload.annotations.clone(),
+                annotations: crate::resources::annotations_of(&workload.meta),
             },
         );
     }
@@ -174,7 +175,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             .iter()
             .find(|entry| entry.service.same_object(&svc_ref))
             .cloned()
-            .map(|entry| entry.summary_keeping(|_| false));
+            .map(|entry| Box::new(entry.summary_keeping(|_| false)));
         let id = node_id(&svc_ref);
         nodes.insert(
             id.clone(),
@@ -210,7 +211,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 object: ing_ref,
                 home: Some(ns.to_string()),
                 verdict: NodeVerdict::Ingress {
-                    row: crate::resources::IngressInfo::from(ing),
+                    row: Box::new(crate::resources::IngressInfo::from(ing)),
                 },
                 app: app_of(ing.labels()),
                 pods: None,
@@ -268,7 +269,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 object: gw_ref,
                 home: Some(ns.to_string()),
                 verdict: NodeVerdict::Gateway {
-                    row: gateway.clone(),
+                    row: Box::new(gateway.clone()),
                 },
                 app: None,
                 pods: None,
@@ -442,7 +443,7 @@ fn workloads_of(
         found.push(Workload {
             subject,
             labels: meta.labels.clone().unwrap_or_default(),
-            annotations: crate::resources::annotations_of(meta),
+            meta: meta.clone(),
             spec: template
                 .spec
                 .as_ref()
@@ -672,9 +673,9 @@ fn ingress_edges(ing: &Ingress, ns: &str, snapshot: &Snapshot, out: &mut Neighbo
 
 /// The stops a route's own status names.
 fn stops_naming(stops: &[ChainStop], route: &ObjectRef) -> Vec<ChainStop> {
-    let mut named: Vec<ChainStop> = Vec::new();
+    let mut found: Vec<ChainStop> = Vec::new();
     for stop in stops {
-        let names = match stop {
+        let about_it = match stop {
             ChainStop::RouteNotAccepted { route: of, .. }
             | ChainStop::RouteRefsUnresolved { route: of, .. }
             | ChainStop::GatewayMissing { route: of, .. }
@@ -682,15 +683,15 @@ fn stops_naming(stops: &[ChainStop], route: &ObjectRef) -> Vec<ChainStop> {
             _ => false,
         };
         let text = serde_json::to_string(stop).unwrap_or_default();
-        if names
-            && !named
+        if about_it
+            && !found
                 .iter()
                 .any(|held| serde_json::to_string(held).unwrap_or_default() == text)
         {
-            named.push(stop.clone());
+            found.push(stop.clone());
         }
     }
-    named
+    found
 }
 
 /// Whether every parent accepted the route: `None` where one has not said.
@@ -817,13 +818,12 @@ fn named_nodes(
 ) {
     let _ = edges;
     for edge in raw {
-        for end in [&edge.from, &edge.to] {
+        let owns = matches!(edge.relation, Relation::Owns { .. });
+        for (end, owner) in [(&edge.from, owns), (&edge.to, false)] {
             let id = node_id(end);
             if nodes.contains_key(&id) {
                 continue;
             }
-            let owner =
-                matches!(edge.relation, Relation::Owns { .. }) && std::ptr::eq(end, &edge.from);
             let labels = named_labels(held, &end.kind, &end.name);
             nodes.insert(
                 id.clone(),
@@ -1419,7 +1419,7 @@ mod tests {
             .expect("a workload's cover")
     }
 
-    /// "No NetworkPolicy selects it" is said only where every engine that
+    /// "No `NetworkPolicy` selects it" is said only where every engine that
     /// could was read: a refused policy list is unread, and another engine's
     /// policies in force here leave it unknown.
     #[test]

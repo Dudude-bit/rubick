@@ -62,7 +62,7 @@ impl Drawn {
             read: slice.read.clone(),
         });
         let (nodes, edges) = self.swap(&namespace, Some(slice));
-        let mut pieces = self.changes(nodes, edges);
+        let mut pieces = self.changes(&nodes, &edges);
         pieces.extend(read_piece);
         pieces
     }
@@ -70,7 +70,7 @@ impl Drawn {
     /// A namespace no longer drawn: what it alone held goes.
     pub fn drop_namespace(&mut self, namespace: &str) -> Vec<TopologyPiece> {
         let (nodes, edges) = self.swap(namespace, None);
-        let mut pieces = self.changes(nodes, edges);
+        let mut pieces = self.changes(&nodes, &edges);
         if self.shown_reads.remove(namespace).is_some() {
             pieces.push(TopologyPiece::NamespaceGone {
                 namespace: namespace.to_string(),
@@ -135,15 +135,21 @@ impl Drawn {
             .find_map(|ns| self.slices.get(ns).and_then(|slice| slice.edges.get(id)))
     }
 
-    fn changes(&mut self, nodes: BTreeSet<String>, edges: BTreeSet<String>) -> Vec<TopologyPiece> {
+    fn changes(
+        &mut self,
+        nodes: &BTreeSet<String>,
+        edges: &BTreeSet<String>,
+    ) -> Vec<TopologyPiece> {
         let mut upserts = Vec::new();
         let mut gone = Vec::new();
-        for id in &nodes {
+        for id in nodes {
             match self.node(id).cloned() {
                 Some(node) => {
                     let print = fingerprint(&node);
                     if self.shown_nodes.insert(id.clone(), print) != Some(print) {
-                        upserts.push(TopologyPiece::Node { node });
+                        upserts.push(TopologyPiece::Node {
+                            node: Box::new(node),
+                        });
                     }
                 }
                 None => {
@@ -154,7 +160,7 @@ impl Drawn {
             }
         }
         let mut edge_gone = Vec::new();
-        for id in &edges {
+        for id in edges {
             match self.edge(id).cloned() {
                 Some(edge) => {
                     let print = fingerprint(&edge);
@@ -321,6 +327,7 @@ mod tests {
         MapKindCount, NamespaceRead, NodeVerdict, TopologyEdge, TopologyNode,
     };
     use crate::resources::{Existence, ObjectRef, Relation};
+    use std::collections::BTreeMap;
 
     fn node(kind: &str, ns: &str, name: &str, verdict: NodeVerdict) -> TopologyNode {
         let object = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present);
@@ -332,8 +339,8 @@ mod tests {
             app: None,
             pods: None,
             cover: None,
-            labels: std::collections::BTreeMap::new(),
-            annotations: std::collections::BTreeMap::new(),
+            labels: BTreeMap::new(),
+            annotations: BTreeMap::new(),
         }
     }
 

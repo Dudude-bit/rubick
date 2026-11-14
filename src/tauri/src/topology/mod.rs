@@ -114,7 +114,7 @@ macro_rules! kinds {
 
         /// One object as the map keeps it.
         #[derive(Debug, Clone)]
-        pub enum Object { $($variant($ty)),* }
+        pub enum Object { $($variant(Box<$ty>)),* }
 
         impl Object {
             #[must_use]
@@ -123,7 +123,7 @@ macro_rules! kinds {
             }
 
             fn key(&self) -> (String, String) {
-                match self { $(Object::$variant(object) => key_of(object)),* }
+                match self { $(Object::$variant(object) => key_of(object.as_ref())),* }
             }
         }
 
@@ -133,7 +133,7 @@ macro_rules! kinds {
         impl Objects {
             fn put(&mut self, object: Object) {
                 let key = object.key();
-                match object { $(Object::$variant(object) => { self.$field.insert(key, Arc::new(object)); }),* }
+                match object { $(Object::$variant(object) => { self.$field.insert(key, Arc::from(object)); }),* }
             }
 
             fn remove(&mut self, object: &Object) {
@@ -276,24 +276,24 @@ impl Object {
     /// A `ConfigMap` as the map keeps it: its name and labels, never its data.
     #[must_use]
     pub fn config_map(map: &k8s_openapi::api::core::v1::ConfigMap) -> Self {
-        Object::ConfigMap(named(&map.metadata))
+        Object::ConfigMap(Box::new(named(&map.metadata)))
     }
 
     /// A Secret's name and labels; `None` for a Helm release record.
     #[must_use]
     pub fn secret(secret: &k8s_openapi::api::core::v1::Secret) -> Option<Self> {
         (secret.type_.as_deref() != Some(HELM_RELEASE))
-            .then(|| Object::Secret(named(&secret.metadata)))
+            .then(|| Object::Secret(Box::new(named(&secret.metadata))))
     }
 
     #[must_use]
     pub fn service_account(account: &k8s_openapi::api::core::v1::ServiceAccount) -> Self {
-        Object::ServiceAccount(named(&account.metadata))
+        Object::ServiceAccount(Box::new(named(&account.metadata)))
     }
 
     #[must_use]
     pub fn namespace(namespace: &k8s_openapi::api::core::v1::Namespace) -> Self {
-        Object::Namespace(named(&namespace.metadata))
+        Object::Namespace(Box::new(named(&namespace.metadata)))
     }
 
     /// A Warning event, stripped; `None` for any other.
@@ -301,7 +301,7 @@ impl Object {
     pub fn warning(mut event: Event) -> Option<Self> {
         (event.type_.as_deref() == Some("Warning")).then(|| {
             stripped_meta(&mut event.metadata);
-            Object::Event(event)
+            Object::Event(Box::new(event))
         })
     }
 
@@ -309,7 +309,7 @@ impl Object {
     #[must_use]
     pub fn pod(mut pod: Pod) -> Self {
         crate::overview::strip_pod(&mut pod);
-        Object::Pod(pod)
+        Object::Pod(Box::new(pod))
     }
 
     /// Any other object, without its managed fields and last-applied copy.
@@ -447,7 +447,7 @@ impl Stores {
             .map_err(|unread| unread.said)
     }
 
-    fn everywhere<V: Clone>(&self, map: &BTreeMap<(String, String), Arc<V>>) -> Vec<V> {
+    fn everywhere<V: Clone>(map: &BTreeMap<(String, String), Arc<V>>) -> Vec<V> {
         map.values().map(|object| object.as_ref().clone()).collect()
     }
 
@@ -467,7 +467,7 @@ impl Stores {
             (Kind::UdpRoute, &o.udp_routes),
         ] {
             match self.answer(kind, namespace) {
-                Answer::Read => routes.extend(self.everywhere(map)),
+                Answer::Read => routes.extend(Self::everywhere(map)),
                 Answer::NotServed => {}
                 Answer::Unread(said, _) => {
                     gateway_unread.push(UnexploredKind::unanswered(
@@ -481,8 +481,8 @@ impl Stores {
         let gateways = match self.answer(Kind::Gateway, namespace) {
             Answer::Read => {
                 let sets = matches!(self.answer(Kind::ListenerSet, namespace), Answer::Read)
-                    .then(|| self.everywhere(&o.listener_sets));
-                let mut gateways = self.everywhere(&o.gateways);
+                    .then(|| Self::everywhere(&o.listener_sets));
+                let mut gateways = Self::everywhere(&o.gateways);
                 for gateway in &mut gateways {
                     gateway.merge_listener_sets(sets.as_deref());
                 }

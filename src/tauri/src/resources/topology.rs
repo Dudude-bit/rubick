@@ -59,11 +59,11 @@ pub enum NodeVerdict {
     /// What a Service publishes, as its page reads it; `None` where none of
     /// the three sources was read, and `unread` then says why.
     Service {
-        published: Option<ServicePublished>,
+        published: Option<Box<ServicePublished>>,
         unread: Option<String>,
     },
     Ingress {
-        row: IngressInfo,
+        row: Box<IngressInfo>,
     },
     /// A Gateway API route: where a path through it stops, and whether every
     /// parent accepted it (`None` where one has not said).
@@ -73,7 +73,7 @@ pub enum NodeVerdict {
     },
     /// A Gateway whole: its page words "programmed" off its conditions.
     Gateway {
-        row: GatewayInfo,
+        row: Box<GatewayInfo>,
     },
     Claim {
         phase: Option<String>,
@@ -191,7 +191,7 @@ pub struct MapKindState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "is", rename_all = "camelCase")]
 pub enum TopologyPiece {
-    Node { node: TopologyNode },
+    Node { node: Box<TopologyNode> },
     Edge { edge: TopologyEdge },
     NodeGone { id: String },
     EdgeGone { id: String },
@@ -290,7 +290,7 @@ mod tests {
         }
     }
 
-    /// A ConfigMap with no app label of its own is placed by its users; one
+    /// A `ConfigMap` with no app label of its own is placed by its users; one
     /// labelled with an empty value must not open a group named "".
     #[test]
     fn the_app_is_the_first_recommended_label_with_a_value() {

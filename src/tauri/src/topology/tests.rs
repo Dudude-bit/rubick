@@ -6,14 +6,14 @@ const SAID: &str =
     "deployments.apps is forbidden: User \"narrow\" cannot list resource \"deployments\"";
 
 fn deployment(ns: &str, name: &str) -> Object {
-    Object::Deployment(
+    Object::Deployment(Box::new(
         serde_json::from_value(json!({
             "metadata": { "name": name, "namespace": ns, "uid": format!("{ns}-{name}") },
             "spec": { "selector": { "matchLabels": { "app": name } },
                       "template": { "metadata": { "labels": { "app": name } } } },
         }))
         .expect("a Deployment"),
-    )
+    ))
 }
 
 fn read(kind: Kind, namespace: Option<&str>, reading: Reading) -> Feed {
