@@ -1895,6 +1895,7 @@ export const ru: Catalogue = {
     security: "Безопасность",
     reliability: "Надёжность",
     efficiency: "Эффективность",
+    upgrade: "Обновление",
     baseline: "Baseline",
     restricted: "Restricted",
     checked: "Проверено: {list}",
@@ -1947,6 +1948,13 @@ export const ru: Catalogue = {
     systemShown: "Показаны системные пространства имён и роли",
     systemBack: "Вернуться к остальным",
     enforced: "{namespace} требует уровень Pod Security {level}",
+    upgradeReading:
+      "Обновление: ещё читаем Helm-релизы и тех, кто пишет через версии, которые удалит более новый Kubernetes",
+    upgradeRead:
+      "Обновление: прочитано в {time}, сверено с Kubernetes {server}",
+    upgradeReadUnversioned: "Обновление: прочитано в {time}",
+    helmRelease: "Helm-релиз",
+    helmReleases: "Helm-релизы",
     why: "Почему это важно",
     fix: "Как исправить",
     copyFix: "Скопировать",
@@ -2027,6 +2035,18 @@ export const ru: Catalogue = {
     wTrafficService: "Service {name} отправляет ему трафик",
     wTrafficNone: "ни один Service не отправляет ему трафик",
     wTrafficUnread: "отправляет ли ему трафик Service, не прочитано: {why}",
+    wRevision:
+      "следующее обновление Helm соберёт из ревизии {revision}, {status}",
+    wStoredGone:
+      "{kind} {name} сохранён как {api}, а Kubernetes {removed} эту версию уже не обслуживает",
+    wStoredUnserved:
+      "{kind} {name} сохранён как {api}, а этот кластер такую версию не обслуживает",
+    wStoredDue:
+      "{kind} {name} сохранён как {api}, а Kubernetes {removed} перестанет эту версию обслуживать",
+    wWritten:
+      "{manager} последний раз записал его через {api} в {time}, а Kubernetes {removed} перестанет эту версию обслуживать",
+    wWrittenUndated:
+      "{manager} последний раз записал его через {api}, а Kubernetes {removed} перестанет эту версию обслуживать",
     pssHostProcess: "Запускается как HostProcess Windows",
     pssHostProcessWhy:
       "Контейнер HostProcess работает с правами самого узла Windows. Профиль Baseline это запрещает.",
@@ -2142,6 +2162,14 @@ export const ru: Catalogue = {
     noMemoryRequest: "Нет запроса памяти",
     noMemoryRequestWhy:
       "Без запроса памяти планировщик размещает под так, будто память ему не нужна, а когда её на узле не хватает, его выселяют одним из первых.",
+    removedApiInHelmRelease:
+      "Helm-релиз хранит версию API, которую Kubernetes удаляет",
+    removedApiInHelmReleaseWhy:
+      "Перед каждым обновлением Helm заново собирает объекты развёрнутой ревизии из сохранённого манифеста. Если этот кластер такую версию уже не обслуживает, `helm upgrade` падает, пока манифест не переведут на замену: для версий, которые удалил сам Kubernetes, это делает плагин mapkubeapis, для версий пользовательских ресурсов нужен свой файл соответствий. Версия, которую удалит более новый Kubernetes, сломает обновление так же, как только кластер на него перейдёт. Чарт тоже нужно поправить, иначе следующее обновление снова сохранит старую версию.",
+    deprecatedApiWriter:
+      "Запись через версию API, которую удалит более новый Kubernetes",
+    deprecatedApiWriterWhy:
+      "В managedFields записано, через какую версию API каждый клиент последний раз писал объект. Клиент, который всё ещё пишет через эту версию, перестанет работать в тот день, когда кластер перейдёт на Kubernetes без неё. До этого переведите манифесты или код клиента на замену.",
   },
   changes: {
     title: "Изменения",
@@ -9046,7 +9074,8 @@ export const ru: Catalogue = {
     events: "событие, события",
     helm: "хелм, релиз, релизы",
     apiResources: "ресурсы api, kind'ы",
-    audit: "проверки, аудит, безопасность, лучшие практики",
+    audit:
+      "проверки, аудит, безопасность, лучшие практики, обновление, устаревшие api, удалённые api",
     myAccess: "мой доступ, мои права, права, что я могу, доступ",
     settings: "настройки, параметры",
     ports: "порты, проброс",

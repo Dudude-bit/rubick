@@ -9,6 +9,7 @@ import type {
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
+import { formatWhen } from "@/lib/utils";
 
 type AuditKey = keyof typeof en.audit;
 
@@ -32,6 +33,9 @@ export const RULE_META = Object.fromEntries(
 
 /** In the order the backend declares them. */
 export const RULE_IDS = contract.rules.map((rule) => rule.id as RuleId);
+
+/** The kind a Helm release is filed under as an audited subject: no Kubernetes kind holds a dot. */
+export const HELM_RELEASE = contract.helmRelease;
 
 /** Every rule's title and why, a total map the compiler holds to the generated union. */
 export const RULE_WORDS: Record<RuleId, { title: AuditKey; why: AuditKey }> = {
@@ -127,6 +131,14 @@ export const RULE_WORDS: Record<RuleId, { title: AuditKey; why: AuditKey }> = {
   },
   "no-cpu-request": { title: "noCpuRequest", why: "noCpuRequestWhy" },
   "no-memory-request": { title: "noMemoryRequest", why: "noMemoryRequestWhy" },
+  "removed-api-in-helm-release": {
+    title: "removedApiInHelmRelease",
+    why: "removedApiInHelmReleaseWhy",
+  },
+  "deprecated-api-writer": {
+    title: "deprecatedApiWriter",
+    why: "deprecatedApiWriterWhy",
+  },
 };
 
 export const ruleTitle = (rule: RuleId, t: T) =>
@@ -150,10 +162,16 @@ export const CATEGORY_WORDS: Record<Category, AuditKey> = {
   security: "security",
   reliability: "reliability",
   efficiency: "efficiency",
+  upgrade: "upgrade",
 };
 
 export const SEVERITIES: AuditSeverity[] = ["high", "medium", "low"];
-export const CATEGORIES: Category[] = ["security", "reliability", "efficiency"];
+export const CATEGORIES: Category[] = [
+  "security",
+  "reliability",
+  "efficiency",
+  "upgrade",
+];
 
 export const standardWords = (rule: RuleId, t: T) => {
   const standard = RULE_META[rule].standard;
@@ -305,6 +323,31 @@ const SAYS: {
             key: "wTrafficUnread",
             values: { why: whyWords(w.by.why, t) },
           },
+  revision: (w) => ({
+    key: "wRevision",
+    values: { revision: w.revision, status: w.status },
+  }),
+  stored: (w): Said => {
+    const values = { kind: w.kind, name: w.name, api: w.api };
+    if (w.removal === null) return { key: "wStoredUnserved", values };
+    return {
+      key: w.served ? "wStoredDue" : "wStoredGone",
+      values: { ...values, removed: w.removal.removed },
+    };
+  },
+  written: (w): Said => {
+    const values = {
+      manager: w.manager,
+      api: w.api,
+      removed: w.removal.removed,
+    };
+    return w.time === null
+      ? { key: "wWrittenUndated", values }
+      : {
+          key: "wWritten",
+          values: { ...values, time: formatWhen(w.time, "moment") },
+        };
+  },
 };
 
 /** What one value of a finding says, as a key and its values. */
@@ -332,4 +375,7 @@ export const VERBATIM = new Set([
   "name",
   "groups",
   "autoscaler",
+  "api",
+  "manager",
+  "status",
 ]);

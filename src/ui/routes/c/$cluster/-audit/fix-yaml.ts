@@ -1,4 +1,4 @@
-import type { AuditFinding, RuleId, What } from "@/generated/types";
+import type { AuditFinding, RuleId, Subject, What } from "@/generated/types";
 
 /**
  * A YAML fragment that fixes a finding, laid out at the path the object's
@@ -62,11 +62,33 @@ const first = <S extends What["says"]>(
     (what): what is Extract<What, { says: S }> => what.says === says
   );
 
+/** Pod Security Admission, which took PodSecurityPolicy's place, on a namespace. */
+const ADMISSION =
+  "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: app\n  labels:\n    pod-security.kubernetes.io/enforce: baseline";
+
+/** Each kind a finding names at a version going away, at the version that replaces it. */
+function replaced(finding: AuditFinding | undefined, kind: string): string[] {
+  const seen = new Set<string>();
+  for (const what of finding?.what ?? []) {
+    const removal =
+      what.says === "stored" || what.says === "written" ? what.removal : null;
+    if (!removal) continue;
+    const named = what.says === "stored" ? what.kind : kind;
+    seen.add(
+      removal.replacement === null
+        ? ADMISSION
+        : `apiVersion: ${removal.replacement}\nkind: ${named}`
+    );
+  }
+  return [...seen];
+}
+
 /** The fix for `rule` on an object of `kind`, filled from `finding` where it has one. */
 export function fixYaml(
   rule: RuleId,
   kind: string,
-  finding?: AuditFinding
+  finding?: AuditFinding,
+  subject?: Subject
 ): string {
   const pod = (body: string) => underPodSpec(kind, body);
   const volume =
@@ -199,6 +221,21 @@ export function fixYaml(
     case "no-memory-request":
       return pod(
         inContainer(finding, "resources:\n  requests:\n    memory: 128Mi")
+      );
+    case "removed-api-in-helm-release": {
+      const gone =
+        !finding || finding.what.some((w) => w.says === "stored" && !w.served);
+      const map = gone
+        ? [
+            `helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis ${subject?.name ?? "RELEASE"} --namespace ${subject?.namespace ?? "NAMESPACE"}`,
+          ]
+        : [];
+      return [...map, ...replaced(finding, kind)].join("\n---\n");
+    }
+    case "deprecated-api-writer":
+      return (
+        replaced(finding, kind).join("\n---\n") ||
+        `apiVersion: apps/v1\nkind: ${kind}`
       );
   }
 }

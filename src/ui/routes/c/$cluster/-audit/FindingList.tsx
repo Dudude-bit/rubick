@@ -6,6 +6,7 @@ import type {
   AuditSeverity,
   ObjectAudit,
   RuleId,
+  Subject,
   Unchecked,
   What,
 } from "@/generated/types";
@@ -71,14 +72,17 @@ export function RuleExplained({
   rule,
   kind,
   finding,
+  subject,
 }: {
   rule: RuleId;
   kind: string;
   finding?: AuditFinding;
+  /** The object the finding is in, where one is: a release's fix names it. */
+  subject?: Subject;
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
-  const yaml = fixYaml(rule, kind, finding);
+  const yaml = fixYaml(rule, kind, finding, subject);
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div>
@@ -134,12 +138,12 @@ export function RuleHeading({
 
 function FindingRow({
   finding,
-  kind,
+  subject,
   open,
   onToggle,
 }: {
   finding: AuditFinding;
-  kind: string;
+  subject: Subject;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -164,7 +168,12 @@ function FindingRow({
       </ul>
       {open && (
         <div className="ml-4">
-          <RuleExplained rule={finding.rule} kind={kind} finding={finding} />
+          <RuleExplained
+            rule={finding.rule}
+            kind={subject.kind}
+            finding={finding}
+            subject={subject}
+          />
         </div>
       )}
     </li>
@@ -219,7 +228,7 @@ export function FindingList({
           <FindingRow
             key={finding.rule}
             finding={finding}
-            kind={audit.subject.kind}
+            subject={audit.subject}
             open={open === finding.rule}
             onToggle={() =>
               setOpen((was) => (was === finding.rule ? null : finding.rule))

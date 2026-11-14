@@ -10,7 +10,7 @@ const asked: AuditQuery[] = [];
 const summary: AuditPage["summary"] = {
   findings: 1,
   severities: { high: 1, medium: 0, low: 0 },
-  categories: { security: 1, reliability: 0, efficiency: 0 },
+  categories: { security: 1, reliability: 0, efficiency: 0, upgrade: 0 },
   rules: [],
   checked: [{ kind: "Deployment", objects: 2 }],
   notChecked: [],
@@ -19,6 +19,7 @@ const summary: AuditPage["summary"] = {
   reading: 0,
   unattributed: 0,
   enforced: [],
+  upgrade: { read: "2026-11-14T10:00:00Z", server: "v1.31.4" },
 };
 
 vi.mock("@/lib/commands", () => ({

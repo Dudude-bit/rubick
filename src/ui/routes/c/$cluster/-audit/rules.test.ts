@@ -66,7 +66,79 @@ const EVERY_WHAT: What[] = [
   { says: "traffic", by: { says: "service", name: "web" } },
   { says: "traffic", by: { says: "noService" } },
   { says: "traffic", by: { says: "notRead", why: refused } },
+  { says: "revision", revision: 4, status: "deployed" },
+  {
+    says: "stored",
+    kind: "Ingress",
+    name: "web",
+    api: "extensions/v1beta1",
+    served: false,
+    removal: {
+      removed: "1.22",
+      replacement: "networking.k8s.io/v1",
+      since: "1.19",
+    },
+  },
+  {
+    says: "stored",
+    kind: "FlowSchema",
+    name: "web",
+    api: "flowcontrol.apiserver.k8s.io/v1beta3",
+    served: true,
+    removal: {
+      removed: "1.32",
+      replacement: "flowcontrol.apiserver.k8s.io/v1",
+      since: "1.29",
+    },
+  },
+  {
+    says: "stored",
+    kind: "Certificate",
+    name: "web",
+    api: "cert-manager.io/v1alpha2",
+    served: false,
+    removal: null,
+  },
+  {
+    says: "written",
+    manager: "ci",
+    operation: "Update",
+    time: "2026-11-01T10:00:00Z",
+    api: "batch/v1beta1",
+    removal: { removed: "1.25", replacement: "batch/v1", since: "1.21" },
+  },
+  {
+    says: "written",
+    manager: "ci",
+    operation: "Apply",
+    time: null,
+    api: "policy/v1beta1",
+    removal: { removed: "1.25", replacement: null, since: null },
+  },
 ];
+
+/** Every kind of value a finding carries: a new one fails to compile until it is listed. */
+const SAYS: Record<What["says"], true> = {
+  set: true,
+  unset: true,
+  volume: true,
+  socket: true,
+  envLiteral: true,
+  key: true,
+  image: true,
+  replicas: true,
+  budget: true,
+  token: true,
+  subject: true,
+  wildcard: true,
+  range: true,
+  target: true,
+  pods: true,
+  traffic: true,
+  revision: true,
+  stored: true,
+  written: true,
+};
 
 describe("the words Audit draws its rules and findings with", () => {
   /**
@@ -87,6 +159,35 @@ describe("the words Audit draws its rules and findings with", () => {
         expect(catalogue[why], `${rule} why`).toBeTruthy();
       }
     }
+  });
+
+  /** Fails when a kind of value is added to the union and never worded here. */
+  it("carries one of every kind of value a finding holds", () => {
+    expect(new Set(EVERY_WHAT.map((what) => what.says))).toEqual(
+      new Set(Object.keys(SAYS))
+    );
+  });
+
+  /**
+   * A stored version this cluster no longer serves, one it serves and a
+   * later Kubernetes removes, and one the guide does not list that nothing
+   * serves are three sentences. Fails if a version still served read as
+   * already gone, or a gone one named no release.
+   */
+  it("tells a stored version already gone from one due to go", () => {
+    const t = tIn("en");
+    const [gone, due, unserved] = EVERY_WHAT.filter(
+      (what) => what.says === "stored"
+    );
+    expect(whatWords(gone, t)).toBe(
+      "Ingress web is stored as extensions/v1beta1, which Kubernetes 1.22 stopped serving"
+    );
+    expect(whatWords(due, t)).toBe(
+      "FlowSchema web is stored as flowcontrol.apiserver.k8s.io/v1beta3, which Kubernetes 1.32 stops serving"
+    );
+    expect(whatWords(unserved, t)).toBe(
+      "Certificate web is stored as cert-manager.io/v1alpha2, which this cluster does not serve"
+    );
   });
 
   /**

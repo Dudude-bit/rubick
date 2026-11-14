@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Unknown } from "@/components/ui/unknown";
-import { ResourceRef } from "@/components/object/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -51,7 +50,8 @@ import {
   standardWords,
   uncheckedWords,
 } from "./rules";
-import { subjectKey, subjectOf } from "./subjects";
+import { subjectKey, subjectOf, subjectTitle } from "./subjects";
+import { SubjectRef } from "./SubjectRef";
 import { useAuditPage, useObjectAudit } from "./useAudit";
 
 const PAGE = 100;
@@ -140,11 +140,7 @@ function objectColumns(t: T): ColumnDef<ObjectRow>[] {
       size: 280,
       accessorFn: (row) => `${row.subject.kind} ${row.subject.name}`,
       cell: ({ row }) => (
-        <ResourceRef
-          kind={row.original.subject.kind}
-          name={row.original.subject.name}
-          namespace={row.original.subject.namespace ?? undefined}
-        />
+        <SubjectRef subject={row.original.subject} showNamespace={false} />
       ),
     },
     {
@@ -239,6 +235,7 @@ function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
           rule={rule}
           kind={first?.row === "found" ? first.subject.kind : "Deployment"}
           finding={first?.row === "found" ? first.finding : undefined}
+          subject={first?.row === "found" ? first.subject : undefined}
         />
         {query.error ? (
           <Unknown
@@ -256,12 +253,7 @@ function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
                 >
                   <span className="flex items-center gap-2">
                     <SeverityBadge severity={row.finding.severity} />
-                    <ResourceRef
-                      kind={row.subject.kind}
-                      name={row.subject.name}
-                      namespace={row.subject.namespace ?? undefined}
-                      showNamespace
-                    />
+                    <SubjectRef subject={row.subject} />
                   </span>
                   <ul className="ml-4 text-fg-mut">
                     {row.finding.what.map((what, at) => (
@@ -278,12 +270,7 @@ function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
                   data-blind={row.subject.name}
                 >
                   <EyeOff className="h-3 w-3 flex-none" aria-hidden />
-                  <ResourceRef
-                    kind={row.subject.kind}
-                    name={row.subject.name}
-                    namespace={row.subject.namespace ?? undefined}
-                    showNamespace
-                  />
+                  <SubjectRef subject={row.subject} />
                   <span>{uncheckedWords(row.unchecked, t)}</span>
                 </li>
               ) : null
@@ -303,22 +290,15 @@ function ObjectPanel({ subject }: { subject: Subject }) {
   return (
     <Section>
       <SectionHeader
-        title={`${subject.kind} ${subject.name}`}
-        description={
-          <ResourceRef
-            kind={subject.kind}
-            name={subject.name}
-            namespace={subject.namespace ?? undefined}
-            showNamespace
-          />
-        }
+        title={subjectTitle(subject, t)}
+        description={<SubjectRef subject={subject} />}
       />
       <SectionBody className="pt-1">
         {audit.data ? (
           <FindingList audit={audit.data} />
         ) : audit.error ? (
           <Unknown
-            question={`${subject.kind} ${subject.name}`}
+            question={subjectTitle(subject, t)}
             error={audit.error}
             onRetry={() => void audit.refetch()}
           />

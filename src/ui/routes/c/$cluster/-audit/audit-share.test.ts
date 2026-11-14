@@ -12,7 +12,7 @@ const page: AuditPage = {
   summary: {
     findings: 1,
     severities: { high: 1, medium: 0, low: 0 },
-    categories: { security: 1, reliability: 0, efficiency: 0 },
+    categories: { security: 1, reliability: 0, efficiency: 0, upgrade: 0 },
     rules: [],
     checked: [{ kind: "Deployment", objects: 2 }],
     notChecked: [
@@ -28,6 +28,7 @@ const page: AuditPage = {
     reading: 0,
     unattributed: 0,
     enforced: [],
+    upgrade: { read: "2026-11-14T10:00:00Z", server: "v1.31.4" },
   },
   rows: [
     {
@@ -56,6 +57,50 @@ describe("Audit in a shared file", () => {
     expect(section.body).toMatchObject({
       type: "findings",
       items: [{ title: "High · Runs a privileged container", role: "err" }],
+    });
+  });
+
+  /**
+   * A Helm release is named in words in the file, as on screen, and a scope
+   * whose upgrade rules are still reading is not written as whole. Fails if
+   * the file named a release by its internal kind, or counted a total
+   * before the releases were read.
+   */
+  it("names a release in words and keeps an unread upgrade pass out of the total", () => {
+    const section = auditScreenSection(
+      {
+        ...page,
+        summary: {
+          ...page.summary,
+          notChecked: [],
+          upgrade: { read: null, server: null },
+        },
+        rows: [
+          {
+            row: "found",
+            subject: {
+              kind: "HelmRelease.helm.sh",
+              namespace: "shop",
+              name: "web",
+            },
+            finding: {
+              rule: "removed-api-in-helm-release",
+              severity: "high",
+              what: [{ says: "revision", revision: 2, status: "deployed" }],
+            },
+          },
+        ],
+      },
+      "rule",
+      t
+    );
+    expect(section.count).toBeNull();
+    expect(section.notRead).toEqual([
+      "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
+    ]);
+    expect(section.body).toMatchObject({
+      type: "findings",
+      items: [{ ref: { kind: "Helm release", stem: expect.any(String) } }],
     });
   });
 

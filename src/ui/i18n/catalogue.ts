@@ -1850,6 +1850,7 @@ export const en = {
     security: "Security",
     reliability: "Reliability",
     efficiency: "Efficiency",
+    upgrade: "Upgrade",
     baseline: "Baseline",
     restricted: "Restricted",
     checked: "Checked: {list}",
@@ -1891,6 +1892,12 @@ export const en = {
     systemShown: "Showing the system's namespaces and roles",
     systemBack: "Back to the rest",
     enforced: "{namespace} enforces Pod Security {level}",
+    upgradeReading:
+      "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
+    upgradeRead: "Upgrade: read at {time}, against Kubernetes {server}",
+    upgradeReadUnversioned: "Upgrade: read at {time}",
+    helmRelease: "Helm release",
+    helmReleases: "Helm releases",
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
@@ -1958,6 +1965,18 @@ export const en = {
     wTrafficService: "Service {name} sends it traffic",
     wTrafficNone: "no Service sends it traffic",
     wTrafficUnread: "whether a Service sends it traffic was not read: {why}",
+    wRevision:
+      "Helm builds its next upgrade from revision {revision}, {status}",
+    wStoredGone:
+      "{kind} {name} is stored as {api}, which Kubernetes {removed} stopped serving",
+    wStoredUnserved:
+      "{kind} {name} is stored as {api}, which this cluster does not serve",
+    wStoredDue:
+      "{kind} {name} is stored as {api}, which Kubernetes {removed} stops serving",
+    wWritten:
+      "{manager} last wrote it through {api} at {time}, which Kubernetes {removed} stops serving",
+    wWrittenUndated:
+      "{manager} last wrote it through {api}, which Kubernetes {removed} stops serving",
     pssHostProcess: "Runs as a Windows HostProcess",
     pssHostProcessWhy:
       "A HostProcess container runs with the Windows node's own privileges. The Baseline profile forbids it.",
@@ -2072,6 +2091,14 @@ export const en = {
     noMemoryRequest: "No memory request",
     noMemoryRequestWhy:
       "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
+    removedApiInHelmRelease:
+      "Helm release stores an API version Kubernetes removes",
+    removedApiInHelmReleaseWhy:
+      "Before every upgrade Helm rebuilds the deployed revision's objects from the manifest it stored. A version this cluster no longer serves fails `helm upgrade` until that manifest is mapped to the replacement, which the mapkubeapis plugin does for the versions Kubernetes removed; a custom resource version needs its own map file. A version a later Kubernetes removes fails the same way once the cluster is upgraded. The chart has to be changed as well, or the next upgrade stores the old version again.",
+    deprecatedApiWriter:
+      "Written through an API version a later Kubernetes removes",
+    deprecatedApiWriterWhy:
+      "managedFields records the API version each writer last used on the object. A client that still writes through this version stops working on the day the cluster moves to the Kubernetes that removes it. Change the client's manifests or code to the replacement before then.",
   },
   changes: {
     title: "Changes",
@@ -8209,7 +8236,8 @@ export const en = {
     events: "",
     helm: "releases, charts",
     apiResources: "api-resources, kinds",
-    audit: "checks, best practices, lint, security",
+    audit:
+      "checks, best practices, lint, security, upgrade, deprecated api, removed api",
     myAccess: "my access, can i, permissions, rbac, auth can-i",
     settings: "preferences, options",
     ports: "port-forward, tunnel",

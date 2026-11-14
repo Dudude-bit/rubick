@@ -4,7 +4,12 @@ import type { AuditPage } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
 import { CATEGORY_WORDS, RULE_IDS, ruleTitle } from "./rules";
-import { anythingUnread, checkedWords, notCheckedWords } from "./summary-words";
+import {
+  anythingUnread,
+  checkedWords,
+  notCheckedWords,
+  upgradeWords,
+} from "./summary-words";
 
 /**
  * The scope's answer in a few lines: counts by severity and category, what
@@ -47,6 +52,12 @@ export function AuditSummaryBlock({
       {summary.checked.length > 0 && (
         <p className="text-fg-mut">{checkedWords(page, t)}</p>
       )}
+      <p
+        className={summary.upgrade.read === null ? "text-warn" : "text-fg-fnt"}
+        data-testid="audit-upgrade-read"
+      >
+        {upgradeWords(page, t)}
+      </p>
       {summary.notChecked.length > 0 && (
         <div className="flex flex-col gap-0.5" data-testid="audit-not-checked">
           <span className="flex items-center gap-1 font-medium text-warn">

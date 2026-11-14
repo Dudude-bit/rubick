@@ -5,6 +5,7 @@ import type {
   AuditSeverity,
   Grouping,
   ObjectAudit,
+  Subject,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
@@ -12,8 +13,18 @@ import { iconSvg } from "@/lib/icon-svg";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
-import { anythingUnread, checkedWords, notCheckedWords } from "./summary-words";
+import {
+  anythingUnread,
+  checkedWords,
+  notCheckedWords,
+  upgradeWords,
+} from "./summary-words";
 import { SEVERITY_WORDS, ruleTitle, uncheckedWords, whatWords } from "./rules";
+import { kindWords } from "./subjects";
+
+/** A subject's reference in the file: a Helm release named in words, as on screen. */
+const subjectRef = (subject: Subject, t: T) =>
+  refOf({ ...subject, kind: kindWords(subject.kind, t) });
 
 const ROLE: Record<AuditSeverity, StatusRole> = {
   high: "err",
@@ -47,7 +58,7 @@ export function auditScreenSection(
             title: row.rules.map((rule) => ruleTitle(rule, t)).join(", "),
             detail: null,
             role: row.worst ? ROLE[row.worst] : "neutral",
-            ref: refOf(row.subject),
+            ref: subjectRef(row.subject, t),
             ...(row.worst === null ? { mark: "notRead" as const } : {}),
           },
         ];
@@ -59,7 +70,7 @@ export function auditScreenSection(
               .map((what) => whatWords(what, t))
               .join("; "),
             role: ROLE[row.finding.severity],
-            ref: refOf(row.subject),
+            ref: subjectRef(row.subject, t),
           },
         ];
       case "blind":
@@ -68,15 +79,16 @@ export function auditScreenSection(
             title: ruleTitle(row.unchecked.rule, t),
             detail: uncheckedWords(row.unchecked, t),
             role: "neutral",
-            ref: refOf(row.subject),
+            ref: subjectRef(row.subject, t),
             mark: "notRead",
           },
         ];
     }
   });
-  const unread = page.summary.notChecked.map((each) =>
-    notCheckedWords(each, t)
-  );
+  const unread = [
+    ...page.summary.notChecked.map((each) => notCheckedWords(each, t)),
+    ...(page.summary.upgrade.read === null ? [upgradeWords(page, t)] : []),
+  ];
   return {
     id: "audit",
     order: ORDER.own,
