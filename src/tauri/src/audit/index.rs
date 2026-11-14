@@ -42,8 +42,11 @@ const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
 /// The fastest the page is told to read again under churn.
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
-/// How often the upgrade rules read again while the page is open.
+/// How often the upgrade rules read again while the page is on screen.
 const UPGRADE_EVERY: Duration = Duration::from_mins(2);
+/// The page on screen asks at least this often (its slowest re-read, 30 s,
+/// and a slow read's grace): longer quiet means it is not on screen.
+const ASKED_WITHIN: Duration = Duration::from_secs(45);
 
 /// The kinds Audit reads whole, and whether each lives in a namespace.
 pub(super) fn audited() -> Vec<(ApiResource, bool)> {
@@ -422,6 +425,8 @@ pub struct AuditIndex {
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
+    /// The page asked: an upgrade pass held while it was off screen goes.
+    asked: Notify,
 }
 
 impl AuditIndex {
@@ -451,6 +456,7 @@ impl AuditIndex {
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
             rescoped: Notify::new(),
+            asked: Notify::new(),
         }
     }
 
@@ -637,6 +643,7 @@ impl AuditIndexes {
         let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
             *index.last_used.lock() = Instant::now();
+            index.asked.notify_one();
             let moved = {
                 let mut held = index.scope.lock();
                 let moved = *held != scope;
@@ -756,14 +763,32 @@ fn spawn_upgrade(index: Arc<AuditIndex>, clients: Arc<crate::client::K8sClientMa
             };
             *index.upgrade.write() = Some(Arc::new(read));
             index.changed();
-            tokio::select! {
-                biased;
-                () = index.stop.cancelled() => break,
-                () = index.rescoped.notified() => {}
-                () = tokio::time::sleep(UPGRADE_EVERY) => {}
+            if !next_pass(&index, UPGRADE_EVERY, ASKED_WITHIN).await {
+                break;
             }
         }
     });
+}
+
+/// Waits for the next upgrade pass: a few minutes on, or at once when the
+/// scope moves, and never while the page is off screen. A page on screen
+/// asks every half minute at the slowest; when it stops asking, the pass
+/// waits for it to ask again. `false` once the index stops.
+async fn next_pass(index: &AuditIndex, every: Duration, asked_within: Duration) -> bool {
+    tokio::select! {
+        biased;
+        () = index.stop.cancelled() => return false,
+        () = index.rescoped.notified() => return true,
+        () = tokio::time::sleep(every) => {}
+    }
+    while index.last_used.lock().elapsed() > asked_within {
+        tokio::select! {
+            biased;
+            () = index.stop.cancelled() => return false,
+            () = index.asked.notified() => {}
+        }
+    }
+    true
 }
 
 /// Tells the page to read again after a change, at most once a second.
@@ -1041,6 +1066,35 @@ pub(super) mod tests {
         assert!(again.objects.iter().any(|o| o.subject.name == "web-7"
             && o.findings.iter().any(|f| f.rule == RuleId::ImageTagLatest)));
         assert!(first < Duration::from_secs(2) && after_one < Duration::from_secs(2));
+    }
+
+    /// The upgrade rules' re-read is bound to the page: due every few minutes
+    /// while the page asks, held while it has not asked for longer than an
+    /// on-screen page waits, and released by the next ask. Would break if
+    /// the pass kept reading a cluster for a page nobody has on screen.
+    #[tokio::test]
+    async fn the_upgrade_pass_waits_while_the_page_is_off_screen() {
+        let (every, within) = (Duration::from_millis(40), Duration::from_millis(400));
+        let index = AuditIndex::holding(client().await, None);
+        let on_screen = tokio::spawn({
+            let index = index.clone();
+            async move { next_pass(&index, every, within).await }
+        });
+        tokio::time::sleep(every * 10).await;
+        assert!(on_screen.is_finished(), "a page on screen is read again");
+
+        *index.last_used.lock() = Instant::now().checked_sub(within * 2).expect("an instant");
+        let off_screen = tokio::spawn({
+            let index = index.clone();
+            async move { next_pass(&index, every, within).await }
+        });
+        tokio::time::sleep(every * 5).await;
+        assert!(!off_screen.is_finished(), "a page off screen is not read");
+
+        *index.last_used.lock() = Instant::now();
+        index.asked.notify_one();
+        let released = tokio::time::timeout(Duration::from_secs(1), off_screen).await;
+        assert!(released.expect("the ask releases it").expect("joined"));
     }
 
     /// The same object seen again at the same version is not judged again.
