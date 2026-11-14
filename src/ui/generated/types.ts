@@ -3009,6 +3009,7 @@ export type LiveEnd =
   | { says: "mutualTls"; namespace: string }
   | { says: "caUnread"; namespace: string; said: string }
   | { says: "noCa"; namespace: string; secret: string }
+  | { says: "notVerified"; namespace: string; said: string }
   | { says: "noPod"; namespace: string; service: string }
   | { says: "relayEnded" }
   | { says: "failed"; said: string };

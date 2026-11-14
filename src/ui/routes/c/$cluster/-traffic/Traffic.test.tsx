@@ -296,7 +296,7 @@ describe("the Traffic page, live", () => {
    * Not enabled, not looked for and serving TLS are three sentences, and
    * none of them is "no flows".
    */
-  it("says not enabled, could not look, mutual TLS and an unread CA apart, never as no flows", async () => {
+  it("says not enabled, could not look, mutual TLS, an unread CA and an unverified certificate apart, never as no flows", async () => {
     traffic.mockReturnValue({ says: "absent" });
     const said = async (end: LiveSnapshot["end"]) => {
       live.mockReturnValue(snapshot({ phase: "ended", end, relay: null }));
@@ -316,13 +316,21 @@ describe("the Traffic page, live", () => {
       namespace: "kube-system",
       said: "secrets is forbidden",
     });
+    const unverified = await said({
+      says: "notVerified",
+      namespace: "kube-system",
+      said: "invalid peer certificate: UnknownIssuer",
+    });
     expect(off).toContain("Hubble Relay is not enabled");
     expect(unread).toContain(
       "Could not look for Hubble Relay: services is forbidden"
     );
     expect(tls).toContain("mutual TLS");
     expect(ca).toContain("could not be read: secrets is forbidden");
-    for (const text of [off, unread, tls, ca])
+    expect(unverified).toContain(
+      "does not vouch for: invalid peer certificate: UnknownIssuer"
+    );
+    for (const text of [off, unread, tls, ca, unverified])
       expect(text).not.toMatch(/saw no flows/);
   });
 

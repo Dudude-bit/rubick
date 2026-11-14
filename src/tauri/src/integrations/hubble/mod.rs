@@ -139,6 +139,11 @@ pub enum LiveEnd {
         namespace: String,
         secret: String,
     },
+    /// Its certificate did not verify against that CA; `said` is the verifier's.
+    NotVerified {
+        namespace: String,
+        said: String,
+    },
     /// No pod behind it is ready.
     NoPod {
         namespace: String,
@@ -347,7 +352,7 @@ async fn connect(
     clients: &Arc<K8sClientManager>,
     context: &str,
     found: &Found,
-) -> std::result::Result<ObserverClient<tonic::transport::Channel>, String> {
+) -> std::result::Result<ObserverClient<tonic::transport::Channel>, LiveEnd> {
     let clients = clients.clone();
     let context = context.to_string();
     let namespace = found.at.namespace.clone();
@@ -382,13 +387,65 @@ async fn connect(
                     .ca_certificate(tonic::transport::Certificate::from_pem(ca))
                     .domain_name(SERVER_NAME),
             )
-            .map_err(|e| e.to_string())?,
+            .map_err(|e| LiveEnd::Failed {
+                said: e.to_string(),
+            })?,
     };
     let channel = endpoint
         .connect_with_connector(connector)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ended_by(&e, &found.at.namespace))?;
     Ok(ObserverClient::new(channel))
+}
+
+/// How a failed connection or call ends the stream: a certificate the CA
+/// did not vouch for, or a relay asking for one of ours, said as such with
+/// the verifier's words; anything else as it was said.
+fn ended_by(error: &(dyn std::error::Error + 'static), namespace: &str) -> LiveEnd {
+    let mut next = Some(error);
+    while let Some(at) = next {
+        let inner = at
+            .downcast_ref::<std::io::Error>()
+            .and_then(std::io::Error::get_ref)
+            .map(|inner| inner as &(dyn std::error::Error + 'static));
+        for one in [Some(at), inner].into_iter().flatten() {
+            match one.downcast_ref::<rustls::Error>() {
+                Some(tls @ rustls::Error::InvalidCertificate(_)) => {
+                    return LiveEnd::NotVerified {
+                        namespace: namespace.to_string(),
+                        said: tls.to_string(),
+                    }
+                }
+                Some(rustls::Error::AlertReceived(
+                    rustls::AlertDescription::CertificateRequired,
+                )) => {
+                    return LiveEnd::MutualTls {
+                        namespace: namespace.to_string(),
+                    }
+                }
+                _ => {}
+            }
+        }
+        next = at.source();
+    }
+    LiveEnd::Failed {
+        said: words_of(error),
+    }
+}
+
+/// Every layer's own words, outermost first: a transport error says only
+/// "transport error", and what failed is under it.
+fn words_of(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut said: Vec<String> = Vec::new();
+    let mut next = Some(error);
+    while let Some(at) = next {
+        let words = at.to_string();
+        if said.last().is_none_or(|last| !last.contains(&words)) {
+            said.push(words);
+        }
+        next = at.source();
+    }
+    said.join(": ")
 }
 
 async fn run(
@@ -424,12 +481,12 @@ async fn run(
                 .get_flows(request)
                 .await
                 .map(tonic::Response::into_inner)
-                .map_err(|status| status.message().to_string())
+                .map_err(|status| ended_by(&status, &found.at.namespace))
         } => opened,
     };
     let mut stream = match opened {
         Ok(stream) => stream,
-        Err(said) => return LiveEnd::Failed { said },
+        Err(end) => return end,
     };
     let mut fold = Fold::new(now_secs());
     let send = |pairs: Vec<LivePair>, gone: Vec<LiveKey>, relay: Option<RelayAt>, fold: &Fold| {
@@ -932,6 +989,70 @@ mod tests {
             FlowEnd::Unidentified {
                 namespace: None,
                 word: "kube-apiserver".into()
+            }
+        );
+    }
+
+    #[derive(Debug)]
+    struct Wrapped(&'static str, Box<dyn std::error::Error + Send + Sync>);
+
+    impl std::fmt::Display for Wrapped {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.0)
+        }
+    }
+
+    impl std::error::Error for Wrapped {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(self.1.as_ref())
+        }
+    }
+
+    fn buried(tls: rustls::Error) -> Wrapped {
+        Wrapped(
+            "transport error",
+            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, tls)),
+        )
+    }
+
+    /// A certificate the CA does not vouch for is said with the verifier's
+    /// words, however deep the transport buried it.
+    #[test]
+    fn a_certificate_that_does_not_verify_is_said_with_the_verifiers_words() {
+        let unknown = buried(rustls::Error::InvalidCertificate(
+            rustls::CertificateError::UnknownIssuer,
+        ));
+        match ended_by(&unknown, "kube-system") {
+            LiveEnd::NotVerified { namespace, said } => {
+                assert_eq!(namespace, "kube-system");
+                assert!(said.contains("UnknownIssuer"), "{said}");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// A relay that answers our handshake by asking for a certificate is
+    /// mutual TLS, whatever its config said or did not say.
+    #[test]
+    fn a_relay_asking_for_our_certificate_in_the_handshake_is_mutual_tls() {
+        let asked = buried(rustls::Error::AlertReceived(
+            rustls::AlertDescription::CertificateRequired,
+        ));
+        assert!(matches!(
+            ended_by(&asked, "kube-system"),
+            LiveEnd::MutualTls { .. }
+        ));
+    }
+
+    /// Any other failure keeps every layer's words: "transport error" alone
+    /// says nothing about what failed.
+    #[test]
+    fn any_other_failure_keeps_every_layers_words() {
+        let refused = Wrapped("transport error", "connection refused".into());
+        assert_eq!(
+            ended_by(&refused, "kube-system"),
+            LiveEnd::Failed {
+                said: "transport error: connection refused".into()
             }
         );
     }

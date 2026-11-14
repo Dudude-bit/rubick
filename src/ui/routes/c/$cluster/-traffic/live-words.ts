@@ -22,6 +22,13 @@ const LIVE_END: Record<LiveEnd["says"], (end: LiveEnd, t: T) => string> = {
           said: end.said,
         })
       : "",
+  notVerified: (end, t) =>
+    end.says === "notVerified"
+      ? t("traffic", "liveNotVerified", {
+          namespace: end.namespace,
+          said: end.said,
+        })
+      : "",
   noCa: (end, t) =>
     end.says === "noCa"
       ? t("traffic", "liveNoCa", {

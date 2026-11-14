@@ -2108,6 +2108,8 @@ export const ru: Catalogue = {
       "Hubble Relay в {namespace} требует сертификат от каждого клиента (взаимный TLS), а Rubick не берёт чужой.",
     liveCaUnread:
       "Hubble Relay в {namespace} отдаёт TLS, а CA для его проверки прочитать не удалось: {said}",
+    liveNotVerified:
+      "Сертификат Hubble Relay в {namespace} не проходит проверку по его собственному CA: {said}",
     liveNoCa:
       "Hubble Relay в {namespace} отдаёт TLS, а в {secret} нет ca.crt, чтобы его проверить.",
     liveNoPod: "За {namespace}/{service} нет ни одного готового пода.",

@@ -2032,6 +2032,8 @@ export const en = {
       "Hubble Relay in {namespace} asks every client for a certificate (mutual TLS), and Rubick does not borrow another client's.",
     liveCaUnread:
       "Hubble Relay in {namespace} serves TLS, and the CA to check it against could not be read: {said}",
+    liveNotVerified:
+      "Hubble Relay in {namespace} serves a certificate its own CA does not vouch for: {said}",
     liveNoCa:
       "Hubble Relay in {namespace} serves TLS, and {secret} holds no ca.crt to check it against.",
     liveNoPod: "No pod behind {namespace}/{service} is ready.",
