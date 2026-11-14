@@ -51,6 +51,7 @@ pub mod shell;
 pub mod state;
 pub mod terminal;
 pub mod tls;
+pub mod topology;
 pub mod utils;
 pub mod validation;
 pub mod watch;

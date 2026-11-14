@@ -173,6 +173,10 @@ pub struct AppState {
     /// Which contexts' metrics API was not installed or refused, and when.
     pub metrics_unserved: crate::metrics::Unserved,
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
+    /// The cluster map's held lists, per context.
+    pub topology: Arc<crate::topology::TopologyCache>,
+    /// Cluster maps being drawn.
+    pub topology_streams: streams::Streams,
 }
 
 impl AppState {
@@ -220,6 +224,8 @@ impl AppState {
             overview_cache,
             metrics_unserved: crate::metrics::Unserved::default(),
             ownership: Arc::new(crate::ownership::OwnershipIndexes::default()),
+            topology: Arc::new(crate::topology::TopologyCache::default()),
+            topology_streams: streams::Streams::default(),
         })
     }
 
@@ -431,6 +437,7 @@ impl AppState {
     pub fn client_replaced(&self, context: &str) {
         self.overview_cache.forget(context);
         self.ownership.forget(context);
+        self.topology.forget(context);
         self.metrics_unserved.forget_refusals(context);
     }
 

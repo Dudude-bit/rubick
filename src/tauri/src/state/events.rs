@@ -477,6 +477,18 @@ pub enum AppEvent {
         namespaces: Vec<String>,
         cluster: bool,
     },
+    /// Changes to a cluster map, sized to the IPC target; never empty.
+    TopologyBatch {
+        stream_id: String,
+        pieces: Vec<crate::resources::topology::TopologyPiece>,
+    },
+    /// The scope has been drawn once whole; batches after it are changes.
+    TopologyReady { stream_id: String },
+    /// The stream ended; exactly one per stream, on every path.
+    TopologyEnded {
+        stream_id: String,
+        end: crate::resources::topology::TopologyEnd,
+    },
 }
 
 impl AppEvent {
@@ -510,6 +522,9 @@ impl AppEvent {
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
             AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
             AppEvent::OverviewChanged { .. } => "overview-changed",
+            AppEvent::TopologyBatch { .. } => "topology-batch",
+            AppEvent::TopologyReady { .. } => "topology-ready",
+            AppEvent::TopologyEnded { .. } => "topology-ended",
         }
     }
 
@@ -699,6 +714,17 @@ mod tests {
                 stream_id: "log-1".into(),
                 lines: 2,
             },
+            AppEvent::TopologyBatch {
+                stream_id: "map-1".into(),
+                pieces: vec![],
+            },
+            AppEvent::TopologyReady {
+                stream_id: "map-1".into(),
+            },
+            AppEvent::TopologyEnded {
+                stream_id: "map-1".into(),
+                end: crate::resources::topology::TopologyEnd::Closed,
+            },
         ]
     }
 
@@ -729,6 +755,9 @@ mod tests {
             AppEvent::TerminalSessions { .. } => 22,
             AppEvent::OverviewChanged { .. } => 23,
             AppEvent::LogRead { .. } => 24,
+            AppEvent::TopologyBatch { .. } => 25,
+            AppEvent::TopologyReady { .. } => 26,
+            AppEvent::TopologyEnded { .. } => 27,
         }
     }
 
@@ -737,7 +766,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=24).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=27).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`
