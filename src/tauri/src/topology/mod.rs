@@ -618,12 +618,39 @@ impl Stores {
     }
 }
 
-/// One cluster's map: its stores, where their changes are told, and the
-/// token that ends every stream on it when its client is replaced.
+/// What feeds a cluster's map: the watches of the kinds it reads.
+pub trait Source: Send + Sync {
+    /// Starts feeding `map` for `context`. Feeding stops when the lease is
+    /// dropped, which is when the map is let go.
+    fn attach(&self, context: &str, map: &Arc<ClusterMap>) -> Lease;
+}
+
+/// Held for as long as a source feeds one map.
+pub struct Lease(Option<Box<dyn FnOnce() + Send + Sync>>);
+
+impl Lease {
+    #[must_use]
+    pub fn on_drop(release: impl FnOnce() + Send + Sync + 'static) -> Self {
+        Self(Some(Box::new(release)))
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        if let Some(release) = self.0.take() {
+            release();
+        }
+    }
+}
+
+/// One cluster's map: its stores, where their changes are told, the token
+/// that ends every stream on it when its client is replaced, and the lease
+/// of whatever feeds it.
 pub struct ClusterMap {
     stores: RwLock<Stores>,
     changes: broadcast::Sender<Touched>,
     replaced: CancellationToken,
+    lease: parking_lot::Mutex<Option<Lease>>,
 }
 
 impl Default for ClusterMap {
@@ -632,6 +659,7 @@ impl Default for ClusterMap {
             stores: RwLock::new(Stores::default()),
             changes: broadcast::channel(256).0,
             replaced: CancellationToken::new(),
+            lease: parking_lot::Mutex::new(None),
         }
     }
 }
@@ -667,25 +695,52 @@ impl ClusterMap {
 }
 
 /// Every connected cluster's map.
-#[derive(Default)]
 pub struct TopologyCache {
     clusters: DashMap<String, Arc<ClusterMap>>,
+    source: RwLock<Option<Arc<dyn Source>>>,
+}
+
+impl Default for TopologyCache {
+    fn default() -> Self {
+        Self {
+            clusters: DashMap::new(),
+            source: RwLock::new(None),
+        }
+    }
 }
 
 impl TopologyCache {
-    /// The cluster's map, made on first use.
-    #[must_use]
-    pub fn cluster(&self, context: &str) -> Arc<ClusterMap> {
-        self.clusters
-            .entry(context.to_string())
-            .or_insert_with(|| Arc::new(ClusterMap::default()))
-            .clone()
+    /// What feeds every map made from now on.
+    pub fn feed_from(&self, source: Arc<dyn Source>) {
+        *self.source.write() = Some(source);
     }
 
-    /// Lets the cluster's map go: every stream on it ends as replaced, and
-    /// the next one opened starts from nothing.
+    /// The cluster's map, made and handed to the source on first use.
+    #[must_use]
+    pub fn cluster(&self, context: &str) -> Arc<ClusterMap> {
+        let mut made = false;
+        let map = self
+            .clusters
+            .entry(context.to_string())
+            .or_insert_with(|| {
+                made = true;
+                Arc::new(ClusterMap::default())
+            })
+            .clone();
+        if made {
+            let source = self.source.read().clone();
+            if let Some(source) = source {
+                *map.lease.lock() = Some(source.attach(context, &map));
+            }
+        }
+        map
+    }
+
+    /// Lets the cluster's map go: its source stops feeding it, every stream
+    /// on it ends as replaced, and the next one opened starts from nothing.
     pub fn forget(&self, context: &str) {
         if let Some((_, map)) = self.clusters.remove(context) {
+            drop(map.lease.lock().take());
             map.replaced.cancel();
         }
     }

@@ -218,3 +218,54 @@ async fn a_stream_draws_its_scope_then_only_what_a_feed_changed() {
     cache.forget("kind");
     assert_eq!(task.await.expect("ends"), TopologyEnd::Replaced);
 }
+
+/// A source that feeds one Deployment and counts what it was asked.
+struct Fake {
+    attached: Arc<std::sync::atomic::AtomicUsize>,
+    released: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Source for Fake {
+    fn attach(&self, _context: &str, map: &Arc<ClusterMap>) -> Lease {
+        self.attached
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        map.feed([
+            read(Kind::Deployment, None, Reading::Synced),
+            Feed::Applied(deployment("shop", "cart")),
+        ]);
+        let released = self.released.clone();
+        Lease::on_drop(move || {
+            released.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })
+    }
+}
+
+/// A map is fed once however many streams draw it, and a replaced client
+/// stops the feeding: a lease kept past `forget` would go on watching with
+/// credentials the cluster no longer takes.
+#[test]
+fn a_map_is_fed_once_and_its_feeding_ends_with_it() {
+    use std::sync::atomic::Ordering;
+    let attached = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let released = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let cache = TopologyCache::default();
+    cache.feed_from(Arc::new(Fake {
+        attached: attached.clone(),
+        released: released.clone(),
+    }));
+    let map = cache.cluster("kind");
+    let _again = cache.cluster("kind");
+    assert_eq!(attached.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        map.stores()
+            .held("shop", OtherPolicies::none(), now())
+            .deployments
+            .map(|l| l.len()),
+        Ok(1)
+    );
+    cache.forget("kind");
+    assert_eq!(released.load(Ordering::SeqCst), 1);
+    assert!(map.replaced().is_cancelled());
+    let _ = cache.cluster("kind");
+    assert_eq!(attached.load(Ordering::SeqCst), 2);
+}
