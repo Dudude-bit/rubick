@@ -267,13 +267,16 @@ export function estimatePicture(
         gpus: node.gpus,
       })
     );
-    const allocated = partsTotal(
-      priceOf(prices, {
-        cpu: node.cpuRequested,
-        memory: node.memoryRequested,
-        gpus: node.gpusRequested,
-      })
-    );
+    const allocated =
+      node.cpuRequested === null || node.memoryRequested === null
+        ? null
+        : partsTotal(
+            priceOf(prices, {
+              cpu: node.cpuRequested,
+              memory: node.memoryRequested,
+              gpus: node.gpusRequested ?? 0,
+            })
+          );
     const reserved =
       node.cpuAllocatable === null || node.memoryAllocatable === null
         ? null
@@ -288,7 +291,7 @@ export function estimatePicture(
       ...base,
       perHour,
       allocated,
-      idle: perHour - allocated,
+      idle: allocated === null ? null : perHour - allocated,
       reserved,
     };
   });
@@ -348,14 +351,18 @@ export function estimatePicture(
     source: { kind: "estimate", prices },
     cluster,
     total: scopeTotal(basis, scope, cluster, namespaces, partial),
-    idle: nodes
-      ? {
-          perHour: sum(nodes.map((n) => n.idle)),
-          reserved: nodes.some((n) => n.perHour !== null && n.reserved === null)
-            ? null
-            : sum(nodes.map((n) => n.reserved)),
-        }
-      : null,
+    // Idle needs what every priced node holds: one uncounted is no total.
+    idle:
+      nodes && nodes.every((n) => n.perHour === null || n.idle !== null)
+        ? {
+            perHour: sum(nodes.map((n) => n.idle)),
+            reserved: nodes.some(
+              (n) => n.perHour !== null && n.reserved === null
+            )
+              ? null
+              : sum(nodes.map((n) => n.reserved)),
+          }
+        : null,
     namespaces,
     workloads,
     rest,

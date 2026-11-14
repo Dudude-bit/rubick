@@ -116,9 +116,12 @@ pub struct NodeBasis {
     pub memory_capacity: Option<f64>,
     pub memory_allocatable: Option<f64>,
     pub gpus: f64,
-    pub cpu_requested: f64,
-    pub memory_requested: f64,
-    pub gpus_requested: f64,
+    /// What its pods hold; `None` where they were not counted: a page about
+    /// one object, with the stores not serving, does not list the cluster's
+    /// pods for a node table it does not draw.
+    pub cpu_requested: Option<f64>,
+    pub memory_requested: Option<f64>,
+    pub gpus_requested: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -159,15 +162,27 @@ pub struct CostBasis {
     pub served_from: OverviewSource,
 }
 
+/// `held_on_nodes` false leaves what each node holds uncounted where that
+/// would cost a list of every pod in the cluster.
 #[tauri::command]
 pub async fn cost_basis(
     scope: Option<Vec<String>>,
+    held_on_nodes: bool,
     state: State<'_, AppState>,
 ) -> Result<CostBasis> {
-    crate::client::clock::timed(&state.perf, "costBasis", Box::pin(basis(&state, scope))).await
+    crate::client::clock::timed(
+        &state.perf,
+        "costBasis",
+        Box::pin(basis(&state, scope, held_on_nodes)),
+    )
+    .await
 }
 
-async fn basis(state: &AppState, scope: Option<Vec<String>>) -> Result<CostBasis> {
+async fn basis(
+    state: &AppState,
+    scope: Option<Vec<String>>,
+    held_on_nodes: bool,
+) -> Result<CostBasis> {
     let scope = scope_of(scope)?;
     let client = (*state.here()?.client).clone();
     let (read, volumes) = tokio::join!(
@@ -176,8 +191,8 @@ async fn basis(state: &AppState, scope: Option<Vec<String>>) -> Result<CostBasis
     );
     let read = read?;
     let cluster = match &read.stored {
-        Some(stored) => Ok(stored.clone()),
-        None => cluster_read(&client, scope.as_deref(), &read).await,
+        Some((nodes, pods)) => Ok((nodes.clone(), Some(pods.clone()))),
+        None => cluster_read(&client, scope.as_deref(), &read, held_on_nodes).await,
     };
     Ok(assemble(&read, cluster, &volumes, scope.as_deref()))
 }
@@ -296,13 +311,15 @@ async fn cluster_read(
     client: &Client,
     scope: Option<&[String]>,
     read: &ScopedPods,
-) -> Result<(Vec<Arc<Node>>, Vec<Arc<Pod>>)> {
+    held_on_nodes: bool,
+) -> Result<(Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>)> {
     let params = ListParams::default();
     let nodes: Api<Node> = Api::all(client.clone());
     let nodes = nodes.list(&params).await?.items;
     let pods = match scope {
-        None => read.pods.clone(),
-        Some(_) => {
+        None => Some(read.pods.clone()),
+        Some(_) if !held_on_nodes => None,
+        Some(_) => Some({
             let all: Api<Pod> = Api::all(client.clone());
             all.list(&params)
                 .await?
@@ -310,7 +327,7 @@ async fn cluster_read(
                 .into_iter()
                 .map(Arc::new)
                 .collect()
-        }
+        }),
     };
     Ok((nodes.into_iter().map(Arc::new).collect(), pods))
 }
@@ -538,9 +555,9 @@ async fn volumes_in(client: &Client, scope: Option<&[String]>) -> Volumes {
     volumes
 }
 
-fn node_rows(nodes: &[Arc<Node>], pods: &[Arc<Pod>]) -> Vec<NodeBasis> {
+fn node_rows(nodes: &[Arc<Node>], pods: Option<&[Arc<Pod>]>) -> Vec<NodeBasis> {
     let mut held_on: HashMap<&str, (f64, f64, f64)> = HashMap::new();
-    for pod in pods.iter().filter(|p| on_a_node(p)) {
+    for pod in pods.into_iter().flatten().filter(|p| on_a_node(p)) {
         let node = pod
             .spec
             .as_ref()
@@ -572,8 +589,7 @@ fn node_rows(nodes: &[Arc<Node>], pods: &[Arc<Pod>]) -> Vec<NodeBasis> {
                     .or_else(|| l.get("beta.kubernetes.io/instance-type"))
                     .cloned()
             });
-            let (cpu_requested, memory_requested, gpus_requested) =
-                held_on.get(name.as_str()).copied().unwrap_or_default();
+            let held = pods.map(|_| held_on.get(name.as_str()).copied().unwrap_or_default());
             NodeBasis {
                 instance_type,
                 cpu_capacity: cpu_of(capacity),
@@ -581,9 +597,9 @@ fn node_rows(nodes: &[Arc<Node>], pods: &[Arc<Pod>]) -> Vec<NodeBasis> {
                 memory_capacity: bytes_of(capacity, "memory"),
                 memory_allocatable: bytes_of(allocatable, "memory"),
                 gpus,
-                cpu_requested,
-                memory_requested,
-                gpus_requested,
+                cpu_requested: held.map(|h| h.0),
+                memory_requested: held.map(|h| h.1),
+                gpus_requested: held.map(|h| h.2),
                 name,
             }
         })
@@ -624,7 +640,7 @@ fn keep(mut rows: Vec<WorkloadBasis>, max: usize) -> (Vec<WorkloadBasis>, Option
 
 fn assemble(
     read: &ScopedPods,
-    cluster: Result<(Vec<Arc<Node>>, Vec<Arc<Pod>>)>,
+    cluster: Result<(Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>)>,
     volumes: &Volumes,
     scope: Option<&[String]>,
 ) -> CostBasis {
@@ -716,7 +732,7 @@ fn assemble(
     }
 
     let (nodes, nodes_unread) = match cluster {
-        Ok((nodes, pods)) => (Some(node_rows(&nodes, &pods)), None),
+        Ok((nodes, pods)) => (Some(node_rows(&nodes, pods.as_deref())), None),
         Err(error) => (None, Some(ReadFailure::of(&error))),
     };
     let (workloads, rest) = keep(rows.into_values().collect(), MAX_COST_ROWS);
@@ -867,7 +883,7 @@ pub(crate) mod tests {
             pod(&waiting),
             pod(&done),
         ]);
-        let basis = assemble(&read, Ok((vec![], vec![])), &Volumes::default(), None);
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &Volumes::default(), None);
         let web = row(&basis, "StatefulSet", "web").expect("its running pod");
         assert_eq!(web.pods, 1);
         assert_eq!(web.cpu, 100.0);
@@ -892,7 +908,7 @@ pub(crate) mod tests {
         .unwrap();
         let basis = assemble(
             &read_of(vec![Arc::new(pod)]),
-            Ok((vec![], vec![])),
+            Ok((vec![], Some(vec![]))),
             &Volumes::default(),
             None,
         );
@@ -910,12 +926,17 @@ pub(crate) mod tests {
         ))]);
         read.cron_of
             .insert(("ops".into(), "backup-29".into()), "backup".into());
-        let basis = assemble(&read, Ok((vec![], vec![])), &Volumes::default(), None);
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &Volumes::default(), None);
         assert!(row(&basis, "CronJob", "backup").is_some());
         assert!(row(&basis, "Job", "backup-29").is_none());
 
         let alone = read_of(vec![pod(&running("ops", "once-x2k9z", ("Job", "once")))]);
-        let basis = assemble(&alone, Ok((vec![], vec![])), &Volumes::default(), None);
+        let basis = assemble(
+            &alone,
+            Ok((vec![], Some(vec![]))),
+            &Volumes::default(),
+            None,
+        );
         assert!(
             row(&basis, "Job", "once").is_some(),
             "a Job nothing scheduled stands as itself"
@@ -979,7 +1000,7 @@ pub(crate) mod tests {
         let mut stored = (*pod(&b)).clone();
         crate::overview::strip_pod(&mut stored);
         let read = read_of(vec![pod(&a), Arc::new(stored)]);
-        let basis = assemble(&read, Ok((vec![], vec![])), &volumes, None);
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &volumes, None);
         assert_eq!(row(&basis, "StatefulSet", "a").unwrap().claim_bytes, 5.0);
         assert_eq!(row(&basis, "StatefulSet", "b").unwrap().claim_bytes, 5.0);
         assert_eq!(basis.namespaces[0].storage_bytes, Some(10.0));
@@ -994,7 +1015,7 @@ pub(crate) mod tests {
             claims_known: false,
             ..Volumes::default()
         };
-        let basis = assemble(&read, Ok((vec![], vec![])), &blind, None);
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &blind, None);
         assert_eq!(basis.namespaces[0].storage_bytes, None);
 
         let mut one_refused = Volumes {
@@ -1004,7 +1025,7 @@ pub(crate) mod tests {
         one_refused
             .namespaces_unread
             .push(UnreadNamespace::of("shop".into(), &refused()));
-        let basis = assemble(&read, Ok((vec![], vec![])), &one_refused, None);
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &one_refused, None);
         assert_eq!(basis.namespaces[0].storage_bytes, None);
         assert_eq!(basis.claims_unread[0].namespace, "shop");
     }
@@ -1021,7 +1042,7 @@ pub(crate) mod tests {
             claims_known: true,
             ..Volumes::default()
         };
-        let basis = assemble(&read, Ok((vec![], vec![])), &volumes, Some(&scope));
+        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &volumes, Some(&scope));
         let named: Vec<_> = basis
             .namespaces
             .iter()
@@ -1036,9 +1057,14 @@ pub(crate) mod tests {
     fn a_node_capacity_that_will_not_parse_is_none_and_not_zero() {
         let nodes = vec![node("node-a", "2", "4Gi"), node("node-b", "two", "4Gi")];
         let pods = vec![pod(&running("shop", "web-0", ("StatefulSet", "web")))];
-        let rows = node_rows(&nodes, &pods);
+        let rows = node_rows(&nodes, Some(&pods));
         assert_eq!(rows[0].cpu_capacity, Some(2000.0));
-        assert_eq!(rows[0].cpu_requested, 100.0);
+        assert_eq!(rows[0].cpu_requested, Some(100.0));
+        assert_eq!(
+            node_rows(&nodes, None)[0].cpu_requested,
+            None,
+            "pods not counted are not zero held"
+        );
         assert_eq!(rows[0].gpus, 1.0);
         assert_eq!(rows[0].instance_type.as_deref(), Some("m5.large"));
         assert_eq!(rows[1].cpu_capacity, None);
@@ -1120,9 +1146,9 @@ pub(crate) mod tests {
                 memory_capacity: Some(400_000_000_000.0),
                 memory_allocatable: Some(390_000_000_000.0),
                 gpus: 8.0,
-                cpu_requested: 90_000.0,
-                memory_requested: 380_000_000_000.0,
-                gpus_requested: 8.0,
+                cpu_requested: Some(90_000.0),
+                memory_requested: Some(380_000_000_000.0),
+                gpus_requested: Some(8.0),
             })
             .collect();
         let basis = CostBasis {

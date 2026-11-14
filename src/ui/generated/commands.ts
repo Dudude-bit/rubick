@@ -2199,6 +2199,9 @@ export async function prometheusByWorkload(
   });
 }
 
-export async function costBasis(scope: string[] | null): Promise<CostBasis> {
-  return invoke<CostBasis>("cost_basis", { scope });
+export async function costBasis(
+  scope: string[] | null,
+  heldOnNodes: boolean
+): Promise<CostBasis> {
+  return invoke<CostBasis>("cost_basis", { scope, heldOnNodes });
 }

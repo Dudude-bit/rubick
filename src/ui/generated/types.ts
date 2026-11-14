@@ -3431,9 +3431,9 @@ export interface NodeBasis {
   memoryCapacity: number | null;
   memoryAllocatable: number | null;
   gpus: number;
-  cpuRequested: number;
-  memoryRequested: number;
-  gpusRequested: number;
+  cpuRequested: number | null;
+  memoryRequested: number | null;
+  gpusRequested: number | null;
 }
 
 export interface WorkloadFold {

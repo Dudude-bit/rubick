@@ -202,6 +202,29 @@ describe("an estimate from entered prices", () => {
     expect(picture.workloads[0]!.perHour).not.toBeNull();
   });
 
+  /**
+   * A page about one object does not count what each node holds; idle is
+   * then unknown, not the whole node's price.
+   */
+  it("has no idle where what the nodes hold was not counted", () => {
+    const picture = estimatePicture(
+      basis({
+        nodes: [
+          node("node-a", {
+            cpuRequested: null,
+            memoryRequested: null,
+            gpusRequested: null,
+          }),
+        ],
+      }),
+      prices,
+      null
+    );
+    expect(picture.idle).toBeNull();
+    expect(picture.nodes![0]!.allocated).toBeNull();
+    expect(picture.cluster!.perHour).toBeCloseTo(2 * 0.04 + 8 * 0.005);
+  });
+
   /** Some namespaces of the scope unread: what was read is a floor. */
   it("calls a scope's total at least when some of its namespaces could not be read", () => {
     const picture = estimatePicture(
