@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vite-plus/test";
@@ -14,6 +16,7 @@ import {
   boundsProblem,
   budgetFinding,
   budgets,
+  cannotAllowOf,
   drainBlockers,
   metricReadings,
   scaleWarnings,
@@ -86,18 +89,19 @@ const hpa = (
 const pdb = (
   name: string,
   over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}
-): ObjectRef =>
-  ref("PodDisruptionBudget", name, {
+): ObjectRef => {
+  const counts = { desiredHealthy: 1, expectedPods: 2, ...over };
+  return ref("PodDisruptionBudget", name, {
     kind: "budget",
     minAvailable: "1",
     maxUnavailable: null,
     disruptionsAllowed: 1,
     currentHealthy: 2,
-    desiredHealthy: 1,
-    expectedPods: 2,
     conditions: [],
-    ...over,
+    cannotAllow: cannotAllowOf(counts.desiredHealthy, counts.expectedPods),
+    ...counts,
   });
+};
 
 const governs = (
   from: ObjectRef,
@@ -728,5 +732,35 @@ describe("what the YAML editor's apply reads", () => {
       "The autoscaler hpa-busy",
       "Argo CD",
     ]);
+  });
+});
+
+describe("one budget verdict on both sides of the IPC boundary", () => {
+  /**
+   * The budget's own page reads its raw object here, and the drain dialog,
+   * the workload pages and Audit read the backend's. Fails when this one
+   * drifts from the corpus the backend's evaluator answers too.
+   */
+  it("answers every case in the shared corpus as the backend does", () => {
+    const corpus = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/budget-verdict-conformance.json"),
+        "utf8"
+      )
+    ) as {
+      cases: {
+        name: string;
+        desiredHealthy: number;
+        expectedPods: number;
+        cannotAllow: boolean;
+      }[];
+    };
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(6);
+    for (const each of corpus.cases) {
+      expect(
+        cannotAllowOf(each.desiredHealthy, each.expectedPods),
+        each.name
+      ).toBe(each.cannotAllow);
+    }
   });
 });

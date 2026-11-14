@@ -2519,6 +2519,7 @@ describe("a governing edge says which query reached it", () => {
       desiredHealthy: 1,
       expectedPods: 2,
       conditions: [],
+      cannotAllow: false,
     });
 
   it("prints the set-based form rather than the half of it that fits a map", () => {

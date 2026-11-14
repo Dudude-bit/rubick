@@ -37,7 +37,11 @@ export type BudgetFacts = Extract<ObjectFacts, { kind: "budget" }>;
 /** What a budget's status counts, which is all a verdict on it reads. */
 export type BudgetCounts = Pick<
   BudgetFacts,
-  "disruptionsAllowed" | "currentHealthy" | "desiredHealthy" | "expectedPods"
+  | "disruptionsAllowed"
+  | "currentHealthy"
+  | "desiredHealthy"
+  | "expectedPods"
+  | "cannotAllow"
 >;
 
 export interface Autoscaler {
@@ -386,7 +390,7 @@ export function budgetFinding(
 ): Finding | null {
   if (facts.disruptionsAllowed > 0) return null;
 
-  if (cannotAllow(facts)) {
+  if (facts.cannotAllow) {
     return {
       tone: "warn",
       title: t("readings", "pdbCannotAllow", {
@@ -421,9 +425,14 @@ export function budgetFinding(
   };
 }
 
-/** With every pod it covers healthy, still none to spare: a drain waits on it for good. */
-export const cannotAllow = (facts: BudgetCounts) =>
-  facts.expectedPods > 0 && facts.desiredHealthy >= facts.expectedPods;
+/**
+ * With every pod it covers healthy, still none to spare: a drain waits on it
+ * for good. Only the budget's own page reads a raw object and asks this;
+ * every other reader takes `cannotAllow` from the backend's facts, and
+ * `src/contracts/budget-verdict-conformance.json` holds the two to one answer.
+ */
+export const cannotAllowOf = (desiredHealthy: number, expectedPods: number) =>
+  expectedPods > 0 && desiredHealthy >= expectedPods;
 
 // --- the moment a budget actually matters -------------------------------
 

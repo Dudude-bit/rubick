@@ -7,6 +7,7 @@ import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
+import { cannotAllowOf } from "@/lib/governance";
 
 const subject = {
   kind: "StatefulSet",
@@ -56,18 +57,21 @@ const autoscaler = (
     ...over,
   }) as ObjectFacts;
 
-const budget = (over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}) =>
-  ({
+const budget = (
+  over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}
+) => {
+  const counts = { desiredHealthy: 2, expectedPods: 3, ...over };
+  return {
     kind: "budget",
     minAvailable: "2",
     maxUnavailable: null,
     disruptionsAllowed: 0,
     currentHealthy: 2,
-    desiredHealthy: 2,
-    expectedPods: 3,
     conditions: [],
-    ...over,
-  }) as ObjectFacts;
+    cannotAllow: cannotAllowOf(counts.desiredHealthy, counts.expectedPods),
+    ...counts,
+  } as ObjectFacts;
+};
 
 /** Only `data` is read, and a real query here would need a whole client. */
 const query = (data: ResourceConnections | undefined) =>

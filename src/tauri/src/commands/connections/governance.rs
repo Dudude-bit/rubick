@@ -195,6 +195,9 @@ pub(super) fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
         current_healthy: status.map_or(0, |s| s.current_healthy),
         desired_healthy: status.map_or(0, |s| s.desired_healthy),
         expected_pods: status.map_or(0, |s| s.expected_pods),
+        cannot_allow: status.is_some_and(|s| {
+            crate::resources::disruption::cannot_allow(s.desired_healthy, s.expected_pods)
+        }),
         conditions: status
             .and_then(|s| s.conditions.as_ref())
             .map(|conditions| {

@@ -1,0 +1,41 @@
+{
+  "about": "Whether a PodDisruptionBudget can ever allow an eviction, as both halves read it: cannot_allow in src/tauri/src/resources/disruption.rs (the connections facts every governance reader takes, and Audit's pdb-blocks-disruption rule) and cannotAllowOf in src/ui/lib/governance.ts (the budget's own page and peek, which read the raw object). It cannot when the pods it selects number at least one and every one of them is required healthy: with all of them up there is still none to spare, so a drain waits on it for good. A budget that selects nothing is a different finding, not this one.",
+  "cases": [
+    {
+      "name": "every selected pod required",
+      "desiredHealthy": 3,
+      "expectedPods": 3,
+      "cannotAllow": true
+    },
+    {
+      "name": "more required than selected",
+      "desiredHealthy": 2,
+      "expectedPods": 1,
+      "cannotAllow": true
+    },
+    {
+      "name": "one to spare",
+      "desiredHealthy": 2,
+      "expectedPods": 3,
+      "cannotAllow": false
+    },
+    {
+      "name": "selects nothing",
+      "desiredHealthy": 0,
+      "expectedPods": 0,
+      "cannotAllow": false
+    },
+    {
+      "name": "requires one of none",
+      "desiredHealthy": 1,
+      "expectedPods": 0,
+      "cannotAllow": false
+    },
+    {
+      "name": "requires nothing",
+      "desiredHealthy": 0,
+      "expectedPods": 4,
+      "cannotAllow": false
+    }
+  ]
+}

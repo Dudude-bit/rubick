@@ -10,6 +10,7 @@ import type { T } from "@/i18n/useT";
 import { segmentOf } from "@/lib/access-kinds";
 import {
   budgetFinding,
+  cannotAllowOf,
   desiredComputed,
   type BudgetCounts,
   type Finding,
@@ -328,7 +329,13 @@ function budgetCountsOf(fields: Json): BudgetCounts | null {
     desiredHealthy === null ||
     expectedPods === null
     ? null
-    : { disruptionsAllowed, currentHealthy, desiredHealthy, expectedPods };
+    : {
+        disruptionsAllowed,
+        currentHealthy,
+        desiredHealthy,
+        expectedPods,
+        cannotAllow: cannotAllowOf(desiredHealthy, expectedPods),
+      };
 }
 
 export type LoudFinding = Finding & { tone: "err" | "warn" };
