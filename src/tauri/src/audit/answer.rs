@@ -504,12 +504,12 @@ fn pods(
             Some(controller) if judged.contains(controller) => None,
             Some(controller) => match owners.held_one(controller) {
                 Some(held) if held.kind == "Node" => Some(format!("pod/{}", pod.uid)),
+                // A Deployment's ReplicaSet, a CronJob's Job: the workload above is judged.
                 Some(held)
-                    if held.kind == "ReplicaSet"
-                        && held
-                            .controller
-                            .as_deref()
-                            .is_some_and(|c| judged.contains(c)) =>
+                    if held
+                        .controller
+                        .as_deref()
+                        .is_some_and(|c| judged.contains(c)) =>
                 {
                     None
                 }
@@ -1181,6 +1181,73 @@ mod tests {
         let blind = shop(&world(&index, Err(&missing), Some(&["shop".to_string()])));
         assert!(blind.findings.is_empty());
         assert_eq!(blind.unchecked[0].kind, POD);
+    }
+
+    /// A CronJob's runs are judged on the CronJob, a Deployment's pods on the
+    /// Deployment; a pod of a controller Audit does not read is read whole,
+    /// once for its controller. Fails if a run is judged again, or a pod no
+    /// workload Audit reads stamped goes unjudged without a word.
+    #[tokio::test]
+    async fn a_pod_is_judged_on_the_workload_above_it_or_read_once_for_its_controller() {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        let crons = ApiResource::erase::<k8s_openapi::api::batch::v1::CronJob>(&());
+        index.feed(
+            &crons,
+            json!({
+                "apiVersion": "batch/v1", "kind": "CronJob",
+                "metadata": { "name": "nightly", "namespace": "ops", "uid": "cron-1", "resourceVersion": "1" },
+                "spec": { "schedule": "* * * * *", "jobTemplate": { "spec": { "template": { "spec": {
+                    "restartPolicy": "OnFailure", "containers": [{ "name": "run", "image": "x:1" }] } } } } }
+            }),
+        );
+        let jobs = KindKey {
+            group: "batch".to_string(),
+            plural: "jobs".to_string(),
+        };
+        let clusters = KindKey {
+            group: "postgresql.cnpg.io".to_string(),
+            plural: "clusters".to_string(),
+        };
+        owners.hold(
+            &jobs,
+            "Job",
+            "job-1",
+            ("nightly-1", Some("ops")),
+            Some("cron-1"),
+        );
+        owners.hold(
+            &pods(),
+            "Pod",
+            "run-pod",
+            ("nightly-1-x", Some("ops")),
+            Some("job-1"),
+        );
+        owners.hold(&clusters, "Cluster", "pg-1", ("pg", Some("ops")), None);
+        owners.hold(&pods(), "Pod", "pg-a", ("pg-1", Some("ops")), Some("pg-1"));
+        owners.hold(&pods(), "Pod", "pg-b", ("pg-2", Some("ops")), Some("pg-1"));
+        let replica_sets = KindKey {
+            group: "apps".to_string(),
+            plural: "replicasets".to_string(),
+        };
+        owners.hold(
+            &replica_sets,
+            "ReplicaSet",
+            "rs-0",
+            ("unused", Some("ops")),
+            None,
+        );
+
+        let seen = world(&index, Ok(&owners), None);
+        assert_eq!(seen.unattributed, 0);
+        assert_eq!(
+            seen.reading, 1,
+            "one read for the Cluster's two pods, none for the run"
+        );
+        let held: Vec<String> = index.pods.lock().keys().cloned().collect();
+        assert_eq!(held, vec!["controller/pg-1".to_string()]);
+        index.stop_for_test();
     }
 
     /// Fails if a page past the first is lost or repeated.

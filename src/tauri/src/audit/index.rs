@@ -973,6 +973,10 @@ impl AuditIndex {
         );
     }
 
+    pub(super) fn stop_for_test(&self) {
+        self.stop.cancel();
+    }
+
     /// What a watch of `resource` across the cluster would hand over.
     pub(super) fn feed(&self, resource: &ApiResource, object: serde_json::Value) {
         let slot = SlotKey {
