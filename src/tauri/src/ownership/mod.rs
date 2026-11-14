@@ -778,6 +778,55 @@ impl ClusterIndex {
     }
 }
 
+/// One object the index holds: what it is, and the uid of its controller.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Held {
+    pub uid: String,
+    pub kind: String,
+    pub name: String,
+    pub namespace: Option<String>,
+    pub controller: Option<String>,
+}
+
+impl Held {
+    fn of(uid: &str, node: &graph::Node) -> Self {
+        Self {
+            uid: uid.to_string(),
+            kind: node.kind.clone(),
+            name: node.name.clone(),
+            namespace: node.namespace.clone(),
+            controller: node
+                .owners
+                .iter()
+                .find(|owner| owner.controller)
+                .map(|owner| owner.uid.clone()),
+        }
+    }
+}
+
+/// What other readers of the index ask of it, without changing it.
+impl ClusterIndex {
+    /// Every object of `kind` the index holds, wherever it read it.
+    pub(crate) fn held(&self, kind: &KindKey) -> Vec<Held> {
+        let graph = self.graph.read();
+        graph
+            .of_kind(kind)
+            .iter()
+            .filter_map(|uid| graph.node(uid).map(|node| Held::of(uid, node)))
+            .collect()
+    }
+
+    /// The object `uid`, where the index holds it.
+    pub(crate) fn held_one(&self, uid: &str) -> Option<Held> {
+        self.graph.read().node(uid).map(|node| Held::of(uid, node))
+    }
+
+    /// How every slot reads now.
+    pub(crate) fn slot_states(&self) -> BTreeMap<SlotKey, SlotState> {
+        self.slots_now()
+    }
+}
+
 #[cfg(test)]
 impl ClusterIndex {
     /// An index watching `kinds`, each still listing, with no watch behind it.
@@ -832,6 +881,41 @@ impl ClusterIndex {
             );
         }
         Arc::new(index)
+    }
+
+    /// One object held as the watch of `key` across the cluster holds it,
+    /// controlled by `controller` where one is given.
+    pub(crate) fn hold(
+        &self,
+        key: &KindKey,
+        kind: &str,
+        uid: &str,
+        (name, namespace): (&str, Option<&str>),
+        controller: Option<&str>,
+    ) {
+        let slot = SlotKey {
+            kind: key.clone(),
+            namespace: None,
+        };
+        self.graph.write().apply(
+            &slot,
+            uid.to_string(),
+            graph::Node {
+                key: key.clone(),
+                kind: kind.to_string(),
+                version: "v1".to_string(),
+                name: name.to_string(),
+                namespace: namespace.map(str::to_string),
+                owners: controller
+                    .map(|uid| graph::OwnerLink {
+                        uid: uid.to_string(),
+                        controller: true,
+                    })
+                    .into_iter()
+                    .collect(),
+            },
+        );
+        self.slots.lock().insert(slot, SlotState::Live);
     }
 
     /// One watched kind done listing, holding `names`.

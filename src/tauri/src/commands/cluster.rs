@@ -297,6 +297,7 @@ pub(crate) fn teardown_all(state: &AppState) {
     state.overview_cache.forget_all();
     state.ownership.forget_all();
     state.feeds.forget_all();
+    state.audit.forget_all();
     state.metrics_unserved.forget_all();
     state.set_current_context(None);
 }

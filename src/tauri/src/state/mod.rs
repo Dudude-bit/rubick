@@ -175,6 +175,8 @@ pub struct AppState {
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
     /// One watch per cluster and kind, for every backend reader that follows one.
     pub feeds: Arc<crate::feeds::Feeds>,
+    /// Audit's watches, held while the Audit page is on screen.
+    pub audit: Arc<crate::audit::AuditIndexes>,
 }
 
 impl AppState {
@@ -191,6 +193,7 @@ impl AppState {
         let renew_manager = Arc::new(crate::auth::renew::RenewManager::new());
 
         let overview_cache = Arc::new(crate::overview::OverviewCache::announcing(event_tx.clone()));
+        let event_tx_audit = event_tx.clone();
 
         let ownership = Arc::new(crate::ownership::OwnershipIndexes::default());
 
@@ -225,6 +228,7 @@ impl AppState {
             metrics_unserved: crate::metrics::Unserved::default(),
             feeds: Arc::new(crate::feeds::Feeds::new(ownership.budget())),
             ownership,
+            audit: Arc::new(crate::audit::AuditIndexes::new(event_tx_audit)),
         })
     }
 
@@ -438,6 +442,7 @@ impl AppState {
         self.ownership.forget(context);
         self.feeds
             .client_replaced(context, self.client_of(context).ok().map(|c| (*c).clone()));
+        self.audit.forget(context);
         self.metrics_unserved.forget_refusals(context);
     }
 

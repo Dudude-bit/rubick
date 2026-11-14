@@ -30,6 +30,7 @@
 #![allow(clippy::too_many_lines)]
 
 pub mod app_log;
+pub mod audit;
 pub mod auth;
 pub mod cli;
 pub mod client;

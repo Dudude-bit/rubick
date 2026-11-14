@@ -477,6 +477,9 @@ pub enum AppEvent {
         namespaces: Vec<String>,
         cluster: bool,
     },
+    /// Audit's watched kinds for `context` changed, and `revision` with them.
+    /// At most one a second, so the page reads again no faster than that.
+    AuditChanged { context: String, revision: u64 },
 }
 
 impl AppEvent {
@@ -510,6 +513,7 @@ impl AppEvent {
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
             AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
             AppEvent::OverviewChanged { .. } => "overview-changed",
+            AppEvent::AuditChanged { .. } => "audit-changed",
         }
     }
 
@@ -694,6 +698,10 @@ mod tests {
                 namespaces: vec!["shop".into()],
                 cluster: false,
             },
+            AppEvent::AuditChanged {
+                context: "k3d-rubick".into(),
+                revision: 7,
+            },
             AppEvent::TerminalSessions { sessions: vec![] },
             AppEvent::LogRead {
                 stream_id: "log-1".into(),
@@ -729,6 +737,7 @@ mod tests {
             AppEvent::TerminalSessions { .. } => 22,
             AppEvent::OverviewChanged { .. } => 23,
             AppEvent::LogRead { .. } => 24,
+            AppEvent::AuditChanged { .. } => 25,
         }
     }
 
@@ -737,7 +746,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=24).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=25).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`
