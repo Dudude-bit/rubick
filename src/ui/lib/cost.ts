@@ -16,6 +16,8 @@ import type {
   WorkloadFold,
   WorkloadKey,
 } from "@/generated/types";
+import { formatAmount, formatPercent } from "@/lib/utils";
+import { currentLocale } from "@/stores/localeStore";
 
 /** OpenCost's and Kubecost's own month: 730 hours. */
 export const HOURS_PER_MONTH = 730;
@@ -500,7 +502,7 @@ export function readingPicture(
 
 export type CostTarget =
   | { namespace: string }
-  | { namespace: string; kind: string; name: string };
+  | { namespace: string; group: string; kind: string; name: string };
 
 export interface CostOf {
   perHour: number | null;
@@ -509,10 +511,12 @@ export interface CostOf {
   atLeast: boolean;
 }
 
-const sameKey = (
-  a: WorkloadKey,
-  b: { namespace: string; kind: string; name: string }
-) => a.namespace === b.namespace && a.kind === b.kind && a.name === b.name;
+/** One workload: a custom kind may share a built-in's name, so the group counts too. */
+export const sameKey = (a: WorkloadKey, b: WorkloadKey): boolean =>
+  a.namespace === b.namespace &&
+  a.group === b.group &&
+  a.kind === b.kind &&
+  a.name === b.name;
 
 /**
  * One namespace's or one workload's cost, read off a picture. The page's
@@ -539,4 +543,32 @@ export function costOf(
         : row.perHour / cluster.perHour,
     atLeast: cluster?.atLeast ?? true,
   };
+}
+
+/**
+ * An amount as the reader's language writes numbers, with the entered
+ * currency as a label after it and never converted.
+ */
+export function formatMoney(
+  value: number,
+  currency: string,
+  locale: string = currentLocale()
+): string {
+  const text = formatAmount(value, locale);
+  return currency ? `${text}\u00a0${currency}` : text;
+}
+
+/** A share of a whole, to a tenth of a per cent below ten. */
+export function formatShare(
+  ratio: number,
+  locale: string = currentLocale()
+): string {
+  return formatPercent(ratio, ratio < 0.1 ? 1 : 0, locale);
+}
+
+/** The currency an amount is written in: the entered label, or none for OpenCost's. */
+export function currencyOf(picture: CostPicture): string {
+  return picture.source.kind === "estimate"
+    ? picture.source.prices.currency
+    : "";
 }

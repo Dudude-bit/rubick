@@ -261,6 +261,7 @@ mod tests {
     fn key(name: &str) -> WorkloadKey {
         WorkloadKey {
             namespace: "shop".into(),
+            group: "apps".into(),
             kind: "StatefulSet".into(),
             name: name.into(),
         }

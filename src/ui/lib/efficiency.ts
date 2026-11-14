@@ -11,6 +11,7 @@
  * rule about requests far above use ({@link overRequested}).
  */
 import type { WorkloadFold, WorkloadKey } from "@/generated/types";
+import { sameKey } from "@/lib/cost";
 
 /** The window usage is read over, worded on the column. */
 export const EFFICIENCY_WINDOW = "24h";
@@ -71,9 +72,6 @@ export function efficiencyOf(
     peakRatio: peak === null ? null : peak / requested,
   };
 }
-
-const sameKey = (a: WorkloadKey, b: WorkloadKey) =>
-  a.namespace === b.namespace && a.kind === b.kind && a.name === b.name;
 
 /**
  * A workload's efficiency, out of a reading of every workload's usage.

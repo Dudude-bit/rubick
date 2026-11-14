@@ -41,6 +41,9 @@ pub const MAX_COST_ROWS: usize = 600;
 #[serde(rename_all = "camelCase")]
 pub struct WorkloadKey {
     pub namespace: String,
+    /// The API group, `""` for the core one: a custom kind may share a
+    /// built-in's name, and the two are different objects.
+    pub group: String,
     pub kind: String,
     pub name: String,
 }
@@ -317,19 +320,40 @@ async fn cluster_read(
 #[must_use]
 pub(crate) fn cost_key(pod: &Pod, cron_of: &HashMap<(String, String), String>) -> WorkloadKey {
     let namespace = pod.metadata.namespace.clone().unwrap_or_default();
-    let (kind, name) = match workload_of(pod) {
+    let controller_group = || {
+        pod.metadata
+            .owner_references
+            .iter()
+            .flatten()
+            .find(|o| o.controller == Some(true))
+            .map(|o| {
+                o.api_version
+                    .rsplit_once('/')
+                    .map_or("", |(group, _)| group)
+                    .to_string()
+            })
+            .unwrap_or_default()
+    };
+    let (group, kind, name) = match workload_of(pod) {
+        Some(("Deployment", deployment)) if crate::resources::deployment_of(pod).is_some() => (
+            "apps".to_string(),
+            "Deployment".to_string(),
+            deployment.to_string(),
+        ),
         Some(("Job", job)) => match cron_of.get(&(namespace.clone(), job.to_string())) {
-            Some(cron) => ("CronJob".to_string(), cron.clone()),
-            None => ("Job".to_string(), job.to_string()),
+            Some(cron) => ("batch".to_string(), "CronJob".to_string(), cron.clone()),
+            None => (controller_group(), "Job".to_string(), job.to_string()),
         },
-        Some((kind, name)) => (kind.to_string(), name.to_string()),
+        Some((kind, name)) => (controller_group(), kind.to_string(), name.to_string()),
         None => (
+            String::new(),
             "Pod".to_string(),
             pod.metadata.name.clone().unwrap_or_default(),
         ),
     };
     WorkloadKey {
         namespace,
+        group,
         kind,
         name,
     }
@@ -898,6 +922,41 @@ pub(crate) mod tests {
         );
     }
 
+    /// A custom kind may share a built-in's name: the key carries the
+    /// owner's group, so an Argo Rollout's pods are not a Deployment's and
+    /// a CronJob's runs are batch's own.
+    #[test]
+    fn a_workload_is_keyed_by_its_group_as_well_as_its_kind() {
+        let rollout: Pod = serde_json::from_value(json!({
+            "metadata": {"namespace": "shop", "name": "web-6d4f-x2k9z", "ownerReferences": [
+                {"apiVersion": "argoproj.io/v1alpha1", "kind": "Rollout", "name": "web", "uid": "u", "controller": true}
+            ]},
+        }))
+        .unwrap();
+        let key = cost_key(&rollout, &HashMap::new());
+        assert_eq!(
+            (key.group.as_str(), key.kind.as_str()),
+            ("argoproj.io", "Rollout")
+        );
+
+        let run = pod(&running("ops", "backup-29-x2k9z", ("Job", "backup-29")));
+        let crons = HashMap::from([(
+            ("ops".to_string(), "backup-29".to_string()),
+            "backup".to_string(),
+        )]);
+        let key = cost_key(&run, &crons);
+        assert_eq!(
+            (key.group.as_str(), key.kind.as_str()),
+            ("batch", "CronJob")
+        );
+
+        let bare = pod(&Spec {
+            owner: None,
+            ..running("ops", "debug", ("", ""))
+        });
+        assert_eq!(cost_key(&bare, &HashMap::new()).group, "");
+    }
+
     /// A claim two workloads mount is paid for once: billed whole to each,
     /// the namespace would add up to more than its volumes.
     #[test]
@@ -993,6 +1052,7 @@ pub(crate) mod tests {
             .map(|i| WorkloadBasis {
                 key: WorkloadKey {
                     namespace: "shop".into(),
+                    group: "apps".into(),
                     kind: "Deployment".into(),
                     name: format!("w{i}"),
                 },
@@ -1029,6 +1089,7 @@ pub(crate) mod tests {
             .map(|i| WorkloadBasis {
                 key: WorkloadKey {
                     namespace: long(i % 100),
+                    group: "apps".into(),
                     kind: "StatefulSet".into(),
                     name: long(i),
                 },

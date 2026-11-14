@@ -8,7 +8,12 @@ import {
   type UsageReading,
 } from "./efficiency";
 
-const key: WorkloadKey = { namespace: "shop", kind: "Deployment", name: "web" };
+const key: WorkloadKey = {
+  namespace: "shop",
+  group: "apps",
+  kind: "Deployment",
+  name: "web",
+};
 
 describe("efficiency", () => {
   /** No sample is not 0% used: it is nothing measured. */

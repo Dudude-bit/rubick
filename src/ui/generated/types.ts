@@ -3459,6 +3459,7 @@ export interface Unplaced {
 
 export interface WorkloadKey {
   namespace: string;
+  group: string;
   kind: string;
   name: string;
 }

@@ -45,7 +45,7 @@ function node(name: string, extra: Partial<NodeBasis> = {}): NodeBasis {
 
 function workload(name: string, namespace = "shop"): WorkloadBasis {
   return {
-    key: { namespace, kind: "Deployment", name },
+    key: { namespace, group: "apps", kind: "Deployment", name },
     pods: 2,
     cpu: 500,
     memory: GIB,
@@ -331,6 +331,7 @@ describe("one object's cost", () => {
     const picture = readingPicture(basis(), reading(), opencost, null);
     const of = costOf(picture, {
       namespace: "shop",
+      group: "apps",
       kind: "Deployment",
       name: "web",
     })!;
@@ -338,7 +339,12 @@ describe("one object's cost", () => {
     expect(of.share).toBeCloseTo(0.05 / 0.2);
     expect(costOf(picture, { namespace: "shop" })!.perHour).toBeCloseTo(0.05);
     expect(
-      costOf(picture, { namespace: "shop", kind: "Deployment", name: "gone" })
+      costOf(picture, {
+        namespace: "shop",
+        group: "apps",
+        kind: "Deployment",
+        name: "gone",
+      })
     ).toBeNull();
   });
 });
