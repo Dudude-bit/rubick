@@ -4,8 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    facts_of, ChainStop, ConditionInfo, IngressInfo, ObjectRef, Relation, Rollout,
-    ServicePublished, UnexploredKind,
+    facts_of, ChainStop, GatewayInfo, IngressInfo, ObjectRef, Relation, Rollout, ServicePublished,
+    UnexploredKind,
 };
 
 /// One object on the map.
@@ -65,8 +65,9 @@ pub enum NodeVerdict {
         stops: Vec<ChainStop>,
         accepted: Option<bool>,
     },
+    /// A Gateway whole: its page words "programmed" off its conditions.
     Gateway {
-        programmed: Option<ConditionInfo>,
+        row: GatewayInfo,
     },
     Claim {
         phase: Option<String>,
@@ -102,9 +103,11 @@ pub enum PolicyCover {
     /// Every policy here was read and none selects it.
     None,
     /// No policy here selects it, and something that might was not read:
-    /// another engine's kinds in force here, or a selector that cannot be evaluated.
+    /// another engine's kinds in force here, or policies whose selector
+    /// cannot be evaluated.
     Unknown {
-        because: Vec<String>,
+        kinds: Vec<String>,
+        unreadable: Vec<String>,
     },
     Unread {
         said: String,

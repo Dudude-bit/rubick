@@ -2863,7 +2863,7 @@ export type Usage =
 export type PolicyCover =
   | { says: "covered"; policies: string[] }
   | { says: "none" }
-  | { says: "unknown"; because: string[] }
+  | { says: "unknown"; kinds: string[]; unreadable: string[] }
   | { says: "unread"; said: string };
 
 export type NodeVerdict =
@@ -2878,7 +2878,7 @@ export type NodeVerdict =
     }
   | { says: "ingress"; row: IngressInfo }
   | { says: "route"; stops: ChainStop[]; accepted: boolean | null }
-  | { says: "gateway"; programmed: ConditionInfo | null }
+  | { says: "gateway"; row: GatewayInfo }
   | { says: "claim"; phase: string | null }
   | { says: "autoscaler" }
   | { says: "budget" }

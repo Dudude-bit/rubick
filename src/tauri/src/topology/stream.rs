@@ -441,12 +441,7 @@ mod tests {
     #[test]
     fn a_node_two_namespaces_hold_stays_while_either_does_and_its_own_reading_wins() {
         let mut drawn = Drawn::default();
-        let own = node(
-            "Gateway",
-            "edge",
-            "public",
-            NodeVerdict::Gateway { programmed: None },
-        );
+        let own = node("Gateway", "edge", "public", NodeVerdict::Budget);
         let mut referenced = own.clone();
         referenced.verdict = NodeVerdict::Exists;
         drawn.put(slice("edge", vec![own], vec![]));

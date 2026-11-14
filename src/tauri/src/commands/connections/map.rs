@@ -260,7 +260,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 object: gw_ref,
                 home: Some(ns.to_string()),
                 verdict: NodeVerdict::Gateway {
-                    programmed: crate::resources::programmed(&gateway.conditions).cloned(),
+                    row: gateway.clone(),
                 },
                 app: None,
                 pods: None,
@@ -583,23 +583,23 @@ fn cover_of(labels: &BTreeMap<String, String>, snapshot: &Snapshot, ns: &str) ->
         }
     };
     let mut covered = Vec::new();
-    let mut because = Vec::new();
+    let mut unreadable = Vec::new();
     for policy in policies {
         let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
         match Selector::Query(selector).matches(labels) {
             Some(true) => covered.push(policy.name_any()),
             Some(false) => {}
-            None => because.push(policy.name_any()),
+            None => unreadable.push(policy.name_any()),
         }
     }
     if !covered.is_empty() {
         return PolicyCover::Covered { policies: covered };
     }
-    because.extend(snapshot.others.over(ns));
-    if because.is_empty() {
+    let kinds = snapshot.others.over(ns);
+    if kinds.is_empty() && unreadable.is_empty() {
         PolicyCover::None
     } else {
-        PolicyCover::Unknown { because }
+        PolicyCover::Unknown { kinds, unreadable }
     }
 }
 
@@ -1421,7 +1421,8 @@ mod tests {
         assert_eq!(
             cover(Held { others, ..shop("") }),
             PolicyCover::Unknown {
-                because: vec!["CiliumNetworkPolicy".into()]
+                kinds: vec!["CiliumNetworkPolicy".into()],
+                unreadable: Vec::new(),
             }
         );
     }
