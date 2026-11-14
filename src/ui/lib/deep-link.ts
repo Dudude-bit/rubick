@@ -40,6 +40,8 @@ const SAFE_PARAMS = new Set([
   "type",
   "rule",
   "monitor",
+  // Whether the cluster map marks the NetworkPolicies over each workload.
+  "policies",
   // Which namespace the window looks at: a read the reader could ask for.
   "namespace",
   // Narrow rows the page has already read, by text, kind, time or name.
