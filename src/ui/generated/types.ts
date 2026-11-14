@@ -3220,7 +3220,8 @@ export type Why =
   | { says: "queued" }
   | { says: "refused"; message: string }
   | { says: "failed"; message: string }
-  | { says: "notAudited" };
+  | { says: "notAudited" }
+  | { says: "unserved" };
 
 export type RuleId =
   | "pss-host-process"

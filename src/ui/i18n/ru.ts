@@ -1909,6 +1909,7 @@ export const ru: Catalogue = {
     whyRefused: "отказано: {message}",
     whyFailed: "не удалось прочитать: {message}",
     whyNotAudited: "этот вид Аудит не читает",
+    whyUnserved: "кластер этот вид не обслуживает",
     pickNamespaces:
       "Выберите в списке пространств имён те, что вам доступны, и они будут прочитаны по одному.",
     late: "{kind} {where}: как было прочитано в {since}, с тех пор наблюдение не работает.",

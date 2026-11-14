@@ -12,7 +12,8 @@ use super::rules::{AUTOSCALER, BUDGET, DEPLOYMENT, NETWORK_POLICY, POD, STATEFUL
 use super::{
     is_system, AuditFinding, AuditSeverity, Category, RuleId, Subject, Unchecked, What, Why,
 };
-use crate::ownership::{ClusterIndex, KindKey, SlotKey, SlotState};
+use crate::feeds::FeedState;
+use crate::ownership::{ClusterIndex, KindKey, SlotKey};
 
 /// The most rows one answer carries.
 pub const PAGE_LIMIT: u32 = 200;
@@ -236,7 +237,7 @@ fn blinded_by(kind: &str) -> Vec<RuleId> {
 
 /// A namespace's neighbours, as its slots read them.
 pub(super) fn beside_of(
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     entries: &[&Entry],
     namespace: &str,
 ) -> Beside {
@@ -310,13 +311,22 @@ fn counted(kind: &str) -> bool {
 /// How pods are read, from the ownership index's slots, per namespace.
 fn pods_unread(owners: Owners<'_>, namespace: &str) -> Option<Why> {
     match owners {
-        Ok(owners) => why_unread(&owners.slot_states(), &pods_key(), Some(namespace)),
+        Ok(owners) => why_unread(&owner_states(owners), &pods_key(), Some(namespace)),
         Err(why) => Some(why.clone()),
     }
 }
 
 /// The ownership index pods are read from, or why there is none.
 pub type Owners<'a> = Result<&'a ClusterIndex, &'a Why>;
+
+/// The ownership index's slots, read as the feeds' are.
+fn owner_states(owners: &ClusterIndex) -> BTreeMap<SlotKey, FeedState> {
+    owners
+        .slot_states()
+        .iter()
+        .map(|(slot, state)| (slot.clone(), FeedState::of(state)))
+        .collect()
+}
 
 fn pods_key() -> KindKey {
     KindKey {
@@ -402,7 +412,7 @@ pub(super) fn world(
 
 fn autoscaler_targets(
     world: &mut World,
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     autoscalers: &[&Entry],
     names: &BTreeSet<(String, String, String)>,
 ) {
@@ -466,11 +476,11 @@ fn pods(
     owners: Owners<'_>,
     store: &super::index::Store,
     scope: Option<&[String]>,
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     namespaces: &mut BTreeSet<String>,
 ) {
     let Ok(owners) = owners else { return };
-    let owner_slots = owners.slot_states();
+    let owner_slots = owner_states(owners);
     let judged: std::collections::HashSet<&str> =
         store.entries.keys().map(String::as_str).collect();
     let workloads: Vec<KindKey> = audited()
@@ -576,7 +586,7 @@ fn pods(
 fn network_policies(
     world: &mut World,
     owners: Owners<'_>,
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     namespaces: &BTreeSet<String>,
     policies: &HashMap<&str, u32>,
 ) {
@@ -637,11 +647,11 @@ fn network_policies(
 /// Every kind not read somewhere in the scope, and every kind read late.
 fn readings(
     world: &mut World,
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     owners: Owners<'_>,
     scope: Option<&[String]>,
 ) {
-    let mut kinds: Vec<(String, KindKey, bool, BTreeMap<SlotKey, SlotState>)> = audited()
+    let mut kinds: Vec<(String, KindKey, bool, BTreeMap<SlotKey, FeedState>)> = audited()
         .into_iter()
         .map(|(resource, namespaced)| {
             (
@@ -653,7 +663,7 @@ fn readings(
         })
         .collect();
     match owners {
-        Ok(owners) => kinds.push((POD.to_string(), pods_key(), true, owners.slot_states())),
+        Ok(owners) => kinds.push((POD.to_string(), pods_key(), true, owner_states(owners))),
         Err(why) => world.not_checked.push(NotChecked {
             kind: POD.to_string(),
             namespace: None,
@@ -691,7 +701,7 @@ fn readings(
         for (slot, state) in &states {
             let here = slot.kind == key
                 && (slot.namespace.is_none() || in_scope(slot.namespace.as_deref(), scope));
-            if let (true, SlotState::Stale { since }) = (here, state) {
+            if let (true, FeedState::Blind { since }) = (here, state) {
                 world.late.push(Late {
                     kind: kind.clone(),
                     namespace: slot.namespace.clone(),
@@ -1020,8 +1030,8 @@ mod tests {
         ApiResource::erase::<k8s_openapi::api::networking::v1::NetworkPolicy>(&())
     }
 
-    fn refused() -> SlotState {
-        SlotState::Refused {
+    fn refused() -> FeedState {
+        FeedState::Refused {
             message: "poddisruptionbudgets is forbidden".to_string(),
         }
     }
@@ -1174,7 +1184,7 @@ mod tests {
         assert!(blind.findings.is_empty());
         assert_eq!(blind.unchecked[0].kind, NETWORK_POLICY);
 
-        index.set(&policies(), None, SlotState::Live);
+        index.set(&policies(), None, FeedState::Synced);
         let missing = Why::Failed {
             message: "discovery failed".to_string(),
         };
@@ -1183,7 +1193,7 @@ mod tests {
         assert_eq!(blind.unchecked[0].kind, POD);
     }
 
-    /// A CronJob's runs are judged on the CronJob, a Deployment's pods on the
+    /// A `CronJob`'s runs are judged on the `CronJob`, a Deployment's pods on the
     /// Deployment; a pod of a controller Audit does not read is read whole,
     /// once for its controller. Fails if a run is judged again, or a pod no
     /// workload Audit reads stamped goes unjudged without a word.

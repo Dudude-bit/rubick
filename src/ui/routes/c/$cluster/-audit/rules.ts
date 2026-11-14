@@ -168,6 +168,7 @@ const WHY_WORDS: {
   refused: (why, t) => t("audit", "whyRefused", { message: why.message }),
   failed: (why, t) => t("audit", "whyFailed", { message: why.message }),
   notAudited: (_, t) => t("audit", "whyNotAudited"),
+  unserved: (_, t) => t("audit", "whyUnserved"),
 };
 
 /** Why a kind was not read, worded. */

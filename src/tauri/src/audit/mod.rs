@@ -188,6 +188,8 @@ pub enum Why {
     },
     /// A kind Audit does not read: an autoscaler's target of another kind.
     NotAudited,
+    /// A kind this cluster does not serve.
+    Unserved,
 }
 
 /// A rule that could not answer for one object.
@@ -319,7 +321,8 @@ pub async fn audit_page(
         });
     let index = state
         .audit
-        .ensure(&here, state.ownership.budget(), scope.clone(), minor);
+        .ensure(state, &here, scope.clone(), minor)
+        .await?;
     let seen = answer::world(&index, owners.as_ref().map(AsRef::as_ref), scope.as_deref());
     let enforced = enforced(state, &here, scope.as_deref()).await;
     Ok(answer::page(

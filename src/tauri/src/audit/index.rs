@@ -1,9 +1,8 @@
-//! Audit's watches, one per kind it judges whole: across the cluster, or
-//! where the cluster refuses that, per namespace of the window's selection.
-//! They draw on the watches and list turns the ownership index holds, so
-//! Audit adds to what the process keeps open only while it is on screen.
+//! What Audit holds of the kinds it judges whole, followed through the
+//! shared feeds: one watch per cluster and kind, however many features
+//! read it. Audit opens none of its own.
 //!
-//! Pods are not watched here: their metadata is the ownership index's.
+//! Pods are not followed here: their metadata is the ownership index's.
 //! An object is judged once per change of its `resourceVersion`; a change
 //! marks its namespace, and only marked namespaces are read again beside
 //! their Services, budgets, autoscalers and `LimitRanges`.
@@ -26,27 +25,23 @@ use k8s_openapi::api::rbac::v1::{ClusterRole, ClusterRoleBinding, Role, RoleBind
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::api::{Api, DynamicObject};
 use kube::discovery::ApiResource;
-use kube::runtime::watcher::Event;
 use kube::Client;
 use parking_lot::{Mutex, RwLock};
-use tokio::sync::{broadcast, Notify, Semaphore};
+use tokio::sync::{broadcast, mpsc, Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use super::context::{beside, Beside, Defaults, Replicated, Scales};
 use super::template::{judge, TemplateFacts};
 use super::{is_system, objects, AuditFinding, Subject, Unchecked, Why};
-use crate::ownership::slots::{spawn_slot, SlotHost, PAGE_WITHIN};
-use crate::ownership::{KindKey, SlotKey, SlotState};
-use crate::state::AppEvent;
+use crate::error::Result;
+use crate::feeds::{Ask, Binding, FeedState, Lease, Update};
+use crate::ownership::{KindKey, SlotKey};
+use crate::state::{AppEvent, AppState};
 
 const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
-const RELIST_EVERY: Duration = Duration::from_secs(30);
 /// The fastest the page is told to read again under churn.
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
-
-/// Slots this connection was refused, and the cluster's words for it.
-type Refusals = Arc<Mutex<BTreeMap<SlotKey, String>>>;
 
 /// The kinds Audit reads whole, and whether each lives in a namespace.
 pub(super) fn audited() -> Vec<(ApiResource, bool)> {
@@ -110,7 +105,6 @@ pub(super) type Besides = HashMap<String, (Vec<AuditFinding>, Vec<Unchecked>)>;
 pub(super) struct Store {
     pub entries: HashMap<String, Entry>,
     slots: HashMap<SlotKey, HashSet<String>>,
-    relisting: HashMap<SlotKey, HashSet<String>>,
     /// Namespaces whose rules beside their neighbours are to be read again.
     dirty: BTreeSet<String>,
     dirty_all: bool,
@@ -134,9 +128,6 @@ impl Store {
 
     pub(super) fn apply(&mut self, slot: &SlotKey, uid: String, entry: Entry) {
         self.touch(entry.subject.namespace.as_deref());
-        if let Some(listed) = self.relisting.get_mut(slot) {
-            listed.insert(uid.clone());
-        }
         self.slots
             .entry(slot.clone())
             .or_default()
@@ -159,29 +150,6 @@ impl Store {
         if let Some(members) = self.slots.get_mut(slot) {
             members.remove(uid);
         }
-    }
-
-    fn relist(&mut self, slot: &SlotKey) {
-        self.relisting.insert(slot.clone(), HashSet::new());
-    }
-
-    fn listed(&mut self, slot: &SlotKey) {
-        let Some(listed) = self.relisting.remove(slot) else {
-            return;
-        };
-        let held = self.slots.get(slot).cloned().unwrap_or_default();
-        for uid in held.difference(&listed) {
-            self.delete(slot, uid);
-        }
-        self.dirty_all = true;
-    }
-
-    fn drop_slot(&mut self, slot: &SlotKey) {
-        for uid in self.slots.remove(slot).unwrap_or_default() {
-            self.entries.remove(&uid);
-        }
-        self.relisting.remove(slot);
-        self.dirty_all = true;
     }
 
     /// Reads the marked namespaces again beside their neighbours: one pass
@@ -432,14 +400,14 @@ pub struct AuditIndex {
     pub(super) context: String,
     client: Client,
     stop: CancellationToken,
-    slots: Mutex<BTreeMap<SlotKey, SlotState>>,
-    stops: Mutex<BTreeMap<SlotKey, CancellationToken>>,
-    refusals: Refusals,
+    /// Held while the page asks; dropping the index lets the feeds go.
+    lease: Mutex<Option<Lease>>,
     scope: Mutex<Option<Vec<String>>>,
     last_used: Mutex<Instant>,
-    watches: Arc<Semaphore>,
-    turns: Arc<Semaphore>,
-    namespaced: HashMap<KindKey, (ApiResource, bool)>,
+    /// Each audited kind's name, by the key the feeds hand it under.
+    kinds: HashMap<KindKey, String>,
+    /// How each slot the feeds hand over is read.
+    states: Mutex<BTreeMap<SlotKey, FeedState>>,
     pub(super) minor: Option<u32>,
     pub(super) store: RwLock<Store>,
     pub(super) revision: AtomicU64,
@@ -451,21 +419,36 @@ pub struct AuditIndex {
 }
 
 impl AuditIndex {
-    /// How every slot reads now: a list long past its next turn is stale.
-    pub(super) fn slot_states(&self) -> BTreeMap<SlotKey, SlotState> {
-        let mut slots = self.slots.lock().clone();
-        let overdue =
-            chrono::Utc::now() - chrono::Duration::from_std(RELIST_EVERY * 3).unwrap_or_default();
-        for state in slots.values_mut() {
-            if let SlotState::Listed { at } = *state {
-                if at < overdue {
-                    *state = SlotState::Stale {
-                        since: at.to_rfc3339(),
-                    };
-                }
-            }
+    fn new(
+        context: String,
+        client: Client,
+        scope: Option<Vec<String>>,
+        minor: Option<u32>,
+    ) -> Self {
+        Self {
+            context,
+            client,
+            stop: CancellationToken::new(),
+            lease: Mutex::new(None),
+            scope: Mutex::new(scope),
+            last_used: Mutex::new(Instant::now()),
+            kinds: audited()
+                .iter()
+                .map(|(resource, _)| (key_of(resource), resource.kind.clone()))
+                .collect(),
+            states: Mutex::new(BTreeMap::new()),
+            minor,
+            store: RwLock::new(Store::default()),
+            revision: AtomicU64::new(0),
+            changed: Arc::new(Notify::new()),
+            pods: Mutex::new(HashMap::new()),
+            pod_reads: Arc::new(Semaphore::new(4)),
         }
-        slots
+    }
+
+    /// How every slot the feeds handed over reads now.
+    pub(super) fn slot_states(&self) -> BTreeMap<SlotKey, FeedState> {
+        self.states.lock().clone()
     }
 
     fn changed(&self) {
@@ -473,57 +456,61 @@ impl AuditIndex {
         self.changed.notify_one();
     }
 
-    /// Reads every refused kind in the selection's namespaces instead, and
-    /// stops reading it in those that left, as the ownership index does.
-    fn rescope(self: &Arc<Self>, scope: Option<Vec<String>>) {
-        let namespaces = scope.clone().unwrap_or_default();
-        *self.scope.lock() = scope;
-        {
-            let mut slots = self.slots.lock();
-            let mut stops = self.stops.lock();
-            let mut store = self.store.write();
-            slots.retain(|slot, _| {
-                let kept = slot
-                    .namespace
-                    .as_ref()
-                    .is_none_or(|namespace| namespaces.contains(namespace));
-                if !kept {
-                    if let Some(stop) = stops.remove(slot) {
-                        stop.cancel();
-                    }
-                    store.drop_slot(slot);
-                }
-                kept
-            });
+    /// One object of `slot` as the feeds hand it: judged again only where
+    /// its version moved.
+    fn hold(&self, store: &mut Store, slot: &SlotKey, object: &DynamicObject) -> Option<String> {
+        let uid = object.metadata.uid.clone()?;
+        let version = object.metadata.resource_version.clone().unwrap_or_default();
+        if store.holds(&uid, &version) {
+            store
+                .slots
+                .entry(slot.clone())
+                .or_default()
+                .insert(uid.clone());
+            return Some(uid);
         }
-        let refused: Vec<KindKey> = self
-            .slots
-            .lock()
-            .iter()
-            .filter(|(slot, state)| {
-                slot.namespace.is_none() && matches!(state, SlotState::Refused { .. })
-            })
-            .map(|(slot, _)| slot.kind.clone())
-            .collect();
-        for kind in refused {
-            self.fall_back(&kind, &namespaces);
+        let kind = self.kinds.get(&slot.kind)?;
+        match entry_of(kind, object.clone(), self.minor) {
+            Some(entry) => {
+                store.judged += 1;
+                store.apply(slot, uid.clone(), entry);
+            }
+            None => store.delete(slot, &uid),
         }
+        Some(uid)
     }
 
-    fn fall_back(self: &Arc<Self>, kind: &KindKey, namespaces: &[String]) {
-        let Some((resource, true)) = self.namespaced.get(kind).cloned() else {
-            return;
-        };
-        for namespace in namespaces {
-            let slot = SlotKey {
-                kind: kind.clone(),
-                namespace: Some(namespace.clone()),
-            };
-            if self.slots.lock().contains_key(&slot) {
-                continue;
+    /// What the feeds say, taken into the store.
+    pub(super) fn take(&self, update: Update) {
+        match update {
+            Update::Whole { slot, objects, .. } => {
+                let mut store = self.store.write();
+                let listed: HashSet<String> = objects
+                    .iter()
+                    .filter_map(|object| self.hold(&mut store, &slot, object))
+                    .collect();
+                // What the slot held and the set does not was deleted meanwhile.
+                let held = store.slots.get(&slot).cloned().unwrap_or_default();
+                for uid in held.difference(&listed) {
+                    store.delete(&slot, uid);
+                }
+                store.dirty_all = true;
             }
-            spawn_slot(self, slot, resource.clone(), RELIST_EVERY, PAGE_WITHIN);
+            Update::Applied { slot, object } => {
+                self.hold(&mut self.store.write(), &slot, &object);
+            }
+            Update::Deleted { slot, object } => {
+                if let Some(uid) = object.metadata.uid.as_deref() {
+                    self.store.write().delete(&slot, uid);
+                }
+            }
+            Update::State { slot, state } => {
+                self.states.lock().insert(slot, state);
+                self.store.write().dirty_all = true;
+            }
+            Update::HandedOver => return,
         }
+        self.changed();
     }
 
     /// Reads one pod whole and judges it, at most a few at once.
@@ -561,196 +548,26 @@ impl AuditIndex {
     }
 }
 
-impl SlotHost for AuditIndex {
-    type Object = DynamicObject;
-
-    fn api(&self, slot: &SlotKey, resource: &ApiResource) -> Api<DynamicObject> {
-        match &slot.namespace {
-            Some(namespace) => Api::namespaced_with(self.client.clone(), namespace, resource),
-            None => Api::all_with(self.client.clone(), resource),
-        }
-    }
-
-    fn stop(&self) -> &CancellationToken {
-        &self.stop
-    }
-
-    fn watches(&self) -> &Arc<Semaphore> {
-        &self.watches
-    }
-
-    fn turns(&self) -> &Arc<Semaphore> {
-        &self.turns
-    }
-
-    fn slots(&self) -> &Mutex<BTreeMap<SlotKey, SlotState>> {
-        &self.slots
-    }
-
-    fn stops(&self) -> &Mutex<BTreeMap<SlotKey, CancellationToken>> {
-        &self.stops
-    }
-
-    fn known_refusal(&self, slot: &SlotKey) -> Option<String> {
-        self.refusals.lock().get(slot).cloned()
-    }
-
-    fn told_refused(&self, slot: &SlotKey) {
-        let (group, plural) = (&slot.kind.group, &slot.kind.plural);
-        let namespace = slot.namespace.as_deref().unwrap_or_default();
-        tracing::debug!(group, plural, namespace, "audit: refused");
-    }
-
-    fn saw(
-        &self,
-        slot: &SlotKey,
-        resource: &ApiResource,
-        event: Event<DynamicObject>,
-        stop: &CancellationToken,
-    ) {
-        let mut slots = self.slots.lock();
-        if stop.is_cancelled() {
-            return;
-        }
-        let mut store = self.store.write();
-        match event {
-            Event::Init => {
-                store.relist(slot);
-                if !matches!(
-                    slots.get(slot),
-                    Some(SlotState::Stale { .. } | SlotState::Listed { .. })
-                ) {
-                    slots.insert(slot.clone(), SlotState::Syncing);
-                }
-                return;
-            }
-            Event::InitApply(object) | Event::Apply(object) => {
-                let Some(uid) = object.metadata.uid.clone() else {
-                    return;
-                };
-                let version = object.metadata.resource_version.clone().unwrap_or_default();
-                if store.holds(&uid, &version) {
-                    if let Some(listed) = store.relisting.get_mut(slot) {
-                        listed.insert(uid);
-                    }
-                    return;
-                }
-                match entry_of(&resource.kind, object, self.minor) {
-                    Some(entry) => {
-                        store.judged += 1;
-                        store.apply(slot, uid, entry);
-                    }
-                    None => store.delete(slot, &uid),
-                }
-            }
-            Event::InitDone => {
-                store.listed(slot);
-                slots.insert(slot.clone(), SlotState::Live);
-            }
-            Event::Delete(object) => {
-                if let Some(uid) = object.metadata.uid.as_deref() {
-                    store.delete(slot, uid);
-                }
-            }
-        }
-        drop(store);
-        drop(slots);
-        self.changed();
-    }
-
-    fn listed(&self, slot: &SlotKey, stop: &CancellationToken) {
-        let mut slots = self.slots.lock();
-        if !stop.is_cancelled() {
-            slots.insert(
-                slot.clone(),
-                SlotState::Listed {
-                    at: chrono::Utc::now(),
-                },
-            );
-        }
-    }
-
-    fn failed(&self, slot: &SlotKey, message: String, stop: &CancellationToken) {
-        let mut slots = self.slots.lock();
-        if stop.is_cancelled() {
-            return;
-        }
-        let next = match slots.get(slot) {
-            Some(SlotState::Live) => SlotState::Stale {
-                since: chrono::Utc::now().to_rfc3339(),
-            },
-            Some(SlotState::Listed { at }) => SlotState::Stale {
-                since: at.to_rfc3339(),
-            },
-            Some(stale @ SlotState::Stale { .. }) => stale.clone(),
-            _ => SlotState::Failed { message },
-        };
-        slots.insert(slot.clone(), next);
-        drop(slots);
-        self.store.write().dirty_all = true;
-        self.changed();
-    }
-
-    fn refused(
-        self: &Arc<Self>,
-        slot: &SlotKey,
-        message: String,
-        stop: Option<&CancellationToken>,
-    ) {
-        self.refusals.lock().insert(slot.clone(), message.clone());
-        {
-            let mut slots = self.slots.lock();
-            if stop.is_some_and(CancellationToken::is_cancelled) {
-                return;
-            }
-            self.stops.lock().remove(slot);
-            self.store.write().drop_slot(slot);
-            slots.insert(slot.clone(), SlotState::Refused { message });
-        }
-        if slot.namespace.is_none() {
-            if let Some(namespaces) = self.scope.lock().clone() {
-                self.fall_back(&slot.kind, &namespaces);
-            }
-        }
-        self.changed();
-    }
-
-    fn retire(&self, kind: &KindKey) {
-        let mut slots = self.slots.lock();
-        let mut stops = self.stops.lock();
-        let mut store = self.store.write();
-        slots.retain(|slot, _| {
-            if slot.kind != *kind {
-                return true;
-            }
-            if let Some(stop) = stops.remove(slot) {
-                stop.cancel();
-            }
-            store.drop_slot(slot);
-            false
-        });
-    }
-}
-
-/// Why a kind is not read in `namespace`, from the slots that read it:
-/// `None` where it is (a stale read is read, and said late elsewhere).
-/// `namespace` is `None` for a cluster-scoped kind.
+/// Why a kind is not read in `namespace`, from the slots the feeds handed
+/// over: `None` where it is (a blind read is read, and said late
+/// elsewhere). `namespace` is `None` for a cluster-scoped kind.
 #[must_use]
 pub(super) fn why_unread(
-    slots: &BTreeMap<SlotKey, SlotState>,
+    slots: &BTreeMap<SlotKey, FeedState>,
     kind: &KindKey,
     namespace: Option<&str>,
 ) -> Option<Why> {
-    let of = |state: &SlotState| match state {
-        SlotState::Live | SlotState::Listed { .. } | SlotState::Stale { .. } => None,
-        SlotState::Syncing => Some(Why::Reading),
-        SlotState::Queued => Some(Why::Queued),
-        SlotState::Failed { message } => Some(Why::Failed {
+    let of = |state: &FeedState| match state {
+        FeedState::Synced | FeedState::Blind { .. } => None,
+        FeedState::Syncing => Some(Why::Reading),
+        FeedState::Queued => Some(Why::Queued),
+        FeedState::Failed { message } => Some(Why::Failed {
             message: message.clone(),
         }),
-        SlotState::Refused { message } => Some(Why::Refused {
+        FeedState::Refused { message } => Some(Why::Refused {
             message: message.clone(),
         }),
+        FeedState::Unserved => Some(Why::Unserved),
     };
     let whole = slots.get(&SlotKey {
         kind: kind.clone(),
@@ -758,7 +575,7 @@ pub(super) fn why_unread(
     });
     match whole {
         None => Some(Why::Reading),
-        Some(SlotState::Refused { message }) => {
+        Some(FeedState::Refused { message }) => {
             let Some(namespace) = namespace else {
                 return Some(Why::Refused {
                     message: message.clone(),
@@ -780,7 +597,6 @@ pub(super) fn why_unread(
 
 pub struct AuditIndexes {
     clusters: Arc<DashMap<String, Arc<AuditIndex>>>,
-    refusals: DashMap<String, Refusals>,
     events: broadcast::Sender<AppEvent>,
     /// What a detail page read of its namespace, kept a little while so
     /// walking from object to object does not list it again.
@@ -794,7 +610,6 @@ impl AuditIndexes {
     pub fn new(events: broadcast::Sender<AppEvent>) -> Self {
         Self {
             clusters: Arc::new(DashMap::new()),
-            refusals: DashMap::new(),
             events,
             besides: DashMap::new(),
             enforced: DashMap::new(),
@@ -802,62 +617,67 @@ impl AuditIndexes {
     }
 
     /// The current cluster's index, started on the first call: only the
-    /// Audit page asks this.
-    pub(super) fn ensure(
+    /// Audit page asks this. It follows its kinds through the shared feeds,
+    /// page-bound, and touches its lease each time it is asked.
+    pub(super) async fn ensure(
         &self,
+        state: &AppState,
         here: &crate::state::Here<'_>,
-        budget: (Arc<Semaphore>, Arc<Semaphore>),
         scope: Option<Vec<String>>,
         minor: Option<u32>,
-    ) -> Arc<AuditIndex> {
+    ) -> Result<Arc<AuditIndex>> {
         let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
             *index.last_used.lock() = Instant::now();
-            index.rescope(scope);
-            return index;
+            let moved = {
+                let mut held = index.scope.lock();
+                let moved = *held != scope;
+                held.clone_from(&scope);
+                moved
+            };
+            if let Some(lease) = index.lease.lock().as_ref() {
+                lease.touch();
+                if moved {
+                    lease.rescope(scope);
+                }
+            }
+            return Ok(index);
         }
-        let (watches, turns) = budget;
-        let kinds = audited();
-        let index = Arc::new(AuditIndex {
-            context: context.clone(),
-            client: (*here.client).clone(),
-            stop: CancellationToken::new(),
-            slots: Mutex::new(BTreeMap::new()),
-            stops: Mutex::new(BTreeMap::new()),
-            refusals: self.refusals.entry(context.clone()).or_default().clone(),
-            scope: Mutex::new(scope),
-            last_used: Mutex::new(Instant::now()),
-            watches,
-            turns,
-            namespaced: kinds
-                .iter()
-                .map(|(resource, namespaced)| (key_of(resource), (resource.clone(), *namespaced)))
-                .collect(),
+        let index = Arc::new(AuditIndex::new(
+            context.clone(),
+            (*here.client).clone(),
+            scope.clone(),
             minor,
-            store: RwLock::new(Store::default()),
-            revision: AtomicU64::new(0),
-            changed: Arc::new(Notify::new()),
-            pods: Mutex::new(HashMap::new()),
-            pod_reads: Arc::new(Semaphore::new(4)),
-        });
+        ));
+        let subscription = state
+            .feeds
+            .subscribe(
+                here,
+                Ask {
+                    kinds: audited()
+                        .iter()
+                        .map(|(resource, _)| key_of(resource))
+                        .collect(),
+                    scope,
+                    binding: Binding::Page,
+                },
+            )
+            .await?;
         let index = self
             .clusters
             .entry(context.clone())
             .or_insert(index)
             .clone();
-        if !index.slots.lock().is_empty() {
-            return index;
+        let mut lease = index.lease.lock();
+        if lease.is_some() {
+            return Ok(index.clone());
         }
-        for (resource, _) in kinds {
-            let slot = SlotKey {
-                kind: key_of(&resource),
-                namespace: None,
-            };
-            spawn_slot(&index, slot, resource, RELIST_EVERY, PAGE_WITHIN);
-        }
+        *lease = Some(subscription.lease);
+        drop(lease);
+        spawn_reader(index.clone(), subscription.updates);
         spawn_announcer(index.clone(), self.events.clone());
         spawn_reaper(self.clusters.clone(), context, index.clone());
-        index
+        Ok(index)
     }
 
     /// A context's index where one is already running; none is started.
@@ -867,23 +687,39 @@ impl AuditIndexes {
     }
 
     pub fn forget(&self, context: &str) {
-        self.refusals.remove(context);
         self.besides.retain(|(held, _), _| held != context);
         self.enforced.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
+            index.lease.lock().take();
         }
     }
 
     pub fn forget_all(&self) {
-        self.refusals.clear();
         self.besides.clear();
         self.enforced.clear();
         for entry in self.clusters.iter() {
             entry.stop.cancel();
+            entry.lease.lock().take();
         }
         self.clusters.clear();
     }
+}
+
+/// Takes what the feeds say into the index until either lets go.
+fn spawn_reader(index: Arc<AuditIndex>, mut updates: mpsc::Receiver<Update>) {
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                update = updates.recv() => match update {
+                    Some(update) => index.take(update),
+                    None => break,
+                },
+            }
+        }
+    });
 }
 
 /// Tells the page to read again after a change, at most once a second.
@@ -921,9 +757,10 @@ fn spawn_reaper(
                 () = tokio::time::sleep(REAP_EVERY) => {}
             }
             if index.last_used.lock().elapsed() > IDLE_AFTER {
-                tracing::info!(context, "audit watches idle; stopped");
+                tracing::info!(context, "audit idle; its feeds let go");
                 clusters.remove_if(&context, |_, held| Arc::ptr_eq(held, &index));
                 index.stop.cancel();
+                index.lease.lock().take();
                 break;
             }
         }
@@ -932,64 +769,60 @@ fn spawn_reaper(
 
 #[cfg(test)]
 impl AuditIndex {
-    /// An index with no watch started, every audited kind live and empty.
+    /// An index no feed serves, every audited kind read and empty: the test
+    /// hands it what the feeds would.
     pub(super) fn holding(client: Client, scope: Option<Vec<String>>) -> Arc<Self> {
-        let kinds = audited();
-        let index = Arc::new(Self {
-            context: "test".to_string(),
-            client,
-            stop: CancellationToken::new(),
-            slots: Mutex::new(BTreeMap::new()),
-            stops: Mutex::new(BTreeMap::new()),
-            refusals: Refusals::default(),
-            scope: Mutex::new(scope),
-            last_used: Mutex::new(Instant::now()),
-            watches: Arc::new(Semaphore::new(0)),
-            turns: Arc::new(Semaphore::new(0)),
-            namespaced: kinds
-                .iter()
-                .map(|(resource, namespaced)| (key_of(resource), (resource.clone(), *namespaced)))
-                .collect(),
-            minor: Some(32),
-            store: RwLock::new(Store::default()),
-            revision: AtomicU64::new(0),
-            changed: Arc::new(Notify::new()),
-            pods: Mutex::new(HashMap::new()),
-            pod_reads: Arc::new(Semaphore::new(0)),
-        });
-        for (resource, _) in kinds {
-            index.set(&resource, None, SlotState::Live);
+        let mut index = Self::new("test".to_string(), client, scope, Some(32));
+        index.pod_reads = Arc::new(Semaphore::new(0));
+        let index = Arc::new(index);
+        for (resource, _) in audited() {
+            index.set(&resource, None, FeedState::Synced);
         }
         index
     }
 
-    pub(super) fn set(&self, resource: &ApiResource, namespace: Option<&str>, state: SlotState) {
-        self.slots.lock().insert(
-            SlotKey {
+    pub(super) fn set(&self, resource: &ApiResource, namespace: Option<&str>, state: FeedState) {
+        self.take(Update::State {
+            slot: SlotKey {
                 kind: key_of(resource),
                 namespace: namespace.map(str::to_string),
             },
             state,
-        );
+        });
     }
 
     pub(super) fn stop_for_test(&self) {
         self.stop.cancel();
     }
 
-    /// What a watch of `resource` across the cluster would hand over.
+    /// A change the feed of `resource` across the cluster would hand over.
     pub(super) fn feed(&self, resource: &ApiResource, object: serde_json::Value) {
         let slot = SlotKey {
             kind: key_of(resource),
             namespace: None,
         };
         let object: DynamicObject = serde_json::from_value(object).expect("an object");
-        self.saw(
-            &slot,
-            resource,
-            Event::Apply(object),
-            &CancellationToken::new(),
-        );
+        self.take(Update::Applied {
+            slot,
+            object: Arc::new(object),
+        });
+    }
+
+    /// The whole set the feed of `resource` would hand over after a relist.
+    pub(super) fn relist(&self, resource: &ApiResource, objects: Vec<serde_json::Value>) {
+        let slot = SlotKey {
+            kind: key_of(resource),
+            namespace: None,
+        };
+        let objects = objects
+            .into_iter()
+            .map(|object| Arc::new(serde_json::from_value(object).expect("an object")))
+            .collect();
+        self.take(Update::Whole {
+            slot,
+            why: crate::feeds::Whole::Relist,
+            objects,
+        });
     }
 }
 
@@ -1199,7 +1032,7 @@ pub(super) mod tests {
     fn a_kind_refused_across_the_cluster_reads_as_its_namespaces_read_it() {
         let kind = key_of(&deployments());
         let mut slots = BTreeMap::new();
-        let refused = SlotState::Refused {
+        let refused = FeedState::Refused {
             message: "forbidden".to_string(),
         };
         slots.insert(
@@ -1214,16 +1047,16 @@ pub(super) mod tests {
                 kind: kind.clone(),
                 namespace: Some("shop".to_string()),
             },
-            SlotState::Live,
+            FeedState::Synced,
         );
         assert_eq!(why_unread(&slots, &kind, Some("shop")), None);
         let shop = SlotKey {
             kind: kind.clone(),
             namespace: Some("shop".to_string()),
         };
-        slots.insert(shop.clone(), SlotState::Syncing);
+        slots.insert(shop.clone(), FeedState::Syncing);
         assert_eq!(why_unread(&slots, &kind, Some("shop")), Some(Why::Reading));
-        slots.insert(shop, SlotState::Live);
+        slots.insert(shop, FeedState::Synced);
         assert!(matches!(
             why_unread(&slots, &kind, Some("billing")),
             Some(Why::Refused { .. })
@@ -1237,30 +1070,33 @@ pub(super) mod tests {
                 kind: kind.clone(),
                 namespace: Some("shop".to_string()),
             },
-            SlotState::Stale {
+            FeedState::Blind {
                 since: "2026-11-14T10:00:00Z".to_string(),
             },
         );
         assert_eq!(why_unread(&slots, &kind, Some("shop")), None);
     }
 
-    /// A refusal across the cluster starts a read of each selected
-    /// namespace instead. Fails if the selection is never read, which left a
-    /// namespace-bound reader with nothing.
+    /// A relist hands the whole set again; what the index held and the set
+    /// lacks was deleted while nobody watched. Fails if a Deployment deleted
+    /// during a break stays judged.
     #[tokio::test]
-    async fn a_refusal_across_the_cluster_reads_each_selected_namespace_instead() {
-        let index = AuditIndex::holding(client().await, Some(vec!["shop".to_string()]));
-        let whole = SlotKey {
-            kind: key_of(&deployments()),
-            namespace: None,
-        };
-        SlotHost::refused(&index, &whole, "forbidden".to_string(), None);
-        let shop = SlotKey {
-            kind: key_of(&deployments()),
-            namespace: Some("shop".to_string()),
-        };
-        assert!(index.slots.lock().contains_key(&shop));
-        index.stop.cancel();
+    async fn a_relist_drops_what_was_deleted_while_nobody_watched() {
+        let index = AuditIndex::holding(client().await, None);
+        index.feed(&deployments(), deployment("shop", "web", "1", "web:1"));
+        index.feed(&deployments(), deployment("shop", "gone", "1", "web:1"));
+        index.relist(
+            &deployments(),
+            vec![deployment("shop", "web", "1", "web:1")],
+        );
+        let store = index.store.read();
+        let names: Vec<&str> = store
+            .entries
+            .values()
+            .map(|entry| entry.subject.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["web"]);
+        assert_eq!(store.judged, 2, "the unchanged one was judged again");
     }
 
     /// The answer's rows are what the page draws.

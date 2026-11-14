@@ -77,7 +77,7 @@ pub enum FeedState {
 }
 
 impl FeedState {
-    fn of(state: &SlotState) -> Self {
+    pub(crate) fn of(state: &SlotState) -> Self {
         match state {
             SlotState::Queued => Self::Queued,
             SlotState::Syncing => Self::Syncing,

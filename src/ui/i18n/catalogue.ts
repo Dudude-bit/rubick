@@ -1864,6 +1864,7 @@ export const en = {
     whyRefused: "refused: {message}",
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
+    whyUnserved: "this cluster does not serve the kind",
     pickNamespaces:
       "Pick the namespaces you can read in the namespace picker, and they are read one by one.",
     late: "{kind} {where} as read at {since}; the watch has failed since.",
