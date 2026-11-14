@@ -86,7 +86,8 @@ struct Workload {
     spec: Option<PodSpec>,
     owners: Vec<OwnerReference>,
     verdict: NodeVerdict,
-    uid: Option<String>,
+    /// Its own pods, as indices into the namespace's pod list.
+    own: Vec<usize>,
 }
 
 /// The namespace, drawn.
@@ -107,12 +108,10 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
     let workloads = workloads_of(&held, &snapshot, &warnings, now, &mut claimed);
     for workload in &workloads {
         let template = &workload.template_labels;
-        let own: Vec<&Pod> = snapshot
-            .pods()
+        let own: Vec<&Pod> = workload
+            .own
             .iter()
-            .filter(|pod| {
-                pod.metadata.uid.as_ref().and_then(|uid| claimed.get(uid)) == workload.uid.as_ref()
-            })
+            .map(|&at| &snapshot.pods()[at])
             .collect();
         if let Some(spec) = &workload.spec {
             uses_from_spec(ns, &workload.subject, spec, &snapshot.claims, &mut out);
@@ -368,6 +367,15 @@ fn workloads_of(
     let ns = held.namespace.as_str();
     let mut found = Vec::new();
     let pods_read = snapshot.pods.is_ok();
+    // Each workload's candidates by the uids it owns through, not the whole
+    // namespace each time: a namespace of thousands of pods and a hundred
+    // workloads was a hundred passes over every pod.
+    let mut by_owner: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (at, pod) in snapshot.pods().iter().enumerate() {
+        for owner in pod.owner_references() {
+            by_owner.entry(owner.uid.as_str()).or_default().push(at);
+        }
+    }
     let mut add = |kind: &str,
                    meta: &kube::core::ObjectMeta,
                    template: kinds::Template,
@@ -376,14 +384,24 @@ fn workloads_of(
                    claimed: &mut HashMap<String, String>| {
         let selector = Selector::Query(template.selector.as_ref());
         // A CronJob states no selector: its pods are its Jobs', by uid.
-        let own: Vec<&Pod> = snapshot
-            .pods()
-            .iter()
-            .filter(|pod| {
+        let candidates: std::collections::BTreeSet<usize> = match &owners {
+            crate::resources::Owners::Uids(uids) => uids
+                .iter()
+                .filter_map(|uid| by_owner.get(uid))
+                .flatten()
+                .copied()
+                .collect(),
+            crate::resources::Owners::Named(_) => (0..snapshot.pods().len()).collect(),
+        };
+        let own_at: Vec<usize> = candidates
+            .into_iter()
+            .filter(|&at| {
+                let pod = &snapshot.pods()[at];
                 (template.selector.is_none() || selector.matches(pod.labels()) == Some(true))
                     && crate::resources::runs_for(pod, &owners)
             })
             .collect();
+        let own: Vec<&Pod> = own_at.iter().map(|&at| &snapshot.pods()[at]).collect();
         let uid = meta.uid.clone();
         for pod in &own {
             if let (Some(pod_uid), Some(uid)) = (&pod.metadata.uid, &uid) {
@@ -432,7 +450,7 @@ fn workloads_of(
             owners: template.owners.clone(),
             template_labels: template.labels,
             verdict,
-            uid,
+            own: own_at,
         });
     };
 
