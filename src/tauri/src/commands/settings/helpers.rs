@@ -138,6 +138,25 @@ mod tests {
         assert_eq!(recents(&path), ["cart"]);
     }
 
+    /// Turning the timeline's keeping off is a table of its own. Fails if
+    /// 4.21.2 cannot start with the file, or this build forgets the choice.
+    #[test]
+    fn the_timelines_setting_is_kept_where_4_21_2_still_reads_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let theirs = as_4_21_2::written();
+        std::fs::write(&path, toml::to_string_pretty(&theirs).unwrap()).unwrap();
+
+        update_at(&path, |config| {
+            config.timeline.keep = false;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(as_4_21_2_reads(&path), theirs);
+        assert!(!AppConfig::load_from(&path).unwrap().timeline.keep);
+    }
+
     /// The same for a file this build was the first to write. Fails if what
     /// it remembers of the palette is something 4.21.2 cannot start with.
     #[test]

@@ -105,7 +105,7 @@ impl From<&Secret> for SecretInfo {
 }
 
 /// Event information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EventInfo {
     pub name: String,
@@ -122,7 +122,7 @@ pub struct EventInfo {
 }
 
 /// Involved object information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvolvedObjectInfo {
     /// What tells a kind from a custom one of the same name; absent where the event names none.

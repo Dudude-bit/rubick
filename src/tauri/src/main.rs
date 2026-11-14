@@ -377,6 +377,10 @@ fn main() {
             commands::terminal::terminal_subscribed,
             commands::terminal::open_pod_shell,
             // Resource watch (replaces 2s polling for migrated lists)
+            commands::timeline::timeline_read,
+            commands::timeline::timeline_kept,
+            commands::timeline::timeline_set_keep,
+            commands::timeline::timeline_clear,
             commands::watch::subscribe_configmap_watch,
             commands::watch::subscribe_secret_watch,
             commands::watch::subscribe_service_watch,

@@ -477,6 +477,14 @@ pub enum AppEvent {
         namespaces: Vec<String>,
         cluster: bool,
     },
+    /// `context`'s timeline recorded new rows, or its spans or what it keeps
+    /// changed. At most one a second per cluster; the window reads again
+    /// from the newest row it holds.
+    TimelineChanged {
+        context: String,
+        rows: bool,
+        spans: bool,
+    },
 }
 
 impl AppEvent {
@@ -510,6 +518,7 @@ impl AppEvent {
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
             AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
             AppEvent::OverviewChanged { .. } => "overview-changed",
+            AppEvent::TimelineChanged { .. } => "timeline-changed",
         }
     }
 
@@ -699,6 +708,11 @@ mod tests {
                 stream_id: "log-1".into(),
                 lines: 2,
             },
+            AppEvent::TimelineChanged {
+                context: "kind-rubick".into(),
+                rows: true,
+                spans: false,
+            },
         ]
     }
 
@@ -729,6 +743,7 @@ mod tests {
             AppEvent::TerminalSessions { .. } => 22,
             AppEvent::OverviewChanged { .. } => 23,
             AppEvent::LogRead { .. } => 24,
+            AppEvent::TimelineChanged { .. } => 25,
         }
     }
 
@@ -737,7 +752,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=24).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=25).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`
