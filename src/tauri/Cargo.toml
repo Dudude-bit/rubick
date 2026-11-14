@@ -161,7 +161,7 @@ http-body = "1"
 memchr = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
-tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen"] }
+tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen", "tls-ring"] }
 tonic-prost = "0.14.9"
 prost = "0.14.6"
 prost-types = "0.14.6"

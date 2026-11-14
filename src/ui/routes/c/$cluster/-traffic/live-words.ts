@@ -11,10 +11,24 @@ const LIVE_END: Record<LiveEnd["says"], (end: LiveEnd, t: T) => string> = {
   notEnabled: (_, t) => t("traffic", "liveNotEnabled"),
   notLooked: (end, t) =>
     t("traffic", "liveNotLooked", { said: "said" in end ? end.said : "" }),
-  servesTls: (end, t) =>
-    t("traffic", "liveServesTls", {
+  mutualTls: (end, t) =>
+    t("traffic", "liveMutualTls", {
       namespace: "namespace" in end ? end.namespace : "",
     }),
+  caUnread: (end, t) =>
+    end.says === "caUnread"
+      ? t("traffic", "liveCaUnread", {
+          namespace: end.namespace,
+          said: end.said,
+        })
+      : "",
+  noCa: (end, t) =>
+    end.says === "noCa"
+      ? t("traffic", "liveNoCa", {
+          namespace: end.namespace,
+          secret: end.secret,
+        })
+      : "",
   noPod: (end, t) =>
     end.says === "noPod"
       ? t("traffic", "liveNoPod", {

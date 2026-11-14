@@ -545,7 +545,7 @@ function LiveView({
         ...(live.relay
           ? [
               {
-                text: t("traffic", "liveVia", {
+                text: t("traffic", live.relay.tls ? "liveViaTls" : "liveVia", {
                   namespace: live.relay.namespace,
                   service: live.relay.service,
                   pod: live.relay.pod,

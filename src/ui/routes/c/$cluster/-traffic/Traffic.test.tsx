@@ -239,6 +239,7 @@ describe("the Traffic page, live", () => {
       namespace: "kube-system",
       service: "hubble-relay",
       pod: "relay-1",
+      tls: false,
     },
     lost: 0,
     untracked: 0,
@@ -295,7 +296,7 @@ describe("the Traffic page, live", () => {
    * Not enabled, not looked for and serving TLS are three sentences, and
    * none of them is "no flows".
    */
-  it("says not enabled, could not look and serves TLS apart, never as no flows", async () => {
+  it("says not enabled, could not look, mutual TLS and an unread CA apart, never as no flows", async () => {
     traffic.mockReturnValue({ says: "absent" });
     const said = async (end: LiveSnapshot["end"]) => {
       live.mockReturnValue(snapshot({ phase: "ended", end, relay: null }));
@@ -309,13 +310,19 @@ describe("the Traffic page, live", () => {
       says: "notLooked",
       said: "services is forbidden",
     });
-    const tls = await said({ says: "servesTls", namespace: "kube-system" });
+    const tls = await said({ says: "mutualTls", namespace: "kube-system" });
+    const ca = await said({
+      says: "caUnread",
+      namespace: "kube-system",
+      said: "secrets is forbidden",
+    });
     expect(off).toContain("Hubble Relay is not enabled");
     expect(unread).toContain(
       "Could not look for Hubble Relay: services is forbidden"
     );
-    expect(tls).toContain("serves TLS");
-    for (const text of [off, unread, tls])
+    expect(tls).toContain("mutual TLS");
+    expect(ca).toContain("could not be read: secrets is forbidden");
+    for (const text of [off, unread, tls, ca])
       expect(text).not.toMatch(/saw no flows/);
   });
 

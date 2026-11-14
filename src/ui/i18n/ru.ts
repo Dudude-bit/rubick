@@ -2102,8 +2102,14 @@ export const ru: Catalogue = {
     liveNotEnabled:
       "Hubble Relay в этом кластере не включён: ни у одного Service нет метки k8s-app=hubble-relay. Включите его через hubble.relay.enabled=true или cilium hubble enable --relay.",
     liveNotLooked: "Не удалось проверить, есть ли Hubble Relay: {said}",
-    liveServesTls:
-      "Hubble Relay в {namespace} отдаёт TLS, а Rubick читает только relay с открытым gRPC (так по умолчанию в чарте).",
+    liveViaTls:
+      "Вживую из Hubble Relay {namespace}/{service}, через Pod {pod}, по TLS с проверкой по его собственному CA.",
+    liveMutualTls:
+      "Hubble Relay в {namespace} требует сертификат от каждого клиента (взаимный TLS), а Rubick не берёт чужой.",
+    liveCaUnread:
+      "Hubble Relay в {namespace} отдаёт TLS, а CA для его проверки прочитать не удалось: {said}",
+    liveNoCa:
+      "Hubble Relay в {namespace} отдаёт TLS, а в {secret} нет ca.crt, чтобы его проверить.",
     liveNoPod: "За {namespace}/{service} нет ни одного готового пода.",
     liveRelayEnded: "Hubble Relay закрыл поток.",
     liveUnsubscribed: "Поток не начали слушать вовремя, и он остановлен.",

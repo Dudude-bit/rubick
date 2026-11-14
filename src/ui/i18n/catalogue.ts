@@ -2026,8 +2026,14 @@ export const en = {
     liveNotEnabled:
       "Hubble Relay is not enabled in this cluster: no Service carries k8s-app=hubble-relay. Enable it with hubble.relay.enabled=true, or cilium hubble enable --relay.",
     liveNotLooked: "Could not look for Hubble Relay: {said}",
-    liveServesTls:
-      "Hubble Relay in {namespace} serves TLS, and Rubick reads only a relay serving plaintext gRPC (the chart's default).",
+    liveViaTls:
+      "Live from Hubble Relay {namespace}/{service}, through pod {pod}, over TLS checked against its own CA.",
+    liveMutualTls:
+      "Hubble Relay in {namespace} asks every client for a certificate (mutual TLS), and Rubick does not borrow another client's.",
+    liveCaUnread:
+      "Hubble Relay in {namespace} serves TLS, and the CA to check it against could not be read: {said}",
+    liveNoCa:
+      "Hubble Relay in {namespace} serves TLS, and {secret} holds no ca.crt to check it against.",
     liveNoPod: "No pod behind {namespace}/{service} is ready.",
     liveRelayEnded: "Hubble Relay closed the stream.",
     liveUnsubscribed:

@@ -3,10 +3,13 @@
 //!
 //! The Service is found by the label Cilium's chart gives it
 //! (`k8s-app=hubble-relay`, `templates/hubble-relay/service.yaml`), in
-//! whatever namespace Cilium was installed to. Whether it serves TLS is read
-//! from its `hubble-relay-config`, where the chart writes
-//! `tls-relay-server-cert-file` or `disable-server-tls: true`. Only plaintext
-//! is read here; a relay serving TLS is said, not guessed at.
+//! whatever namespace Cilium was installed to. How it serves is read from
+//! its `hubble-relay-config`, where the chart writes
+//! `disable-server-tls: true`, or `tls-relay-server-cert-file` and, for
+//! mutual TLS, `tls-relay-client-ca-files` (`templates/_extensions.tpl`).
+//! TLS is checked against the `ca.crt` of `hubble-relay-server-certs` alone,
+//! read here and never sent on; mutual TLS asks for a client certificate the
+//! app does not borrow, and is said.
 
 #![allow(clippy::needless_pass_by_value)]
 // Async because it spawns: Tauri runs a sync command off the reactor.
@@ -19,7 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
-use k8s_openapi::api::core::v1::{ConfigMap, Pod, Service};
+use k8s_openapi::api::core::v1::{ConfigMap, Pod, Secret, Service};
 use kube::api::ListParams;
 use kube::{Api, ResourceExt};
 use serde::{Deserialize, Serialize};
@@ -49,6 +52,10 @@ const KEPT_LATENCIES: usize = 64;
 const SEND_EVERY: Duration = Duration::from_secs(1);
 const SELECTOR: &str = "k8s-app=hubble-relay";
 const CONFIG: &str = "hubble-relay-config";
+const SERVER_CERTS: &str = "hubble-relay-server-certs";
+/// The name its certificate is issued for: the chart's `relayName`, under
+/// `*.hubble-relay.cilium.io`.
+const SERVER_NAME: &str = "ui.hubble-relay.cilium.io";
 
 /// A policy that denied a flow, as Hubble names it, with the API group of
 /// its kind so the page can open it.
@@ -102,6 +109,8 @@ pub struct RelayAt {
     pub namespace: String,
     pub service: String,
     pub pod: String,
+    /// Read over TLS, checked against the relay's own CA.
+    pub tls: bool,
 }
 
 /// How a live stream ended; exactly one per stream.
@@ -116,9 +125,19 @@ pub enum LiveEnd {
     NotLooked {
         said: String,
     },
-    /// It serves TLS, which is not read here.
-    ServesTls {
+    /// It asks every client for a certificate, which the app does not borrow.
+    MutualTls {
         namespace: String,
+    },
+    /// It serves TLS and its CA could not be read.
+    CaUnread {
+        namespace: String,
+        said: String,
+    },
+    /// It serves TLS and holds no `ca.crt` where the chart puts it.
+    NoCa {
+        namespace: String,
+        secret: String,
     },
     /// No pod behind it is ready.
     NoPod {
@@ -177,8 +196,24 @@ fn client_of(clients: &K8sClientManager, context: &str) -> Result<kube::Client> 
         .ok_or_else(|| Error::NotConnected(context.to_string()))
 }
 
-/// Which relay to read, through which pod and port, or why none.
-async fn find(client: &kube::Client) -> std::result::Result<(RelayAt, u16), LiveEnd> {
+#[derive(Debug, PartialEq, Eq)]
+enum Serving {
+    Plain,
+    Tls,
+    MutualTls,
+}
+
+/// A relay to read: where, through which pod and port, and the CA its TLS is
+/// checked against.
+#[derive(Debug)]
+struct Found {
+    at: RelayAt,
+    remote: u16,
+    ca: Option<Vec<u8>>,
+}
+
+/// Which relay to read, or why none.
+async fn find(client: &kube::Client) -> std::result::Result<Found, LiveEnd> {
     let services = Api::<Service>::all(client.clone())
         .list(&ListParams::default().labels(SELECTOR))
         .await
@@ -203,14 +238,17 @@ async fn find(client: &kube::Client) -> std::result::Result<(RelayAt, u16), Live
     let config = Api::<ConfigMap>::namespaced(client.clone(), &namespace)
         .get_opt(CONFIG)
         .await;
-    let tls = match config {
-        Ok(Some(config)) => serves_tls(&config),
+    let serving = match config {
+        Ok(Some(config)) => serving(&config),
         // Unread, the chart's own convention: 443 with TLS, 80 without.
-        Ok(None) | Err(_) => port == 443,
+        Ok(None) | Err(_) if port == 443 => Serving::Tls,
+        Ok(None) | Err(_) => Serving::Plain,
     };
-    if tls {
-        return Err(LiveEnd::ServesTls { namespace });
-    }
+    let ca = match serving {
+        Serving::Plain => None,
+        Serving::MutualTls => return Err(LiveEnd::MutualTls { namespace }),
+        Serving::Tls => Some(ca_of(client, &namespace).await?),
+    };
     let selector = service
         .spec
         .as_ref()
@@ -230,22 +268,52 @@ async fn find(client: &kube::Client) -> std::result::Result<(RelayAt, u16), Live
     ready.sort_by_key(|p| p.name_any());
     let pod = ready.first().ok_or_else(no_pod)?;
     let remote = crate::commands::port_forward::pod_port(&service, port, pod).ok_or_else(no_pod)?;
-    Ok((
-        RelayAt {
+    Ok(Found {
+        at: RelayAt {
             namespace: namespace.clone(),
             service: name.clone(),
             pod: pod.name_any(),
+            tls: ca.is_some(),
         },
         remote,
-    ))
+        ca,
+    })
 }
 
-fn serves_tls(config: &ConfigMap) -> bool {
-    config
-        .data
-        .iter()
-        .flatten()
-        .any(|(_, text)| text.contains("tls-relay-server-cert-file"))
+fn serving(config: &ConfigMap) -> Serving {
+    let says = |key: &str| {
+        config
+            .data
+            .iter()
+            .flatten()
+            .any(|(_, text)| text.contains(key))
+    };
+    if says("tls-relay-client-ca-files") {
+        Serving::MutualTls
+    } else if says("tls-relay-server-cert-file") {
+        Serving::Tls
+    } else {
+        Serving::Plain
+    }
+}
+
+/// The relay's CA, and nothing else of the Secret it sits in.
+async fn ca_of(client: &kube::Client, namespace: &str) -> std::result::Result<Vec<u8>, LiveEnd> {
+    let secret = Api::<Secret>::namespaced(client.clone(), namespace)
+        .get_opt(SERVER_CERTS)
+        .await
+        .map_err(|e| LiveEnd::CaUnread {
+            namespace: namespace.to_string(),
+            said: Error::from(e).said(),
+        })?;
+    secret
+        .and_then(|secret| secret.data?.remove("ca.crt"))
+        .map(|bytes| bytes.0)
+        .filter(|bytes| !bytes.is_empty())
+        .ok_or_else(|| LiveEnd::NoCa {
+            namespace: namespace.to_string(),
+            secret: SERVER_CERTS.to_string(),
+        })
 }
 
 fn is_ready(pod: &Pod) -> bool {
@@ -278,13 +346,13 @@ fn filters(scope: Option<&[String]>) -> Vec<flow::FlowFilter> {
 async fn connect(
     clients: &Arc<K8sClientManager>,
     context: &str,
-    relay: &RelayAt,
-    remote: u16,
+    found: &Found,
 ) -> std::result::Result<ObserverClient<tonic::transport::Channel>, String> {
     let clients = clients.clone();
     let context = context.to_string();
-    let namespace = relay.namespace.clone();
-    let pod = relay.pod.clone();
+    let namespace = found.at.namespace.clone();
+    let pod = found.at.pod.clone();
+    let remote = found.remote;
     // A client per connection: a held one carries a token that expires.
     let connector = tower::service_fn(move |_: http::Uri| {
         let clients = clients.clone();
@@ -306,7 +374,17 @@ async fn connect(
             Ok::<_, String>(TokioIo::new(stream))
         }
     });
-    let channel = tonic::transport::Endpoint::from_static("http://hubble-relay")
+    let endpoint = match &found.ca {
+        None => tonic::transport::Endpoint::from_static("http://hubble-relay"),
+        Some(ca) => tonic::transport::Endpoint::from_static("https://ui.hubble-relay.cilium.io")
+            .tls_config(
+                tonic::transport::ClientTlsConfig::new()
+                    .ca_certificate(tonic::transport::Certificate::from_pem(ca))
+                    .domain_name(SERVER_NAME),
+            )
+            .map_err(|e| e.to_string())?,
+    };
+    let channel = endpoint
         .connect_with_connector(connector)
         .await
         .map_err(|e| e.to_string())?;
@@ -329,7 +407,7 @@ async fn run(
         () = cancel.cancelled() => return LiveEnd::Closed,
         found = find(&client) => found,
     };
-    let (relay, remote) = match found {
+    let found = match found {
         Ok(found) => found,
         Err(end) => return end,
     };
@@ -341,7 +419,7 @@ async fn run(
     let opened = tokio::select! {
         () = cancel.cancelled() => return LiveEnd::Closed,
         opened = async {
-            let mut observer = connect(clients, context, &relay, remote).await?;
+            let mut observer = connect(clients, context, &found).await?;
             observer
                 .get_flows(request)
                 .await
@@ -364,7 +442,7 @@ async fn run(
             untracked: fold.untracked,
         });
     };
-    send(Vec::new(), Vec::new(), Some(relay), &fold);
+    send(Vec::new(), Vec::new(), Some(found.at), &fold);
     let mut tick = tokio::time::interval(SEND_EVERY);
     loop {
         tokio::select! {
@@ -886,22 +964,39 @@ mod tests {
         .to_string()
     }
 
-    fn config(tls: bool) -> String {
-        let text = if tls {
-            "tls-relay-server-cert-file: /var/lib/hubble-relay/tls/server.crt"
-        } else {
-            "disable-server-tls: true"
+    fn config(serving: Serving) -> String {
+        let text = match serving {
+            Serving::Plain => "disable-server-tls: true",
+            Serving::Tls => "tls-relay-server-cert-file: /var/lib/hubble-relay/tls/server.crt",
+            Serving::MutualTls => {
+                "tls-relay-server-cert-file: /x\ntls-relay-client-ca-files: /var/lib/hubble-relay/tls/hubble-server-ca.crt"
+            }
         };
         json!({"kind": "ConfigMap", "apiVersion": "v1", "metadata": {"name": CONFIG}, "data": {"config.yaml": text}})
             .to_string()
     }
 
+    /// The chart's server Secret; `ca.crt` is "CA", the rest is never read.
+    fn certs(with_ca: bool) -> String {
+        let mut data = json!({"tls.crt": "Q1JU"});
+        if with_ca {
+            data["ca.crt"] = json!("Q0E=");
+        }
+        json!({"kind": "Secret", "apiVersion": "v1", "metadata": {"name": SERVER_CERTS}, "data": data})
+            .to_string()
+    }
+
     async fn found(
         answer: impl Fn(&str) -> (u16, String) + Send + Sync + 'static,
-    ) -> std::result::Result<(RelayAt, u16), LiveEnd> {
+    ) -> std::result::Result<Found, LiveEnd> {
         let (client, _) = answering(move |path, _| answer(path)).await;
         find(&client).await
     }
+
+    const SERVICES: &str = "/api/v1/services";
+    const CONFIG_AT: &str = "/api/v1/namespaces/kube-system/configmaps/hubble-relay-config";
+    const CERTS_AT: &str = "/api/v1/namespaces/kube-system/secrets/hubble-relay-server-certs";
+    const PODS_AT: &str = "/api/v1/namespaces/kube-system/pods";
 
     /// Services that could not be listed are "could not look", never "not
     /// enabled"; none listed is "not enabled".
@@ -910,7 +1005,7 @@ mod tests {
         let refused = found(|_| failure(403, "Forbidden")).await;
         assert!(matches!(refused, Err(LiveEnd::NotLooked { .. })));
         let none = found(|path| {
-            if path == "/api/v1/services" {
+            if path == SERVICES {
                 (
                     200,
                     json!({"kind": "ServiceList", "apiVersion": "v1", "metadata": {}, "items": []})
@@ -921,26 +1016,50 @@ mod tests {
             }
         })
         .await;
-        assert_eq!(none, Err(LiveEnd::NotEnabled));
+        assert!(matches!(none, Err(LiveEnd::NotEnabled)));
     }
 
-    /// TLS is read from the relay's own config, and where that cannot be
-    /// read, from the chart's port for it; a TLS relay is said, not read.
+    /// A TLS relay is read against its own CA, found by its config or,
+    /// where that is unread, by the chart's port; the CA is all that is
+    /// taken, and a CA that could not be read, or is not there, is said.
     #[tokio::test]
-    async fn a_relay_serving_tls_is_said_by_its_config_or_its_port() {
-        let by_config = found(|path| match path {
-            "/api/v1/services" => (200, relay_service(80)),
-            "/api/v1/namespaces/kube-system/configmaps/hubble-relay-config" => (200, config(true)),
+    async fn a_tls_relay_is_read_against_its_ca_and_a_missing_ca_is_said() {
+        let tls = |port: u16, config_ok: bool, secret: (u16, String)| {
+            move |path: &str| match path {
+                SERVICES => (200, relay_service(port)),
+                CONFIG_AT if config_ok => (200, config(Serving::Tls)),
+                CONFIG_AT => failure(403, "Forbidden"),
+                CERTS_AT => secret.clone(),
+                PODS_AT => (200, relay_pods(true)),
+                _ => failure(404, "NotFound"),
+            }
+        };
+        let read = found(tls(80, true, (200, certs(true))))
+            .await
+            .expect("read over TLS");
+        assert_eq!(read.ca.as_deref(), Some(b"CA".as_slice()));
+        assert!(read.at.tls);
+        let by_port = found(tls(443, false, (200, certs(true))))
+            .await
+            .expect("by port");
+        assert!(by_port.at.tls);
+        let refused = found(tls(80, true, failure(403, "Forbidden"))).await;
+        assert!(matches!(refused, Err(LiveEnd::CaUnread { .. })));
+        let missing = found(tls(80, true, (200, certs(false)))).await;
+        assert!(matches!(missing, Err(LiveEnd::NoCa { .. })));
+    }
+
+    /// A relay that asks every client for a certificate is said as that, not
+    /// read and not failed.
+    #[tokio::test]
+    async fn a_relay_asking_for_a_client_certificate_is_said() {
+        let mutual = found(|path| match path {
+            SERVICES => (200, relay_service(443)),
+            CONFIG_AT => (200, config(Serving::MutualTls)),
             _ => failure(404, "NotFound"),
         })
         .await;
-        assert!(matches!(by_config, Err(LiveEnd::ServesTls { .. })));
-        let by_port = found(|path| match path {
-            "/api/v1/services" => (200, relay_service(443)),
-            _ => failure(403, "Forbidden"),
-        })
-        .await;
-        assert!(matches!(by_port, Err(LiveEnd::ServesTls { .. })));
+        assert!(matches!(mutual, Err(LiveEnd::MutualTls { .. })));
     }
 
     /// A plaintext relay is read through a ready pod on the port its named
@@ -949,17 +1068,16 @@ mod tests {
     async fn a_plaintext_relay_is_read_through_a_ready_pod_on_its_target_port() {
         let answer = |ready: bool| {
             move |path: &str| match path {
-                "/api/v1/services" => (200, relay_service(80)),
-                "/api/v1/namespaces/kube-system/configmaps/hubble-relay-config" => {
-                    (200, config(false))
-                }
-                "/api/v1/namespaces/kube-system/pods" => (200, relay_pods(ready)),
+                SERVICES => (200, relay_service(80)),
+                CONFIG_AT => (200, config(Serving::Plain)),
+                PODS_AT => (200, relay_pods(ready)),
                 _ => failure(404, "NotFound"),
             }
         };
-        let (relay, port) = found(answer(true)).await.expect("a relay");
-        assert_eq!(relay.pod, "hubble-relay-7f9");
-        assert_eq!(port, 4245);
+        let relay = found(answer(true)).await.expect("a relay");
+        assert_eq!(relay.at.pod, "hubble-relay-7f9");
+        assert_eq!(relay.remote, 4245);
+        assert!(!relay.at.tls && relay.ca.is_none());
         assert!(matches!(
             found(answer(false)).await,
             Err(LiveEnd::NoPod { .. })

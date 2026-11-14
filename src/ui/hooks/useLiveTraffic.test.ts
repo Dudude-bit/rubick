@@ -33,7 +33,12 @@ describe("what a live stream holds", () => {
     store.apply({
       pairs: [kept, pair("web", "api", 1)],
       gone: [],
-      relay: { namespace: "kube-system", service: "hubble-relay", pod: "r-1" },
+      relay: {
+        namespace: "kube-system",
+        service: "hubble-relay",
+        pod: "r-1",
+        tls: false,
+      },
       lost: 0,
       untracked: 0,
     });
@@ -65,11 +70,11 @@ describe("what a live stream holds", () => {
   /** An end is held as said, and a batch after it does not reopen the stream. */
   it("stays ended once the stream said how it ended", () => {
     const store = new LiveStore();
-    store.ended({ says: "servesTls", namespace: "kube-system" });
+    store.ended({ says: "mutualTls", namespace: "kube-system" });
     store.apply({ pairs: [], gone: [], relay: null, lost: 0, untracked: 0 });
     expect(store.snapshot().phase).toBe("ended");
     expect(store.snapshot().end).toEqual({
-      says: "servesTls",
+      says: "mutualTls",
       namespace: "kube-system",
     });
   });

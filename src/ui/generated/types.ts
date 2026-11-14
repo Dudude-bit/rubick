@@ -147,6 +147,7 @@ export interface RelayAt {
   namespace: string;
   service: string;
   pod: string;
+  tls: boolean;
 }
 
 export interface LivePair {
@@ -3005,7 +3006,9 @@ export type LiveEnd =
   | { says: "unsubscribed" }
   | { says: "notEnabled" }
   | { says: "notLooked"; said: string }
-  | { says: "servesTls"; namespace: string }
+  | { says: "mutualTls"; namespace: string }
+  | { says: "caUnread"; namespace: string; said: string }
+  | { says: "noCa"; namespace: string; secret: string }
   | { says: "noPod"; namespace: string; service: string }
   | { says: "relayEnded" }
   | { says: "failed"; said: string };
