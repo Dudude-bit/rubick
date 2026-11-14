@@ -59,6 +59,7 @@ import type {
   EventFilters,
   EventInfo,
   FileRead,
+  FlowQuery,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -104,6 +105,7 @@ import type {
   PersistentVolumeInfo,
   PodFilters,
   PodInfo,
+  PodMarker,
   PodMetricsResponse,
   PortForwardConfigInfo,
   PortForwardConfigPayload,
@@ -145,6 +147,7 @@ import type {
   TerminalSessionInfo,
   ThemeConfig,
   TlsCertificate,
+  TrafficAnswer,
   UpdaterConfig,
   Via,
   WorkloadFold,
@@ -292,6 +295,20 @@ export async function prometheusByWorkload(
     queries,
     scope,
     keys,
+  });
+}
+
+export async function prometheusFlows(
+  queries: FlowQuery[],
+  scope: string[] | null,
+  subject: WorkloadKey | null,
+  markers: PodMarker[]
+): Promise<TrafficAnswer> {
+  return invoke<TrafficAnswer>("prometheus_flows", {
+    queries,
+    scope,
+    subject,
+    markers,
   });
 }
 

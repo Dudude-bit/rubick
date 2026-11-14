@@ -36,6 +36,7 @@ use crate::state::AppState;
 pub const ID: &str = "prometheus";
 
 pub mod by_workload;
+pub mod flows;
 
 // ---------------------------------------------------------------------------
 // What the webview is allowed to know

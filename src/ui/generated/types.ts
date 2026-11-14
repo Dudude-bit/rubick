@@ -2505,6 +2505,85 @@ export interface CertificateFacts {
   chainLength: number;
 }
 
+export interface TrafficAnswer {
+  ends: FlowEnd[];
+  flows: Flow[];
+  reads: QueryRead[];
+  observed: Observed[] | null;
+  coverage: Coverage[];
+  podsUnread: UnreadNamespace[];
+  podsFailed: ReadFailure | null;
+  cut: number;
+}
+
+export interface Coverage {
+  source: number;
+  workloads: number;
+  marked: number;
+  partly: number;
+}
+
+export interface Observed {
+  source: number;
+  pods: number;
+  marked: number;
+}
+
+export interface QueryRead {
+  source: number;
+  measure: Measure;
+  state: QueryState;
+}
+
+export interface Flow {
+  source: number;
+  from: number;
+  to: number;
+  protocols: string[];
+  values: (number | null)[];
+  reasons: DropRate[];
+}
+
+export interface DropRate {
+  reason: string;
+  rate: number;
+}
+
+export interface PodMarker {
+  source: number;
+  containers: string[];
+  annotations: string[];
+}
+
+export interface FlowQuery {
+  source: number;
+  measure: Measure;
+  query: string;
+  from: EndLabels;
+  to: EndLabels;
+  protocol: string | null;
+  reason: string | null;
+  zeroWhenAbsent: boolean;
+}
+
+export interface EndLabels {
+  namespace: string | null;
+  kind: string | null;
+  name: string | null;
+  pod: string | null;
+  service: string | null;
+  serviceNamespace: string | null;
+  address: string | null;
+  nameLabel: string | null;
+  kindAs: KindAs[];
+  unknown: string[];
+}
+
+export interface KindAs {
+  word: string;
+  is: EndIs;
+}
+
 export interface WorkloadFold {
   values: Values[];
   rest: Values;
@@ -3546,6 +3625,40 @@ export type CertificateProblem =
   | { says: "noTlsCrt" }
   | { says: "noPemCertificate" }
   | { says: "unparseable"; said: string };
+
+export type QueryState =
+  | { says: "read"; series: number }
+  | { says: "noSeries" }
+  | { says: "failed"; code: string; message: string };
+
+export type Measure =
+  | "requests"
+  | "errors"
+  | "p50"
+  | "p95"
+  | "p99"
+  | "bytes"
+  | "events"
+  | "drops";
+
+export type FlowEnd =
+  | { is: "workload"; key: WorkloadKey }
+  | { is: "ambiguous"; namespace: string; name: string; kinds: string[] }
+  | {
+      is: "notListed";
+      namespace: string;
+      name: string;
+      kind: string | null;
+      why: NotListedWhy;
+    }
+  | { is: "service"; namespace: string | null; name: string }
+  | { is: "node"; name: string }
+  | { is: "address"; address: string }
+  | { is: "unidentified"; namespace: string | null; word: string };
+
+export type NotListedWhy = "noSuch" | "podsUnread";
+
+export type EndIs = "pod" | "node" | "service" | "address";
 
 export type StepNote =
   | { says: "said"; text: string }
