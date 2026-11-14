@@ -282,6 +282,21 @@ the viewer says which labels it tried rather than showing an empty panel.
 
 ---
 
+## Audit (`audit.yaml`)
+
+One object for each rule Audit judges, in `audit-test`, and a namespace
+that breaks none, `audit-clean`. Some pods never start: Audit judges
+templates, and those are what the file is for.
+
+```bash
+kubectl apply -f audit.yaml
+kubectl delete ns audit-test audit-clean && kubectl delete clusterrolebinding audit-test-admin
+```
+
+`audit-reader` is a ServiceAccount with rights in both namespaces and no
+PodDisruptionBudgets in `audit-test`; `kubectl create token audit-reader -n audit-test`
+makes a token for a kubeconfig user that sees Audit say "not checked".
+
 ## Troubleshooting
 
 ### The StatefulSet stays pending
