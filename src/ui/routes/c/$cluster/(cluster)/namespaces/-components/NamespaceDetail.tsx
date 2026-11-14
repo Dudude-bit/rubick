@@ -27,6 +27,7 @@ import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { NamespaceInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
+import { NamespaceCostLine } from "../../../-cost/cost-line";
 
 export function NamespaceDetail() {
   const t = useT();
@@ -82,6 +83,7 @@ export function NamespaceDetail() {
             items={facts}
             className="max-w-lg"
           />
+          {name && <NamespaceCostLine namespace={name} />}
           <KeyValueSection
             title={t("columns", "labels")}
             count={Object.keys(ns?.labels ?? {}).length}

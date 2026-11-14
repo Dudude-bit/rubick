@@ -35,6 +35,8 @@ use crate::state::AppState;
 
 pub const ID: &str = "prometheus";
 
+pub mod by_workload;
+
 // ---------------------------------------------------------------------------
 // What the webview is allowed to know
 // ---------------------------------------------------------------------------
@@ -113,7 +115,7 @@ pub struct PromSeries {
 // Config
 // ---------------------------------------------------------------------------
 
-fn context_of(state: &State<'_, AppState>) -> Result<String> {
+fn context_of(state: &AppState) -> Result<String> {
     state
         .get_current_context()
         .ok_or_else(|| Error::Config("No cluster is connected".to_string()))
@@ -309,7 +311,7 @@ fn unreachable(reason: String) -> Error {
     Error::Connection(reason)
 }
 
-fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
+fn configured(state: &AppState) -> Result<PrometheusEntry> {
     let context = context_of(state)?;
     let entry = entry_for(&context)?
         .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))?;

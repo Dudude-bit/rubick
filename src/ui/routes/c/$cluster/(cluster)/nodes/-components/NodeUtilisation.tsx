@@ -102,8 +102,8 @@ export function NodeUtilisation({
         notes,
         fromPods,
         silent,
-        vendor: power.state === "absent" ? null : power.vendor,
-        capable: power.state !== "absent",
+        vendor: "vendor" in power ? power.vendor : null,
+        capable: power.state === "ready" || power.state === "unreachable",
         unread: !nodesKnown
           ? nodesReason
             ? t("empty", "nodesDidNotList", { reason: nodesReason })
@@ -118,7 +118,7 @@ export function NodeUtilisation({
                   vendor: power.state === "ready" ? power.vendor : "",
                   reason: errorToShow(query.error),
                 })
-              : ready && query.isPending
+              : (ready && query.isPending) || power.state === "reading"
                 ? t("share", "stillReading")
                 : null,
         range,
@@ -136,6 +136,14 @@ export function NodeUtilisation({
         {nodesReason
           ? t("empty", "nodesDidNotList", { reason: nodesReason })
           : t("action", "reading")}
+      </p>
+    );
+  }
+
+  if (power.state === "reading") {
+    return (
+      <p className="px-1 py-6 text-xs text-fg-mut" role="status">
+        {t("action", "reading")}
       </p>
     );
   }

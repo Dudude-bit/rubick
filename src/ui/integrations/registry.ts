@@ -58,6 +58,8 @@ import type {
   StyledSegment,
 } from "@/generated/types";
 import type { AppLink } from "@/lib/links";
+import type { CostReading, Prices } from "@/lib/cost";
+import type { WorkloadFold, WorkloadKey } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type {
   Delivery,
@@ -265,6 +267,16 @@ export interface LogHistory {
    * page, which is the only one anything fetches on its own.
    */
   before?: string;
+}
+
+/** The ranges a cost trend is drawn over. */
+export const COST_RANGES = ["6h", "24h", "7d"] as const;
+export type CostRange = (typeof COST_RANGES)[number];
+
+/** Cost per hour over a range; a bucket with no samples is `null`, a gap. */
+export interface CostTrend {
+  points: readonly DeclaredPoint[];
+  stepSeconds: number;
 }
 
 /** Bytes in and out, over the same window and buckets as {@link UsageWindow}. */
@@ -566,6 +578,42 @@ export interface Capabilities {
   }) => Promise<UsageWindow>;
   "usage.nodes": (input: { range: UsageRange }) => Promise<NodeUsageWindow>;
   /**
+   * What the cluster costs, from a supplier that prices it: OpenCost's or
+   * Kubecost's series. `null` where the supplier answered and holds none
+   * of them, which is its own sentence and not a failure: the page offers
+   * entered prices then. Absent, the page estimates from entered prices or
+   * says how to get either.
+   *
+   * `keys` are `cost_basis`'s rows, and the per-workload answer is for
+   * exactly them, positionally. `nodes: false` leaves out the node
+   * breakdown, for a detail page that needs only the cluster's total.
+   */
+  "cost.now": (input: {
+    namespaces: string[] | null;
+    keys: WorkloadKey[];
+    nodes: boolean;
+  }) => Promise<CostReading | null>;
+  /**
+   * Cost per hour over a range: the supplier's prices, or with `prices` an
+   * estimate from what the cluster held then.
+   */
+  "cost.history": (input: {
+    namespaces: string[] | null;
+    range: CostRange;
+    prices: Prices | null;
+  }) => Promise<CostTrend>;
+  /**
+   * Every workload's use over `EFFICIENCY_WINDOW`, average and peak, in
+   * `USAGE_QUERIES` order and positionally on `keys`. Apart from cost on
+   * purpose: a day of subqueries over every pod can be slow, and the cost
+   * numbers must not wait for it.
+   */
+  "usage.workloads": (input: {
+    namespaces: string[] | null;
+    keys: WorkloadKey[];
+  }) => Promise<WorkloadFold>;
+
+  /**
    * The lines a pod wrote before it stopped existing.
    *
    * No amount of client-side buffering closes this: `--previous` reaches one
@@ -809,6 +857,12 @@ export type CapabilityKey = keyof Capabilities;
  */
 export type CapabilityState<K extends CapabilityKey> =
   | { state: "absent" }
+  /**
+   * A supplier is configured and its probe has not answered yet. Not
+   * "absent": a surface that offers to connect one here is offering what
+   * the reader already did.
+   */
+  | { state: "reading" }
   | { state: "unreachable"; vendor: string; endpoint: string; reason: string }
   | {
       state: "ready";

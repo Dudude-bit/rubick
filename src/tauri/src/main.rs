@@ -331,6 +331,7 @@ fn main() {
             integrations::prometheus::probe_prometheus,
             integrations::prometheus::prometheus_query,
             integrations::prometheus::prometheus_query_range,
+            integrations::prometheus::by_workload::prometheus_by_workload,
             integrations::prometheus::prometheus_targets,
             integrations::prometheus::prometheus_rules,
             integrations::loki::get_loki_connection,
@@ -510,6 +511,7 @@ fn main() {
             commands::gateway::probe_tcp_connect,
             // Stats commands
             commands::overview::get_cluster_overview,
+            commands::cost::cost_basis,
             commands::overview::follow_cluster_overview,
             commands::overview::name_holder,
             // Metrics API

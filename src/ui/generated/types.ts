@@ -1174,6 +1174,74 @@ export interface ResourceBudget {
   extended: boolean;
 }
 
+export interface CostBasis {
+  nodes: NodeBasis[] | null;
+  nodesUnread: ReadFailure | null;
+  namespaces: NamespaceBasis[];
+  workloads: WorkloadBasis[];
+  rest: RestBasis | null;
+  waiting: number;
+  unread: UnreadNamespace[];
+  volumeBytes: number | null;
+  volumeCount: number | null;
+  unclaimed: UnclaimedVolume[] | null;
+  volumesUnread: ReadFailure | null;
+  claimsUnread: UnreadNamespace[];
+  servedFrom: OverviewSource;
+}
+
+export interface UnclaimedVolume {
+  name: string;
+  bytes: number;
+  phase: string | null;
+}
+
+export interface RestBasis {
+  workloads: number;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  claimBytes: number;
+}
+
+export interface WorkloadBasis {
+  key: WorkloadKey;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  claimBytes: number;
+}
+
+export interface NamespaceBasis {
+  namespace: string;
+  workloads: number;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  storageBytes: number | null;
+}
+
+export interface ReadFailure {
+  code: string;
+  message: string;
+}
+
+export interface NodeBasis {
+  name: string;
+  instanceType: string | null;
+  cpuCapacity: number | null;
+  cpuAllocatable: number | null;
+  memoryCapacity: number | null;
+  memoryAllocatable: number | null;
+  gpus: number;
+  cpuRequested: number | null;
+  memoryRequested: number | null;
+  gpusRequested: number | null;
+}
+
 export interface CliAvailability {
   available: boolean;
   version: string | null;
@@ -2437,6 +2505,34 @@ export interface CertificateFacts {
   chainLength: number;
 }
 
+export interface WorkloadFold {
+  values: Values[];
+  rest: Values;
+  unplaced: Unplaced[];
+  unread: UnreadSums[];
+  unlabelled: number;
+}
+
+export interface UnreadSums {
+  namespace: string;
+  code: string;
+  message: string;
+  values: Values;
+}
+
+export interface Unplaced {
+  namespace: string;
+  pods: number;
+  values: Values;
+}
+
+export interface WorkloadKey {
+  namespace: string;
+  group: string;
+  kind: string;
+  name: string;
+}
+
 export interface AlertRule {
   group: string;
   file: string;
@@ -3463,3 +3559,5 @@ export type Stalled =
   | { says: "orderNotCompleted" };
 
 export type RawJson = RawValue;
+
+export type Values = (number | null)[];
