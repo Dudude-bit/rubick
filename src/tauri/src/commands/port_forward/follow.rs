@@ -168,7 +168,7 @@ fn candidates<'a>(pods: &'a [Pod], selector: Selector<'_>, left: &Left<'_>) -> V
 /// The pod-side port a Service port lands on in this pod, resolved the way
 /// kube-proxy resolves it: `targetPort` by number, by the container port's
 /// name, or the Service port itself where none is set.
-pub(super) fn pod_port(service: &Service, port: u16, pod: &Pod) -> Option<u16> {
+pub(crate) fn pod_port(service: &Service, port: u16, pod: &Pod) -> Option<u16> {
     let entry = service
         .spec
         .as_ref()?

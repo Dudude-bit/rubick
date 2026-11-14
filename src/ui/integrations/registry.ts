@@ -59,6 +59,12 @@ import type {
 } from "@/generated/types";
 import type { AppLink } from "@/lib/links";
 import type { CostReading, Prices } from "@/lib/cost";
+import type {
+  FlowSource,
+  FlowWindow,
+  LiveListener,
+  TrafficReading,
+} from "@/lib/traffic";
 import type { WorkloadFold, WorkloadKey } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type {
@@ -658,6 +664,34 @@ export interface Capabilities {
     scope: UsageScope;
     range: UsageRange;
   }) => Promise<TrafficWindow>;
+  /**
+   * Who talks to whom: flows between workloads from series that name both
+   * ends. `sources` says which sources the supplier holds series for, and is
+   * cheap and cached by the caller; `read` asks only the present ones.
+   *
+   * Absent, the Traffic page names what could supply it and stops; the
+   * workload block is not drawn. A failed read throws, so "no flows" is
+   * never said over a query that did not answer.
+   */
+  /**
+   * Flows as they happen, from the cluster's own observer rather than from
+   * a store of metrics. `open` starts one stream for the scope and returns
+   * how to stop it; the listener hears batches until exactly one end.
+   *
+   * Absent, the Traffic page reads only the windowed source.
+   */
+  "traffic.live": {
+    open: (scope: string[] | null, listener: LiveListener) => () => void;
+  };
+  "traffic.flows": {
+    sources: () => Promise<FlowSource[]>;
+    read: (input: {
+      scope: string[] | null;
+      window: FlowWindow;
+      subject: WorkloadKey | null;
+      sources: readonly FlowSource[];
+    }) => Promise<TrafficReading>;
+  };
   /**
    * What a cloud's own object configures about the way into this Service.
    *

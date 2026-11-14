@@ -1,0 +1,13 @@
+{
+  "maxFlowRows": 1000,
+  "measures": [
+    "requests",
+    "errors",
+    "p50",
+    "p95",
+    "p99",
+    "bytes",
+    "events",
+    "drops"
+  ]
+}

@@ -47,6 +47,8 @@ export interface WorkloadOverviewProps {
   usage?: ReactNode;
   /** How it is reached. */
   traffic?: ReactNode;
+  /** Who calls it and whom it calls, where something measures flows. */
+  flows?: ReactNode;
   /** How it is declared. */
   declared?: ReactNode;
   /** What the page owns past the four questions: owners, dialogs. */
@@ -63,6 +65,7 @@ export function WorkloadOverview({
   alerts,
   usage,
   traffic,
+  flows,
   declared,
   children,
 }: WorkloadOverviewProps) {
@@ -72,6 +75,7 @@ export function WorkloadOverview({
       {count}
       {usage}
       {traffic}
+      {flows}
       {declared}
       {children}
     </div>

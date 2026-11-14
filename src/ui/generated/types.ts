@@ -1033,6 +1033,45 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
+export interface RelayAt {
+  namespace: string;
+  service: string;
+  pod: string;
+  tls: boolean;
+}
+
+export interface LivePair {
+  from: FlowEnd;
+  to: FlowEnd;
+  forwarded: number;
+  dropped: number;
+  drops: LiveDrop[];
+  requests: number | null;
+  errors: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  protocols: string[];
+}
+
+export interface LiveDrop {
+  reason: string;
+  rate: number;
+  policies: PolicyRef[];
+}
+
+export interface PolicyRef {
+  group: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface LiveKey {
+  from: FlowEnd;
+  to: FlowEnd;
+}
+
 export interface MapKindState {
   kind: string;
   reading: MapKindReading;
@@ -2524,6 +2563,85 @@ export interface CertificateFacts {
   chainLength: number;
 }
 
+export interface TrafficAnswer {
+  ends: FlowEnd[];
+  flows: Flow[];
+  reads: QueryRead[];
+  observed: Observed[] | null;
+  coverage: Coverage[];
+  podsUnread: UnreadNamespace[];
+  podsFailed: ReadFailure | null;
+  cut: number;
+}
+
+export interface Coverage {
+  source: number;
+  workloads: number;
+  marked: number;
+  partly: number;
+}
+
+export interface Observed {
+  source: number;
+  pods: number;
+  marked: number;
+}
+
+export interface QueryRead {
+  source: number;
+  measure: Measure;
+  state: QueryState;
+}
+
+export interface Flow {
+  source: number;
+  from: number;
+  to: number;
+  protocols: string[];
+  values: (number | null)[];
+  reasons: DropRate[];
+}
+
+export interface DropRate {
+  reason: string;
+  rate: number;
+}
+
+export interface PodMarker {
+  source: number;
+  containers: string[];
+  annotated: string[];
+}
+
+export interface FlowQuery {
+  source: number;
+  measure: Measure;
+  query: string;
+  from: EndLabels;
+  to: EndLabels;
+  protocol: string | null;
+  reason: string | null;
+  zeroWhenAbsent: boolean;
+}
+
+export interface EndLabels {
+  namespace: string | null;
+  kind: string | null;
+  name: string | null;
+  pod: string | null;
+  service: string | null;
+  serviceNamespace: string | null;
+  address: string | null;
+  nameLabel: string | null;
+  kindAs: KindAs[];
+  unknown: string[];
+}
+
+export interface KindAs {
+  word: string;
+  is: EndIs;
+}
+
 export interface WorkloadFold {
   values: Values[];
   rest: Values;
@@ -3603,6 +3721,23 @@ export type CertificateProblem =
   | { says: "noPemCertificate" }
   | { says: "unparseable"; said: string };
 
+export type QueryState =
+  | { says: "read"; series: number }
+  | { says: "noSeries" }
+  | { says: "failed"; code: string; message: string };
+
+export type Measure =
+  | "requests"
+  | "errors"
+  | "p50"
+  | "p95"
+  | "p99"
+  | "bytes"
+  | "events"
+  | "drops";
+
+export type EndIs = "pod" | "node" | "service" | "address";
+
 export type AppEvent =
   | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }
   | { channel: "log-read"; stream_id: string; lines: number }
@@ -3734,7 +3869,47 @@ export type AppEvent =
   | { channel: "audit-changed"; context: string; revision: number }
   | { channel: "topology-batch"; stream_id: string; pieces: TopologyPiece[] }
   | { channel: "topology-ready"; stream_id: string }
-  | { channel: "topology-ended"; stream_id: string; end: TopologyEnd };
+  | { channel: "topology-ended"; stream_id: string; end: TopologyEnd }
+  | {
+      channel: "hubble-flows";
+      stream_id: string;
+      pairs: LivePair[];
+      gone: LiveKey[];
+      relay: RelayAt | null;
+      lost: number;
+      untracked: number;
+    }
+  | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd };
+
+export type LiveEnd =
+  | { says: "closed" }
+  | { says: "unsubscribed" }
+  | { says: "notEnabled" }
+  | { says: "notLooked"; said: string }
+  | { says: "mutualTls"; namespace: string }
+  | { says: "caUnread"; namespace: string; said: string }
+  | { says: "noCa"; namespace: string; secret: string }
+  | { says: "notVerified"; namespace: string; said: string }
+  | { says: "noPod"; namespace: string; service: string }
+  | { says: "relayEnded" }
+  | { says: "failed"; said: string };
+
+export type FlowEnd =
+  | { is: "workload"; key: WorkloadKey }
+  | { is: "ambiguous"; namespace: string; name: string; kinds: string[] }
+  | {
+      is: "notListed";
+      namespace: string;
+      name: string;
+      kind: string | null;
+      why: NotListedWhy;
+    }
+  | { is: "service"; namespace: string | null; name: string }
+  | { is: "node"; name: string }
+  | { is: "address"; address: string }
+  | { is: "unidentified"; namespace: string | null; word: string };
+
+export type NotListedWhy = "noSuch" | "podsUnread";
 
 export type TopologyEnd =
   | { says: "closed" }

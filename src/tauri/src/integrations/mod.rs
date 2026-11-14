@@ -21,6 +21,7 @@
 //! One folder per extension. Nothing outside this module imports one by name
 //! — the frontend asks for a capability and a lint rule keeps that true.
 pub mod cert_manager;
+pub mod hubble;
 pub mod ingress_nginx;
 pub mod loki;
 pub mod prometheus;
@@ -50,6 +51,12 @@ pub struct DetectedExtension {
     /// What the extension labels its own CRDs with, where it labels them.
     pub version: Option<String>,
 }
+
+/// Pod annotations a vendor reads off a pod the overview store keeps,
+/// which otherwise strips them all: Istio's ambient enrollment, written by
+/// istio-cni once the pod's traffic is redirected, is what says the mesh
+/// sees a pod that runs no sidecar.
+pub const KEPT_POD_ANNOTATIONS: &[&str] = &["ambient.istio.io/redirection"];
 
 /// The extensions whose whole Rust-side knowledge is a marker CRD.
 ///
@@ -278,6 +285,26 @@ mod tests {
     use super::*;
     use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinitionSpec;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+
+    /// A marker a supplier asks about is an annotation the overview store
+    /// keeps: one it strips would count every such pod as not observed,
+    /// with nothing failing. Read from the supplier's own source.
+    #[test]
+    fn every_annotation_a_supplier_marks_pods_by_is_kept_by_the_store() {
+        let source = include_str!("../../../ui/integrations/prometheus/traffic.ts");
+        let marked: Vec<&str> = source
+            .split("annotated: [")
+            .skip(1)
+            .flat_map(|rest| rest.split(']').next().unwrap_or_default().split(','))
+            .map(|entry| entry.trim().trim_matches('"'))
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        assert!(!marked.is_empty(), "the scan found no marker");
+        for mark in marked {
+            let key = mark.split('=').next().unwrap_or(mark);
+            assert!(KEPT_POD_ANNOTATIONS.contains(&key), "{key} is stripped");
+        }
+    }
 
     fn crd(name: &str) -> CustomResourceDefinition {
         CustomResourceDefinition {

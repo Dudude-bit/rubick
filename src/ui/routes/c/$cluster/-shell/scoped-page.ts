@@ -6,6 +6,7 @@ const SCOPED_PAGES = new Set([
   "events",
   "changes",
   "topology",
+  "traffic",
   "audit",
   "helm",
 ]);

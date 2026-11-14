@@ -35,6 +35,7 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
+import { WorkloadFlows } from "../../-components/workload-traffic";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
@@ -236,6 +237,13 @@ export function JobDetail() {
                         ? t("empty", "jobNoPodRunningFailed")
                         : t("empty", "jobNoPodRunning")
                   }
+                />
+              }
+              flows={
+                <WorkloadFlows
+                  kind={ResourceType.Job}
+                  namespace={namespace}
+                  name={name}
                 />
               }
               declared={
