@@ -527,6 +527,22 @@ describe("UsageBlock and a history supplier", () => {
   });
 
   /**
+   * A Prometheus the reader configured is still being probed. The offer to
+   * connect one used to show for that whole while, offering what they had
+   * already done.
+   */
+  it("configured and still being asked: no offer to connect one", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    probePrometheus.mockReturnValueOnce(new Promise(() => {}));
+
+    await wrap(<UsageBlock {...live} uid="uid-10-probing" />);
+
+    await waitFor(() => expect(probePrometheus).toHaveBeenCalled());
+    expect(screen.queryByText(/needs a Prometheus/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: "connect one" })).toBeNull();
+  });
+
+  /**
    * Would break if the ranges stopped coming alive, or if the chart stopped
    * saying where its numbers came from. A chart whose provenance is unstated
    * is a chart nobody can check.

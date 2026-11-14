@@ -809,6 +809,12 @@ export type CapabilityKey = keyof Capabilities;
  */
 export type CapabilityState<K extends CapabilityKey> =
   | { state: "absent" }
+  /**
+   * A supplier is configured and its probe has not answered yet. Not
+   * "absent": a surface that offers to connect one here is offering what
+   * the reader already did.
+   */
+  | { state: "reading" }
   | { state: "unreachable"; vendor: string; endpoint: string; reason: string }
   | {
       state: "ready";

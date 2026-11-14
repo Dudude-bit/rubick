@@ -226,7 +226,9 @@ export function UsageBlock({
         title={title ?? t("columns", "usage")}
         count={caption}
         actions={
-          available || past.status !== "absent" ? (
+          available ||
+          past.status === "ready" ||
+          past.status === "unreachable" ? (
             <RangePicker
               enabled={past.enabled}
               selected={past.range}
@@ -483,7 +485,7 @@ function RangePicker({
 
 interface RangedHistory {
   /** Which of the three states the supplier is in. */
-  status: "absent" | "unreachable" | "ready";
+  status: "absent" | "reading" | "unreachable" | "ready";
   /** True only where a range could actually be asked for and drawn. */
   enabled: boolean;
   /** Whether the quiet offer is worth making — see {@link HistoryNote}. */
@@ -581,7 +583,7 @@ function useRangedHistory(
       ? "unreachable"
       : ready
         ? "ready"
-        : "absent";
+        : power.state;
 
   return {
     status,
@@ -598,8 +600,8 @@ function useRangedHistory(
     loading: query.isFetching,
     window: range !== null && query.data ? query.data : null,
     traffic: range !== null ? (trafficQuery.data ?? null) : null,
-    endpoint: power.state === "absent" ? "" : power.endpoint,
-    vendor: power.state === "absent" ? "" : power.vendor,
+    endpoint: "endpoint" in power ? power.endpoint : "",
+    vendor: "vendor" in power ? power.vendor : "",
     reason:
       power.state === "unreachable"
         ? power.reason

@@ -281,6 +281,17 @@ describe("NodeUtilisation", () => {
     expect(screen.getByText(/needs a Prometheus/)).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
   });
+
+  /** A Prometheus the reader configured is still being asked whether it
+   *  answers: offering to connect one then offers what was already done. */
+  it("does not offer a Prometheus while the configured one is still being asked", async () => {
+    capability.mockReturnValue({ state: "reading" });
+    await wrap(
+      <NodeUtilisation nodes={[node("calm")]} range="6h" onRange={() => {}} />
+    );
+    expect(screen.queryByText(/needs a Prometheus/)).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent(/Reading/i);
+  });
 });
 
 describe("what the view offers Share", () => {
