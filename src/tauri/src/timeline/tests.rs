@@ -1457,3 +1457,94 @@ mod following {
         assert!(cluster.page(&query(Show::All)).spans.meta[0].to.is_some());
     }
 }
+
+mod listed_for_a_reader {
+    use super::*;
+    use crate::feeds::{FeedState, Update, Whole};
+    use crate::ownership::{KindKey, SlotKey};
+    use crate::timeline::follow::feed;
+    use crate::timeline::recorder::Recorder;
+    use kube::api::DynamicObject;
+
+    fn slot() -> SlotKey {
+        SlotKey {
+            kind: KindKey {
+                group: String::new(),
+                plural: "configmaps".into(),
+            },
+            namespace: None,
+        }
+    }
+
+    fn state(state: FeedState) -> Update {
+        Update::State {
+            slot: slot(),
+            state,
+        }
+    }
+
+    fn whole(why: Whole, value: &str) -> Update {
+        let object: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": {"name": "app", "namespace": "shop", "uid": "u",
+                "creationTimestamp": "2026-11-01T00:00:00Z"},
+            "data": {"k": value},
+        }))
+        .expect("a ConfigMap");
+        Update::Whole {
+            slot: slot(),
+            why,
+            objects: vec![Arc::new(object)],
+        }
+    }
+
+    fn setup() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
+        let (timelines, _rx) = holder(None, false);
+        let cluster = timelines.cluster("kind");
+        let recorder = Recorder::new(cluster.clone(), Vec::new());
+        (timelines, cluster, recorder)
+    }
+
+    /// The layer keeps no ConfigMap or Secret, so a reader that fell behind
+    /// is listed them again while their changes wait. The watch never broke:
+    /// fails if that list draws a gap, or loses what moved meanwhile.
+    #[test]
+    fn a_list_for_a_reader_that_fell_behind_is_not_a_gap() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(&mut recorder, state(FeedState::Synced));
+        feed(&mut recorder, whole(Whole::Fresh, "1"));
+        feed(&mut recorder, state(FeedState::Syncing));
+        feed(&mut recorder, state(FeedState::Synced));
+        feed(&mut recorder, whole(Whole::Relist, "2"));
+        let page = cluster.page(&query(Show::All));
+        assert_eq!(page.spans.followed.len(), 1, "{:?}", page.spans.followed);
+        assert_eq!(page.spans.followed[0].to, None);
+        assert_eq!(page.rows.len(), 1);
+        assert!(page.rows[0].at_relist);
+    }
+
+    /// A list for the reader that failed leaves it holding nothing current
+    /// until the retry answers. Fails if that stretch is drawn as watched,
+    /// or the span does not open again with the set that follows.
+    #[test]
+    fn a_list_that_failed_is_not_watched_until_the_retry_answers() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(&mut recorder, state(FeedState::Synced));
+        feed(&mut recorder, whole(Whole::Fresh, "1"));
+        feed(&mut recorder, state(FeedState::Syncing));
+        feed(
+            &mut recorder,
+            state(FeedState::Failed {
+                message: "timed out".into(),
+            }),
+        );
+        let shut = cluster.page(&query(Show::All)).spans.followed;
+        assert!(shut[0].to.is_some());
+        feed(&mut recorder, state(FeedState::Synced));
+        feed(&mut recorder, whole(Whole::Relist, "2"));
+        let page = cluster.page(&query(Show::All));
+        assert_eq!(page.spans.followed.len(), 2);
+        assert_eq!(page.spans.followed[1].to, None);
+        assert!(page.rows[0].at_relist);
+    }
+}

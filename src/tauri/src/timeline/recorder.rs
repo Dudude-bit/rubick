@@ -274,6 +274,12 @@ impl Recorder {
         self.settle(source, was, since);
     }
 
+    /// How one watch stands, as last told.
+    #[must_use]
+    pub fn slot_state(&self, source: Source, slot: &Slot) -> Option<SlotState> {
+        self.slots.get(&(source, slot.clone())).copied()
+    }
+
     /// A kind the cluster does not serve holds nothing shut and is not
     /// named as refused: it is not one of the kinds.
     pub fn forget(&mut self, source: Source, kind: &str) {

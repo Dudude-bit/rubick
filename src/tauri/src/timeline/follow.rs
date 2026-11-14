@@ -110,6 +110,13 @@ pub(crate) fn feed(recorder: &mut Recorder, update: Update) {
                 kind: kind.to_string(),
                 namespace: slot.namespace,
             };
+            // A watch that is live and lists again for this reader alone, a
+            // kind the layer keeps nothing of after a lost update, still
+            // watches: its changes wait and come after the list. Not a gap.
+            let live = recorder.slot_state(Source::Followed, &slot) == Some(SlotState::Live);
+            if live && state == SlotState::Listing {
+                return;
+            }
             recorder.state(Source::Followed, slot, state, since);
         }
         Update::Whole { slot, why, objects } => {
