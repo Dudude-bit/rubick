@@ -75,6 +75,9 @@ export function LogHistoryBar({
 }) {
   const t = useT();
   if (stranded === null && !ranged) return null;
+  // Until the configured store answers its probe, neither the offer to
+  // connect one nor its range is true yet.
+  if (capability.state === "reading") return null;
 
   if (capability.state === "absent") {
     // Only beside a real dead end. A workload tab that reads perfectly well

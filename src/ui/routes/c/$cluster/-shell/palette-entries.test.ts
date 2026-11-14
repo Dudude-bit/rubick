@@ -148,9 +148,10 @@ describe("the palette's entries with nothing typed", () => {
       "nav:goToSecrets",
       "nav:goToEvents",
       "nav:goToTopology",
+      "nav:goToAudit",
+      "nav:goToCost",
       "nav:goToHelm",
       "nav:goToApiResources",
-      "nav:goToAudit",
       "nav:goToMyAccess",
       "settings",
       "cap:activity",
@@ -171,9 +172,10 @@ describe("the palette's entries with nothing typed", () => {
       "/c/k3d-dev/secrets",
       "/c/k3d-dev/events",
       "/c/k3d-dev/topology",
+      "/c/k3d-dev/audit",
+      "/c/k3d-dev/cost",
       "/c/k3d-dev/helm",
       "/c/k3d-dev/api-resources",
-      "/c/k3d-dev/audit",
       "/c/k3d-dev/my-access",
     ]);
   });
