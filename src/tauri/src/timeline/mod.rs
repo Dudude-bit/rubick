@@ -12,6 +12,7 @@
 
 mod disk;
 pub mod project;
+pub mod recorder;
 mod spans;
 mod store;
 

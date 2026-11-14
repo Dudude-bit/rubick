@@ -118,6 +118,9 @@ impl Store {
     pub(super) fn record(&mut self, mut row: TimelineRow, now: i64) -> TimelineRow {
         self.seq += 1;
         row.seq = self.seq;
+        if row.id.is_empty() {
+            row.id = format!("c{}", self.seq);
+        }
         self.put(row.clone(), now);
         row
     }

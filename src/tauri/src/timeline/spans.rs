@@ -81,7 +81,7 @@ impl ObservedSpan {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Source {
     /// The followed kinds, read whole.
     Followed,

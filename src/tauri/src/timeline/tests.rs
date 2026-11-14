@@ -127,7 +127,7 @@ fn config_map(data: &Value) -> Value {
     json!({"metadata": {"name": "app", "namespace": "shop"}, "data": data})
 }
 
-/// A ConfigMap or Secret change says which keys moved and never what they
+/// A `ConfigMap` or `Secret` change says which keys moved and never what they
 /// hold. Fails if a value reaches the row, or a changed, added or removed key
 /// goes unsaid.
 #[test]
@@ -888,7 +888,7 @@ fn a_segment_past_the_widest_window_is_neither_read_nor_kept() {
 }
 
 /// What a followed object costs to hold, and a first list of ten thousand
-/// ConfigMaps and Secrets to read, for the bounds the timeline states. Run
+/// `ConfigMaps` and `Secrets` to read, for the bounds the timeline states. Run
 /// with `--ignored --nocapture`; it measures, so it asserts only that the
 /// numbers came out.
 #[test]
@@ -962,4 +962,210 @@ fn a_surface_on_screen_holds_its_cluster_for_a_while_and_no_longer() {
     assert!(timelines.held("kind", std::time::Instant::now()));
     assert!(!timelines.held("other", std::time::Instant::now()));
     assert!(!timelines.held("kind", std::time::Instant::now() + HELD_FOR));
+}
+
+mod recording {
+    use super::*;
+    use crate::timeline::project::FOLLOWED;
+    use crate::timeline::recorder::{Named, Recorder, Slot, SlotState};
+
+    fn followed_kind(kind: &str) -> &'static project::Followed {
+        FOLLOWED.iter().find(|f| f.kind == kind).expect("followed")
+    }
+
+    fn recorder() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
+        let (timelines, _rx) = holder(None, false);
+        let cluster = timelines.cluster("kind");
+        let recorder = Recorder::new(cluster.clone(), vec!["shop".into()]);
+        (timelines, cluster, recorder)
+    }
+
+    fn rows(cluster: &ClusterTimeline) -> Vec<TimelineRow> {
+        cluster.page(&query(Show::All)).rows
+    }
+
+    fn says(row: &TimelineRow) -> &'static str {
+        match row.what {
+            RowSays::Created => "created",
+            RowSays::Deleted => "deleted",
+            RowSays::Changed { .. } => "changed",
+            RowSays::Generation { .. } => "generation",
+            RowSays::Event { .. } => "event",
+        }
+    }
+
+    fn slot(kind: &str, namespace: Option<&str>) -> Slot {
+        Slot {
+            kind: kind.into(),
+            namespace: namespace.map(str::to_string),
+        }
+    }
+
+    /// A first list is what was there, not what changed. Fails if it writes
+    /// a row per object, or the change after it is not one.
+    #[test]
+    fn a_first_list_is_a_baseline_and_the_change_after_it_is_a_row() {
+        let (_t, cluster, mut recorder) = recorder();
+        let kind = followed_kind("Deployment");
+        recorder.listed(kind, [&deployment("nginx:1", 2, "v")], false);
+        assert!(rows(&cluster).is_empty());
+        recorder.applied(kind, &deployment("nginx:2", 2, "v"));
+        let found = rows(&cluster);
+        assert_eq!(found.len(), 1);
+        assert_eq!(says(&found[0]), "changed");
+        assert!(!found[0].at_relist);
+    }
+
+    /// What changed while nothing watched is noticed at the list after the
+    /// break, and said to have been. Fails if it is lost, or passed off as
+    /// seen happening.
+    #[test]
+    fn a_list_after_a_break_says_what_moved_in_the_gap() {
+        let (_t, cluster, mut recorder) = recorder();
+        let kind = followed_kind("ConfigMap");
+        let cm = |name: &str, value: &str| {
+            json!({"metadata": {"name": name, "namespace": "shop",
+                "creationTimestamp": "2026-11-01T00:00:00Z"}, "data": {"k": value}})
+        };
+        recorder.listed(kind, [&cm("a", "1"), &cm("gone", "1")], false);
+        recorder.listed(kind, [&cm("a", "2"), &cm("new", "1")], true);
+        let mut found: Vec<(&str, String, bool)> = rows(&cluster)
+            .iter()
+            .map(|row| (says(row), row.name.clone(), row.at_relist))
+            .collect();
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                ("changed", "a".to_string(), true),
+                ("created", "new".to_string(), true),
+                ("deleted", "gone".to_string(), true)
+            ]
+        );
+    }
+
+    /// An object deleted and then reported again late is not born again;
+    /// one made anew under the name is. Fails if either is said wrong.
+    #[test]
+    fn a_late_report_of_a_deleted_object_does_not_revive_it_and_a_new_one_is_created() {
+        let (_t, cluster, mut recorder) = recorder();
+        let kind = followed_kind("Deployment");
+        let old = deployment("nginx:1", 2, "v");
+        recorder.listed(kind, [&old], false);
+        recorder.deleted(kind, &old);
+        recorder.applied(kind, &old);
+        let mut anew = deployment("nginx:1", 2, "v");
+        anew["metadata"]["creationTimestamp"] = json!("2026-11-02T00:00:00Z");
+        recorder.applied(kind, &anew);
+        let found: Vec<&str> = rows(&cluster).iter().map(says).collect();
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(found.contains(&"deleted") && found.contains(&"created"));
+    }
+
+    fn followed_spans(cluster: &ClusterTimeline) -> Vec<ObservedSpan> {
+        cluster.page(&query(Show::All)).spans.followed
+    }
+
+    /// The span opens once every watch has listed or been refused, names a
+    /// refused kind, and ends when one goes blind or lists again. Fails if a
+    /// kind nobody was let watch is spoken for, or a blind stretch is drawn
+    /// as watched.
+    #[test]
+    fn the_span_opens_on_every_watch_and_names_what_was_refused() {
+        let (_t, cluster, mut recorder) = recorder();
+        for kind in ["Deployment", "Secret", "Event"] {
+            recorder.state(Source::Followed, slot(kind, None), SlotState::Listing);
+        }
+        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
+        recorder.state(Source::Followed, slot("Event", None), SlotState::Live);
+        assert!(
+            followed_spans(&cluster).is_empty(),
+            "opened while Secret listed"
+        );
+        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        let open = followed_spans(&cluster);
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].unwatched, ["Secret"]);
+        assert_eq!(open[0].kinds, ["Deployment", "Secret"]);
+        assert_eq!(open[0].to, None);
+        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Blind);
+        assert!(followed_spans(&cluster)[0].to.is_some());
+    }
+
+    /// A kind refused across the cluster and read in the window's namespaces
+    /// is watched there and nowhere else. Fails if the span claims the whole
+    /// cluster, or names the namespaces it was refused in too.
+    #[test]
+    fn a_kind_read_in_some_namespaces_narrows_the_span_and_names_the_rest() {
+        let (_t, cluster, mut recorder) = recorder();
+        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
+        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        recorder.state(
+            Source::Followed,
+            slot("Secret", Some("shop")),
+            SlotState::Live,
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", Some("ops")),
+            SlotState::Refused,
+        );
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(span.scope, ["shop"]);
+        assert_eq!(span.unwatched_in, ["Secret/ops"]);
+        assert!(span.unwatched.is_empty());
+    }
+
+    /// A refusal that arrives while watching is a new stretch with its own
+    /// words. Fails if the span goes on claiming the kind it lost.
+    #[test]
+    fn a_refusal_while_watching_starts_a_span_that_says_it() {
+        let (_t, cluster, mut recorder) = recorder();
+        recorder.state(Source::Followed, slot("Secret", None), SlotState::Listing);
+        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
+        recorder.state(Source::Followed, slot("Secret", None), SlotState::Live);
+        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        let spans = followed_spans(&cluster);
+        assert_eq!(spans.len(), 2);
+        assert!(spans[0].to.is_some() && spans[0].unwatched.is_empty());
+        assert_eq!(spans[1].unwatched, ["Secret"]);
+    }
+
+    fn named(uid: &str, generation: Option<i64>, controlled: bool) -> Named {
+        Named {
+            kind: "Job".into(),
+            group: "batch".into(),
+            uid: uid.into(),
+            name: format!("job-{uid}"),
+            namespace: Some("shop".into()),
+            generation,
+            controlled,
+        }
+    }
+
+    /// Seen by name only: a moved generation is a row that says so, a birth
+    /// a controller made is its owner's, and a kind that keeps no generation
+    /// says nothing of a change it cannot see. Fails if any of the three is
+    /// said otherwise.
+    #[test]
+    fn a_kind_seen_by_name_says_its_generation_and_leaves_owned_births_to_their_owner() {
+        let (_t, cluster, mut recorder) = recorder();
+        recorder.named_applied(&named("a", Some(1), false), false);
+        recorder.named_applied(&named("b", None, false), false);
+        assert!(rows(&cluster).is_empty(), "a first sight is a baseline");
+        recorder.named_applied(&named("a", Some(2), false), true);
+        recorder.named_applied(&named("b", None, false), true);
+        recorder.named_applied(&named("c", Some(1), true), true);
+        recorder.named_applied(&named("d", Some(1), false), true);
+        recorder.named_deleted("c");
+        recorder.named_deleted("d");
+        let found: Vec<(&str, String)> = rows(&cluster)
+            .iter()
+            .map(|row| (says(row), row.name.clone()))
+            .collect();
+        assert_eq!(found.len(), 3, "{found:?}");
+        assert!(found.contains(&("generation", "job-a".to_string())));
+        assert!(found.contains(&("created", "job-d".to_string())));
+        assert!(found.contains(&("deleted", "job-d".to_string())));
+    }
 }
