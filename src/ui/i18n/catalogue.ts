@@ -1866,6 +1866,10 @@ export const en = {
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
     whyUnserved: "this cluster does not serve the kind",
+    whyNoPrometheus:
+      "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
+    whyNotScraped:
+      "the connected Prometheus holds none of the API server's metrics",
     pickNamespaces:
       "Pick the namespaces you can read in the namespace picker, and they are read one by one.",
     late: "{kind} {where} as read at {since}; the watch has failed since.",
@@ -1898,6 +1902,8 @@ export const en = {
     upgradeReadUnversioned: "Upgrade: read at {time}",
     helmRelease: "Helm release",
     helmReleases: "Helm releases",
+    deprecatedApi: "Deprecated API",
+    deprecatedApis: "Deprecated APIs",
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
@@ -1977,6 +1983,22 @@ export const en = {
       "{manager} last wrote it through {api} at {time}, which Kubernetes {removed} stops serving",
     wWrittenUndated:
       "{manager} last wrote it through {api}, which Kubernetes {removed} stops serving",
+    wDeprecatedWarned: "{version} is served and marked deprecated: {warning}",
+    wDeprecatedQuiet:
+      "{version} is served and marked deprecated, with no warning of its own",
+    wStoredAs:
+      "{kind} objects are written as {storage}, and may still be stored as {stored}",
+    wStoredAsOnly: "{kind} objects are written as {storage}",
+    wStoredAsUnknown: "{kind} objects may be stored as {stored}",
+    wRequested:
+      "the API server served it since it started; Kubernetes {removed} stops serving it",
+    wRequestedUndated:
+      "the API server served it since it started, and names no release that removes it",
+    wRequestedToday: {
+      one: "{n} request in the last day",
+      other: "{n} requests in the last day",
+    },
+    wRequestedTodayNone: "no request in the last day",
     pssHostProcess: "Runs as a Windows HostProcess",
     pssHostProcessWhy:
       "A HostProcess container runs with the Windows node's own privileges. The Baseline profile forbids it.",
@@ -2097,6 +2119,13 @@ export const en = {
       "Before every upgrade Helm rebuilds the deployed revision's objects from the manifest it stored. A version this cluster no longer serves fails `helm upgrade` until that manifest is mapped to the replacement, which the mapkubeapis plugin does for the versions Kubernetes removed; a custom resource version needs its own map file. A version a later Kubernetes removes fails the same way once the cluster is upgraded. The chart has to be changed as well, or the next upgrade stores the old version again.",
     deprecatedApiWriter:
       "Written through an API version a later Kubernetes removes",
+    crdVersionDeprecated: "A custom resource version marked deprecated",
+    crdVersionDeprecatedWhy:
+      "The CRD still serves this version and says it is deprecated, so the operator that owns it plans to drop it. Manifests and clients that use it break when it goes, and while objects may still be stored at it the CRD cannot drop it at all: they have to be rewritten at the storage version and the old version removed from status.storedVersions first.",
+    deprecatedApiRequested:
+      "The API server is still asked for a deprecated API",
+    deprecatedApiRequestedWhy:
+      "This is the API server's own count, apiserver_requested_deprecated_apis, read from Prometheus: some client requested this deprecated version since the server started. Unlike a manifest, it shows a client that is running now. That client stops working on the day the cluster moves to the release that removes the version.",
     deprecatedApiWriterWhy:
       "managedFields records the API version each writer last used on the object. A client that still writes through this version stops working on the day the cluster moves to the Kubernetes that removes it. Change the client's manifests or code to the replacement before then.",
   },

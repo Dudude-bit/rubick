@@ -237,5 +237,30 @@ export function fixYaml(
         replaced(finding, kind).join("\n---\n") ||
         `apiVersion: apps/v1\nkind: ${kind}`
       );
+    case "crd-version-deprecated": {
+      const at = first(finding, "storedAs");
+      const storage = at?.storage ?? at?.current[0] ?? "v1";
+      const held = finding?.what.some(
+        (w) => w.says === "deprecated" && w.stored && !w.storage
+      );
+      if (held) {
+        const crd = subject?.name ?? "CRD";
+        return `kubectl get ${crd} --all-namespaces -o json | kubectl replace -f -\nkubectl patch customresourcedefinitions ${crd} --subresource='status' --type='merge' -p '{"status":{"storedVersions":["${storage}"]}}'`;
+      }
+      const current =
+        at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;
+      return `apiVersion: ${at?.group ?? "example.com"}/${current}\nkind: ${at?.kind ?? "Kind"}`;
+    }
+    case "deprecated-api-requested": {
+      const asked = first(finding, "requested");
+      if (asked?.kind && asked.replacement)
+        return `apiVersion: ${asked.replacement}\nkind: ${asked.kind}`;
+      const group = (subject?.name ?? "")
+        .split(" ")[0]
+        .split("/")
+        .slice(0, -1)
+        .join("/");
+      return `kubectl api-resources --api-group=${group}`;
+    }
   }
 }

@@ -115,6 +115,54 @@ const EVERY_WHAT: What[] = [
     api: "policy/v1beta1",
     removal: { removed: "1.25", replacement: null, since: null },
   },
+  {
+    says: "deprecated",
+    version: "v1alpha1",
+    warning: "example.com/v1alpha1 CronTab is deprecated; use example.com/v1",
+    stored: true,
+    storage: false,
+  },
+  {
+    says: "deprecated",
+    version: "v1beta1",
+    warning: null,
+    stored: false,
+    storage: false,
+  },
+  {
+    says: "storedAs",
+    group: "example.com",
+    kind: "CronTab",
+    storage: "v1",
+    stored: ["v1alpha1", "v1"],
+    current: ["v1"],
+  },
+  {
+    says: "storedAs",
+    group: "example.com",
+    kind: "CronTab",
+    storage: "v1",
+    stored: [],
+    current: ["v1"],
+  },
+  {
+    says: "storedAs",
+    group: "example.com",
+    kind: "CronTab",
+    storage: null,
+    stored: ["v1"],
+    current: ["v1"],
+  },
+  {
+    says: "requested",
+    kind: "Ingress",
+    removed: "1.22",
+    replacement: "networking.k8s.io/v1",
+  },
+  { says: "requested", kind: null, removed: null, replacement: null },
+  { says: "requestedToday", requests: 14 },
+  { says: "requestedToday", requests: 1 },
+  { says: "requestedToday", requests: 0 },
 ];
 
 /** Every kind of value a finding carries: a new one fails to compile until it is listed. */
@@ -138,6 +186,10 @@ const SAYS: Record<What["says"], true> = {
   revision: true,
   stored: true,
   written: true,
+  deprecated: true,
+  storedAs: true,
+  requested: true,
+  requestedToday: true,
 };
 
 describe("the words Audit draws its rules and findings with", () => {
@@ -187,6 +239,35 @@ describe("the words Audit draws its rules and findings with", () => {
     );
     expect(whatWords(unserved, t)).toBe(
       "Certificate web is stored as cert-manager.io/v1alpha2, which this cluster does not serve"
+    );
+  });
+
+  /**
+   * A CRD's warning is its own words and reaches the page as written; a
+   * count of requests that came back zero says none, and a count of one is
+   * singular. Fails if the warning were reworded or a zero read as "0
+   * requests".
+   */
+  it("keeps a CRD's warning as written and counts requests in words", () => {
+    const t = tIn("en");
+    const pick = <S extends What["says"]>(says: S) =>
+      EVERY_WHAT.filter(
+        (what): what is Extract<What, { says: S }> => what.says === says
+      );
+    const [warned, quiet] = pick("deprecated");
+    expect(whatWords(warned, t)).toBe(
+      "v1alpha1 is served and marked deprecated: example.com/v1alpha1 CronTab is deprecated; use example.com/v1"
+    );
+    expect(whatWords(quiet, t)).toBe(
+      "v1beta1 is served and marked deprecated, with no warning of its own"
+    );
+    expect(pick("requestedToday").map((what) => whatWords(what, t))).toEqual([
+      "14 requests in the last day",
+      "1 request in the last day",
+      "no request in the last day",
+    ]);
+    expect(whyWords({ says: "noPrometheus" }, t)).toMatch(
+      /API server's own count of deprecated requests is read from one/
     );
   });
 

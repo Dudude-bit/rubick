@@ -26,4 +26,23 @@ describe("an audited object's reference", () => {
     expect(link).toHaveTextContent("Helm release");
     expect(link).not.toHaveTextContent("HelmRelease.helm.sh");
   });
+
+  /** A deprecated API is no object: it is named in words, and links nowhere it could not be opened. */
+  it("names a deprecated API the server was asked for without a link", async () => {
+    await renderWithRouter(
+      <SubjectRef
+        subject={{
+          kind: "DeprecatedAPI.k8s.io",
+          namespace: null,
+          name: "extensions/v1beta1 ingresses",
+        }}
+      />,
+      { at: "/c/prod/audit", route: "/c/$cluster/$resource" }
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("Deprecated API")).toBeInTheDocument();
+    expect(
+      screen.getByText("extensions/v1beta1 ingresses")
+    ).toBeInTheDocument();
+  });
 });

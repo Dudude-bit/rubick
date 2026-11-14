@@ -37,6 +37,9 @@ export const RULE_IDS = contract.rules.map((rule) => rule.id as RuleId);
 /** The kind a Helm release is filed under as an audited subject: no Kubernetes kind holds a dot. */
 export const HELM_RELEASE = contract.helmRelease;
 
+/** The kind a deprecated API the server was asked for is filed under. */
+export const DEPRECATED_API = contract.deprecatedApi;
+
 /** Every rule's title and why, a total map the compiler holds to the generated union. */
 export const RULE_WORDS: Record<RuleId, { title: AuditKey; why: AuditKey }> = {
   "pss-host-process": { title: "pssHostProcess", why: "pssHostProcessWhy" },
@@ -139,6 +142,14 @@ export const RULE_WORDS: Record<RuleId, { title: AuditKey; why: AuditKey }> = {
     title: "deprecatedApiWriter",
     why: "deprecatedApiWriterWhy",
   },
+  "crd-version-deprecated": {
+    title: "crdVersionDeprecated",
+    why: "crdVersionDeprecatedWhy",
+  },
+  "deprecated-api-requested": {
+    title: "deprecatedApiRequested",
+    why: "deprecatedApiRequestedWhy",
+  },
 };
 
 export const ruleTitle = (rule: RuleId, t: T) =>
@@ -187,6 +198,8 @@ const WHY_WORDS: {
   failed: (why, t) => t("audit", "whyFailed", { message: why.message }),
   notAudited: (_, t) => t("audit", "whyNotAudited"),
   unserved: (_, t) => t("audit", "whyUnserved"),
+  noPrometheus: (_, t) => t("audit", "whyNoPrometheus"),
+  notScraped: (_, t) => t("audit", "whyNotScraped"),
 };
 
 /** Why a kind was not read, worded. */
@@ -348,6 +361,32 @@ const SAYS: {
           values: { ...values, time: formatWhen(w.time, "moment") },
         };
   },
+  deprecated: (w): Said =>
+    w.warning === null
+      ? { key: "wDeprecatedQuiet", values: { version: w.version } }
+      : {
+          key: "wDeprecatedWarned",
+          values: { version: w.version, warning: w.warning },
+        },
+  storedAs: (w): Said => {
+    const stored = w.stored.join(", ");
+    if (w.storage === null)
+      return { key: "wStoredAsUnknown", values: { kind: w.kind, stored } };
+    return w.stored.length === 0
+      ? { key: "wStoredAsOnly", values: { kind: w.kind, storage: w.storage } }
+      : {
+          key: "wStoredAs",
+          values: { kind: w.kind, storage: w.storage, stored },
+        };
+  },
+  requested: (w): Said =>
+    w.removed === null
+      ? { key: "wRequestedUndated", values: {} }
+      : { key: "wRequested", values: { removed: w.removed } },
+  requestedToday: (w): Said =>
+    w.requests === 0
+      ? { key: "wRequestedTodayNone", values: {} }
+      : { key: "wRequestedToday", values: { n: w.requests } },
 };
 
 /** What one value of a finding says, as a key and its values. */
@@ -378,4 +417,8 @@ export const VERBATIM = new Set([
   "api",
   "manager",
   "status",
+  "version",
+  "warning",
+  "storage",
+  "stored",
 ]);
