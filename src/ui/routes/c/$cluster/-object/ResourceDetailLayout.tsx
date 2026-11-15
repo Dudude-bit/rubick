@@ -496,10 +496,12 @@ export function ResourceDetailLayout({
             namespaceLink={namespaceLink}
             createdAt={createdAt}
             status={
-              statusBadge && (
+              statusBadge ? (
                 <WithProblem problem={problem} role={statusRole}>
                   {statusBadge}
                 </WithProblem>
+              ) : (
+                problem && <WithProblem problem={problem} role={null} />
               )
             }
             meta={

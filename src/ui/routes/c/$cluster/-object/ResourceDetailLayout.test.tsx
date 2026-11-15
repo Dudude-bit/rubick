@@ -898,6 +898,48 @@ describe("DetailError says a read it could not do the way every unread is said",
   });
 
   /**
+   * The chip rode only on a status badge, so a page with none said nothing
+   * of the problem its own row carried. Fails if a page with no status drops
+   * the shell's problem from its header.
+   */
+  it("carries the shell's problem in a header that has no status badge", async () => {
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "api",
+      namespace: "api",
+    };
+    shellItems.items = [
+      {
+        ...self,
+        key: "hpa",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        opens: self,
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "api" }}
+          title="api"
+          namespace="api"
+          resourceKind="HorizontalPodAutoscaler"
+          activeTab="overview"
+          tabs={overview}
+        />
+      );
+      expect(document.querySelector('[data-problem="err"]')).toHaveAttribute(
+        "title",
+        "FailedGetScale"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
    * A crash-looping pod's page said its cause in its own summary and again
    * in the shell's findings block. Fails if a page that tells its own cause
    * still draws the list row's finding beneath it.

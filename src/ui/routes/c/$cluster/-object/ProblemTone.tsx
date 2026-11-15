@@ -49,7 +49,7 @@ export function WithProblem({
   problem: Problem | null;
   /** The role the wrapped badge is drawn in; null for what is not a status word, such as a name. */
   role: StatusRole | null;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const t = useT();
   if (!problem) return <>{children}</>;
@@ -85,14 +85,16 @@ export function WithProblem({
             <span>{t("cluster", "problemNotRechecked")}</span>
           </>
         )}
-        <span aria-hidden="true">·</span>
+        {children != null && <span aria-hidden="true">·</span>}
       </span>
-      <span
-        data-problem-word={quiet ? "quiet" : "loud"}
-        className={cn("inline-flex min-w-0", quiet && "[&_*]:text-fg-mut!")}
-      >
-        {children}
-      </span>
+      {children != null && (
+        <span
+          data-problem-word={quiet ? "quiet" : "loud"}
+          className={cn("inline-flex min-w-0", quiet && "[&_*]:text-fg-mut!")}
+        >
+          {children}
+        </span>
+      )}
     </span>
   );
 }

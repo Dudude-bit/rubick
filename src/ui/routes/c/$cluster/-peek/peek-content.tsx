@@ -394,8 +394,17 @@ export function PeekContent({
                 {summary.statusLabel}
               </StatusBadge>
             </GovernedStatus>
+          ) : summary?.status === null ? (
+            <PhaseBadge phase={null} />
           ) : (
-            summary?.status === null && <PhaseBadge phase={null} />
+            <GovernedStatus
+              on={!gone}
+              target={target}
+              namespace={namespace}
+              role="neutral"
+            >
+              {null}
+            </GovernedStatus>
           )}
           {!gone && summary?.endedAt && <EndedAgo at={summary.endedAt} />}
           <span>{target.kind}</span>

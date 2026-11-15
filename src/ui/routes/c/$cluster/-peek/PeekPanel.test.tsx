@@ -2481,6 +2481,71 @@ describe("PeekPanel on a core kind the registry does not hold", () => {
   });
 });
 
+describe("PeekPanel on an object with no status of its own", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+  });
+
+  /**
+   * The api HPA's row said "1 problem" beside its peek, whose header said
+   * nothing: the chip only ever rode on a status badge, and an autoscaler
+   * has none. Fails if the peek of an object with no status drops what the
+   * shell counts against it.
+   */
+  it("carries the problem the shell counts against it in its header", async () => {
+    vi.mocked(commands.listApiCatalog).mockResolvedValue({
+      entries: [
+        {
+          group: "autoscaling",
+          version: "v2",
+          kind: "HorizontalPodAutoscaler",
+          plural: "horizontalpodautoscalers",
+          namespaced: true,
+          verbs: ["get", "list"],
+          shortNames: ["hpa"],
+          hasStatus: true,
+        },
+      ],
+      unread: [],
+    });
+    const object = {
+      ...buildApplication(),
+      name: "cart",
+      namespace: "shop",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      spec: { minReplicas: 2, maxReplicas: 10 },
+      status: null,
+    };
+    vi.mocked(commands.getCustomResource).mockResolvedValue(object);
+    vi.mocked(commands.getServedObject).mockResolvedValue(object);
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "cart",
+      namespace: "shop",
+    };
+    shell.items = [
+      {
+        ...self,
+        key: "hpa/shop/cart",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+        opens: self,
+      },
+    ];
+    useClusterStore.setState({ isConnected: true });
+    await wrap("/c/prod/events?peek=horizontalpodautoscalers/shop/cart");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    useClusterStore.setState({ isConnected: false });
+  });
+});
+
 describe("PeekPanel tab persistence", () => {
   beforeEach(mockCluster);
 

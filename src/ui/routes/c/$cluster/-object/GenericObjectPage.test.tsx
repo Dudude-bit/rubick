@@ -17,6 +17,14 @@ const answers = vi.hoisted(() => ({
   events: vi.fn((_filter: unknown): Promise<unknown[]> => Promise.resolve([])),
 }));
 
+const shell = vi.hoisted(() => ({
+  attention: null as { items: unknown[] } | null,
+}));
+
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => shell.attention,
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     listApiCatalog: () => answers.catalog(),
@@ -43,6 +51,7 @@ const LEASES: CatalogEntry = {
 };
 
 beforeEach(() => {
+  shell.attention = null;
   useClusterStore.setState({ currentContext: "test", isConnected: true });
 });
 
@@ -496,6 +505,41 @@ describe("an autoscaler's page", () => {
     ).toHaveAttribute("href", "/c/test/deployments/lena-sandbox/hello-web");
     expect(screen.getByText(/1 to 2 replicas/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Share/ })).toBeEnabled();
+  });
+
+  /**
+   * The api HPA was FailedGetScale on the Overview, "1 problem" in the status
+   * bar and on its own list row, while its page, which draws its own header,
+   * said nothing of it. Fails if the page's header or its findings drop what
+   * the shell counts against this very object.
+   */
+  it("leads with the problem the shell counts against it", async () => {
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+    };
+    shell.attention = {
+      items: [
+        {
+          ...self,
+          key: "hpa",
+          tone: "err",
+          reason: "FailedGetScale",
+          detail: null,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: self,
+        },
+      ],
+    };
+    await page("/c/test/horizontalpodautoscalers/lena-sandbox/hello-web");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    expect(screen.getByTestId("findings-block")).toHaveTextContent(
+      "FailedGetScale"
+    );
   });
 
   /** The Overview drew scaleTargetRef as three unlinked rows; fails if they come back. */

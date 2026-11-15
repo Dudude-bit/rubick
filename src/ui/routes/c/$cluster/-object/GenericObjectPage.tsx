@@ -24,6 +24,10 @@ import { accessSegment, listTitleOf, segmentOf } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { ProblemSummary } from "@/components/object/detail-blocks";
+import { itemFinding } from "./item-finding";
+import { listedKindOf, useListedItems, useListedProblem } from "./problem";
+import { FindingsBlock, WithProblem } from "./ProblemTone";
+import { statusRole } from "@/lib/status-role";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Unknown } from "@/components/ui/unknown";
@@ -129,6 +133,24 @@ export function GenericObjectPage({
     namespace ?? null
   );
   const crd = segmentOf(target);
+  // The page draws its own header, so what the shell counts against the
+  // object is carried here too: an HPA's FailedGetScale was on its row only.
+  const listedKind = listedKindOf({ kind, crd });
+  const listed = useListedProblem(
+    listedKind,
+    namespace ?? null,
+    name,
+    !!object.data
+  );
+  const shellItems = useListedItems(
+    listedKind,
+    namespace ?? null,
+    name,
+    !!object.data && !finding
+  );
+  const subjectFindings = (shellItems ?? [])
+    .filter((item) => item.kind === kind && item.name === name)
+    .map((item) => itemFinding(item, t));
   const events = useObjectEvents(
     eventsKindOf({ kind, name, crd }),
     name,
@@ -257,7 +279,11 @@ export function GenericObjectPage({
         served={target}
         status={
           facets?.status ? (
-            <StatusBadge status={facets.status}>{facets.status}</StatusBadge>
+            <WithProblem problem={listed} role={statusRole(facets.status)}>
+              <StatusBadge status={facets.status}>{facets.status}</StatusBadge>
+            </WithProblem>
+          ) : listed ? (
+            <WithProblem problem={listed} role={null} />
           ) : undefined
         }
         createdAt={facets?.createdAt}
@@ -303,12 +329,14 @@ export function GenericObjectPage({
         />
       ) : (
         <>
-          {finding && (
+          {finding ? (
             <ProblemSummary
               tone={finding.tone}
               headline={finding.title}
               detail={finding.detail}
             />
+          ) : (
+            <FindingsBlock findings={subjectFindings} />
           )}
           <DetailTabs
             tabs={tabs}
