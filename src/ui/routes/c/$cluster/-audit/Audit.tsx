@@ -227,7 +227,11 @@ function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
       <SectionHeader
         title={ruleTitle(rule, t)}
         description={
-          <RuleHeading rule={rule} severity={RULE_META[rule].severity} />
+          <RuleHeading
+            rule={rule}
+            severity={RULE_META[rule].severity}
+            showTitle={false}
+          />
         }
       />
       <SectionBody className="flex flex-col gap-3 pt-2">

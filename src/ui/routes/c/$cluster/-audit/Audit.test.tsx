@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AuditPage, AuditQuery } from "@/generated/types";
@@ -154,6 +154,27 @@ describe("the Audit page", () => {
       route: "/c/$cluster/audit",
     });
     expect(await screen.findByText("1 rule")).toBeInTheDocument();
+  });
+
+  /**
+   * The opened rule is named once, in its heading, with the badge and the
+   * category beside it. Fails if the title is printed twice.
+   */
+  it("names an opened rule once", async () => {
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    await userEvent
+      .setup()
+      .click(await screen.findByText("No PodDisruptionBudget"));
+    const opened = screen.getByTestId("audit-opened-rule");
+    await waitFor(() =>
+      expect(within(opened).getByText("keeps 3 replicas")).toBeInTheDocument()
+    );
+    expect(within(opened).getAllByText("No PodDisruptionBudget")).toHaveLength(
+      1
+    );
   });
 
   /** The system's own findings are folded under one line with their count, never hidden. */
