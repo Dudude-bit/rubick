@@ -43,7 +43,7 @@ function setup() {
 
 describe("the reads on screen the problem count cannot vouch for", () => {
   /**
-   * Shot r7-17: a Deployment page's own read refused, and the strip said "1
+   * A Deployment page's own read refused, and the strip said "1
    * problem in api" as if everything had been read. Fails if a refused read
    * on screen is missed, called a failure, or outlives the answer after it.
    */
@@ -70,7 +70,7 @@ describe("the reads on screen the problem count cannot vouch for", () => {
   });
 
   /**
-   * Shot r7-27: Argo CD's read timing out while the strip said "0 problems".
+   * Argo CD's read timing out while the strip said "0 problems".
    * Fails if a failed read is left out, or if a NotFound, a read nothing on
    * screen holds, a hidden surface's read or a usage read is counted.
    */
@@ -131,7 +131,7 @@ describe("what an unread read is called", () => {
 
 describe("what a read the count asks for itself is called", () => {
   /**
-   * Shot r8-22: the hover named "ingress-clients
+   * The hover named "ingress-clients
    * traefik.io/ingress-controller", a cache key nobody reading it knows.
    * Fails if such a read is named by its key, or if any other read loses
    * its name.

@@ -170,7 +170,7 @@ describe("WorkloadUsage whose pods were not read", () => {
   });
 
   /**
-   * Vercel r8-75: a Deployment scaled to zero showed "still reading" for
+   * A Deployment scaled to zero showed "still reading" for
    * about 10 s before "nothing running", with 0/0 already on screen. Fails
    * if a workload that asks for no pods waits on its pod read to say so, or
    * if one that asks for some stops waiting.

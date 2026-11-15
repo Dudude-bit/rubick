@@ -357,7 +357,7 @@ describe("UsageBlock with no limits at all", () => {
   });
 
   /**
-   * Vercel r8-47: "No limits declared" under CPU while the Memory band below
+   * "No limits declared" under CPU while the Memory band below
    * drew "limit 128Mi". Fails if the one measure without a ceiling is not
    * named in its sentence, or the other measure is said to lack one.
    */

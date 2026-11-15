@@ -121,7 +121,7 @@ describe("one object's events, live", () => {
   });
 
   /**
-   * Shot r6-07: a refused read of them was an amber triangle over mono text.
+   * A refused read of them was an amber triangle over mono text.
    * Fails if the warnings that could not be read go unsaid under the rows
    * that could, or a refusal is not the framed lock with the rule to ask for.
    */
@@ -149,7 +149,7 @@ describe("one object's events, live", () => {
   });
 
   /**
-   * Shot r6-07: under the peek's own refused read the line repeated the
+   * Under the peek's own refused read the line repeated the
    * notice above it with its own, older cause. Fails if a part read through
    * an unread object draws its own box instead of one line worded from the
    * object's failure now.

@@ -791,7 +791,7 @@ describe("the breadcrumb's namespace segment", () => {
 
 describe("DetailError says a read it could not do the way every unread is said", () => {
   /**
-   * Shot r5-74: a refused GET drew a red "Could not read this Deployment"
+   * A refused GET drew a red "Could not read this Deployment"
    * over an amber lock box asking "What is this Deployment?". Red is the
    * cluster's or a write's; fails if the sentence is said twice or in red.
    */
@@ -844,7 +844,7 @@ describe("DetailError says a read it could not do the way every unread is said",
   });
 
   /**
-   * Shot r5-74 with the list's row drawn: its own read and the one that
+   * The list's row drawn: its own read and the one that
    * finds what governs it both failed, and the chip read a clean Ready beside
    * a list row saying "1 problem". Fails if the chip over a stale object
    * does not carry the row's problem.
@@ -1383,7 +1383,7 @@ describe("ResourceDetailLayout after its object comes back, and while it cannot"
   };
 
   /**
-   * Shots r6-10/11: the object read again, its findings read had not, and
+   * The object read again, its findings read had not, and
    * the header dropped "1 problem" beside a row still saying it. Fails if
    * the chip floors at the row's problem only while the object is stale.
    */
@@ -1414,7 +1414,7 @@ describe("ResourceDetailLayout after its object comes back, and while it cannot"
   });
 
   /**
-   * Shot r6-12: only each box's own retry cleared it. Fails if the object's
+   * Only each box's own retry cleared it. Fails if the object's
    * one retry leaves a failed part about it to its own timer.
    */
   it("asks every failed part about the object again on the object's one retry", async () => {
@@ -1455,7 +1455,7 @@ describe("ResourceDetailLayout after its object comes back, and while it cannot"
   });
 
   /**
-   * Shots r6-07/08: the peek said "read failing" and the page "partly
+   * The peek said "read failing" and the page "partly
    * unread" for one refused GET of the object. Fails if the parts that fail
    * with the object outrank its own failure, or a refusal is not said as one.
    */

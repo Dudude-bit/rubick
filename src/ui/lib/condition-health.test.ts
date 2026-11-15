@@ -275,7 +275,7 @@ describe("a condition its reason settles", () => {
 
 describe("a condition by whether its type's sense is known", () => {
   /**
-   * Vercel r7-15: an Argo Rollout's `Paused=False`, its healthy value, was a
+   * An Argo Rollout's `Paused=False`, its healthy value, was a
    * red cross, because every type nobody listed was read as a Ready. Fails
    * if a type of known sense is read by the wrong value, or a type of
    * unknown sense is drawn as health or as trouble.
@@ -313,7 +313,7 @@ describe("the words a condition is spoken in", () => {
     condition("Paused", status, { reason, message });
 
   /**
-   * Vercel r7-15: "Paused False (RolloutPaused): Rollout is paused". Argo
+   * "Paused False (RolloutPaused): Rollout is paused". Argo
    * writes those words whichever value the condition holds, so beside False
    * they said the opposite of it. Fails if they are spoken beside False, or
    * dropped beside True where they are true.

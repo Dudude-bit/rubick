@@ -600,7 +600,7 @@ describe("what the problem count counts", () => {
   });
 
   /**
-   * Vercel's seat: "pods not counted in argocd" and "in argocd" a few words
+   * "Pods not counted in argocd" and "in argocd" a few words
    * later on one strip. Fails if the namespace the whole strip is scoped to
    * is said again beside the refusal.
    */
@@ -638,7 +638,7 @@ describe("what the problem count counts", () => {
   });
 
   /**
-   * Shots r7-17 and r7-27: a Deployment page refused and Argo CD timing out,
+   * A Deployment page refused and Argo CD timing out,
    * and the strip said "1 problem in api" and "0 problems in argocd". Fails
    * if a read on screen that was refused or failed leaves the count whole,
    * or the hover does not say which reads they were.

@@ -100,7 +100,7 @@ describe("mergePodsWithMetrics", () => {
     ).toBe(10);
   });
 
-  /** Apple r8-03: a Completed pod's cells drew "no sample yet". Fails if a finished pod is not marked as having nothing to measure, or a running one is. */
+  /** A Completed pod's cells drew "no sample yet". Fails if a finished pod is not marked as having nothing to measure, or a running one is. */
   it("marks a finished pod as having nothing to measure, and a running one not", () => {
     const [done, running] = mergePodsWithMetrics(
       [pod({ name: "a", phase: "Succeeded" }), pod({ name: "b" })],
@@ -244,7 +244,7 @@ describe("attachAggregatedPodMetrics", () => {
   });
 
   /**
-   * Vercel r8-63: a Deployment at 0/0 read "0m" and "0 B", a measured zero,
+   * A Deployment at 0/0 read "0m" and "0 B", a measured zero,
    * where its page said nothing runs. Fails if a workload with no pods is
    * not marked as having nothing to measure once the pods were read, or is
    * marked so when they were not.

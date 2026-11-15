@@ -236,7 +236,7 @@ describe("a metric cell for something with nothing running", () => {
     });
 
   /**
-   * Vercel r8-63 and Apple r8-03: a Deployment at 0/0 read "0m" and "0 B",
+   * A Deployment at 0/0 read "0m" and "0 B",
    * and a Completed pod drew the could-not-look triangle "no sample yet".
    * Fails if nothing running is drawn as a measured zero or as unread, or if
    * a measured zero and an unread reading stop being drawn as such.

@@ -24,7 +24,7 @@ const chip = (problem: Problem) =>
 
 describe("a problem nobody could check again", () => {
   /**
-   * Shot r7-13: pods refused, and the row and the peek drew green "Running"
+   * Pods refused, and the row and the peek drew green "Running"
    * as if the probe had recovered. Fails if a kept problem is drawn in its
    * old tone, without "not rechecked", or without why and since when.
    */
@@ -77,7 +77,7 @@ describe("a problem nobody could check again", () => {
 
 describe("where the mark drops its noun", () => {
   /**
-   * Shot r7-10: "⚠ 1 ·" with no noun in a cell that had room for it; the
+   * "⚠ 1 ·" with no noun in a cell that had room for it; the
    * switch sat at 11rem, wider than the mark and "✓ Running" need. Fails if
    * the switch drifts from the room the whole mark and a seven-letter status
    * badge take, or if the class stops being the measured one.

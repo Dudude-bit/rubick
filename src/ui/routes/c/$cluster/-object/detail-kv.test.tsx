@@ -113,7 +113,7 @@ describe("a key-value row", () => {
   });
 
   /**
-   * Vercel r7-15: "blueGreen.prePromotionAnalysisRu / nStatus.name", a key
+   * "blueGreen.prePromotionAnalysisRu / nStatus.name", a key
    * cut inside a word because its one dotted segment was wider than the
    * track. Fails if a camelCase key offers no break between its words, or
    * if a word wider than the track is broken inside rather than cut whole

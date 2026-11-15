@@ -5,7 +5,7 @@ import { FindingLine } from "./FindingLine";
 import { closedSentence } from "./problem";
 
 describe("the cluster's words before ours", () => {
-  /** Shot r6-32: "...(Client.Timeout exceeded while awaiting headers) Most likely why...". Fails if words ending without a stop run into the sentence after them. */
+  /** "...(Client.Timeout exceeded while awaiting headers) Most likely why...". Fails if words ending without a stop run into the sentence after them. */
   it("closes words that end without a stop, a closing bracket included", () => {
     expect(closedSentence("awaiting headers)")).toBe("awaiting headers).");
     expect(closedSentence("request timed out  ")).toBe("request timed out.");
@@ -18,7 +18,7 @@ describe("the cluster's words before ours", () => {
     expect(closedSentence("")).toBe("");
   });
 
-  /** Shot r5-76: an autoscaler's message ran into its readings. Fails if a finding's sentence is not closed before the readings that follow it. */
+  /** An autoscaler's message ran into its readings. Fails if a finding's sentence is not closed before the readings that follow it. */
   it("closes a finding's sentence before its readings", () => {
     render(
       <FindingLine

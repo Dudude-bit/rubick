@@ -170,7 +170,7 @@ describe("a detail page whose own read fails while a list holds its object", () 
   };
 
   /**
-   * Shots r5-73/74: the list and the peek both held the Deployment and its
+   * The list and the peek both held the Deployment and its
    * page drew only "Could not read". Fails if the page does not draw the
    * list's row, or draws it without saying it is from that list's read.
    */
@@ -590,7 +590,7 @@ describe("the tab a detail page is open on", () => {
 
 describe("a detail page whose own read comes back", () => {
   /**
-   * Shots r6-10/11: the object read again, and the Usage and Connections
+   * The object read again, and the Usage and Connections
    * boxes kept their failure for 15 s with no new request. Fails if a part
    * read through the object waits on its own backed-off timer once the
    * object answers again.

@@ -3749,7 +3749,7 @@ describe("a governed workload's peek beside its list", () => {
   };
 
   /**
-   * Shots r5-15 and r5-23: under its own failed read the peek said a green
+   * Under its own failed read the peek said a green
    * "Ready" beside a row saying "1 problem", and its freshness chip went
    * away. Fails if the held row's chip drops the list's problem, or the chip
    * stops saying the read fails and how old the answer on screen is.
@@ -3777,7 +3777,7 @@ describe("a governed workload's peek beside its list", () => {
   });
 
   /**
-   * Vercel r6 B5: a Deployment read Ready while both its pods failed their
+   * A Deployment read Ready while both its pods failed their
    * liveness probe and its row said so. Fails if the peek's chip does not
    * count its pods' problems as the row does, or its body does not name them.
    */
@@ -3808,7 +3808,7 @@ describe("a governed workload's peek beside its list", () => {
   });
 
   /**
-   * Shot r6-07: under its own failed read the peek kept "1 problem" and
+   * Under its own failed read the peek kept "1 problem" and
    * dropped the finding line the healthy peek leads with. Fails if the body
    * says nothing of the row's finding once its own read of what governs it
    * fails.
@@ -3831,7 +3831,7 @@ describe("a governed workload's peek beside its list", () => {
   });
 
   /**
-   * Apple r8-32/33: under a 500 the peek said "1 problem" with no cause for
+   * Under a 500 the peek said "1 problem" with no cause for
    * half a minute, then the raw "FailedGetScale" in red, where the healthy
    * peek says "api cannot reach what it scales". Fails if the row's finding
    * waits for the peek's own read of what governs it, or is worded by
@@ -3853,7 +3853,7 @@ describe("a governed workload's peek beside its list", () => {
   });
 
   /**
-   * Apple r8-32: a peek opened during a failure drew an unlabelled skeleton
+   * A peek opened during a failure drew an unlabelled skeleton
    * for 14 s while the list beside it held the row. Fails if the peek waits
    * on its own read to draw what the list holds, or does not say that it is
    * still reading and, without a live watch, how old the row is.
@@ -3885,7 +3885,7 @@ describe("a governed workload's peek beside its list", () => {
   });
 
   /**
-   * Shot r5-62: the list said "live" and the peek of its row "polling",
+   * The list said "live" and the peek of its row "polling",
    * though the list's watch reads the peek again at every change it sees.
    * Fails if the peek ignores that watch, or claims it when none is live.
    */
@@ -3970,7 +3970,7 @@ describe("a pod's peek beside the Pods list", () => {
   };
 
   /**
-   * Shots r6-30/43: the Pods row said "1 problem · Running" and the pod's
+   * The Pods row said "1 problem · Running" and the pod's
    * page led with its failing liveness probe, while the peek said a plain
    * green Running. Fails if the peek's chip does not carry the row's
    * problem, or its Overview does not lead with the page's sentence.
@@ -3996,7 +3996,7 @@ describe("a pod's peek beside the Pods list", () => {
   });
 
   /**
-   * Shots r6-30/43: the Pods list said "live" and the peek of its row
+   * The Pods list said "live" and the peek of its row
    * "polled less often", though the Pods list's watch reads the pod again at
    * every change. Fails if the peek looks for the Pods list anywhere but
    * where the Pods page keeps its rows.
@@ -4058,7 +4058,7 @@ describe("the peek of a custom resource that runs pods", () => {
   };
 
   /**
-   * Vercel r7-15: Rollout/node peeked "Healthy Rollout" while its pod failed
+   * Rollout/node peeked "Healthy Rollout" while its pod failed
    * its readiness probe on the Pods row, the pod's page, the Overview and
    * the status bar. Fails if the chip of an owner that is a custom resource
    * does not count its pods' rows, or its body does not name them.
@@ -4081,7 +4081,7 @@ describe("the peek of a custom resource that runs pods", () => {
   });
 
   /**
-   * Vercel r7-15: "conditions.Paused False (RolloutPaused): Rollout is
+   * "conditions.Paused False (RolloutPaused): Rollout is
    * paused" in red, the healthy value drawn as an error in words that deny
    * it. Fails if the row is coloured as trouble or speaks the paused words.
    */

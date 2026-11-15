@@ -138,7 +138,7 @@ describe("CountBlock", () => {
   });
 
   /**
-   * Vercel r8-76: "cpu no reading" in amber on a Deployment scaled to zero,
+   * "cpu no reading" in amber on a Deployment scaled to zero,
    * which has no pod to read. Fails if that expected absence is drawn as a
    * warning, or a missing reading with pods running is no longer one.
    */

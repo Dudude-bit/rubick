@@ -279,7 +279,7 @@ describe("the reads behind Needs attention", () => {
 
 describe("a pod's problem when the next read of pods is refused", () => {
   /**
-   * Shot r7-13: pods refused, and the row, the peek and the page chip all
+   * Pods refused, and the row, the peek and the page chip all
    * fell back to green "Running" because the count dropped the pod's
    * problem with the read. Fails if the count stops handing on the last
    * told problem, marked stale, while the Pod check is unread.

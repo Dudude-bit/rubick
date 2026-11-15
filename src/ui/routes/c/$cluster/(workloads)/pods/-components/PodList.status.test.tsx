@@ -90,7 +90,7 @@ describe("a pod whose problem the read of pods could not check again", () => {
   };
 
   /**
-   * Shot r7-13: pods refused, and node-5skbg's row lost its mark and read
+   * Pods refused, and node-5skbg's row lost its mark and read
    * green "Running". Fails if the row drops the kept problem, does not say
    * it was not rechecked, or its column leaves no room for that beside the
    * status word.

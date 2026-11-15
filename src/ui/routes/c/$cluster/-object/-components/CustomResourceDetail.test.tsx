@@ -345,7 +345,7 @@ describe("what a custom resource's page could not read", () => {
 
 describe("the page of a custom resource that runs pods", () => {
   /**
-   * Vercel r7-15: an Argo Rollout's page and peek said Healthy while its pod
+   * An Argo Rollout's page and peek said Healthy while its pod
    * failed its readiness probe on every other screen. Fails if the page's
    * chip does not count its pods' rows, or its Overview does not name them.
    */
