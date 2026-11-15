@@ -126,4 +126,16 @@ describe("ResourceListHeader held notice", () => {
       "shown when the pointer leaves the table"
     );
   });
+
+  /** Fails if the held line is drawn in the info blue the links use instead of quiet text. */
+  it("draws the waiting line as quiet text, not as a link", () => {
+    render(
+      <TooltipProvider>
+        <ResourceListHeader title="Pods" count={13} live held />
+      </TooltipProvider>
+    );
+    const line = screen.getByTestId("list-held");
+    expect(line).toHaveClass("text-fg-mut");
+    expect(line).not.toHaveClass("text-info");
+  });
 });

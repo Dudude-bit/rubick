@@ -24,6 +24,7 @@ import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
 import { startFocusModality, startFocusWrap } from "@/lib/focus-modality";
 import { keepNativeMenuForText, openMenusFromKeys } from "@/lib/native-menu";
+import { keepSelectAllToFields } from "@/lib/select-all-guard";
 import { stallWatch } from "@/lib/stall-watch";
 import { logInfo, flushLogs } from "@/lib/logger";
 import { markStartup, reportStartup } from "@/lib/startup";
@@ -69,6 +70,7 @@ export default function App() {
   useEffect(() => startFocusModality(), []);
   useEffect(() => startFocusWrap(), []);
   useEffect(() => keepNativeMenuForText(), []);
+  useEffect(() => keepSelectAllToFields(), []);
   useEffect(() => openMenusFromKeys(), []);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {

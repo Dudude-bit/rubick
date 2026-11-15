@@ -69,7 +69,7 @@ export function ResourceListHeader({
               <span
                 role="status"
                 data-testid="list-held"
-                className="absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-caption text-info"
+                className="absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-caption text-fg-mut"
               >
                 {t("readings", "listNoticeWaiting")}
               </span>

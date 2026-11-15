@@ -151,7 +151,8 @@ export const columns: ColumnDef<PodRow>[] = [
     meta: {
       // The widest status its rows say, up to STATUS_FLOOR_GLYPHS (the rest
       // is whole on hover), with a problem's mark at its narrowest: one long
-      // status must not take the room Node and IP need for every row.
+      // status must not take the room Node and IP need for every row. A mark
+      // that was not rechecked needs no more: its words give way to the count.
       floor: (_t, rows: readonly PodRow[]) =>
         rows.length === 0
           ? 224
@@ -162,8 +163,7 @@ export const columns: ColumnDef<PodRow>[] = [
                 .map(
                   (pod) =>
                     cappedBadgePx([pod.status.display]) +
-                    PROBLEM_MARK_COMPACT_PX +
-                    (pod.problem?.stale ? PROBLEM_STALE_PX : 0)
+                    PROBLEM_MARK_COMPACT_PX
                 )
             ),
       // The mark's words and "already replaced" beside the badge while the port has room.

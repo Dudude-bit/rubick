@@ -94,6 +94,51 @@ describe("two notices over one list", () => {
     );
   });
 
+  /**
+   * The metrics notice dropped its own retry for a list notice's, and kept
+   * dropping it after that notice was gone. Fails if the button is not back
+   * once the list reads again, or is missing while no list notice stands.
+   */
+  it("gives the metrics notice its retry back when the list notice goes away", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData([...queryKeys.metrics.all(), "pods", "all"], {
+      status: silent,
+    });
+    const list = (error?: Error) => (
+      <ResourceList<Item>
+        title="Deployments"
+        kind="Deployment"
+        columns={columns}
+        emptyStateLabel="Deployments"
+        data={[{ name: "api", namespace: "lab" }]}
+        error={error ?? null}
+        dataUpdatedAt={Date.now() - 60_000}
+        onRetry={vi.fn()}
+        headerContent={<MetricsStatusBanner status={silent} />}
+      />
+    );
+    const { rerender } = await renderWithRouter(
+      list(new Error("etcdserver: request timed out")),
+      { client, at: "/c/prod/deployments", route: "/c/$cluster/$" }
+    );
+    await screen.findByText(/The metrics API is not answering/);
+    expect(
+      screen.getAllByRole("button", { name: "Try the read again" })
+    ).toHaveLength(1);
+    expect(screen.getByText(/Could not read deployments/)).toBeInTheDocument();
+
+    await rerender(list());
+    await waitFor(() =>
+      expect(screen.queryByText(/Could not read deployments/)).toBeNull()
+    );
+    const retry = screen.getByRole("button", { name: "Try the read again" });
+    expect(retry.closest('[data-read], [role="status"]')).toHaveTextContent(
+      /The metrics API is not answering/
+    );
+  });
+
   /** One inner layout: the list notice puts its cause line and button under the title, as the metrics notice does. */
   it("lays the list notice out as the metrics notice is", async () => {
     await stacked(vi.fn());
@@ -130,5 +175,58 @@ describe("a refused list's keyboard order", () => {
     expect(
       retry.compareDocumentPosition(learn) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+});
+
+describe("where a list says what the kind is", () => {
+  const before = (first: HTMLElement, second: HTMLElement) =>
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING;
+
+  /**
+   * The kind's description sat above the metrics notice while a failed list
+   * put it below its notice. Fails if a list with only the metrics notice
+   * says what the kind is before the notice rather than after it.
+   */
+  it("puts the metrics notice ahead of the description", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData([...queryKeys.metrics.all(), "pods", "all"], {
+      status: silent,
+    });
+    await renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[{ name: "api", namespace: "lab" }]}
+        headerContent={<MetricsStatusBanner status={silent} />}
+      />,
+      { client, at: "/c/prod/pods", route: "/c/$cluster/$" }
+    );
+    const notice = (
+      await screen.findByText(/The metrics API is not answering/)
+    ).closest('[role="status"]') as HTMLElement;
+    expect(before(notice, screen.getByText("Learn more"))).toBeTruthy();
+  });
+
+  /** Fails if a read that ran out of time draws the description above its notice. */
+  it("puts the read-deadline notice ahead of the description", async () => {
+    await renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        error={Object.assign(new Error("READ_DEADLINE: took too long"), {
+          code: "READ_DEADLINE",
+        })}
+        onRetry={() => undefined}
+      />,
+      { at: "/c/prod/pods", route: "/c/$cluster/$" }
+    );
+    const notice = await screen.findByTestId("read-deadline");
+    expect(before(notice, screen.getByText("Learn more"))).toBeTruthy();
   });
 });

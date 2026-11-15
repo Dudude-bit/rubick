@@ -92,19 +92,23 @@ describe("a pod whose problem the read of pods could not check again", () => {
   /**
    * Pods refused, and node-5skbg's row lost its mark and read
    * green "Running". Fails if the row drops the kept problem, does not say
-   * it was not rechecked, or its column leaves no room for that beside the
-   * status word.
+   * it was not rechecked, or its column asks for room for those words while
+   * the port has it, or needs any more room for them than a fresh problem.
    */
-  it("says not rechecked, and its column makes room for it", () => {
+  it("says not rechecked, and its column asks for the words only as an ideal", () => {
     render(<>{statusCell({ status: RUNNING, problem: kept })}</>);
     expect(screen.getByText("not rechecked")).toBeInTheDocument();
 
     const column = (columns as ColumnDef<Row>[]).find((c) => c.id === "status");
     const floor = column?.meta?.floor as (t: T, rows: readonly Row[]) => number;
     const fresh = { ...kept, stale: undefined };
+    expect(floor(t, [{ status: RUNNING, problem: kept }])).toBe(
+      floor(t, [{ status: RUNNING, problem: fresh }])
+    );
+    const ideal = column?.meta?.ideal as (t: T, rows: readonly Row[]) => number;
     expect(
-      floor(t, [{ status: RUNNING, problem: kept }]) -
-        floor(t, [{ status: RUNNING, problem: fresh }])
+      ideal(t, [{ status: RUNNING, problem: kept }]) -
+        ideal(t, [{ status: RUNNING, problem: fresh }])
     ).toBe(PROBLEM_STALE_PX);
   });
 });

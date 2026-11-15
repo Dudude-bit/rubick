@@ -715,7 +715,9 @@ export function ResourceList<
   const about = description ?? (listKind && <KindAbout kind={listKind} />);
   const wholeUnread =
     !!unreadError && resources.length === 0 && !(failed && ranOutOfTime);
-  const aboutAfterNotice = wholeUnread || stale || (warm && !!freshList.unread);
+  const deadlineShown =
+    failed !== null && resources.length === 0 && ranOutOfTime;
+  const aboutBelowAlert = wholeUnread || deadlineShown;
   const aboutLine = about && (
     <p className="mb-2 text-xs text-fg-mut">
       <HeldLines>{about}</HeldLines>
@@ -746,7 +748,6 @@ export function ResourceList<
                   : resources.length
           }
           countPending={showSkeleton}
-          description={aboutAfterNotice ? undefined : about}
           actions={
             <>
               {headerActions}
@@ -819,7 +820,7 @@ export function ResourceList<
           onRetry={retry}
         />
       </HeldWhilePointed>
-      {!embedded && !wholeUnread && aboutAfterNotice && aboutLine}
+      {!embedded && !aboutBelowAlert && aboutLine}
       {showDelivery && !showSkeleton && deliveryKnown && (
         <DeliveryFilterControl
           value={deliveryFilter}
@@ -869,39 +870,46 @@ export function ResourceList<
           )}
         </Alert>
       )}
-      {failed && resources.length === 0 && ranOutOfTime ? (
-        <Alert
-          variant="warn"
-          role="status"
-          data-testid="read-deadline"
-          className={LIST_NOTICE_WIDTH}
-        >
-          <TriangleAlert aria-hidden="true" />
-          <p className="text-fg">
-            <span>{failedWords}</span>
-          </p>
-          {/* Not a fault to retry into: a deadline on a big cluster is the
+      {deadlineShown ? (
+        <>
+          <Alert
+            variant="warn"
+            role="status"
+            data-testid="read-deadline"
+            className={LIST_NOTICE_WIDTH}
+          >
+            <TriangleAlert aria-hidden="true" />
+            <p className="text-fg">
+              <span>{failedWords}</span>
+            </p>
+            {/* Not a fault to retry into: a deadline on a big cluster is the
               cluster being big, so the narrower question comes first. */}
-          <p className="mt-1 text-fg-mut">{t("empty", "readDeadlineHint")}</p>
-          {/* No mono line here. In the branch below it carries the
+            <p className="mt-1 text-fg-mut">{t("empty", "readDeadlineHint")}</p>
+            {/* No mono line here. In the branch below it carries the
               cluster's own words, which is why it is there; this message is
               ours, already said above in the reader's language, and the
               `READ_DEADLINE:` marker in front of it is a wire format. */}
-          <div className="mt-2 flex gap-2">
-            {narrowingHelps && (scope.isAll || scope.several) && (
-              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
-                {t("action", "pickOneNamespace")}
-              </Button>
-            )}
-            <ReadAgain
-              error={failed}
-              // The caller's, where it owns the read: refetching the
-              // placeholder query here would write `[]` under a key the
-              // page never reads and leave the real list exactly as it was.
-              onRetry={() => (onRetry ? onRetry() : queryResult.refetch())}
-            />
-          </div>
-        </Alert>
+            <div className="mt-2 flex gap-2">
+              {narrowingHelps && (scope.isAll || scope.several) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openNamespacePicker}
+                >
+                  {t("action", "pickOneNamespace")}
+                </Button>
+              )}
+              <ReadAgain
+                error={failed}
+                // The caller's, where it owns the read: refetching the
+                // placeholder query here would write `[]` under a key the
+                // page never reads and leave the real list exactly as it was.
+                onRetry={() => (onRetry ? onRetry() : queryResult.refetch())}
+              />
+            </div>
+          </Alert>
+          {!embedded && aboutLine}
+        </>
       ) : unreadError && resources.length === 0 ? (
         <>
           <UnreadList
