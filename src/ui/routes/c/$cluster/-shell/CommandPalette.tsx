@@ -137,6 +137,13 @@ interface Wake {
   attempt: number;
 }
 
+const WIDENS_SEARCH = new Set<Entry["kind"]>([
+  "search-more",
+  "search-all-namespaces",
+  "group",
+  "more",
+]);
+
 export function CommandPalette() {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -146,6 +153,9 @@ export function CommandPalette() {
   const [wake, setWake] = useState<Wake | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enterTried, setEnterTried] = useState(false);
+  const [queuedEnter, setQueuedEnter] = useState<{ newTab: boolean } | null>(
+    null
+  );
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
   const [everything, setEverything] = useState(false);
@@ -380,6 +390,7 @@ export function CommandPalette() {
     selectable.find((entry) => entry.id === selectedId)?.id ??
     selectable[0]?.id ??
     null;
+  const settling = text !== deferredText;
 
   // ----- acting on it -----
 
@@ -741,13 +752,16 @@ export function CommandPalette() {
         return;
       }
       if (event.key === "Enter") {
-        if (!entry) {
-          event.preventDefault();
-          setEnterTried(true);
-          return;
-        }
         event.preventDefault();
-        activate(entry, event.metaKey || event.ctrlKey);
+        const newTab = event.metaKey || event.ctrlKey;
+        const waiting = !actionsOf && (settling || isSearching);
+        if (entry && !settling) {
+          activate(entry, newTab);
+        } else if (waiting) {
+          setQueuedEnter({ newTab });
+        } else {
+          setEnterTried(true);
+        }
         return;
       }
       // The chip is a token in the field, and every token field in the app
@@ -766,13 +780,27 @@ export function CommandPalette() {
       activeId,
       backToSearch,
       bang,
+      isSearching,
       move,
       scoped,
       selectable,
+      settling,
       showActions,
       text,
     ]
   );
+
+  const queuedEntry =
+    queuedEnter && !settling
+      ? selectable.find((entry) => !WIDENS_SEARCH.has(entry.kind))
+      : undefined;
+  /* oxlint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!queuedEnter || !queuedEntry) return;
+    setQueuedEnter(null);
+    activate(queuedEntry, queuedEnter.newTab);
+  }, [queuedEnter, queuedEntry, activate]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   // ----- lifecycle -----
 
@@ -811,6 +839,7 @@ export function CommandPalette() {
     } else {
       pointer.current = null;
       setEnterTried(false);
+      setQueuedEnter(null);
       setText("");
       setScope({ kind: "current" });
       setWake(null);
@@ -913,6 +942,8 @@ export function CommandPalette() {
               value={actionsOf ? actionText : text}
               onChange={(event) => {
                 setEnterTried(false);
+                setQueuedEnter(null);
+                setSelectedId(null);
                 if (actionsOf) setActionText(event.target.value);
                 else setText(event.target.value);
               }}
@@ -968,6 +999,7 @@ export function CommandPalette() {
                   selected={entry.id === activeId}
                   actionable={actionable && entry.id === activeId}
                   enterTried={enterTried}
+                  enterQueued={queuedEnter !== null}
                   onHover={(event) => {
                     // A row that slid under a resting pointer, as results
                     // arrive, is not one the reader pointed at.
@@ -1131,6 +1163,7 @@ function EntryRow({
   selected,
   actionable,
   enterTried,
+  enterQueued,
   onHover,
   onPick,
   pinned = false,
@@ -1144,6 +1177,8 @@ function EntryRow({
   actionable: boolean;
   /** Enter was pressed with nothing yet to open. */
   enterTried: boolean;
+  /** Enter was pressed while names were still being read and waits for the first. */
+  enterQueued: boolean;
   onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
@@ -1171,9 +1206,11 @@ function EntryRow({
           </span>
         )}
         <span>
-          {enterTried && entry.tone === "loading"
-            ? t("empty", "nothingToOpenYet")
-            : entry.text}
+          {entry.tone === "loading" && enterQueued
+            ? t("empty", "opensWhenRead")
+            : enterTried && entry.tone === "loading"
+              ? t("empty", "nothingToOpenYet")
+              : entry.text}
         </span>
       </p>
     );

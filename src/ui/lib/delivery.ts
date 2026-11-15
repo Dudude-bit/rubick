@@ -22,7 +22,7 @@
  *   beside a peek that names the controller.
  */
 
-import { sayWords } from "@/i18n/say";
+import { sayWords, type Saying } from "@/i18n/say";
 import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 
@@ -243,8 +243,11 @@ export function deliveryLine(
   deliveries: Delivery[],
   t: T
 ): DeliveryLine | null {
-  const line = lineOf(deliveries, t);
   const through = deliveries.find((entry) => entry.through)?.through;
+  const line = lineOf(
+    through ? wordedThrough(deliveries, through) : deliveries,
+    t
+  );
   if (!line || !through) return line;
   // A label a controller's object inherited says nothing of the object, and
   // what happens on a delete is that controller's to say.
@@ -255,6 +258,30 @@ export function deliveryLine(
       .filter(Boolean)
       .join(" "),
   };
+}
+
+/** A note about the owner's own object, said of the owner that delivers this one's maker. */
+const NOTE_THROUGH: Partial<Record<Saying["key"], Saying["key"]>> = {
+  argoSelfHeals: "argoSelfHealsThrough",
+};
+
+function wordedThrough(
+  deliveries: Delivery[],
+  through: NonNullable<Delivery["through"]>
+): Delivery[] {
+  return deliveries.map((entry) => {
+    const key = entry.state === "delivered" && entry.source.note?.key;
+    const worded = key && NOTE_THROUGH[key];
+    return entry.state === "delivered" && worded
+      ? {
+          ...entry,
+          source: {
+            ...entry.source,
+            note: { key: worded, values: { ...through } },
+          },
+        }
+      : entry;
+  });
 }
 
 function lineOf(deliveries: Delivery[], t: T): DeliveryLine | null {

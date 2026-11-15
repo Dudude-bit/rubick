@@ -629,6 +629,19 @@ const KIND_ORDER = new Map<string, number>(
 );
 
 /**
+ * What of the query is meant for the object's name: the words its namespace
+ * already answers are the namespace's, so "lab api" asks for `api` in `lab`.
+ * Words that only the name holds, or all of them when the namespace holds
+ * every one, stay.
+ */
+export function nameNeedleOf(hit: SearchHit, needle: string): string {
+  const words = needle.split(/\s+/).filter(Boolean);
+  const namespace = hit.namespace?.toLowerCase() ?? "";
+  const rest = words.filter((word) => !namespace.includes(word));
+  return (rest.length > 0 ? rest : words).join(" ");
+}
+
+/**
  * Hits arrive in whatever order the kinds answered, so two identical
  * searches must be put in one order here or Down lands on another object.
  */
@@ -636,11 +649,12 @@ export function orderHits<Found extends { hit: SearchHit }>(
   found: readonly Found[],
   needle: string
 ): Found[] {
-  const tier = ({ name }: SearchHit) => {
-    const lower = name.toLowerCase();
-    if (lower === needle) return 0;
-    if (lower.startsWith(needle)) return 1;
-    return lower.includes(needle) ? 2 : 3;
+  const tier = (hit: SearchHit) => {
+    const lower = hit.name.toLowerCase();
+    const wanted = nameNeedleOf(hit, needle);
+    if (lower === wanted) return 0;
+    if (lower.startsWith(wanted)) return 1;
+    return lower.includes(wanted) ? 2 : 3;
   };
   const kindAt = (kind: string) => KIND_ORDER.get(kind) ?? KIND_ORDER.size;
   return [...found].sort(
@@ -993,7 +1007,10 @@ export function buildPaletteEntries({
       const path = servedObjectLink(hit, { cluster: hit.context });
       return path ? [{ hit, path }] : [];
     });
-    const named = (hit: SearchHit) => hit.name.toLowerCase().includes(needle);
+    const named = (hit: SearchHit) =>
+      nameNeedleOf(hit, needle)
+        .split(" ")
+        .every((word) => hit.name.toLowerCase().includes(word));
     const ranked = orderHits(found, needle);
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     let viaNamespace = false;

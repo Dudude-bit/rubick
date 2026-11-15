@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ClipboardCopy, Lock, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,47 @@ export function CopyRule({ refusal }: { refusal: Refusal }) {
       />
       {t("empty", "unknownCopyRule")}
     </Button>
+  );
+}
+
+function ClampedSaid({ said }: { said: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [cut, setCut] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const measure = () => setCut(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [said, open]);
+  return (
+    <>
+      <span
+        ref={ref}
+        className={cn(
+          "min-w-0 flex-1 basis-40 break-words text-fg-mut",
+          !open && "line-clamp-2"
+        )}
+        title={said}
+      >
+        {said}
+      </span>
+      {(cut || open) && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((previous) => !previous)}
+          className="flex-none rounded-sm px-1 text-caption text-fg-mut underline underline-offset-2 hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        >
+          {open ? t("empty", "showLess") : t("empty", "showMore")}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -83,12 +124,7 @@ export function Unknown({
           />
           <span className="min-w-0">{question}</span>
         </span>
-        <span
-          className="line-clamp-2 min-w-0 flex-1 basis-40 break-words text-fg-mut"
-          title={said}
-        >
-          {said}
-        </span>
+        <ClampedSaid said={said} />
         {onRetry && (
           <ReadAgain error={error} onRetry={onRetry} className="flex-none" />
         )}

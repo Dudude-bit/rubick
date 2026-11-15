@@ -4058,6 +4058,8 @@ export const en = {
       "{name} cannot compare against its repository, so nothing is being applied and an edit here stands until somebody fixes it. Then it is undone.",
     argoSelfHeals:
       "Argo self-heals this Application: an edit made here is put back on its next comparison, within about five minutes.",
+    argoSelfHealsThrough:
+      "Argo self-heals the Application that delivers {kind} {name}: an edit made here is put back on its next comparison, within about five minutes.",
     argoAutoSyncNoHeal:
       "Auto-sync is on but self-heal is off, so an edit here stands until the next commit touches this object.",
     argoNoAutoSync:
@@ -5627,6 +5629,7 @@ export const en = {
       "The cluster serves this kind and answered that no such object exists.",
     printedMore: "Showing the first {count}. The cluster has more.",
     showMore: "Show more",
+    showLess: "Show less",
     // A NetworkPolicy's four readings of one direction, and its three of a
     // `podSelector`. Each one is a state the others would be mistaken for.
     saysNothing: "not restricted by this policy",
@@ -7374,6 +7377,8 @@ export const en = {
       "No matches yet: {answered} of {total} clusters have answered.",
     stillSearchingFor: "Still reading names for “{query}”…",
     nothingToOpenYet: "Nothing to open yet: the names are still being read.",
+    opensWhenRead:
+      "Enter is kept: it opens the first match as soon as one is read.",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
     nothingSearchedAnywhere:

@@ -1,6 +1,6 @@
 import type { SearchFailureKind } from "@/generated/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
@@ -581,21 +581,74 @@ describe("the command palette's hits", () => {
   });
 
   /**
-   * Enter with no name read yet did nothing, silently. Fails if the press
-   * leaves the hint saying only that it is still searching, so the reader
-   * cannot tell a dead key from a slow cluster.
+   * Enter pressed while names were still being read was dropped, and a
+   * second Enter opened the match. Fails if the press is not kept and
+   * acted on the first result once it arrives, or if the field says
+   * nothing about the kept press.
    */
-  it("says nothing is there to open yet when Enter lands before any name", async () => {
+  it("keeps an Enter pressed before any name and opens the first match when it arrives", async () => {
     search.searching = true;
     search.status = "searching";
     await open("marco");
     await screen.findByText(/Still reading names for/);
 
-    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(await screen.findByText(/Enter is kept/)).toBeInTheDocument();
+    expect(useScopeTabStore.getState().tabs).toHaveLength(1);
 
-    expect(await screen.findByText(/Nothing to open yet/)).toBeInTheDocument();
+    search.hits = [hit({ name: "marco-1", namespace: "shop" })];
+    search.searching = false;
+    search.status = "done";
+    act(() =>
+      useClusterStore.setState({
+        contexts: [...useClusterStore.getState().contexts],
+      })
+    );
+
+    await waitFor(() =>
+      expect(useScopeTabStore.getState().tabs).toHaveLength(2)
+    );
+  });
+
+  /** A kept Enter must not open something the reader has since retyped away from. */
+  it("forgets a kept Enter when the query changes", async () => {
+    search.searching = true;
+    search.status = "searching";
+    await open("marco");
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    await screen.findByText(/Enter is kept/);
     await userEvent.keyboard("x");
-    expect(screen.queryByText(/Nothing to open yet/)).toBeNull();
+    expect(screen.queryByText(/Enter is kept/)).toBeNull();
+
+    search.hits = [hit({ name: "marcox", namespace: "shop" })];
+    search.searching = false;
+    search.status = "done";
+    act(() =>
+      useClusterStore.setState({
+        contexts: [...useClusterStore.getState().contexts],
+      })
+    );
+    await screen.findByText(/marcox/);
+    expect(useScopeTabStore.getState().tabs).toHaveLength(1);
+  });
+
+  /**
+   * After a miss the highlight sat on "Search the other kinds too" and
+   * stayed there for the next query, so Enter did not open the match. Fails
+   * if the active row stops resetting to the best match when the text moves.
+   */
+  it("moves the highlight back to the best match when the query changes", async () => {
+    search.hits = [];
+    await open("zzzz");
+    await screen.findByText("Search 1 more kind too");
+    await userEvent.keyboard("{ArrowDown}");
+    const field = screen.getByRole("combobox");
+    expect(field.getAttribute("aria-activedescendant")).toMatch(/search-more/);
+
+    search.hits = [hit({ name: "zzzzy", namespace: "shop" })];
+    await userEvent.keyboard("y");
+    await screen.findByText(/zzzzy/);
+    expect(field.getAttribute("aria-activedescendant")).toMatch(/hit:/);
   });
 
   it("still opens the kinds it does have a page for", async () => {

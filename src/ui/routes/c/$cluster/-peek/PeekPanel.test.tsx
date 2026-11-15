@@ -2544,6 +2544,66 @@ describe("PeekPanel on an object with no status of its own", () => {
     expect(await screen.findByText("1 problem")).toBeInTheDocument();
     useClusterStore.setState({ isConnected: false });
   });
+  /**
+   * The api HPA's peek said "1 problem" in its header and led with nothing,
+   * where a Deployment's and a Pod's lead with the finding. Fails if a peek
+   * of a kind with no finding of its own stops drawing the shell's item for
+   * the object, here one that opens itself as the backend's do.
+   */
+  it("leads with the finding the shell counts against it, under a header that counts one problem", async () => {
+    vi.mocked(commands.listApiCatalog).mockResolvedValue({
+      entries: [
+        {
+          group: "autoscaling",
+          version: "v2",
+          kind: "HorizontalPodAutoscaler",
+          plural: "horizontalpodautoscalers",
+          namespaced: true,
+          verbs: ["get", "list"],
+          shortNames: ["hpa"],
+          hasStatus: true,
+        },
+      ],
+      unread: [],
+    });
+    const object = {
+      ...buildApplication(),
+      name: "cart",
+      namespace: "shop",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      spec: { minReplicas: 2, maxReplicas: 10 },
+      status: null,
+    };
+    vi.mocked(commands.getCustomResource).mockResolvedValue(object);
+    vi.mocked(commands.getServedObject).mockResolvedValue(object);
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "cart",
+      namespace: "shop",
+    };
+    shell.items = [
+      {
+        ...self,
+        key: "hpa/shop/cart",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+        opens: self,
+      },
+    ];
+    useClusterStore.setState({ isConnected: true });
+    await wrap("/c/prod/events?peek=horizontalpodautoscalers/shop/cart");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    expect(await screen.findByTestId("findings-block")).toHaveTextContent(
+      "FailedGetScale"
+    );
+    useClusterStore.setState({ isConnected: false });
+  });
 });
 
 describe("PeekPanel tab persistence", () => {
@@ -2599,6 +2659,70 @@ describe("PeekPanel tab persistence", () => {
         "true"
       )
     );
+  });
+
+  const failing = {
+    key: "pod/k8s-gui-test/log-demo-1",
+    tone: "err",
+    kind: "Pod",
+    name: "log-demo-1",
+    namespace: "k8s-gui-test",
+    reason: "CrashLoopBackOff",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Pod", name: "log-demo-1", namespace: "k8s-gui-test" },
+  };
+
+  /**
+   * Enter from a failing pod's peek opened its page on Containers, the tab
+   * the last pod was left on, hiding the cause block. Fails if a tab
+   * remembered from another object of the kind still travels to the page of
+   * one with a problem.
+   */
+  it("opens a failing pod's page on Overview when the tab was only remembered", async () => {
+    shell.items = [failing];
+    try {
+      await wrap(POD_PEEK, withOpeners);
+      await screen.findByText("CrashLoopBackOff");
+      await openTab("Logs");
+      await userEvent.click(screen.getByText("peek other pod"));
+      await waitFor(() =>
+        expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        )
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: /Open full page/ })
+      );
+      await waitFor(() =>
+        expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1")
+      );
+    } finally {
+      shell.items = [];
+    }
+  });
+
+  /** A tab the reader picked on this very object is still wanted on its page, problem or not. */
+  it("takes a tab the reader chose on a failing pod to its page", async () => {
+    shell.items = [failing];
+    try {
+      await wrap(POD_PEEK, withOpeners);
+      await userEvent.click(screen.getByText("peek other pod"));
+      await screen.findByRole("tab", { name: "Logs" });
+      await openTab("Logs");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Open full page/ })
+      );
+      await waitFor(() =>
+        expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1?tab=logs")
+      );
+    } finally {
+      shell.items = [];
+    }
   });
 });
 

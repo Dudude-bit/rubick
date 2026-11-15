@@ -35,13 +35,19 @@ pub const MAX_KIND_CONCURRENCY: usize = 3;
 /// fan out across a 200-context kubeconfig.
 pub const MAX_CONTEXTS: usize = 16;
 
-/// Case-insensitive substring match on name or namespace — the same
-/// rule the palette applied client-side before the search moved here.
+/// Every whitespace-separated word of the query is a case-insensitive
+/// substring of the name or of the namespace, each word on its own, so
+/// "lab api" finds `api` in `lab` and "api lab" does too.
 #[must_use]
 pub fn matches(needle: &str, name: &str, namespace: Option<&str>) -> bool {
-    let needle = needle.to_lowercase();
-    name.to_lowercase().contains(&needle)
-        || namespace.is_some_and(|ns| ns.to_lowercase().contains(&needle))
+    let name = name.to_lowercase();
+    let namespace = namespace.map(str::to_lowercase);
+    let mut words = needle.split_whitespace().peekable();
+    words.peek().is_some()
+        && words.all(|word| {
+            let word = word.to_lowercase();
+            name.contains(&word) || namespace.as_ref().is_some_and(|ns| ns.contains(&word))
+        })
 }
 
 /// Validate and normalise the query text.
@@ -185,6 +191,15 @@ mod tests {
         assert!(matches("API", "api-server-0", None));
         assert!(matches("prod", "web", Some("prod-eu")));
         assert!(!matches("api", "web", Some("staging")));
+    }
+
+    #[test]
+    fn two_words_may_name_the_namespace_and_the_object() {
+        assert!(matches("lab api", "api", Some("lab")));
+        assert!(matches("api lab", "api", Some("lab")));
+        assert!(!matches("lab api", "web", Some("lab")));
+        assert!(!matches("lab api", "api", Some("prod")));
+        assert!(!matches("lab api", "api", None));
     }
 
     #[test]

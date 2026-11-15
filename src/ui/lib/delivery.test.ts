@@ -252,6 +252,25 @@ describe("an object a controller makes", () => {
       "Argo CD · shop · via Deployment api"
     );
   });
+
+  /**
+   * The ReplicaSet's notice opened "Argo self-heals this Application", which
+   * describes the Deployment. Fails if a notice judged through the owner
+   * stops naming the owner in its first sentence, or an object delivered
+   * directly loses its own wording.
+   */
+  it("opens by naming the owner when delivery is judged through it", () => {
+    const self = delivered({
+      drift: "reverted",
+      note: { key: "argoSelfHeals" },
+    });
+    expect(deliveryLine([{ ...self, through }], t)?.detail).toMatch(
+      /^Argo self-heals the Application that delivers Deployment api: /
+    );
+    expect(deliveryLine([self], t)?.detail).toMatch(
+      /^Argo self-heals this Application: /
+    );
+  });
 });
 
 describe("the list column names the controller for the rule and marks the exception", () => {

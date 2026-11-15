@@ -210,4 +210,51 @@ describe("Unknown", () => {
       screen.getByRole("button", { name: /again/i })
     );
   });
+
+  /**
+   * The cluster's sentence in a peek's notice was cut at two lines with
+   * nothing to read the rest by. Fails if a cut sentence loses its toggle,
+   * the toggle is not a keyboard stop, or a sentence that fits grows one.
+   */
+  it("gives a cut sentence a toggle that reads it whole", async () => {
+    const heights = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get");
+    const client = vi.spyOn(HTMLElement.prototype, "clientHeight", "get");
+    try {
+      heights.mockReturnValue(60);
+      client.mockReturnValue(30);
+      const { container } = render(
+        <Unknown
+          compact
+          question="Who is behind this Service?"
+          error={new Error(REFUSED)}
+        />
+      );
+      const said = container.querySelector("[title]") as HTMLElement;
+      expect(said.className).toContain("line-clamp-2");
+      await userEvent.tab();
+      const toggle = screen.getByRole("button", { name: "Show more" });
+      expect(toggle).toHaveFocus();
+      await userEvent.keyboard("{Enter}");
+      expect(said.className).not.toContain("line-clamp-2");
+      expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+        "aria-expanded",
+        "true"
+      );
+    } finally {
+      heights.mockRestore();
+      client.mockRestore();
+    }
+  });
+
+  /** Fails if a sentence that fits on its lines is given a toggle with nothing to reveal. */
+  it("offers no toggle where the sentence fits", () => {
+    render(
+      <Unknown
+        compact
+        question="Who?"
+        error={new Error("etcdserver: request timed out")}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+  });
 });

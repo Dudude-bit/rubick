@@ -6,6 +6,7 @@
 
 import {
   useMemo,
+  useState,
   useRef,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -57,11 +58,13 @@ import { ResourceType } from "@/lib/resource-registry";
 import { useObjectConnections } from "@/hooks/useConnections";
 import { governanceFindings } from "@/lib/governance-findings";
 import { statusRole, type StatusRole } from "@/lib/status-role";
-import { WithProblem } from "../-object/ProblemTone";
+import { FindingsBlock, WithProblem } from "../-object/ProblemTone";
+import { itemFinding } from "../-object/item-finding";
 import {
   GOVERNED,
   listedKindOf,
   problemOf,
+  useListedItems,
   useListedProblem,
 } from "../-object/problem";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
@@ -263,6 +266,16 @@ export function PeekContent({
   // `?tab=children` the tab then recorded as its route.
   const view = ownView(target);
   const landing = peekLanding(target);
+  const objectKey = `${target.kind}/${namespace ?? ""}/${target.name}`;
+  const [choseTabFor, setChoseTabFor] = useState<string | null>(null);
+  const hasProblem =
+    useListedProblem(listedKindOf(target), namespace, target.name, true) !==
+    null;
+  // A tab remembered from the last object of this kind would hide the cause.
+  const carriedTab =
+    hasProblem && choseTabFor !== objectKey
+      ? null
+      : pageTab(activeTab, target.kind);
   const fullPage = objectLink(
     {
       kind: target.kind,
@@ -270,9 +283,7 @@ export function PeekContent({
       namespace,
       crd: target.crd,
     },
-    target.via
-      ? landing
-      : { tab: pageTab(activeTab, target.kind) ?? undefined, view }
+    target.via ? landing : { tab: carriedTab ?? undefined, view }
   );
   const routable = fullPage !== null;
   const openFullPage = () => {
@@ -451,7 +462,10 @@ export function PeekContent({
         // without the sheet replaying its open animation.
         key={`${target.kind}/${namespace ?? ""}/${target.name}`}
         value={activeTab}
-        onValueChange={(value) => onTabChange(value as PeekTabId)}
+        onValueChange={(value) => {
+          setChoseTabFor(objectKey);
+          onTabChange(value as PeekTabId);
+        }}
         className="flex min-h-0 flex-1 flex-col"
       >
         {/* Pills, still: this strip sits inside a panel over a page that has
@@ -654,7 +668,7 @@ function PeekOverview({
                 onRetry={onRetry}
               />
             )}
-            {summary.lead}
+            {summary.lead || <ShellFindings target={target} />}
             {summary.groups.map((group) => (
               <div key={group.title}>
                 <PeekHeading title={group.title} count={group.count} />
@@ -691,6 +705,31 @@ function PeekOverview({
         <PeekEvents target={target} />
       </div>
     </ObjectUnreadContext.Provider>
+  );
+}
+
+/**
+ * What the shell counts against an object whose peek leads with no finding of
+ * its own, worded as its page words it, so the header's "1 problem" is
+ * followed by the problem.
+ */
+function ShellFindings({ target }: { target: PeekTarget }) {
+  const t = useT();
+  const kind = listedKindOf(target);
+  const items = useListedItems(
+    kind,
+    target.namespace ?? null,
+    target.name,
+    true
+  );
+  const findings = (items ?? [])
+    .filter((item) => item.kind === kind && item.name === target.name)
+    .map((item) => itemFinding(item, t));
+  if (findings.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <FindingsBlock findings={findings} />
+    </div>
   );
 }
 

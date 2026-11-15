@@ -1685,6 +1685,50 @@ describe("the order the palette draws hits in", () => {
     expect(order.at(-1)).toBe("ConfigMap/kube-root-ca.crt");
   });
 
+  /**
+   * "lab api" asked for the object api in the namespace lab and found
+   * nothing, because the whole query was one needle. Fails if a word the
+   * namespace answers stops being left to the namespace, so the exact name
+   * ranks first in either word order.
+   */
+  it("reads two words as a namespace and a name, in either order", () => {
+    const found = [
+      hit("Pod", "api-7d9f", "lab"),
+      hit("Deployment", "api", "lab"),
+      hit("Pod", "api-7d9f", "prod"),
+    ];
+    for (const needle of ["lab api", "api lab"]) {
+      expect(
+        orderHits(found, needle)
+          .slice(0, 2)
+          .map(({ hit }) => `${hit.kind}/${hit.name}`)
+      ).toEqual(["Deployment/api", "Pod/api-7d9f"]);
+    }
+  });
+
+  /** Fails if a hit found through its namespace alone claims to be named by the query. */
+  it("says a hit matched by namespace only when no word of the query is in its name", () => {
+    const own = (name: string): SearchHit => ({
+      context: "k3d-dev",
+      kind: "Pod",
+      group: "",
+      plural: "pods",
+      name,
+      namespace: "lab",
+    });
+    const entries = buildPaletteEntries(
+      state({
+        text: "lab api",
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext([own("api-0"), own("worker")]),
+      })
+    );
+    const caption = ids(entries).indexOf("cap:ns:k3d-dev");
+    expect(caption).toBeGreaterThan(-1);
+    expect(entries[caption - 1]).toMatchObject({ hit: { name: "api-0" } });
+    expect(entries[caption + 1]).toMatchObject({ hit: { name: "worker" } });
+  });
+
   /** Marco's "could not read 13 kinds" list was in a new order on every open. */
   it("names kinds in one order whatever order the cluster listed them in", () => {
     const kinds = ["Role", "DaemonSet", "ClusterRole"].map((kind) => ({
