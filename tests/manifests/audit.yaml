@@ -2,9 +2,10 @@
 # Apply: kubectl apply -f tests/manifests/audit.yaml
 # Clean up: kubectl delete ns audit-test audit-clean && kubectl delete clusterrolebinding audit-test-admin
 #
-# Some pods here never start (an unsafe sysctl, an NFS server that is not
+# Some templates here never run (an unsafe sysctl, an NFS server that is not
 # there, a Windows HostProcess on Linux nodes): Audit judges templates, and
-# the templates are what is being shown.
+# the templates are what is being shown. One the kubelet would reject and
+# its controller make again is kept at no replicas.
 #
 # A reader with rights in both namespaces and no PodDisruptionBudgets in
 # audit-test: the audit-reader account below. Make a kubeconfig user for it
@@ -66,14 +67,17 @@ spec:
           volumeMounts:
             - { name: run, mountPath: /host-run }
 ---
-# An unsafe sysctl, a custom SELinux user, an NFS volume: the pod never starts.
+# An unsafe sysctl, a custom SELinux user, an NFS volume. No replicas: the
+# kubelet rejects every pod with an unsafe sysctl (SysctlForbidden), and the
+# ReplicaSet makes another at once, thousands in minutes. Audit judges the
+# template, which is here whatever the replica count.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kernel-and-volumes
   namespace: audit-test
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels: { app: kernel-and-volumes }
   template:

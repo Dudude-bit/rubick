@@ -1133,6 +1133,71 @@ pub(super) mod tests {
         assert!(released.expect("the ask releases it").expect("joined"));
     }
 
+    /// Every `Deployment`, `StatefulSet`, `Pod` and `CronJob` in the Audit fixture,
+    /// as it would be judged once applied.
+    fn fixture_templates() -> Vec<(String, DynamicObject)> {
+        use serde::Deserialize;
+        const FIXTURE: &str = include_str!("../../../../tests/manifests/audit.yaml");
+        serde_yaml::Deserializer::from_str(FIXTURE)
+            .filter_map(|document| {
+                let value = Value::deserialize(document).ok()?;
+                let kind = value["kind"].as_str()?.to_string();
+                ["Deployment", "StatefulSet", "Pod", "CronJob"]
+                    .contains(&kind.as_str())
+                    .then(|| (kind, serde_json::from_value(value).expect("an object")))
+            })
+            .collect()
+    }
+
+    /// A template the kubelet rejects for an unsafe sysctl makes no pods,
+    /// since its controller makes another for every rejected one, and the
+    /// fixture still breaks what it was written to break. Fails if the
+    /// fixture floods the cluster, or stops showing the rules.
+    #[test]
+    fn the_audit_fixture_applies_runs_no_rejected_pods_and_still_breaks_its_rules() {
+        let mut tripped: Vec<(String, RuleId)> = Vec::new();
+        for (kind, object) in fixture_templates() {
+            let name = object.metadata.name.clone().unwrap_or_default();
+            let own = if kind == "Pod" {
+                let pod: Pod = object.clone().try_parse().expect("a pod");
+                pod_judged(&pod, Some(37)).expect("judged").own
+            } else {
+                entry_of(&kind, object.clone(), Some(37))
+                    .expect("judged")
+                    .own
+            };
+            let rejected = own.iter().any(|f| f.rule == RuleId::PssSysctls);
+            if rejected {
+                let makes_none = match kind.as_str() {
+                    "CronJob" => object.data["spec"]["suspend"] == json!(true),
+                    "Pod" => false,
+                    _ => object.data["spec"]["replicas"] == json!(0),
+                };
+                assert!(
+                    makes_none,
+                    "{name} would be made again for every rejected pod"
+                );
+            }
+            tripped.extend(own.iter().map(|f| (name.clone(), f.rule)));
+        }
+        for (name, rule) in [
+            ("everything-wrong", RuleId::PssHostPorts),
+            ("everything-wrong", RuleId::PssPrivileged),
+            ("everything-wrong", RuleId::PssHostNamespaces),
+            ("everything-wrong", RuleId::RuntimeSocket),
+            ("everything-wrong", RuleId::EnvSecretLiteral),
+            ("kernel-and-volumes", RuleId::PssSysctls),
+            ("kernel-and-volumes", RuleId::PssSelinux),
+            ("kernel-and-volumes", RuleId::PssVolumeTypes),
+            ("as-root", RuleId::PssRunAsUserRoot),
+        ] {
+            assert!(
+                tripped.contains(&(name.to_string(), rule)),
+                "{name} no longer breaks {rule:?}"
+            );
+        }
+    }
+
     /// The same object seen again at the same version is not judged again.
     /// Fails if a resync, which re-applies every object, judges the cluster.
     #[tokio::test]
