@@ -337,6 +337,8 @@ function TopologyMap() {
   };
 
   const drawnNamespaces = map.reads.size;
+  // Fitted to what the first batches drew, then once more to the whole map.
+  const whole = map.phase === "ready" || map.phase === "ended";
   const nothing =
     map.phase === "ready" &&
     model.nodes.length === 0 &&
@@ -506,6 +508,7 @@ function TopologyMap() {
             onOpen={onOpen}
             highlight={matches}
             focus={focus}
+            fitKey={`${grouping}${whole ? "\u0000whole" : ""}`}
             ariaLabel={t("topology", "canvasLabel")}
             summaryText={(group) => model.summaries.get(group.id) ?? ""}
           />

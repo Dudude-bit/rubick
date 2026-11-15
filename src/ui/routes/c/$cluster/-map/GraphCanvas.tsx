@@ -3,7 +3,7 @@
  * Traffic draws its flows on.
  *
  * ```
- * <GraphCanvas groups nodes edges onToggleGroup onOpen onOpenEdge? highlight? focus? ariaLabel ref />
+ * <GraphCanvas groups nodes edges onToggleGroup onOpen onOpenEdge? highlight? focus? fitKey? ariaLabel ref />
  *
  * GraphNode  { id, group: string | null, kind, crd?, label, sub?, tone: MapTone,
  *              badge?: { text, tone }, rank? }
@@ -25,6 +25,9 @@
  *   motion and while the canvas is off screen.
  * - `onOpenEdge` makes every edge a button the keyboard reaches; without it
  *   an edge shows its `label` and `sub` while either end is singled out.
+ * - The view is fitted once to the first layout laid out whole, and again
+ *   to the first after `fitKey` changes; `null` holds the fit back. A later
+ *   change moves nothing under the reader.
  * - Places are worked out in a worker. Only a group whose nodes or shaping
  *   edges changed is laid out again, so a tone or a label never moves
  *   anything, and a node added keeps the others in their order.
@@ -76,6 +79,8 @@ export type { GraphCanvasHandle, GraphEdge, GraphGroup, GraphNode };
 const NODE_TYPES = { object: ObjectNode, frame: GroupFrame, card: GroupCard };
 const EDGE_TYPES = { map: MapEdge };
 
+const FIT = { padding: 0.08 };
+
 /** Past this many drawn nodes only those in view are mounted. */
 export const MOUNT_ALL_UP_TO = 600;
 
@@ -90,6 +95,8 @@ export interface GraphCanvasProps {
   highlight?: ReadonlySet<string> | null;
   /** A node to pan to once it is placed: a search's pick in a group just opened. */
   focus?: string | null;
+  /** A new value fits the view to the next layout laid out whole; `null` waits. */
+  fitKey?: string | null;
   ariaLabel: string;
   /** Plain words for a collapsed card's summary, for the image. */
   summaryText?: (group: GraphGroup) => string;
@@ -114,6 +121,7 @@ function Canvas({
   onOpenEdge,
   highlight,
   focus,
+  fitKey = "",
   ariaLabel,
   summaryText,
   handle,
@@ -182,6 +190,14 @@ function Canvas({
     centred.current = focus;
     centre(focus);
   }, [focus, placement, centre]);
+
+  const fitted = useRef<string | null>(null);
+  useEffect(() => {
+    if (fitKey === null || fitted.current === fitKey) return;
+    if (!placement.settled || placement.groups.size === 0) return;
+    fitted.current = fitKey;
+    void flow.fitView(FIT);
+  }, [fitKey, placement, flow]);
 
   const reveal = useCallback(
     (id: string) => {
@@ -299,7 +315,7 @@ function Canvas({
   useImperativeHandle(
     handle,
     () => ({
-      fit: () => void flow.fitView({ padding: 0.08, duration: 200 }),
+      fit: () => void flow.fitView({ ...FIT, duration: 200 }),
       centre,
       toSvg: () =>
         mapSvg({
@@ -363,8 +379,6 @@ function Canvas({
             onlyRenderVisibleElements={drawn.nodes.length > MOUNT_ALL_UP_TO}
             minZoom={0.05}
             maxZoom={2}
-            fitView
-            fitViewOptions={{ padding: 0.08 }}
             ariaLabelConfig={{
               "node.a11yDescription.default": t("topology", "nodeKeys"),
               "node.a11yDescription.keyboardDisabled": t(

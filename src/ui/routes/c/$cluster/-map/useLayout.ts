@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   LayoutAnswer,
@@ -28,6 +28,8 @@ export interface Placement {
   /** Relative to the node's group box. */
   nodes: ReadonlyMap<string, Point>;
   failed: string | null;
+  /** Whether it answers what the canvas holds now, with no layout still being worked out. */
+  settled: boolean;
 }
 
 interface Laid {
@@ -191,7 +193,7 @@ export function askFor(
   return { request: { id: ++nextId, groups: asks }, signatures };
 }
 
-const NONE: Placement = {
+const NONE: Omit<Placement, "settled"> = {
   groups: new Map(),
   nodes: new Map(),
   failed: null,
@@ -207,12 +209,21 @@ export function useLayout(
   nodes: readonly GraphNode[],
   edges: readonly GraphEdge[]
 ): Placement {
-  const cache = useRef(new Map<string, Laid>());
-  const packed = useRef<string | null>(null);
-  const [placement, setPlacement] = useState<Placement>(NONE);
+  const [held] = useState(() => ({
+    cache: new Map<string, Laid>(),
+    packed: new Map<"last", string>(),
+  }));
+  const ask = useMemo(
+    () =>
+      askFor(groups, nodes, edges, held.cache, held.packed.get("last") ?? null),
+    [groups, nodes, edges, held]
+  );
+  const [laid, setLaid] = useState<{
+    placement: Omit<Placement, "settled">;
+    answers: Ask | null;
+  }>({ placement: NONE, answers: null });
 
   useEffect(() => {
-    const ask = askFor(groups, nodes, edges, cache.current, packed.current);
     if (!ask) return;
     let live = true;
     const started = performance.now();
@@ -220,7 +231,10 @@ export function useLayout(
       if (!live) return;
       if (answer.failed !== undefined) {
         const failed = answer.failed;
-        setPlacement((was) => ({ ...was, failed }));
+        setLaid((was) => ({
+          placement: { ...was.placement, failed },
+          answers: ask,
+        }));
         return;
       }
       const boxes = new Map<string, Box>();
@@ -229,23 +243,29 @@ export function useLayout(
         boxes.set(group.id, group);
         const signature = ask.signatures.get(group.id);
         if (group.positions && signature !== undefined)
-          cache.current.set(group.id, {
+          held.cache.set(group.id, {
             signature,
             width: group.width,
             height: group.height,
             positions: group.positions,
           });
         const positions =
-          group.positions ?? cache.current.get(group.id)?.positions ?? {};
+          group.positions ?? held.cache.get(group.id)?.positions ?? {};
         for (const [id, point] of Object.entries(positions)) at.set(id, point);
       }
-      packed.current = JSON.stringify(
-        ask.request.groups.map((group) => {
-          const box = boxes.get(group.id);
-          return [group.id, box?.width, box?.height];
-        })
+      held.packed.set(
+        "last",
+        JSON.stringify(
+          ask.request.groups.map((group) => {
+            const box = boxes.get(group.id);
+            return [group.id, box?.width, box?.height];
+          })
+        )
       );
-      setPlacement({ groups: boxes, nodes: at, failed: null });
+      setLaid({
+        placement: { groups: boxes, nodes: at, failed: null },
+        answers: ask,
+      });
       if (perf.recording) {
         const end = performance.now();
         perf.record({
@@ -269,7 +289,13 @@ export function useLayout(
     return () => {
       live = false;
     };
-  }, [groups, nodes, edges]);
+  }, [ask, held]);
 
-  return placement;
+  return useMemo(
+    () => ({
+      ...laid.placement,
+      settled: ask === null || laid.answers === ask,
+    }),
+    [laid, ask]
+  );
 }
