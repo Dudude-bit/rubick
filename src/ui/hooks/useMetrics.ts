@@ -24,12 +24,13 @@ const NO_POD_METRICS: PodMetrics[] = [];
 const NO_NODE_METRICS: NodeMetrics[] = [];
 
 /**
- * An error is not a sample, so it is not held to the recording's cadence:
- * a cluster answering 502 was asked every two seconds for as long as it was down.
+ * An error or no answer is not a sample, so it is not held to the recording's
+ * cadence: a cluster answering 502 was asked every two seconds for as long as
+ * it was down.
  */
 function rateFor(status: MetricsStatus | null | undefined): RefreshRate {
   if (isUnserved(status)) return "unserved";
-  return absenceOf(status) === "error" ? "metricsFailing" : "metrics";
+  return absenceOf(status) === null ? "metrics" : "metricsFailing";
 }
 
 type MetricsQueryOptions<T> = Omit<

@@ -26,7 +26,7 @@ use crate::state::AppState;
 
 use parse::{
     fetch_metrics, list_metrics, metrics_status_available, metrics_status_from_error,
-    parse_node_metric, parse_pod_metric,
+    parse_node_metric, parse_pod_metric, registered,
 };
 
 /// Get pod metrics from Metrics API
@@ -69,7 +69,7 @@ pub async fn get_pod_metrics_in(
         .await;
         let answer = combined(names, answers.into_iter().collect::<Result<Vec<_>>>()?);
         unread = answer.unread;
-        Ok((answer.status, answer.data))
+        Ok((registered(state, answer.status).await, answer.data))
     })
     .await?;
     Ok(PodMetricsResponse {
@@ -186,7 +186,7 @@ impl Unserved {
                 remembered.remove(&key(WHOLE_API));
                 remembered.remove(&key(read));
             }
-            MetricsStatusKind::Error => {
+            MetricsStatusKind::NotAnswering | MetricsStatusKind::Error => {
                 remembered.remove(&key(read));
             }
         }
@@ -293,7 +293,10 @@ mod tests {
     async fn a_cluster_with_no_metrics_server_is_asked_once_across_pages_and_a_reconnect() {
         use crate::client::served::{test_server::reconnectable, ServedIndex};
         crate::tls::provider();
-        let (state, hits, kubeconfig) = reconnectable(ServedIndex::default(), |_, _| {
+        let (state, hits, kubeconfig) = reconnectable(ServedIndex::default(), |path, _| {
+            if path == "/apis" {
+                return (200, API_GROUPS_WITHOUT_METRICS.to_string());
+            }
             (404, "404 page not found".to_string())
         })
         .await;
@@ -341,6 +344,52 @@ mod tests {
         state.metrics_unserved.forget("fake");
         get_node_metrics(&state).await.expect("checked again");
         assert_eq!(asked(), 2, "Check again asks the API");
+    }
+
+    const API_GROUPS_WITHOUT_METRICS: &str =
+        r#"{"kind":"APIGroupList","apiVersion":"v1","groups":[]}"#;
+
+    /// A spot node went down, metrics-server's pod moved,
+    /// and its registered API answered 404 until it was back. Said as "not
+    /// installed", the Nodes page told the on-call to have someone install
+    /// it, and held that for five minutes. Fails if a 404 from a registered
+    /// API is anything but not answering, if it is remembered rather than
+    /// asked again, or if a 404 with no API registered stops being "not
+    /// installed".
+    #[tokio::test]
+    async fn a_registered_metrics_api_that_answers_404_is_not_answering_and_asked_again() {
+        use crate::client::served::{test_server::connected, ServedIndex};
+        crate::tls::provider();
+        let (state, hits) = connected(ServedIndex::default(), |path, _| {
+            if path == "/apis" {
+                return (
+                    200,
+                    r#"{"kind":"APIGroupList","apiVersion":"v1","groups":[{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}]}"#
+                        .to_string(),
+                );
+            }
+            (404, "404 page not found".to_string())
+        })
+        .await;
+        let asked = |path: &str| hits.lock().unwrap().get(path).copied().unwrap_or(0);
+        let scope = ["shop".to_string(), "net".to_string()];
+
+        for _ in 0..2 {
+            let nodes = get_node_metrics(&state).await.expect("nodes");
+            assert!(matches!(
+                nodes.status.status,
+                MetricsStatusKind::NotAnswering
+            ));
+            assert_eq!(nodes.status.message.as_deref(), Some("404 page not found"));
+            let pods = get_pod_metrics_in(Some(&scope), &state)
+                .await
+                .expect("scoped");
+            assert!(matches!(
+                pods.status.status,
+                MetricsStatusKind::NotAnswering
+            ));
+        }
+        assert_eq!(asked("/apis/metrics.k8s.io/v1beta1/nodes"), 2);
     }
 
     /// A token that lapsed under an open list: the metrics poll gets a 401

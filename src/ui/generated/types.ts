@@ -2827,6 +2827,7 @@ export type MetricsStatusKind =
   | "available"
   | "notInstalled"
   | "forbidden"
+  | "notAnswering"
   | "error";
 
 export type TcpProbeReason = "refused" | "timedOut";

@@ -5203,6 +5203,12 @@ export const ru: Catalogue = {
       "Кластер ответил ошибкой. Запрос повторяется по обычному расписанию.",
     metricsRefusedSince: "Отказ с {time}",
     metricsFailingSince: "Сбои с {time}",
+    metricsNotAnswering:
+      "API метрик не отвечает, поэтому CPU и память не показаны",
+    metricsNotAnsweringBody:
+      "Возможно, его сервер перезапускается или переезжает на другой узел. Приложение спрашивает снова.",
+    metricsSilentSince: "Не отвечает с {time}",
+    metricsShortNotAnswering: "API метрик не отвечает",
     metricsCheckAgain: "Проверить снова",
     metricsChecking: "Проверяем…",
     metricsHideForCluster: "Скрыть для этого кластера",
@@ -7181,7 +7187,7 @@ export const ru: Catalogue = {
     longerNeedsPrometheus:
       "Для более длинных интервалов нужен Prometheus: {link}.",
     historyNeedsPrometheus:
-      "Без metrics-server их за период может показать Prometheus: {link}.",
+      "Без живых показаний их за период может показать Prometheus: {link}.",
     trendsNeedPrometheus: "Для загрузки за период нужен Prometheus: {link}.",
     trendsSortNote:
       "сначала с наименьшим запасом; каждая точка показывает пик своего интервала",

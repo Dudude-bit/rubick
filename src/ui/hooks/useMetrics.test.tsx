@@ -66,7 +66,9 @@ describe("how often an unserved metrics API is asked", () => {
     vi.useRealTimers();
   });
 
-  const answer = (status: "notInstalled" | "forbidden" | "error") => ({
+  const answer = (
+    status: "notInstalled" | "forbidden" | "notAnswering" | "error"
+  ) => ({
     status: { status, message: "404 page not found" },
     data: [],
     unread: [],
@@ -152,15 +154,24 @@ describe("how often an unserved metrics API is asked", () => {
     );
   });
 
-  /** A failing API may come back on its own, so it keeps the usual rate. */
-  it("keeps asking a failing API at the usual rate", async () => {
-    vi.mocked(commands.getPodsMetrics).mockResolvedValue(answer("error"));
-    const { result } = renderHook(() => useMetrics({ includeNodes: false }), {
-      wrapper,
-    });
-    await waitFor(() => expect(result.current.podStatus?.status).toBe("error"));
-    expect(result.current.podMetricsQuery.freshness.everyMs).not.toBe(
-      REFRESH_INTERVALS.unserved
-    );
-  });
+  /**
+   * A failing API, or one whose server is moving, comes back on its own, so
+   * it keeps the usual rate. Fails if "not answering" is held for minutes as
+   * "not installed" is, which is how a moving metrics-server read as missing.
+   */
+  it.each(["error", "notAnswering"] as const)(
+    "keeps asking an API that is %s at the usual rate",
+    async (status) => {
+      vi.mocked(commands.getPodsMetrics).mockResolvedValue(answer(status));
+      const { result } = renderHook(() => useMetrics({ includeNodes: false }), {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(result.current.podStatus?.status).toBe(status)
+      );
+      expect(result.current.podMetricsQuery.freshness.everyMs).not.toBe(
+        REFRESH_INTERVALS.unserved
+      );
+    }
+  );
 });

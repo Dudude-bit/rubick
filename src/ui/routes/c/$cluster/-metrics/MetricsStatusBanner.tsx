@@ -42,11 +42,21 @@ interface MetricsStatusBannerProps {
 const NOTICE: Record<
   MetricsAbsence,
   {
-    title: "metricsNotInstalled" | "metricsForbidden" | "metricsError";
+    title:
+      | "metricsNotInstalled"
+      | "metricsForbidden"
+      | "metricsNotAnswering"
+      | "metricsError";
     body:
       | "metricsNotInstalledBody"
       | "metricsForbiddenBody"
+      | "metricsNotAnsweringBody"
       | "metricsErrorBody";
+    since:
+      | "metricsRefusedSince"
+      | "metricsSilentSince"
+      | "metricsFailingSince"
+      | null;
     glyph: typeof Lock;
     code: string;
   }
@@ -54,18 +64,28 @@ const NOTICE: Record<
   notInstalled: {
     title: "metricsNotInstalled",
     body: "metricsNotInstalledBody",
+    since: null,
     glyph: Info,
     code: ERROR_CODES.NOT_FOUND,
   },
   forbidden: {
     title: "metricsForbidden",
     body: "metricsForbiddenBody",
+    since: "metricsRefusedSince",
     glyph: Lock,
     code: ERROR_CODES.PERMISSION,
+  },
+  notAnswering: {
+    title: "metricsNotAnswering",
+    body: "metricsNotAnsweringBody",
+    since: "metricsSilentSince",
+    glyph: TriangleAlert,
+    code: ERROR_CODES.NO_ANSWER,
   },
   error: {
     title: "metricsError",
     body: "metricsErrorBody",
+    since: "metricsFailingSince",
     glyph: TriangleAlert,
     code: ERROR_CODES.UNKNOWN,
   },
@@ -101,7 +121,7 @@ function useFirstSeen(
 ): number | null {
   const queryClient = useQueryClient();
   const key =
-    context && (absence === "forbidden" || absence === "error")
+    context && absence && NOTICE[absence].since
       ? `${context}:${absence}`
       : null;
   const [now] = useState(Date.now);
@@ -214,7 +234,7 @@ export function MetricsStatusBanner({
   if (absence === "notInstalled" && hidden.includes(absence)) return null;
   if (!settled) return null;
 
-  const { title, body, glyph: Glyph } = NOTICE[absence];
+  const { title, body, since: sinceWords, glyph: Glyph } = NOTICE[absence];
   const information = absence === "notInstalled";
 
   return (
@@ -244,15 +264,9 @@ export function MetricsStatusBanner({
           <p className="text-fg-mut">
             <HeldLines>{t("cluster", body)}</HeldLines>
           </p>
-          {since !== null && (
+          {since !== null && sinceWords && (
             <p className="text-caption text-fg-fnt" data-testid="metrics-since">
-              {t(
-                "cluster",
-                absence === "forbidden"
-                  ? "metricsRefusedSince"
-                  : "metricsFailingSince",
-                { time: formatWhen(since, "clock") }
-              )}
+              {t("cluster", sinceWords, { time: formatWhen(since, "clock") })}
             </p>
           )}
         </div>

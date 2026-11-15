@@ -83,6 +83,41 @@ describe("MetricsStatusBanner", () => {
     expect(banner.className).not.toContain("border-err");
   });
 
+  /**
+   * Metrics-server's pod moved off a node going down and
+   * its registered API stopped answering, which the Nodes page said as "not
+   * installed", in the blue a fact about the cluster wears. Fails if a metrics
+   * API that is not answering is told as missing, put away as information, or
+   * offered no read again.
+   */
+  it("says a metrics API that is not answering is being asked again, in the failed frame", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner
+        status={{ status: "notAnswering", message: "404 page not found" }}
+      />
+    );
+    const banner = bannerOf(
+      "The metrics API is not answering, so CPU and memory are not shown"
+    );
+    expect(banner).toHaveTextContent(
+      "Its server may be restarting or moving to another node. The app is asking again."
+    );
+    expect(banner).not.toHaveTextContent(/not installed/);
+    expect(banner.className).toContain("border-dashed");
+    expect(banner.querySelector("svg")).toHaveClass("text-warn");
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        /^Not answering since \d/
+      )
+    );
+  });
+
   /** Fails if a refusal goes back to the error tone it cannot be fixed from. */
   it("draws a refusal calmly, not as an error", async () => {
     await renderWithRouter(

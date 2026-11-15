@@ -542,7 +542,7 @@ describe("UsageBlock and a history supplier", () => {
 
     expect(
       await screen.findByText(
-        /Without metrics-server, a Prometheus can still draw these over time/
+        /Without live readings, a Prometheus can still draw these over time/
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/Longer than this/)).toBeNull();

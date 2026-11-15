@@ -4640,6 +4640,12 @@ export const en = {
       "The cluster answered with an error. It is asked again on the usual schedule.",
     metricsRefusedSince: "Refused since {time}",
     metricsFailingSince: "Failing since {time}",
+    metricsNotAnswering:
+      "The metrics API is not answering, so CPU and memory are not shown",
+    metricsNotAnsweringBody:
+      "Its server may be restarting or moving to another node. The app is asking again.",
+    metricsSilentSince: "Not answering since {time}",
+    metricsShortNotAnswering: "metrics API not answering",
     metricsCheckAgain: "Check again",
     metricsChecking: "Checking…",
     metricsHideForCluster: "Hide for this cluster",
@@ -6474,7 +6480,7 @@ export const en = {
       "{vendor} did not answer: {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
     longerNeedsPrometheus: "Longer than this needs a Prometheus: {link}.",
     historyNeedsPrometheus:
-      "Without metrics-server, a Prometheus can still draw these over time: {link}.",
+      "Without live readings, a Prometheus can still draw these over time: {link}.",
     trendsNeedPrometheus: "Utilisation over time needs a Prometheus: {link}.",
     trendsSortNote: "least headroom first, each point the peak of its bucket",
     nodesFromPods:
