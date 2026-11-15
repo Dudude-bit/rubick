@@ -178,6 +178,7 @@ describe("what the shared Changes report says beyond the changes", () => {
   it("says the timeline was kept for this session only, as a warning", () => {
     const span = { from, seenAt: to, to: null };
     const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
       keeping: { says: "off" },
       unreadable: 0,
       error: null,
@@ -199,6 +200,7 @@ describe("what the shared Changes report says beyond the changes", () => {
   it("calls no watch quiet over rows not read yet", () => {
     const span = { from, seenAt: to, to: null };
     const read = (readFrom: number | null) => ({
+      read: true,
       keeping: { says: "kept" as const },
       unreadable: 0,
       error: null,

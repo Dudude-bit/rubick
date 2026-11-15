@@ -846,6 +846,39 @@ describe("a watch that has recorded nothing", () => {
   });
 });
 
+describe("a timeline that could not be read", () => {
+  /**
+   * The page said the read failed, then "Not watching this cluster right
+   * now" over an empty clock, and the file sent on said the window held
+   * nothing. Fails if a failed read claims either.
+   */
+  it("says only that it could not be read, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "timeline_read") throw new Error("disk refused");
+      return undefined;
+    });
+    const collect = await mount();
+    await waitFor(() =>
+      expect(
+        screen.getByText(/^The timeline could not be read: /)
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByText("Not watching this cluster right now.")
+    ).toBeNull();
+    expect(screen.queryByText(/^Not observed /)).toBeNull();
+    const texts = JSON.stringify(collect());
+    expect(texts).not.toContain("Nothing on this clock in the window.");
+    expect(texts).not.toContain("Not watching this cluster right now.");
+    expect(texts).toContain("The timeline could not be read: ");
+  });
+});
+
 describe("warnings only, where the Event watch was refused", () => {
   const MIN = 60_000;
   /**

@@ -33,6 +33,7 @@ import {
 import { Eye, History, Lock } from "lucide-react";
 import type { Show } from "@/generated/types";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useTimeline, useTimelineHold } from "@/hooks/useTimeline";
@@ -131,8 +132,16 @@ export function Changes() {
   const windowWords =
     window === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day");
 
+  // A read that failed or has not answered says nothing of watching, and
+  // holds no rows to call the window empty by.
+  const unread = read.read
+    ? null
+    : read.error
+      ? t("changes", "readFailed", { reason: errorToShow(read.error) })
+      : t("share", "stillReading");
+
   useShareSection("changes", () => [
-    changesScreenSection(items, t, windowWords, show),
+    changesScreenSection(items, t, windowWords, show, unread),
     watchedSection(watching, ours, items, t, show, read),
   ]);
 
@@ -163,9 +172,9 @@ export function Changes() {
                 </span>
               )}
             </>
-          ) : (
+          ) : read.read ? (
             t("changes", "notWatchingNow")
-          )
+          ) : undefined
         }
         description={
           earlier && (
@@ -234,6 +243,7 @@ export function Changes() {
               {t("changes", "readingKept")}
             </p>
           ) : (
+            read.read &&
             (items.length > 0 || quiet === null) && (
               <ChangesTimeline
                 items={items}
