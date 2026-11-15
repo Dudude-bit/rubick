@@ -161,6 +161,30 @@ describe("one surface reading the timeline", () => {
     expect(asked[1].before).toEqual({ at: 10, seq: 10 });
     expect(result.current.readFrom).toBeNull();
   });
+
+  /**
+   * A relist records every live event again under a new number and its old
+   * time. Fails if one older than the last row read becomes the tail: the
+   * next page would start below it, past changes nobody read, and the page
+   * would draw that stretch as read.
+   */
+  it("leaves a row recorded since but older than what was read for the page that reads there", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: 60_000, show: "all" }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    answers = [page([row("c", 30), row("old-event", 5, 31)])];
+    told("prod");
+    await waitFor(() => expect(result.current.rows).toHaveLength(3));
+    expect(result.current.rows.map((each) => each.id)).toEqual(["c", "b", "a"]);
+    expect(result.current.readFrom).toBe(10);
+    answers = [page([row("x", 8), row("old-event", 5, 31)])];
+    act(() => result.current.loadOlder());
+    await waitFor(() => expect(result.current.rows).toHaveLength(5));
+    expect(asked[2].before).toEqual({ at: 10, seq: 10 });
+  });
 });
 
 describe("the 5.0 journal", () => {

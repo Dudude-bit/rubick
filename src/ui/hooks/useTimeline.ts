@@ -58,20 +58,28 @@ export interface TimelineRead {
 
 const NO_ROWS: readonly TimelineRow[] = [];
 
-const newer = (a: TimelineRow, b: TimelineRow) => b.at - a.at || b.seq - a.seq;
+type Placed = Pick<TimelineRow, "at" | "seq">;
+
+const newer = (a: Placed, b: Placed) => b.at - a.at || b.seq - a.seq;
 
 /**
  * Rows recorded since the last read, laid into the ones held: a repeat of a
  * series leaves its old place. Both lists are newest first, so this costs the
  * held list once and sorts only what arrived; untouched rows keep their identity.
+ * Below `tail`, the last row held while older ones remain unread, a row
+ * arrived is left for the page that reads there: laid in, it would become the
+ * tail, and the next page would start below rows nobody read.
  */
 export function withNewer(
   held: readonly TimelineRow[],
-  arrived: readonly TimelineRow[]
+  arrived: readonly TimelineRow[],
+  tail: Placed | null = null
 ): TimelineRow[] {
   if (arrived.length === 0) return [...held];
-  const fresh = [...arrived].sort(newer);
-  const ids = new Set(fresh.map((row) => row.id));
+  const ids = new Set(arrived.map((row) => row.id));
+  const fresh = arrived
+    .filter((row) => tail === null || newer(row, tail) <= 0)
+    .sort(newer);
   const out: TimelineRow[] = [];
   let i = 0;
   let j = 0;
@@ -158,7 +166,11 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           now
             ? {
                 ...page,
-                rows: withNewer(now.rows, page.rows),
+                rows: withNewer(
+                  now.rows,
+                  page.rows,
+                  now.more ? (now.rows.at(-1) ?? null) : null
+                ),
                 more: now.more,
               }
             : now
