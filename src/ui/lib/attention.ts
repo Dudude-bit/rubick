@@ -194,7 +194,7 @@ export function checkSaid(check: AttentionCheck, t: T): string {
 }
 
 export interface Attention {
-  /** Worst first, then what is down now before pods already replaced, then the longest broken (undated first, as the backend ranks). */
+  /** As `ranked` orders them: a node that went down, then what began today, then the undated, then the long-standing, worst first in each. */
   items: AttentionItem[];
   /** Every problem, counting the rows the backend's ranked list cut. */
   total: number;
@@ -968,20 +968,19 @@ function rankKey(item: AttentionItem, now: number): number[] {
   const undated = Number.isNaN(at);
   return [
     wentDown(item) ? 0 : 1,
-    !undated && now - at >= LONG_STANDING_HOURS * 3_600_000 ? 1 : 0,
+    undated ? 1 : now - at < LONG_STANDING_HOURS * 3_600_000 ? 0 : 2,
     SEVERITY[item.tone],
     Number(item.replaced),
-    Number(undated),
     undated ? 0 : -at,
   ];
 }
 
 /**
  * The backend's `rank_key`, applied again with this side's rows beside its
- * own: a node that went down first; then, worst first, what began within a
- * day or has no date; then what has stood longer. Pods already replaced come
- * after what is down, a dated row before an undated one, the newest first.
- * A spot node lost a minute ago sat under month-old Job failures.
+ * own: a node that went down first; then what began within a day; then what
+ * has no date; then what has stood longer, worst first inside each. Pods
+ * already replaced come after what is down, the newest first. Services
+ * without endpoints for months, undated, sat among today's problems.
  */
 export function ranked(items: AttentionItem[], now: number): AttentionItem[] {
   const keys = new Map(items.map((item) => [item, rankKey(item, now)]));

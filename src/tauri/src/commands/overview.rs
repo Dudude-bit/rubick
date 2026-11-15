@@ -2439,18 +2439,18 @@ fn fold_replaced<'a>(
 pub const LONG_STANDING_HOURS: i64 = 24;
 
 /// What is happening now before what has stood for days: a node that went
-/// down first, since everything on it goes with it; then, worst first, what
-/// began within [`LONG_STANDING_HOURS`] or has no date; then what is older.
-/// Pods already replaced come after what is down, a dated row before an
-/// undated one, and the newest first. A spot node lost a minute ago sat under
-/// month-old Job failures.
+/// down first, since everything on it goes with it; then what began within
+/// [`LONG_STANDING_HOURS`]; then what has no date; then what is older, worst
+/// first inside each. Pods already replaced come after what is down, and the
+/// newest first. A spot node lost a minute ago sat under month-old Job
+/// failures, and Services without endpoints for months, undated, among
+/// today's.
 fn rank_key(
     problem: &ClusterProblem,
     now: DateTime<Utc>,
 ) -> (
     bool,
-    bool,
-    bool,
+    u8,
     bool,
     bool,
     std::cmp::Reverse<Option<DateTime<Utc>>>,
@@ -2460,12 +2460,16 @@ fn rank_key(
         .as_deref()
         .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
         .map(|at| at.with_timezone(&Utc));
+    let tier = match since {
+        Some(at) if now - at < chrono::Duration::hours(LONG_STANDING_HOURS) => 0,
+        None => 1,
+        Some(_) => 2,
+    };
     (
         !(problem.kind == "Node" && problem.reason == "NotReady"),
-        since.is_some_and(|at| now - at >= chrono::Duration::hours(LONG_STANDING_HOURS)),
+        tier,
         problem.severity == ProblemSeverity::Warning,
         problem.replaced,
-        since.is_none(),
         std::cmp::Reverse(since),
     )
 }

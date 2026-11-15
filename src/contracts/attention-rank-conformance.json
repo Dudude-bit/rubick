@@ -59,9 +59,9 @@
       "order": [
         "node",
         "pod-kube-proxy",
-        "undated",
         "pod-nats",
         "pod-unhealthy",
+        "undated",
         "job-38d",
         "hpa-74d"
       ]
@@ -155,7 +155,7 @@
       "order": ["a-second-less", "undated", "a-day"]
     },
     {
-      "name": "pods already replaced come after what is down, dated or not, and a date that does not parse is no date",
+      "name": "pods already replaced come after what is down in the same tier, and a date that does not parse is no date",
       "rows": [
         {
           "id": "replaced",
@@ -187,7 +187,48 @@
           "since": null
         }
       ],
-      "order": ["down", "garbled", "replaced", "cordoned"]
+      "order": ["down", "replaced", "garbled", "cordoned"]
+    },
+    {
+      "name": "undated rows that may have stood for months rank below what began today and above what is dated older, worst first",
+      "rows": [
+        {
+          "id": "svc-a",
+          "kind": "Service",
+          "reason": "NoEndpoints",
+          "severity": "warning",
+          "since": null
+        },
+        {
+          "id": "old-job",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "svc-b",
+          "kind": "Service",
+          "reason": "NoEndpoints",
+          "severity": "warning",
+          "since": null
+        },
+        {
+          "id": "today",
+          "kind": "Pod",
+          "reason": "Unhealthy",
+          "severity": "warning",
+          "since": "2026-11-15T09:00:00Z"
+        },
+        {
+          "id": "undated-critical",
+          "kind": "Deployment",
+          "reason": "Unavailable",
+          "severity": "critical",
+          "since": null
+        }
+      ],
+      "order": ["today", "undated-critical", "svc-a", "svc-b", "old-job"]
     }
   ]
 }

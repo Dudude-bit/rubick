@@ -871,7 +871,7 @@ describe("what Needs attention lists beyond pods", () => {
     });
   });
 
-  /** The worst row leads whichever reader found it, and the backend's cut still counts. */
+  /** Inside one tier the worst row leads whichever reader found it, and the backend's cut still counts. */
   it("ranks errors before warnings and counts what the backend cut", () => {
     const warning: ClusterProblem = {
       severity: "warning",
@@ -880,7 +880,7 @@ describe("what Needs attention lists beyond pods", () => {
       namespace: "shop",
       reason: "Restarting",
       detail: null,
-      since: "2026-10-05T10:00:00Z",
+      since: null,
       restarts: 7,
       foldedPods: null,
       replaced: false,
