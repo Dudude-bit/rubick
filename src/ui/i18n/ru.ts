@@ -2201,7 +2201,7 @@ export const ru: Catalogue = {
       "Пока allowPrivilegeEscalation не false, процесс может получить больше прав, чем у родителя, через setuid-файл. Профиль Restricted требует false.",
     pssRunAsNonRoot: "Не требует запуска не от root",
     pssRunAsNonRootWhy:
-      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. Явное false означает root нарочно и обходится дороже. Профиль Restricted требует true.",
+      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. С явным false эту проверку не делает никто. Профиль Restricted требует true; если контейнеру задан пользователь 0, это отдельная находка.",
     pssRunAsUserRoot: "Запускается от пользователя 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 означает root, заданный нарочно. Профиль Restricted это запрещает.",

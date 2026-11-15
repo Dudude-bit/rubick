@@ -591,14 +591,15 @@ fn restricted_linux(
 }
 
 /// Running as non-root: a container's own field, else the pod's. Stated
-/// false is running as root on purpose, and costs more than leaving it unset.
+/// false or left out, the restricted control's usual weight: false only
+/// lifts the check, and root on purpose is `runAsUser: 0`, which
+/// `pss-run-as-user-root` weighs.
 fn run_as(found: &mut Gathered, seat: &Seat<'_>, pod: Option<bool>) {
     let own = seat.sc.and_then(|sc| sc.run_as_non_root);
     match own.or(pod) {
         Some(true) => {}
-        Some(false) => found.raise(
+        Some(false) => found.add(
             RuleId::PssRunAsNonRoot,
-            AuditSeverity::Medium,
             set(
                 own.map(|_| &seat.at),
                 "securityContext.runAsNonRoot",
@@ -653,9 +654,8 @@ fn pod_level(
             }
         }
         if pod.run_as_non_root == Some(false) {
-            found.raise(
+            found.add(
                 RuleId::PssRunAsNonRoot,
-                AuditSeverity::Medium,
                 set(None, "securityContext.runAsNonRoot", "false"),
             );
         }
@@ -1015,8 +1015,11 @@ mod tests {
         assert!(fires(None));
     }
 
-    /// `runAsNonRoot: false` written down is running as root on purpose.
-    /// Fails if it is ranked with a field nobody set.
+    /// A restricted control every workload trips by default weighs Low,
+    /// whether `runAsNonRoot` is left out or stated false; root on purpose
+    /// is `runAsUser: 0`, Medium on its own rule. Fails if one object
+    /// stating false made the rule's row read Medium over every object
+    /// that merely left it out.
     #[test]
     fn running_as_root_on_purpose_costs_more_than_leaving_it_unset() {
         let severity = |bend: fn(&mut Value)| {
@@ -1034,12 +1037,20 @@ mod tests {
         );
         assert_eq!(
             severity(|s| container(s)["securityContext"]["runAsNonRoot"] = json!(false)),
-            Some(AuditSeverity::Medium)
+            Some(AuditSeverity::Low)
         );
         assert_eq!(
             severity(|s| s["securityContext"] = json!({ "runAsNonRoot": false })),
-            Some(AuditSeverity::Medium)
+            Some(AuditSeverity::Low)
         );
+        let mut root = clean();
+        root["securityContext"] = json!({ "runAsUser": 0 });
+        let user = judged(&root, Some(32))
+            .findings
+            .into_iter()
+            .find(|f| f.rule == RuleId::PssRunAsUserRoot)
+            .map(|f| f.severity);
+        assert_eq!(user, Some(AuditSeverity::Medium));
     }
 
     /// The value never leaves the process: the finding names the variable

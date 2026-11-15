@@ -2126,7 +2126,7 @@ export const en = {
       "Unless allowPrivilegeEscalation is false, a process can gain more privileges than its parent through a setuid binary. The Restricted profile requires false.",
     pssRunAsNonRoot: "Does not require a non-root user",
     pssRunAsNonRootWhy:
-      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, it runs as root on purpose, which costs more. The Restricted profile requires true.",
+      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, nothing checks it at all. The Restricted profile requires true; a container set to run as user 0 is its own finding.",
     pssRunAsUserRoot: "Runs as user 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 is root, stated on purpose. The Restricted profile forbids it.",
