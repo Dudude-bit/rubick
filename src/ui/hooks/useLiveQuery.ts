@@ -87,7 +87,11 @@ export interface Freshness {
   live?: boolean;
   /** What it is actually re-reading at, for anything that wants to say so. */
   everyMs: number | false;
-  /** The last read failed, and what is on screen is from the one before it. */
+  /**
+   * The last read failed, or failed and is being tried again, and what is on
+   * screen is from the one before it. React Query holds `success` through
+   * its retries, which drew "live" over a read failing for seconds.
+   */
   stale: boolean;
   /**
    * A re-read of what is on screen has waited on the cluster past
@@ -174,6 +178,8 @@ interface JoinedParts<T> {
   failed: boolean[];
   /** Which parts the cluster refused. */
   refused: boolean[];
+  /** Why a part still holding its last answer failed and is being tried again. */
+  retrying: Error | null;
   isLoading: boolean;
   error: Error | null;
   refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
@@ -197,6 +203,9 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
     ),
     failed: parts.map((part) => part.status === "error"),
     refused: parts.map((part) => isRefusal(part.error)),
+    retrying:
+      parts.find((part) => part.status !== "error" && part.failureCount > 0)
+        ?.failureReason ?? null,
     isLoading: parts.some((part) => part.isLoading),
     error: parts.find((part) => part.error)?.error ?? null,
     refetchers: parts.map((part) => part.refetch),
@@ -261,6 +270,7 @@ export function useLiveQueries<T>(options: {
     settled,
     failed,
     refused,
+    retrying,
     isLoading,
     error,
     refetchers,
@@ -386,9 +396,11 @@ export function useLiveQueries<T>(options: {
       everyMs,
       waitingSince,
       // A part that never answered is unread, not old.
-      stale: failed.some(Boolean) && data.every((part) => part !== undefined),
+      stale:
+        (failed.some(Boolean) || retrying !== null) &&
+        data.every((part) => part !== undefined),
       slowRead,
-      failure: error,
+      failure: error ?? retrying,
     },
   };
 }
@@ -522,6 +534,8 @@ export function useLiveQuery<
     refetch,
     isLoading,
     status,
+    failureCount,
+    failureReason,
   } = query;
   // A failure is an answer too. Counting only `dataUpdatedAt` kept a refused
   // read at full rate for as long as its page stayed open, one 403 every
@@ -540,6 +554,7 @@ export function useLiveQuery<
   // keeps the last data, so the outcome is compared too: an answer after a
   // refusal is a change even where it repeats the one before the refusal.
   const failed = status === "error";
+  const retrying = !failed && failureCount > 0;
   // The object is gone, and asking again every few seconds only logs it
   // again. A mount or an explicit refetch still asks.
   const notFound = failed && errorCode(error) === ERROR_CODES.NOT_FOUND;
@@ -617,8 +632,7 @@ export function useLiveQuery<
     [refetch, runs, countRuns]
   );
 
-  const turnsAt =
-    data == null ? NaN : Date.parse(changesAt?.(data) ?? "");
+  const turnsAt = data == null ? NaN : Date.parse(changesAt?.(data) ?? "");
   const readsAgain =
     enabled && visible && !gone && !refused && !Number.isNaN(turnsAt);
   useEffect(() => {
@@ -636,9 +650,9 @@ export function useLiveQuery<
     paused: base !== false && everyMs === false,
     everyMs,
     waitingSince,
-    stale: failed && data !== undefined,
+    stale: (failed || retrying) && data !== undefined,
     slowRead,
-    failure: failed ? error : null,
+    failure: failed ? error : retrying ? failureReason : null,
   };
 
   // Neither spread nor assigned. React Query hands back a proxy that records

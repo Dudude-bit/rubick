@@ -3679,6 +3679,32 @@ describe("a governed workload's peek beside its list", () => {
     ownerReferences: [],
     createdAt: null,
   };
+  const hpa = (type: string, status: string, reason: string) => {
+    const facts = {
+      kind: "autoscaler",
+      minReplicas: 1,
+      maxReplicas: 3,
+      currentReplicas: 3,
+      desiredReplicas: 3,
+      metrics: [],
+      conditions: [
+        { type, status, reason, message: null, lastTransitionTime: null },
+      ],
+      lastScaleTime: null,
+    };
+    const ref = (kind: string) => ({
+      kind,
+      name: "cart",
+      namespace: "shop",
+      existence: "present",
+      facts: kind === "Deployment" ? null : facts,
+    });
+    return {
+      object: ref("HorizontalPodAutoscaler"),
+      facts,
+      target: ref("Deployment"),
+    };
+  };
   const CEILING = {
     key: "hpa/shop/cart",
     tone: "warn",
@@ -3692,6 +3718,18 @@ describe("a governed workload's peek beside its list", () => {
     foldedPods: null,
     replaced: false,
     opens: { kind: "Deployment", name: "cart", namespace: "shop" },
+    autoscaler: hpa("ScalingLimited", "True", "TooManyReplicas"),
+  };
+  const UNREACHED = {
+    ...CEILING,
+    key: "hpa/shop/cart/scale",
+    tone: "err",
+    reason: "FailedGetScale",
+    detail: {
+      says: "said",
+      text: "the HPA controller was unable to get the target's current scale",
+    },
+    autoscaler: hpa("AbleToScale", "False", "FailedGetScale"),
   };
   const LIST_KEY = ["deployments", "all"];
   const open = (listedAt: number) => {
@@ -3787,9 +3825,63 @@ describe("a governed workload's peek beside its list", () => {
     await open(Date.now() - 30_000);
     expect(
       await within(await screen.findByTestId("workload-diagnosis")).findByText(
-        "TooManyReplicas"
+        "cart wants more replicas than 3, which is its ceiling"
       )
     ).toBeVisible();
+  });
+
+  /**
+   * Apple r8-32/33: under a 500 the peek said "1 problem" with no cause for
+   * half a minute, then the raw "FailedGetScale" in red, where the healthy
+   * peek says "api cannot reach what it scales". Fails if the row's finding
+   * waits for the peek's own read of what governs it, or is worded by
+   * another composer than the page's.
+   */
+  it("says the row's finding in the page's words while its own read of what governs it is still on its way", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    vi.mocked(commands.getResourceConnections).mockReturnValue(
+      new Promise(() => {})
+    );
+    shell.items = [UNREACHED];
+    await open(Date.now());
+    const diagnosis = await screen.findByTestId("workload-diagnosis");
+    expect(
+      await within(diagnosis).findByText("cart cannot reach what it scales")
+    ).toHaveClass("text-err");
+    expect(within(diagnosis).queryByText("FailedGetScale")).toBeNull();
+  });
+
+  /**
+   * Apple r8-32: a peek opened during a failure drew an unlabelled skeleton
+   * for 14 s while the list beside it held the row. Fails if the peek waits
+   * on its own read to draw what the list holds, or does not say that it is
+   * still reading and, without a live watch, how old the row is.
+   */
+  it("draws the list's row at once while its own read is on its way, and says it is reading", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockReturnValue(new Promise(() => {}));
+    vi.mocked(commands.getResourceConnections).mockReturnValue(
+      new Promise(() => {})
+    );
+    shell.items = [UNREACHED];
+    await open(Date.now() - 30_000);
+    expect(
+      await screen.findByText("cart cannot reach what it scales")
+    ).toBeVisible();
+    expect(screen.queryByTestId("peek-skeleton")).toBeNull();
+    expect(document.querySelector('[data-problem="err"]')).not.toBeNull();
+    expect(
+      screen
+        .getByText(/^reading · last answer \d+s ago$/)
+        .closest("[role=status]")
+    ).not.toBeNull();
+    expect(screen.queryByText("live")).toBeNull();
+    cleanup();
+
+    shell.live.add(JSON.stringify(LIST_KEY));
+    await open(Date.now());
+    expect(await screen.findByText(/^reading$/)).toBeVisible();
   });
 
   /**

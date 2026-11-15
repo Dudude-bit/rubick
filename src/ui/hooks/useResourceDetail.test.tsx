@@ -650,11 +650,15 @@ describe("an object page opened over a refusal kept from before", () => {
    * ask the cluster once more, or the answer leaves the refusal kept.
    */
   it("asks the cluster once more when it is opened", async () => {
-    const asked = vi.fn(async (name: string) => ({ name }));
+    const asked = vi.fn(async (...args: unknown[]) => ({
+      name: String(args[0]),
+    }));
     const getPod = wrapCommand(asked, "getPod");
     const read = 'getPod ["api-7bcd",null]';
     noteRefusal(read, new Error("pods is forbidden"), currentConnection());
-    const { result } = await detail((name) => getPod(name, null));
+    const { result } = await detail(
+      (name) => getPod(name, null) as Promise<Pod>
+    );
     await waitFor(() =>
       expect(result.current.resource).toEqual({ name: "api-7bcd" })
     );

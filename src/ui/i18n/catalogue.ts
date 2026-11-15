@@ -3318,12 +3318,17 @@ export const en = {
     caBundleNamed: "{name} bundle",
     govMetricFrom: "{source} metric",
     govBudgetKeeps: "keeps {rule}; {room}",
-    storyChanged:
-      "{changes} {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
-    storyPods:
-      "Pods {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
-    storyPod:
-      "The pod {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyChanged: "{changes} {when}: {counts}.",
+    storyChangedOnly: "{changes} {when}.",
+    storyPods: "Pods {when}: {counts}.",
+    storyPod: "The pod {when}: {counts}.",
+    storyPodsQuiet: "Pods {when}: nothing happened.",
+    storyPodQuiet: "The pod {when}: nothing happened.",
+    storyScheduled: "{n} scheduled",
+    storyPulled: "{n} pulled",
+    storyStarted: "{n} started",
+    storyStopped: "{n} stopped",
+    storyCountsJoin: "{first}, {rest}",
     changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
     changesScales: { one: "{n} scale", other: "{n} scales" },
     changesBoth: "{rollouts} and {scales}",
@@ -4208,6 +4213,8 @@ export const en = {
     columnsYielded: "Hidden at this width: {columns}",
     columnsYieldedHint:
       "Hidden at this width: {columns}. Widen the window, or close the panel beside the list, to see them. The search still reads them.",
+    columnsYieldedHintNoPanel:
+      "Hidden at this width: {columns}. Widen the window to see them. The search still reads them.",
     hpaScaleUnread:
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",
@@ -4687,6 +4694,9 @@ export const en = {
     freshPartlyUnreadChecksNote:
       "The overview is being read, but these checks did not answer: {reads}. What they would find is not on this page.",
     freshBehind: "still reading",
+    freshReading: "reading",
+    freshReadingRowNote:
+      "Drawn from the list's row until this panel's own read of it answers.",
     freshBehindNote:
       "A read of this screen has waited on the cluster for more than {slow} s, so what is on screen is the last answer. After {deadline} s the app stops waiting and says so.",
     freshRefused: "refused",
@@ -4944,9 +4954,14 @@ export const en = {
     problemNotRecheckedFailed:
       "Not rechecked: the read that would check this again failed. Last known at {time}.",
     unreadOnScreen:
-      "Not everything on this screen could be read, so the count may leave something out:",
-    unreadOnScreenRefused: "{name}: refused",
-    unreadOnScreenFailed: "{name}: the read failed",
+      "Some reads this window rests on did not answer, so the count may leave something out:",
+    unreadOnScreenRefused: "{name}: refused {ago}, asked again by {time}",
+    unreadOnScreenFailed: "{name}: the read failed {ago}",
+    readIngressClients: "Pods of the ingress controller {what}",
+    readIngressClientPolicies:
+      "NetworkPolicies around the ingress controller {what}",
+    readIngressClasses: "IngressClasses",
+    readServiceHealth: "Services and what backs them",
     finishedOnNode: "Finished here",
     finishedOnNodeNote:
       "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
@@ -6765,6 +6780,14 @@ export const en = {
     noTargetGroupBinding: "no TargetGroupBinding",
     noLimitsDeclared:
       "No limits declared on this template: the scale is what these pods have used, and nothing caps what they can take.",
+    noCpuLimitDeclared:
+      "No CPU limit declared on this template: the scale is what these pods have used, and nothing caps the CPU they can take.",
+    noMemoryLimitDeclared:
+      "No memory limit declared on this template: the scale is what these pods have used, and nothing caps the memory they can take.",
+    noCpuLimitSet:
+      "No CPU limit set: the scale is what it has used, and nothing stops it taking the node's.",
+    noMemoryLimitSet:
+      "No memory limit set: the scale is what it has used, and nothing stops it taking the node's.",
     limitsNotKnown:
       "This template's limits could not be read: the scale is what these pods have used, and whether anything caps them is not known.",
     noStructuralSchema:

@@ -20,6 +20,7 @@
  */
 
 import type { T } from "@/i18n/useT";
+import { cn } from "@/lib/utils";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { EditGoverning } from "./EditGoverning";
 import {
@@ -30,7 +31,7 @@ import {
   budgets,
   lastScaled,
   metricReadings,
-  type AutoscalerFacts,
+  type Autoscaler,
   type Finding,
 } from "@/lib/governance";
 import { governanceFindings } from "@/lib/governance-findings";
@@ -51,10 +52,15 @@ import type { ResourceConnections } from "@/generated/types";
  * something other than the count — an autoscaler that computed nothing — the
  * finding under the rows says so in words.
  */
-function nowValue(facts: AutoscalerFacts, t: T) {
+function nowValue({ facts, target }: Autoscaler, t: T) {
   const readings = metricReadings(facts);
   const scaled = lastScaled(facts, t);
   if (readings.length === 0 && scaled === null) return null;
+  // With no pod running there is nothing to read: an expected absence, not
+  // a metric the autoscaler failed to get.
+  const expected =
+    facts.currentReplicas === 0 ||
+    (target.facts?.kind === "workload" && target.facts.replicas === 0);
 
   return (
     <span className="flex flex-col gap-0.5">
@@ -65,7 +71,13 @@ function nowValue(facts: AutoscalerFacts, t: T) {
         >
           <span className="font-mono">{metric.label}</span>
           {metric.current === null ? (
-            <span className="text-caption text-warn">
+            <span
+              data-testid="hpa-no-reading"
+              className={cn(
+                "text-caption",
+                expected ? "text-fg-fnt" : "text-warn"
+              )}
+            >
               {t("readings", "govNoReading")}
             </span>
           ) : (
@@ -135,7 +147,7 @@ export function governanceRows(
       ),
     });
 
-    const now = nowValue(auto.facts, t);
+    const now = nowValue(auto, t);
     if (now) rows.push({ label: t("columns", "govNow"), value: now });
   }
 

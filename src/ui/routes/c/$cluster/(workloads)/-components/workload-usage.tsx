@@ -11,7 +11,7 @@
  * Node and a Deployment must not disagree about what a chart of CPU looks
  * like. What is here is only the summing and the honesty about zero.
  */
-import type { EmptyKey } from "../../-usage/usage-chart";
+import type { NoLimitNote } from "../../-usage/usage-chart";
 import { useMemo } from "react";
 
 import { Lock, TriangleAlert } from "lucide-react";
@@ -41,6 +41,12 @@ function runningPods(pods: readonly PodInfo[]): PodInfo[] {
   return pods.filter((pod) => !hasTerminated(pod));
 }
 
+/** The pods a workload asks for, where its kind counts them: a Deployment's or StatefulSet's replicas, a DaemonSet's nodes. */
+type AsksFor = { replicas?: { desired: number } | null; desired?: number };
+
+const asksForNone = (workload: AsksFor | null | undefined) =>
+  (workload?.replicas?.desired ?? workload?.desired) === 0;
+
 export interface WorkloadUsageProps {
   kind: string;
   uid: string | null | undefined;
@@ -54,8 +60,8 @@ export interface WorkloadUsageProps {
    */
   name?: string | null;
   namespace: string | null | undefined;
-  /** The pod template, which is where a controller's limits are declared. */
-  template: WorkloadTemplate | null | undefined;
+  /** The workload as read: its pod template, where its limits are declared, and how many pods it asks for. */
+  template: (WorkloadTemplate & AsksFor) | null | undefined;
   /** Every pod the page found, exited ones included. */
   pods: readonly PodInfo[];
   /** The pod read failed; with no pods left from an earlier read, whether any runs is not known. */
@@ -70,7 +76,7 @@ export interface WorkloadUsageProps {
    */
   idle: string;
   connections?: ResourceConnections | null;
-  noLimitNote?: EmptyKey;
+  noLimitNote?: NoLimitNote;
 }
 
 export function WorkloadUsage({
@@ -93,7 +99,7 @@ export function WorkloadUsage({
   // its missing limits are not "none declared".
   const replica = template?.replica?.known ? template.replica : null;
   // The key travels; the chart is what turns it into words.
-  const limitNote: EmptyKey = replica
+  const limitNote: NoLimitNote = replica
     ? (noLimitNote ?? "noLimitsDeclared")
     : "limitsNotKnown";
   const running = useMemo(() => runningPods(pods), [pods]);
@@ -129,7 +135,9 @@ export function WorkloadUsage({
       ? { kind: "workload", namespace, owner: name, ownerKind: kind }
       : undefined;
 
-  if (unread || podsPending) {
+  // Asked for none, nothing runs, and that is known before its pods are read.
+  const waiting = podsPending && !(asksForNone(template) && pods.length === 0);
+  if (unread || waiting) {
     return (
       <PodsUnknownUsage
         kind={kind}

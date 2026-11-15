@@ -919,6 +919,56 @@ describe("a read on a large cluster", () => {
       /Still reading pods/
     );
   });
+
+  /**
+   * A caller with rows of its own that has no clock for the wait handed in
+   * `null`, and the three-second line never came. Fails if the list does not
+   * time its own skeleton when the caller's clock is null.
+   */
+  it("says it is still reading after three seconds when the caller has no clock", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        data={undefined}
+        isLoading
+        waitingSince={null}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS + 1000);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
+  });
+
+  /**
+   * The reading line sat in the flow above the skeleton and the real table
+   * landed 24 px higher. Fails if the line takes any height in the flow.
+   */
+  it("keeps the reading line out of the flow so the table does not jump on arrival", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "flow"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS + 1000);
+    });
+    const line = screen.getByTestId("reading-list");
+    expect(line).toHaveClass("h-0", "relative");
+    expect(line.firstElementChild).toHaveClass("absolute");
+  });
 });
 
 describe("what a list hands to Share", () => {

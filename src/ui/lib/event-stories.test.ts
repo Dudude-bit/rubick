@@ -106,10 +106,19 @@ describe("the recorded hour", () => {
       key: "storyChanged",
       values: {
         when: { key: "whenWithin", values: { coverMs: 5000 } },
-        scheduled: 1,
-        pulled: 2,
-        started: 2,
-        stopped: 0,
+        counts: {
+          key: "storyCountsJoin",
+          values: {
+            first: { key: "storyScheduled", values: { n: 1 } },
+            rest: {
+              key: "storyCountsJoin",
+              values: {
+                first: { key: "storyPulled", values: { n: 2 } },
+                rest: { key: "storyStarted", values: { n: 2 } },
+              },
+            },
+          },
+        },
         changes: { key: "changesRollouts", values: { n: 1 } },
       },
     });
@@ -1187,6 +1196,28 @@ describe("what a Deployment's story says it did", () => {
     );
     expect(story.says.key).toBe("storyPod");
     expect(sayWords(story.says, en)).toMatch(/^The pod within /);
+  });
+
+  /**
+   * A story read "0 scheduled, 0 pulled, 0 started, 0 stopped" beside a
+   * scaling story. Fails if a zero count is printed, or if a story of only
+   * zeros says anything but that nothing happened.
+   */
+  it("leaves zero counts out of a pod story and says nothing happened when all are zero", () => {
+    const [some] = storiesOf(
+      ["Scheduled", "Started"].map((reason) =>
+        event({ kind: "Pod", name: "wd-demo", reason })
+      ),
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    const said = sayWords(some.says, en);
+    expect(said).toMatch(/: 1 scheduled, 1 started\.$/);
+    expect(said).not.toMatch(/\b0 /);
+    const [none] = storiesOf(
+      [event({ kind: "Pod", name: "idle-demo", reason: "Created" })],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(sayWords(none.says, en)).toMatch(/: nothing happened\.$/);
   });
 
   /** Lena read «Поды за 1 минуту» on Pod/wd-demo's own story; fails if one pod is told about as several, or several as one. */

@@ -646,8 +646,12 @@ describe("what the problem count counts", () => {
   it("is not all checked while a read on screen was refused or failed, and names them", async () => {
     attentions.here = attentionOf(1);
     onScreen.reads = [
-      { key: ["deployment", "api", "api"], refused: true },
-      { key: ["prod", "argocd", "applications"], refused: false },
+      { key: ["deployment", "api", "api"], refused: true, at: Date.now() },
+      {
+        key: ["prod", "argocd", "applications"],
+        refused: false,
+        at: Date.now(),
+      },
     ];
     bar();
 
@@ -655,8 +659,12 @@ describe("what the problem count counts", () => {
     expect(counts).toHaveTextContent("1 problem · not all checked");
     await userEvent.hover(counts);
     const named = await screen.findAllByTestId("unread-on-screen");
-    expect(named[0]).toHaveTextContent("Deployment api: refused");
-    expect(named[0]).toHaveTextContent("argocd applications: the read failed");
+    expect(named[0]).toHaveTextContent(
+      /Deployment api: refused .* ago, asked again by/
+    );
+    expect(named[0]).toHaveTextContent(
+      /argocd applications: the read failed .* ago/
+    );
   });
 
   /** Fails if the strip says "not all checked" with every read on screen answered. */

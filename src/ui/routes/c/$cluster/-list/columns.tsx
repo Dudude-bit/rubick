@@ -31,12 +31,15 @@ interface WithCreatedAt {
   createdAt?: string | null;
 }
 
+/** `idle`: nothing of it runs, so there is nothing to measure, said in the none word rather than as a zero or an unread mark. */
 interface WithCpuUsage {
   cpuMillicores?: number | null;
+  idle?: boolean;
 }
 
 interface WithMemoryUsage {
   memoryBytes?: number | null;
+  idle?: boolean;
 }
 
 interface WithCpuLimits {
@@ -136,17 +139,37 @@ export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 /** The could-not-look glyph a metric cell draws in place of a figure. */
 const UNREAD_GLYPH_PX = 14;
 
-/** As wide as what its rows say: a figure where one has one, and the one word the rest say, as `MetricValue` picks it. */
+/** As wide as what its rows say: a figure where one has one, the none word where nothing runs, and the unread glyph the rest draw. */
 export const metricCellFloor =
   <Row,>(valueOf: (row: Row) => number | null | undefined) =>
-  (_t: Translate, rows: readonly Row[]) => {
+  (t: Translate, rows: readonly Row[]) => {
+    const idle = (row: Row) => (row as { idle?: boolean }).idle === true;
     const figure = rows.some((row) => typeof valueOf(row) === "number");
-    const word = rows.some((row) => typeof valueOf(row) !== "number");
+    const none = rows.some(idle);
+    const glyph = rows.some(
+      (row) => !idle(row) && typeof valueOf(row) !== "number"
+    );
     return Math.max(
       figure ? METRIC_CELL_PX : 0,
-      word ? UNREAD_GLYPH_PX + CELL_PADS_PX : 0
+      none
+        ? widestText([t("empty", "noneLower")], "sans", 7) + CELL_PADS_PX
+        : 0,
+      glyph ? UNREAD_GLYPH_PX + CELL_PADS_PX : 0
     );
   };
+
+/** What a shared report says in a metric cell, as the cell draws it. */
+const metricShare = (
+  value: number | null | undefined,
+  idle: boolean | undefined,
+  type: "cpu" | "memory",
+  t: Translate
+) =>
+  idle
+    ? { text: t("empty", "noneLower"), quiet: true }
+    : typeof value === "number"
+      ? formatUsage(value, type)
+      : notMeasured(t);
 
 const GLYPH_PX: Record<"sans" | "mono", number> = { sans: 7, mono: 7.2 };
 
@@ -271,11 +294,10 @@ export function createCpuColumn<
       sort: (row: Row) => row.cpuMillicores,
       floor: metricCellFloor((row: Row) => row.cpuMillicores),
       share: (row: Row, t) =>
-        typeof row.cpuMillicores === "number"
-          ? formatUsage(row.cpuMillicores, "cpu")
-          : notMeasured(t),
+        metricShare(row.cpuMillicores, row.idle, "cpu", t),
     },
     cell: ({ row }) => {
+      if (row.original.idle) return <None />;
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests
         ? parseCPU(row.original.cpuRequests)
@@ -305,11 +327,10 @@ export function createMemoryColumn<
       sort: (row: Row) => row.memoryBytes,
       floor: metricCellFloor((row: Row) => row.memoryBytes),
       share: (row: Row, t) =>
-        typeof row.memoryBytes === "number"
-          ? formatUsage(row.memoryBytes, "memory")
-          : notMeasured(t),
+        metricShare(row.memoryBytes, row.idle, "memory", t),
     },
     cell: ({ row }) => {
+      if (row.original.idle) return <None />;
       const used = row.original.memoryBytes ?? null;
       const request = row.original.memoryRequests
         ? parseMemory(row.original.memoryRequests)

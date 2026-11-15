@@ -208,7 +208,7 @@ export interface AutoscalerVerdict {
  * first true one is the whole answer and the rest is detail.
  */
 export function autoscalerVerdict(
-  facts: AutoscalerFacts
+  facts: Pick<AutoscalerFacts, "conditions">
 ): AutoscalerVerdict | null {
   const { conditions } = facts;
   const able = condition(conditions, "AbleToScale");

@@ -91,6 +91,7 @@ import { ObjectUnreadContext } from "../-object/object-unread";
 import { ServiceHealthView } from "../-object/health-views";
 import { StaleRows } from "@/components/ui/stale-rows";
 import { Unknown } from "@/components/ui/unknown";
+import { Reading } from "@/components/ui/states";
 import { NamespaceContents } from "../-object/NamespaceContents";
 import { DataFreshness } from "@/components/ui/realtime";
 import {
@@ -190,17 +191,19 @@ export function PeekContent({
           : null
       )
     ) !== null;
-  const held = useHeldRow(
-    builtIn,
-    namespace,
-    target.name,
-    data === undefined && error !== null
-  );
+  // The list's row stands in while the peek's own read has not answered,
+  // on its way or failed: the row beside it already says what it is.
+  const held = useHeldRow(builtIn, namespace, target.name, data === undefined);
   const shownAt = data === undefined && held ? held.at : dataUpdatedAt;
   // A live watch on a list holding this object reads it again at every
   // change it sees, as `rowDetail` asks of every list of these kinds.
   const followed = useListLive(
-    useHoldingList(builtIn, namespace, target.name, data !== undefined)
+    useHoldingList(
+      builtIn,
+      namespace,
+      target.name,
+      data !== undefined || held !== null
+    )
   );
   const summary = useMemo(() => {
     const shown = data ?? held?.row;
@@ -336,13 +339,15 @@ export function PeekContent({
           <CopyName name={target.name} />
           {/* On the line that never wraps: below, a row it took and gave back
               moved the actions out from under a press. */}
-          {!gone && (
+          {gone ? null : data === undefined && held && error === null ? (
+            <ReadingOverRow at={held.at} current={followed} />
+          ) : (
             <DataFreshness
               className="ml-auto"
               dataUpdatedAt={shownAt}
               live={followed}
               slowed={read.freshness.slowed}
-              stale={error !== null}
+              stale={error !== null || read.freshness.stale}
               refusedAt={isRefusal(error) ? refusedAt : undefined}
               slowRead={read.freshness.slowRead}
               reserve={false}
@@ -459,7 +464,6 @@ export function PeekContent({
                 summary={summary}
                 error={error}
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
-                isLoading={isLoading}
                 readAt={shownAt}
                 onRetry={() => read.refetch()}
               />
@@ -477,6 +481,25 @@ export function PeekContent({
         ))}
       </Tabs>
     </SheetContent>
+  );
+}
+
+/** The title line's chip while the list's row stands in: reading, and how old the row is where no watch keeps it current. */
+function ReadingOverRow({ at, current }: { at: number; current: boolean }) {
+  const t = useT();
+  const age = useRealtimeAge(new Date(at).toISOString());
+  const reading = t("cluster", "freshReading");
+  return (
+    <div
+      className="ml-auto shrink-0"
+      title={t("cluster", "freshReadingRowNote")}
+    >
+      <Reading className="whitespace-nowrap">
+        {current
+          ? reading
+          : `${reading} · ${t("cluster", "freshAnswerAge", { age })}`}
+      </Reading>
+    </div>
   );
 }
 
@@ -559,7 +582,6 @@ function PeekOverview({
   summary,
   error,
   gone,
-  isLoading,
   readAt,
   onRetry,
 }: {
@@ -568,7 +590,6 @@ function PeekOverview({
   error: Error | null;
   /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
   gone: KnownOwners | false;
-  isLoading: boolean;
   /** When the object on screen was read. */
   readAt: number;
   onRetry: () => unknown;
@@ -597,7 +618,7 @@ function PeekOverview({
             error={error}
             onRetry={onRetry}
           />
-        ) : isLoading || !summary ? (
+        ) : !summary ? (
           <PeekSkeleton />
         ) : (
           <>

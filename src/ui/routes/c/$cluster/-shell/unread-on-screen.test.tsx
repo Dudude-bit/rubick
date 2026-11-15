@@ -8,7 +8,11 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 
-import { readName, useUnreadOnScreen } from "./unread-on-screen";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { readName, readWords, useUnreadOnScreen } from "./unread-on-screen";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const refusal = {
   code: "PERMISSION_DENIED",
@@ -51,7 +55,12 @@ describe("the reads on screen the problem count cannot vouch for", () => {
     const { result } = renderHook(() => useUnreadOnScreen(), { wrapper });
     await waitFor(() =>
       expect(result.current).toEqual([
-        { key: ["deployment", "api", "api"], refused: true },
+        {
+          key: ["deployment", "api", "api"],
+          refused: true,
+          error: refusal,
+          at: expect.any(Number),
+        },
       ])
     );
 
@@ -89,7 +98,12 @@ describe("the reads on screen the problem count cannot vouch for", () => {
     const { result } = renderHook(() => useUnreadOnScreen(), { wrapper });
     await waitFor(() =>
       expect(result.current).toEqual([
-        { key: ["prod", "argocd", "applications"], refused: false },
+        {
+          key: ["prod", "argocd", "applications"],
+          refused: false,
+          error: timeout,
+          at: expect.any(Number),
+        },
       ])
     );
   });
@@ -111,6 +125,23 @@ describe("what an unread read is called", () => {
     expect(readName(["pod-rows", "shop"], "prod")).toBe("Pods");
     expect(readName(["prod", "argocd", "applications"], "prod")).toBe(
       "argocd applications"
+    );
+  });
+});
+
+describe("what a read the count asks for itself is called", () => {
+  /**
+   * Shot r8-22: the hover named "ingress-clients
+   * traefik.io/ingress-controller", a cache key nobody reading it knows.
+   * Fails if such a read is named by its key, or if any other read loses
+   * its name.
+   */
+  it("names it in words with the controller as the cluster wrote it, and every other read as before", () => {
+    expect(
+      readWords(["ingress-clients", "traefik.io/ingress-controller"], "prod", t)
+    ).toBe("Pods of the ingress controller traefik.io/ingress-controller");
+    expect(readWords(["deployment", "api", "api"], "prod", t)).toBe(
+      "Deployment api"
     );
   });
 });

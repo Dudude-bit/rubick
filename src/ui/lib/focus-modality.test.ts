@@ -170,3 +170,32 @@ describe("Tab past a stop that is cut out of sight", () => {
     expect(document.activeElement).toBe(seen);
   });
 });
+
+describe("Tab past a stop painted at no opacity", () => {
+  /**
+   * A control that is in the Tab order and drawn at opacity 0 takes a press
+   * and shows no ring. Fails if Tab, forward or back, lands on one, or
+   * does not wrap past it when it is the last stop.
+   */
+  it("skips it forward and back and wraps past it at the end", () => {
+    stop = startFocusWrap();
+    document.body.innerHTML = `
+      <button id="first">first</button>
+      <button id="last">last</button>
+      <div style="opacity:0"><button id="ghost">ghost</button></div>`;
+    const [first, last, ghost] = ["first", "last", "ghost"].map((id) =>
+      document.getElementById(id)!
+    );
+    const tab = (init: KeyboardEventInit = {}) =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", cancelable: true, ...init })
+      );
+    last.focus();
+    tab();
+    expect(document.activeElement).toBe(first);
+    expect(document.activeElement).not.toBe(ghost);
+    first.focus();
+    tab({ shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+});

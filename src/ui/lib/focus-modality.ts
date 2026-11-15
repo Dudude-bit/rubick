@@ -45,8 +45,15 @@ function tabbables(root: ParentNode): HTMLElement[] {
   );
 }
 
-/** A stop the browser would visit that an `overflow: hidden` ancestor has cut out of sight. */
+function faded(el: HTMLElement): boolean {
+  for (let up: HTMLElement | null = el; up; up = up.parentElement)
+    if (getComputedStyle(up).opacity === "0") return true;
+  return false;
+}
+
+/** A stop the browser would visit that is painted at no opacity, or that an `overflow: hidden` ancestor has cut out of sight. */
 function clippedAway(el: HTMLElement): boolean {
+  if (faded(el)) return true;
   const box = el.getBoundingClientRect();
   if (box.width === 0 && box.height === 0) return false;
   for (let up = el.parentElement; up; up = up.parentElement) {

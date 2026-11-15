@@ -46,6 +46,12 @@ const Band = React.lazy(() => import("./usage-band"));
 export const WATCHING_NOTE = "watchingFromNow" as const;
 export const NO_LIMIT_NOTE = "noLimitSet" as const;
 
+/** What a block says of a missing ceiling: a pod's, a workload template's, or one that could not be read. */
+export type NoLimitNote =
+  | typeof NO_LIMIT_NOTE
+  | "noLimitsDeclared"
+  | "limitsNotKnown";
+
 export interface UsageChartProps {
   label: string;
   type: "cpu" | "memory";

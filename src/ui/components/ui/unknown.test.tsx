@@ -182,4 +182,32 @@ describe("Unknown", () => {
       screen.getByText(/endpointslices\.discovery\.k8s\.io is forbidden/)
     ).toBeInTheDocument();
   });
+
+  /**
+   * Beside a peek the compact notice drew only its first sentence inside the
+   * dashed frame: a flex item in the page's column shrank to one line and the
+   * server's words and the retry hung below it. Fails if the frame can shrink
+   * below its wrapped content, or the server's words are cut to one line, or
+   * the retry leaves the frame.
+   */
+  it("keeps a long question, a long server message and the retry inside one frame that cannot shrink", () => {
+    const long = "etcdserver: request timed out ".repeat(12);
+    render(
+      <Unknown
+        compact
+        question={"Could not read deployments just now. ".repeat(4)}
+        error={new Error(long)}
+        onRetry={() => {}}
+      />
+    );
+    const frame = screen.getByRole("status");
+    expect(frame).toHaveClass("shrink-0", "flex-wrap");
+    const said = screen.getByText(/etcdserver: request timed out/);
+    expect(said).toHaveClass("line-clamp-2", "min-w-0");
+    expect(said).not.toHaveClass("truncate");
+    expect(frame).toContainElement(said);
+    expect(frame).toContainElement(
+      screen.getByRole("button", { name: /again/i })
+    );
+  });
 });

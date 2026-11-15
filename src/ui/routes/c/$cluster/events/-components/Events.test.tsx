@@ -268,9 +268,9 @@ describe("a feed a watch keeps", () => {
 
   /**
    * Dana's All events re-read the latest 500 every second, 350 KB each
-   * time. Fails if the feed is polled once its watch has its rows, if the
-   * newest are not on top of a burst that arrived in the API's order, or if
-   * the cut stops saying which 500 these are.
+   * time. Fails if the feed is polled once its watch has its rows (its
+   * one-row probe aside), if the newest are not on top of a burst that
+   * arrived in the API's order, or if the cut stops saying which 500 these are.
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
     layOutRows();
@@ -287,9 +287,41 @@ describe("a feed a watch keeps", () => {
     expect(rowAt(0)?.textContent).toContain("prod-pod-0");
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
     expect(screen.getByText("live")).toBeInTheDocument();
   }, 30_000);
+
+  /**
+   * Under an events list answering 500 the page read "live" for 25 to 60
+   * seconds, waiting on the overview's cached probe. Fails if the page's own
+   * one-row read is not asked while the watch is live, or if its failure does
+   * not take the live mark away with no help from the overview.
+   */
+  it("says a fresh list fails from its own one-row read, without the overview", async () => {
+    await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(asked().some((filters) => filters.limit === 1)).toBe(true)
+    );
+
+    listEvents.mockRejectedValue(
+      Object.assign(new Error("etcdserver: request timed out"), {
+        code: "NO_ANSWER",
+      })
+    );
+    expect(
+      await screen.findByText(
+        /A fresh list of events is failing/,
+        {},
+        { timeout: 3000 }
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/etcdserver: request timed out/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
 
   // As the overview answers it: a failed events list sits with the cut ones
   // in `warningsShort`, never in `unread`.
@@ -405,7 +437,7 @@ describe("a feed a watch keeps", () => {
     expect(screen.getByText("live")).toBeInTheDocument();
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
   });
 
   /**
@@ -1423,9 +1455,18 @@ describe("a feed a watch keeps", () => {
       expect(document.body.textContent).toContain("staging-pod-0")
     );
     expect(document.body.textContent).toContain("prod-pod-1");
+    await waitFor(() =>
+      expect(
+        new Set(
+          asked()
+            .filter((filters) => filters.limit === 1)
+            .map((filters) => filters.namespace)
+        )
+      ).toEqual(new Set(["prod", "staging"]))
+    );
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
   });
 
   /**

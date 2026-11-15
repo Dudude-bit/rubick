@@ -1,16 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useRefusal } from "@/hooks/useRefusals";
-import {
-  AlignLeft,
-  BadgeCheck,
-  History,
-  Info,
-  Layers2,
-  Scale,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, History, Info, Layers2 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { useAsk } from "../../../-object/useAsk";
@@ -44,12 +37,8 @@ import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
-import {
-  Composition,
-  ConditionRows,
-  ReasonedAction,
-} from "@/components/object/detail-blocks";
-import { ScaleDialog } from "../../../-object/ScaleDialog";
+import { Composition, ConditionRows } from "@/components/object/detail-blocks";
+import { ScaleControl } from "../../../-object/ScaleControl";
 import { scaleWarnings } from "@/lib/governance";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
@@ -199,7 +188,6 @@ export function StatefulSetDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
-  const [scaleOpen, setScaleOpen] = useState(false);
   const asking = useAsk();
 
   const restarted = restartedWords(
@@ -263,7 +251,6 @@ export function StatefulSetDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.StatefulSet, namespace, name)]
           : [],
-      onSuccess: () => setScaleOpen(false),
     }
   );
 
@@ -565,11 +552,15 @@ export function StatefulSetDetail() {
             {/* Plain, not intercepted: the Scale dialog carries the delivery
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
-            <ReasonedAction
-              label={t("action", "scale")}
+            <ScaleControl
+              kind={ResourceType.StatefulSet}
+              name={name ?? ""}
+              namespace={namespace || null}
+              current={replicas?.desired}
+              ready={!!statefulSet}
               reason={scaleDenied}
-              icon={Scale}
-              onClick={() => statefulSet && setScaleOpen(true)}
+              warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              mutation={scaleMutation}
             />
             <RestartAction
               kind={ResourceType.StatefulSet}
@@ -595,25 +586,6 @@ export function StatefulSetDetail() {
         onTabChange={setActiveTab}
       />
 
-      {/* Outside the frame, because it is opened from the strip's row and so
-          from any tab — inside the Overview's panel it would be unmounted the
-          moment the reader was on Logs, which is when Scale still has to
-          work. It draws nothing until it is open, and portals when it is. */}
-      <ScaleDialog
-        warnings={scaleWarnings(connections, intercept("Scale"), t)}
-        open={scaleOpen}
-        onOpenChange={(open) => {
-          if (open) scaleMutation.reset();
-          setScaleOpen(open);
-        }}
-        kind={ResourceType.StatefulSet}
-        name={name ?? ""}
-        namespace={namespace || null}
-        current={replicas?.desired}
-        busy={scaleMutation.isPending}
-        error={scaleMutation.isError ? scaleMutation.error : null}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
       {asking.dialog}
     </>
   );

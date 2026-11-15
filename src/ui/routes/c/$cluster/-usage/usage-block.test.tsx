@@ -317,6 +317,7 @@ describe("UsageBlock with no limits at all", () => {
     uid: string;
     cpuLimit: number | null;
     memoryLimit: number | null;
+    noLimitNote?: "noLimitsDeclared";
   }) => {
     const base = {
       kind: "Pod" as const,
@@ -355,15 +356,36 @@ describe("UsageBlock with no limits at all", () => {
     expect(shares).toHaveLength(0);
   });
 
-  it("still attaches the sentence to the one measure that lacks a ceiling", async () => {
+  /**
+   * Vercel r8-47: "No limits declared" under CPU while the Memory band below
+   * drew "limit 128Mi". Fails if the one measure without a ceiling is not
+   * named in its sentence, or the other measure is said to lack one.
+   */
+  it("still attaches the sentence to the one measure that lacks a ceiling, naming it", async () => {
     const { container } = await renderPolled({
       uid: "uid-7",
       cpuLimit: null,
       memoryLimit: 128 * 1024 * 1024,
     });
-    expect(screen.getAllByText(/No limit set/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^No CPU limit set/)).toHaveLength(1);
+    expect(screen.queryByText(/^No limit set/)).toBeNull();
+    expect(screen.queryByText(/memory limit/i)).toBeNull();
     // The measure that does have one still reads against it.
     expect(container.textContent).toMatch(/\/128Mi/);
+  });
+
+  /** The shot's own case, a workload's template: fails if its note says "no limits" where only memory's is missing. */
+  it("names the measure a workload's template leaves without a limit", async () => {
+    await renderPolled({
+      uid: "uid-8",
+      cpuLimit: 500,
+      memoryLimit: null,
+      noLimitNote: "noLimitsDeclared",
+    });
+    expect(
+      screen.getAllByText(/^No memory limit declared on this template/)
+    ).toHaveLength(1);
+    expect(screen.queryByText(/^No limits declared/)).toBeNull();
   });
 });
 

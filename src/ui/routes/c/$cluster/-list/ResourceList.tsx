@@ -71,6 +71,7 @@ import { useNamedRows } from "./useNamedRows";
 import { useSetSearch } from "@/hooks/useSearchParam";
 import { rowName } from "@/lib/links";
 import { StaleRows } from "@/components/ui/stale-rows";
+import { HeldWhilePointed } from "@/components/ui/held-while-pointed";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { ListUnread } from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
@@ -553,10 +554,13 @@ export function ResourceList<
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
+  const [skeletonSince, setSkeletonSince] = useState<number | null>(null);
+  if (showSkeleton !== (skeletonSince !== null))
+    setSkeletonSince(showSkeleton ? now : null);
   const waitingSince =
-    externalWaitingSince !== undefined
+    (externalWaitingSince !== undefined
       ? externalWaitingSince
-      : queryResult.freshness.waitingSince;
+      : queryResult.freshness.waitingSince) ?? skeletonSince;
   const waitedMs =
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
   const slow = waitedMs >= SLOW_READ_MS;
@@ -696,37 +700,39 @@ export function ResourceList<
           whole={failed === null && !partial}
         />
       )}
-      <ListUnread.Provider value={!!unreadError && resources.length === 0}>
-        {headerContent}
-      </ListUnread.Provider>
-      {stale && (
-        <StaleRows
+      <HeldWhilePointed>
+        <ListUnread.Provider value={!!unreadError && resources.length === 0}>
+          {headerContent}
+        </ListUnread.Provider>
+        {stale && (
+          <StaleRows
+            label={emptyStateLabel.toLowerCase()}
+            since={dataUpdatedAt}
+            error={failed}
+            onRetry={retry}
+          />
+        )}
+        {warm && freshList.unread && (
+          <Unknown
+            compact
+            className="mb-2"
+            question={t("empty", "watchLiveListFailing", {
+              label: emptyStateLabel.toLowerCase(),
+            })}
+            error={Object.assign(new Error(freshList.unread.message), {
+              code: freshList.unread.code,
+            })}
+            onRetry={freshList.retry}
+          />
+        )}
+        <UnreadNamespaces
+          unread={unread}
           label={emptyStateLabel.toLowerCase()}
-          since={dataUpdatedAt}
-          error={failed}
+          // Not the placeholder query's refetch when the rows come from outside:
+          // that asks again under a key the page never reads.
           onRetry={retry}
         />
-      )}
-      {warm && freshList.unread && (
-        <Unknown
-          compact
-          className="mb-2"
-          question={t("empty", "watchLiveListFailing", {
-            label: emptyStateLabel.toLowerCase(),
-          })}
-          error={Object.assign(new Error(freshList.unread.message), {
-            code: freshList.unread.code,
-          })}
-          onRetry={freshList.retry}
-        />
-      )}
-      <UnreadNamespaces
-        unread={unread}
-        label={emptyStateLabel.toLowerCase()}
-        // Not the placeholder query's refetch when the rows come from outside:
-        // that asks again under a key the page never reads.
-        onRetry={retry}
-      />
+      </HeldWhilePointed>
       {showDelivery && !showSkeleton && deliveryKnown && (
         <DeliveryFilterControl
           value={deliveryFilter}
@@ -735,14 +741,16 @@ export function ResourceList<
         />
       )}
       {showSkeleton && !slow && (
-        <div data-testid="reading-list" className="mb-2 min-h-4 px-1">
+        <div data-testid="reading-list" className="relative h-0">
           {noticed && (
-            <Reading>
-              {t("empty", "stillReading", {
-                label: emptyStateLabel.toLowerCase(),
-                scope: scope.inWords,
-              })}
-            </Reading>
+            <div className="absolute left-44 top-0 flex h-7 items-center">
+              <Reading>
+                {t("empty", "stillReading", {
+                  label: emptyStateLabel.toLowerCase(),
+                  scope: scope.inWords,
+                })}
+              </Reading>
+            </div>
           )}
         </div>
       )}

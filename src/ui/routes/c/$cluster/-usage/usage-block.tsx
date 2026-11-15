@@ -45,7 +45,7 @@ import type { MetricsStatus, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { sayWords, type Saying } from "@/i18n/say";
-import type { EmptyKey } from "./usage-chart";
+import type { EmptyKey, NoLimitNote } from "./usage-chart";
 import { declaredQuantity } from "@/lib/metric-format";
 
 export interface UsageBlockProps {
@@ -67,8 +67,8 @@ export interface UsageBlockProps {
   memoryRequest?: number | null;
   /** What the ceiling is called here: a pod has limits, a node a capacity. */
   limitNoun?: "limitWord" | "capacityWord";
-  /** The sentence shown when there is no ceiling at all. */
-  noLimitNote?: EmptyKey;
+  /** The sentence shown when there is no ceiling at all; each band says its own measure's when only one lacks one. */
+  noLimitNote?: NoLimitNote;
   restarts?: number | null;
   /** `dataUpdatedAt` of the metrics query. */
   sampledAt: number | null | undefined;
@@ -126,6 +126,23 @@ const DECLARED = {
     against: "usageAgainstDeclaredCapacity",
   },
 } as const;
+
+/**
+ * The sentence one band says alone, while the other measure has a ceiling:
+ * about its own measure, as the line above it is. "No limits declared" under
+ * CPU was untrue beside a Memory band drawing its limit.
+ */
+const ONE_MEASURE_NOTE: Record<
+  NoLimitNote,
+  Record<"cpu" | "memory", EmptyKey>
+> = {
+  noLimitSet: { cpu: "noCpuLimitSet", memory: "noMemoryLimitSet" },
+  noLimitsDeclared: {
+    cpu: "noCpuLimitDeclared",
+    memory: "noMemoryLimitDeclared",
+  },
+  limitsNotKnown: { cpu: "limitsNotKnown", memory: "limitsNotKnown" },
+};
 
 export function UsageBlock({
   title,
@@ -278,7 +295,7 @@ export function UsageBlock({
               limit={cpuLimit}
               request={cpuRequest}
               limitNoun={limitNoun}
-              noLimitNote={neither ? null : noLimitNote}
+              noLimitNote={neither ? null : ONE_MEASURE_NOTE[noLimitNote].cpu}
               current={available ? (cpu ?? null) : null}
               suppressNote={shared !== null}
               live={liveLine}
@@ -298,7 +315,9 @@ export function UsageBlock({
               limit={memoryLimit}
               request={memoryRequest}
               limitNoun={limitNoun}
-              noLimitNote={neither ? null : noLimitNote}
+              noLimitNote={
+                neither ? null : ONE_MEASURE_NOTE[noLimitNote].memory
+              }
               current={available ? (memory ?? null) : null}
               suppressNote={shared !== null}
               live={liveLine}

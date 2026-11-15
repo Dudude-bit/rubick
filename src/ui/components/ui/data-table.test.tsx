@@ -50,6 +50,19 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 
+const deferral = vi.hoisted(() => ({ held: null as string | null }));
+
+vi.mock("react", async (importOriginal) => {
+  const original = await importOriginal<typeof import("react")>();
+  const useDeferredValue = <T,>(value: T): T => {
+    const settled = original.useDeferredValue(value);
+    return deferral.held !== null && typeof value === "string"
+      ? (deferral.held as T)
+      : settled;
+  };
+  return { ...original, default: original, useDeferredValue };
+});
+
 vi.mock("./data-table-rows", async (importOriginal) => {
   const original = await importOriginal<typeof import("./data-table-rows")>();
   return { ...original, buildTableRows: vi.fn(original.buildTableRows) };
@@ -1004,6 +1017,32 @@ describe("the list keys, from anywhere on a list page", () => {
     expect(selected()).toEqual(["a-1"]);
   });
 
+  /**
+   * The rows narrow a render after the box does, so Down pressed in that gap
+   * focused a row of the old list that then left the page, and the Enter
+   * after it found no row. Fails if Down selects before the filter settles.
+   */
+  it("takes Down pressed before the filter settled to the first row of the narrowed list", async () => {
+    deferral.held = "";
+    try {
+      const { rerender } = await wrapRerenderable(page());
+      press("/");
+      fireEvent.change(search(), { target: { value: "b-" } });
+      press("ArrowDown", search());
+      expect(selected()).toEqual([]);
+
+      deferral.held = null;
+      rerender(page());
+      await waitFor(() => expect(rowAt(1)).toBeFalsy());
+      await waitFor(() => expect(selected()).toEqual(["b-2"]));
+      expect(document.activeElement).toBe(rowAt(0));
+      press("Enter", rowAt(0)!);
+      await goesTo("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    } finally {
+      deferral.held = null;
+    }
+  });
+
   /** Fails if Escape leaves the text in and the list narrowed. */
   it("empties the filter on the first Escape and leaves it on the second", async () => {
     await wrap(page());
@@ -1739,7 +1778,8 @@ describe("column widths", () => {
    * Lena's Pods list at 1024 in Russian scrolled sideways and cut a header.
    * Fails if a port too narrow for every floor keeps a column that yields
    * instead of hiding it, keeps it hidden once there is room, or hides it
-   * without naming it under the table and in that note's tooltip.
+   * without naming it under the table and in that note's tooltip, or tells
+   * the reader to close a panel when none is open.
    */
   it("hides a yielding column where the port is too narrow and names it under the table", async () => {
     const columnsOf: ColumnDef<Item>[] = [
@@ -1766,6 +1806,9 @@ describe("column widths", () => {
         "title",
         expect.stringMatching(/^Hidden at this width: Namespace\. Widen/)
       );
+      expect(
+        screen.getByTestId("columns-yielded").getAttribute("title")
+      ).not.toMatch(/panel/);
       expect(screen.getByRole("table").parentElement!.style.overflowX).toBe("");
     } finally {
       narrow.mockRestore();

@@ -3,14 +3,7 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import {
-  AlignLeft,
-  BadgeCheck,
-  Info,
-  Layers2,
-  Scale,
-  History,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2, History } from "lucide-react";
 
 import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -67,7 +60,7 @@ import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { useRollback } from "../../../-object/useRollback";
 import { revisionOfReplicaSet } from "@/lib/changes";
-import { ScaleDialog } from "../../../-object/ScaleDialog";
+import { ScaleControl } from "../../../-object/ScaleControl";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
@@ -86,7 +79,6 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
-  ReasonedAction,
   ReasonTip,
 } from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
@@ -128,7 +120,6 @@ function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
 
 export function DeploymentDetail() {
   const t = useT();
-  const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
   const [selectedContainer, setSelectedContainer] = useState("");
@@ -302,7 +293,6 @@ export function DeploymentDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
           : [],
-      onSuccess: () => setScaleDialogOpen(false),
     }
   );
 
@@ -371,10 +361,6 @@ export function DeploymentDetail() {
       },
     }
   );
-
-  const openScaleDialog = () => {
-    if (deployment) setScaleDialogOpen(true);
-  };
 
   const openImageDialog = (containerName: string, currentImage: string) => {
     setSelectedContainer(containerName);
@@ -712,11 +698,15 @@ export function DeploymentDetail() {
         actions={
           <>
             <PinAction kind="Deployment" namespace={namespace} name={name} />
-            <ReasonedAction
-              label={t("action", "scale")}
+            <ScaleControl
+              kind={ResourceType.Deployment}
+              name={name ?? ""}
+              namespace={namespace || null}
+              current={deployment?.replicas.desired}
+              ready={!!deployment}
               reason={patchDenied}
-              icon={Scale}
-              onClick={openScaleDialog}
+              warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              mutation={scaleMutation}
             />
             <RestartAction
               kind={ResourceType.Deployment}
@@ -773,21 +763,6 @@ export function DeploymentDetail() {
       {/* Both are opened from the strip's row, and so from whichever tab the
           reader is on. Inside the Overview's panel they would be unmounted the
           moment that tab was not the open one. */}
-      <ScaleDialog
-        warnings={scaleWarnings(connections, intercept("Scale"), t)}
-        open={scaleDialogOpen}
-        onOpenChange={(open) => {
-          if (open) scaleMutation.reset();
-          setScaleDialogOpen(open);
-        }}
-        kind={ResourceType.Deployment}
-        name={name ?? ""}
-        namespace={namespace || null}
-        current={deployment?.replicas.desired}
-        busy={scaleMutation.isPending}
-        error={scaleMutation.isError ? scaleMutation.error : null}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
 
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent>

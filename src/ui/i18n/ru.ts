@@ -3552,12 +3552,17 @@ export const ru: Catalogue = {
     caBundleNamed: "набор {name}",
     govMetricFrom: "метрика {source}",
     govBudgetKeeps: "держит {rule}; {room}",
-    storyChanged:
-      "{changes} {when}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
-    storyPods:
-      "Поды {when}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
-    storyPod:
-      "Под {when}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyChanged: "{changes} {when}: {counts}.",
+    storyChangedOnly: "{changes} {when}.",
+    storyPods: "Поды {when}: {counts}.",
+    storyPod: "Под {when}: {counts}.",
+    storyPodsQuiet: "Поды {when}: ничего не происходило.",
+    storyPodQuiet: "Под {when}: ничего не происходило.",
+    storyScheduled: "запланировано {n}",
+    storyPulled: "скачано {n}",
+    storyStarted: "запущено {n}",
+    storyStopped: "остановлено {n}",
+    storyCountsJoin: "{first}, {rest}",
     changesRollouts: {
       one: "{n} развёртывание",
       few: "{n} развёртывания",
@@ -4724,6 +4729,8 @@ export const ru: Catalogue = {
     columnsYielded: "Не поместились: {columns}",
     columnsYieldedHint:
       "Не поместились: {columns}. Чтобы увидеть эти столбцы, расширьте окно или закройте панель рядом со списком. Поиск по ним работает и так.",
+    columnsYieldedHintNoPanel:
+      "Не поместились: {columns}. Чтобы увидеть эти столбцы, расширьте окно. Поиск по ним работает и так.",
     hpaScaleUnread:
       "Автомасштабировщик не удалось прочитать, поэтому неизвестно, что он масштабирует.",
     hpaNamesNoTarget:
@@ -5247,6 +5254,9 @@ export const ru: Catalogue = {
     freshPartlyUnreadChecksNote:
       "Обзор читается, но эти проверки не ответили: {reads}. Того, что они нашли бы, на этой странице нет.",
     freshBehind: "ещё читается",
+    freshReading: "читается",
+    freshReadingRowNote:
+      "Пока панель сама не прочитала объект, она показывает его строку из списка.",
     freshBehindNote:
       "Чтение этого экрана ждёт ответа кластера дольше {slow} с, поэтому на экране последний полученный ответ. Через {deadline} с приложение перестанет ждать и сообщит об этом.",
     freshRefused: "отказано",
@@ -5542,9 +5552,14 @@ export const ru: Catalogue = {
     problemNotRecheckedFailed:
       "Не перепроверено: чтение, которое проверило бы это снова, не удалось. Последние известные данные на {time}.",
     unreadOnScreen:
-      "Не всё на этом экране удалось прочитать, поэтому счёт может что-то упускать:",
-    unreadOnScreenRefused: "{name}: отклонено",
-    unreadOnScreenFailed: "{name}: чтение не удалось",
+      "Часть чтений, на которых держится это окно, осталась без ответа, поэтому счёт может что-то упускать:",
+    unreadOnScreenRefused: "{name}: отказ {ago}, спросим снова до {time}",
+    unreadOnScreenFailed: "{name}: чтение не удалось {ago}",
+    readIngressClients: "Поды Ingress-контроллера {what}",
+    readIngressClientPolicies:
+      "NetworkPolicy вокруг Ingress-контроллера {what}",
+    readIngressClasses: "IngressClasses",
+    readServiceHealth: "Services и то, что за ними стоит",
     finishedOnNode: "Завершились здесь",
     finishedOnNodeNote:
       "Поды в фазе Succeeded и Failed не занимают места на узле, поэтому счётчики подов на этой странице их не учитывают, как и kubectl describe node.",
@@ -7486,6 +7501,14 @@ export const ru: Catalogue = {
     noTargetGroupBinding: "нет TargetGroupBinding",
     noLimitsDeclared:
       "В этом шаблоне не объявлены лимиты: шкала показывает то, что эти поды уже потребляли, и ничто не ограничивает, сколько они могут взять.",
+    noCpuLimitDeclared:
+      "В этом шаблоне не объявлен лимит CPU: шкала показывает то, что эти поды уже потребляли, и ничто не ограничивает, сколько CPU они могут взять.",
+    noMemoryLimitDeclared:
+      "В этом шаблоне не объявлен лимит памяти: шкала показывает то, что эти поды уже потребляли, и ничто не ограничивает, сколько памяти они могут взять.",
+    noCpuLimitSet:
+      "Предел CPU не задан: шкала показывает израсходованное, и ничто не мешает занять весь CPU узла.",
+    noMemoryLimitSet:
+      "Предел памяти не задан: шкала показывает израсходованное, и ничто не мешает занять всю память узла.",
     limitsNotKnown:
       "Лимиты этого шаблона прочитать не удалось: шкала показывает то, что эти поды уже потребляли, а ограничивает ли их что-то, неизвестно.",
     noStructuralSchema:

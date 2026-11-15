@@ -137,6 +137,26 @@ describe("CountBlock", () => {
     expect(screen.getByText(/against 80%/)).toBeInTheDocument();
   });
 
+  /**
+   * Vercel r8-76: "cpu no reading" in amber on a Deployment scaled to zero,
+   * which has no pod to read. Fails if that expected absence is drawn as a
+   * warning, or a missing reading with pods running is no longer one.
+   */
+  it("draws a missing reading neutral where nothing runs, and amber where pods run", async () => {
+    const unread = [
+      { name: "cpu", source: "resource", target: "80%", current: null },
+    ];
+    const { unmount } = await renderBlock(
+      query(conns(autoscaler({ currentReplicas: 0, metrics: unread })))
+    );
+    expect(screen.getByTestId("hpa-no-reading")).toHaveClass("text-fg-fnt");
+    expect(screen.getByTestId("hpa-no-reading")).not.toHaveClass("text-warn");
+    unmount();
+
+    await renderBlock(query(conns(autoscaler({ metrics: unread }))));
+    expect(screen.getByTestId("hpa-no-reading")).toHaveClass("text-warn");
+  });
+
   /** Issue #178: the block described the autoscaler and gave no way to change it. */
   it("offers the editor beside the autoscaler it names", async () => {
     await renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));

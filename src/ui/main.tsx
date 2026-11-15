@@ -29,6 +29,7 @@ import { currentLocale, useLocaleStore } from "@/stores/localeStore";
 import { loadPathIdentity } from "@/stores/privacyStore";
 import { applyTheme, cachedTheme } from "@/lib/theme";
 import { shareStructure } from "@/lib/watched-rows";
+import { askAgainWhenLetGo } from "@/lib/refusals";
 
 // After every eagerly imported module has loaded.
 markStartup("main");
@@ -80,6 +81,8 @@ const queryClient = new QueryClient({
     mutations: { networkMode: "always" },
   },
 });
+
+askAgainWhenLetGo(queryClient);
 
 const router = makeRouter(queryClient);
 

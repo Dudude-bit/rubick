@@ -727,7 +727,7 @@ function DataTableInner<TData extends RowData>({
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
-  const { open: openPeek } = usePeek();
+  const { open: openPeek, target: openedPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -1242,6 +1242,13 @@ function DataTableInner<TData extends RowData>({
     }
   });
 
+  const firstWhenSettled = React.useRef(false);
+  React.useEffect(() => {
+    if (!firstWhenSettled.current || settling) return;
+    firstWhenSettled.current = false;
+    select(0);
+  });
+
   const isDrawn = (rowIndex: number) => {
     if (!shouldVirtualScroll || virtualItems.length === 0) return true;
     const line = rowLine[rowIndex];
@@ -1598,7 +1605,10 @@ function DataTableInner<TData extends RowData>({
       actions={quickActions}
       folded={foldActions ? openRowMenuAt : null}
     >
-      <div className={cn("flex flex-col gap-2", fill && "min-h-0")}>
+      <div
+        data-pointer-hold=""
+        className={cn("flex flex-col gap-2", fill && "min-h-0")}
+      >
         <div className="flex flex-none flex-wrap items-center justify-between gap-2">
           {/* A search field is a text entry, not a panel: the box only
             appears once it has focus or a value. */}
@@ -1626,7 +1636,8 @@ function DataTableInner<TData extends RowData>({
                     else event.currentTarget.blur();
                   } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
                     event.preventDefault();
-                    select(0);
+                    if (settling) firstWhenSettled.current = true;
+                    else select(0);
                   }
                 }}
                 className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
@@ -1957,9 +1968,11 @@ function DataTableInner<TData extends RowData>({
           {yieldedNames && (
             <span
               className="flex min-w-0 max-w-full items-center gap-1"
-              title={t("readings", "columnsYieldedHint", {
-                columns: yieldedNames,
-              })}
+              title={t(
+                "readings",
+                openedPeek ? "columnsYieldedHint" : "columnsYieldedHintNoPanel",
+                { columns: yieldedNames }
+              )}
               data-testid="columns-yielded"
             >
               <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />

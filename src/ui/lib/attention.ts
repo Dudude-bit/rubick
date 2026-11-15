@@ -30,7 +30,7 @@ import {
   type ClaimReads,
 } from "@/lib/claim-cause";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { autoscalerVerdict } from "@/lib/governance";
+import { autoscalerVerdict, type Autoscaler } from "@/lib/governance";
 import { namespacesWhere } from "@/lib/namespace-scope";
 import { sameCause } from "@/lib/pod-cause";
 import { policyNamesOf } from "@/lib/policy-door";
@@ -93,6 +93,8 @@ export interface AttentionItem {
   stale?: boolean;
   /** Where `stale`: when the answer it is kept from came, and whether the reads since were refused rather than failed. */
   lastKnown?: { at: number; refused: boolean };
+  /** The autoscaler it was judged from, so a reader words it as the workload's page does. */
+  autoscaler?: Autoscaler;
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -721,6 +723,7 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
           name: target.name,
           namespace: target.namespace,
         },
+        autoscaler: { object: autoscaler, facts: autoscaler.facts, target },
       }),
     ];
   })

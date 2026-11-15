@@ -455,6 +455,22 @@ export function Events() {
     })),
   });
 
+  // Its own one-row read while the watch is live: the overview's answer is
+  // kept thirty seconds and polled at its own rate, so a feed every list of
+  // which failed read "live" for up to a minute.
+  const probe = useLiveQueries<LatestEvents>({
+    refresh: "fast",
+    queries: (watching ? (several ? scope.scope : [currentNamespace]) : []).map(
+      (namespace) => ({
+        queryKey: [...queryKeys.events(namespace), "probe"],
+        queryFn: () => read(filtersFor(namespace, "all", 1)),
+        enabled: isConnected,
+        staleTime: STALE_TIMES.fast,
+        refetchOnWindowFocus: false,
+      })
+    ),
+  });
+
   const answers = parts.data;
   const polled = useMemo(
     () =>
@@ -496,10 +512,10 @@ export function Events() {
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = useRefusedAt(refused ? failed : null);
   const freshList = useOverviewUnreadOf(ResourceType.Event);
-  const warm =
-    watching && !watch.resyncing && !refused && failed === null
-      ? freshList.unread
-      : null;
+  const warmRead = watching && !watch.resyncing && !refused && failed === null;
+  const probed = warmRead ? probe.error : null;
+  const probeRefusedAt = useRefusedAt(probed);
+  const warm = probed ?? (warmRead ? freshList.unread : null);
   // `others` is what the type filter left out, where the read held it: a
   // polled read asked the cluster for the one type alone.
   const { pool, windowFull, others } = useMemo(() => {
@@ -866,8 +882,10 @@ export function Events() {
               refusedAt={
                 refused
                   ? refusedAt
-                  : warm && isRefusal(warm) && freshList.since
-                    ? freshList.since
+                  : warm && isRefusal(warm)
+                    ? probed
+                      ? probeRefusedAt
+                      : freshList.since || undefined
                     : undefined
               }
             />
@@ -897,10 +915,12 @@ export function Events() {
               question={t("empty", "watchLiveListFailing", {
                 label: "events",
               })}
-              error={Object.assign(new Error(warm.message), {
-                code: warm.code,
-              })}
-              onRetry={freshList.retry}
+              error={
+                warm instanceof Error
+                  ? warm
+                  : Object.assign(new Error(warm.message), { code: warm.code })
+              }
+              onRetry={probed ? probe.refetch : freshList.retry}
             />
           )}
           {short && !stale && !showSkeleton && (
@@ -1030,19 +1050,17 @@ function UnreadFeed({
   const t = useT();
   const refusal = useListRefusal(failed, everyNamespace, EVENTS);
   return (
-    <div className="px-1.5">
-      <UnreadList
-        error={failed}
-        words={
-          isRefusal(failed)
-            ? refusal.words
-            : t("empty", "eventsRefused", { scope: scopeWords })
-        }
-        onRetry={onRetry}
-      >
-        <RefusalWayOut refusal={refusal} />
-      </UnreadList>
-    </div>
+    <UnreadList
+      error={failed}
+      words={
+        isRefusal(failed)
+          ? refusal.words
+          : t("empty", "eventsRefused", { scope: scopeWords })
+      }
+      onRetry={onRetry}
+    >
+      <RefusalWayOut refusal={refusal} />
+    </UnreadList>
   );
 }
 

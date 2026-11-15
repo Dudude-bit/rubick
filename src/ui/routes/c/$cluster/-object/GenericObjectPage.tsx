@@ -1,3 +1,4 @@
+import { useAutoscalerPageClears } from "@/hooks/useAutoscalerPageClears";
 import { Info, Link2, Network } from "lucide-react";
 import { useMemo } from "react";
 
@@ -121,6 +122,12 @@ export function GenericObjectPage({
   const kind = known ?? resource;
   const uid = useLineage(read, name, namespace).data?.uid ?? null;
   useOwnershipKeys(read, name, namespace);
+  useAutoscalerPageClears(
+    kind === ResourceType.HorizontalPodAutoscaler ? object.data : undefined,
+    object.dataUpdatedAt,
+    name,
+    namespace ?? null
+  );
   const crd = segmentOf(target);
   const events = useObjectEvents(
     eventsKindOf({ kind, name, crd }),

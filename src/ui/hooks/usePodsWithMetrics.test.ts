@@ -92,7 +92,13 @@ beforeEach(() => {
   state.answered = true;
   client.clear();
   state.pods = ["a", "b"].map(
-    (name) => ({ name, namespace: "default", nodeName: "gone" }) as PodRow
+    (name) =>
+      ({
+        name,
+        namespace: "default",
+        nodeName: "gone",
+        status: { phase: "Running" },
+      }) as PodRow
   );
   state.metrics = state.pods.map(({ name, namespace }) => ({
     name,
@@ -224,7 +230,11 @@ it("keeps a watched namespace's pods when a re-read misses it", async () => {
   state.cluster.namespaceScope = ["default", "staging"];
   try {
     const { result } = renderHook(() => usePodsWithMetrics());
-    const worker = { name: "worker", namespace: "staging" } as PodRow;
+    const worker = {
+      name: "worker",
+      namespace: "staging",
+      status: { phase: "Running" },
+    } as PodRow;
     expect(result.current.watchLive).toBe(true);
     state.fresh = {
       rows: [state.pods[0]],

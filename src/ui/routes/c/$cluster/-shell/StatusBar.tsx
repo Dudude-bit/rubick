@@ -36,8 +36,9 @@ import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT, type T } from "@/i18n/useT";
+import { KEPT_FOR, useRefusedAt } from "@/lib/refusals";
 import {
-  readName,
+  readWords,
   useUnreadOnScreen,
   type UnreadRead,
 } from "./unread-on-screen";
@@ -427,19 +428,39 @@ function UnreadHere({
       <p>{t("cluster", "unreadOnScreen")}</p>
       <ul>
         {named.map((read) => (
-          <li key={hashKey(read.key)}>
-            {t(
-              "cluster",
-              read.refused ? "unreadOnScreenRefused" : "unreadOnScreenFailed",
-              { name: readName(read.key, context) }
-            )}
-          </li>
+          <UnreadEntry key={hashKey(read.key)} read={read} context={context} />
         ))}
       </ul>
       {reads.length > named.length && (
         <p>{t("empty", "andMore", { n: reads.length - named.length })}</p>
       )}
     </div>
+  );
+}
+
+/** One read by what it was of and when it last answered; a refusal by when it was said and when it is asked again. */
+function UnreadEntry({
+  read,
+  context,
+}: {
+  read: UnreadRead;
+  context: string | null;
+}) {
+  const t = useT();
+  const at = useRefusedAt(read.refused ? read.error : null) ?? read.at;
+  const age = useRealtimeAge(new Date(at).toISOString());
+  const name = readWords(read.key, context, t);
+  const ago = t("action", "agoSuffix", { age });
+  return (
+    <li>
+      {read.refused
+        ? t("cluster", "unreadOnScreenRefused", {
+            name,
+            ago,
+            time: formatWhen(at + KEPT_FOR, "clock"),
+          })
+        : t("cluster", "unreadOnScreenFailed", { name, ago })}
+    </li>
   );
 }
 

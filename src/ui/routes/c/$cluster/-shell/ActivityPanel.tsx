@@ -98,7 +98,7 @@ export function ActivityPanel() {
           // Underlined on hover as well as brightened: on a line where
           // everything else is text that does nothing, colour alone did not
           // read as a control.
-          className="flex items-center gap-1.5 rounded px-1.5 py-1 text-caption text-fg-fnt transition-colors hover:text-fg hover:underline hover:decoration-dotted hover:underline-offset-2"
+          className="flex items-center gap-1.5 rounded px-1.5 py-1 text-caption text-fg-fnt transition-colors hover:text-fg hover:underline hover:decoration-dotted hover:underline-offset-2 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <Activity className="h-3 w-3" />
           <span className={cn(totalActive > 0 && "tabular-nums")}>{label}</span>

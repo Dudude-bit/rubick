@@ -51,7 +51,7 @@ export function ResourceListHeader({
         (countPending ? (
           <span
             aria-hidden="true"
-            className="inline-block h-3 w-5 animate-pulse rounded bg-hover align-middle"
+            className="inline-block h-2.5 w-5 animate-pulse rounded bg-hover align-baseline"
           />
         ) : undefined)
       }

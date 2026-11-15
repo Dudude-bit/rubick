@@ -58,12 +58,14 @@ export function WorkloadDiagnosis({
       />
       <RolloutSummary rollout={rollout} subject={{ kind, name, namespace }} />
       <PodsTroubleLines pods={pods} />
-      {connections.error && !connections.data ? (
-        <ListedFindingLines kind={kind} namespace={namespace} name={name} />
-      ) : (
+      {/* The row's finding until the peek's own read of what governs it
+          answers, failed or still on its way: "1 problem" above no cause. */}
+      {connections.data ? (
         findings.map((finding) => (
           <FindingLine key={finding.title} finding={finding} />
         ))
+      ) : (
+        <ListedFindingLines kind={kind} namespace={namespace} name={name} />
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 
+import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
 import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
@@ -51,6 +52,9 @@ const NOT_COUNTED = new Set(["cluster-overview", "metrics"]);
 export interface UnreadRead {
   key: QueryKey;
   refused: boolean;
+  error: unknown;
+  /** When the latest answer came. */
+  at: number;
 }
 
 /** Whether `query` is read by something on screen and its latest read was refused or failed. */
@@ -81,25 +85,34 @@ const stores = new WeakMap<QueryCache, Store>();
 function storeOf(cache: QueryCache): Store {
   const known = stores.get(cache);
   if (known) return known;
-  const unread = new Map<string, UnreadRead & { query: Query }>();
+  const unread = new Map<string, { read: UnreadRead; query: Query }>();
   const listeners = new Set<() => void>();
   let shown = NONE;
   let off: (() => void) | null = null;
   const see = (query: Query): boolean => {
     const hash = query.queryHash;
     const was = unread.get(hash);
+    const { error, errorUpdatedAt } = query.state;
     const now =
       cache.get(hash) === query && leftUnread(query)
-        ? { key: query.queryKey, refused: isRefusal(query.state.error), query }
+        ? {
+            read: {
+              key: query.queryKey,
+              refused: isRefusal(error),
+              error,
+              at: errorUpdatedAt,
+            },
+            query,
+          }
         : undefined;
-    if (was?.query === now?.query && was?.refused === now?.refused)
+    if (was?.query === now?.query && was?.read.error === now?.read.error)
       return false;
     if (now) unread.set(hash, now);
     else unread.delete(hash);
     return true;
   };
   const publish = () => {
-    shown = [...unread.values()].map(({ key, refused }) => ({ key, refused }));
+    shown = [...unread.values()].map(({ read }) => read);
     for (const listener of listeners) listener();
   };
   const store: Store = {
@@ -146,6 +159,26 @@ const PLURAL = new Map<string, string>([
   ),
   ["pod-rows", "Pods"],
 ]);
+
+/** Reads no screen draws, which the problem count asks to judge what it counts, in words a reader knows. */
+const ASKED_FOR_COUNT = {
+  "ingress-clients": "readIngressClients",
+  "ingress-client-policies": "readIngressClientPolicies",
+  "ingress-class": "readIngressClasses",
+  "service-health-inputs": "readServiceHealth",
+} as const;
+
+/** {@link readName}, but a read the count asks for itself in words rather than by its key. */
+export function readWords(key: QueryKey, context: string | null, t: T): string {
+  const root = String(key[0]);
+  if (!(root in ASKED_FOR_COUNT)) return readName(key, context);
+  const what = key.find(
+    (part, at) => at > 0 && typeof part === "string" && part !== ""
+  );
+  return t("cluster", ASKED_FOR_COUNT[root as keyof typeof ASKED_FOR_COUNT], {
+    what: typeof what === "string" ? what : "",
+  });
+}
 
 /**
  * What a read was of, out of its key: the kind and the name of one object,

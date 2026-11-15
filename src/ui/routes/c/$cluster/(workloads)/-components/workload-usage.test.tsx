@@ -169,6 +169,40 @@ describe("WorkloadUsage whose pods were not read", () => {
     );
   });
 
+  /**
+   * Vercel r8-75: a Deployment scaled to zero showed "still reading" for
+   * about 10 s before "nothing running", with 0/0 already on screen. Fails
+   * if a workload that asks for no pods waits on its pod read to say so, or
+   * if one that asks for some stops waiting.
+   */
+  it("says nothing runs at once for a workload that asks for no pods", () => {
+    const replica = {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    };
+    const scaled = (desired: number) =>
+      view({
+        kind: "Deployment",
+        podsPending: true,
+        template: { replica, replicas: { desired } },
+        idle: "This Deployment is scaled to zero.",
+      });
+    const { unmount } = scaled(0);
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "nothing running"
+    );
+    expect(screen.getByText(/scaled to zero/)).toBeVisible();
+    unmount();
+
+    scaled(2);
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "still reading"
+    );
+  });
+
   /** Fails if a refused pod read is a dead end with no way to ask again. */
   it("offers to read the pods again", async () => {
     const onRetryPods = vi.fn();

@@ -72,7 +72,7 @@ export function Unknown({
         role="status"
         data-read={refused ? "refused" : "failed"}
         className={cn(
-          "flex min-h-7 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-dashed border-hair px-2.5 py-0.5 text-xs",
+          "flex min-h-7 shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-dashed border-hair px-2.5 py-0.5 text-xs",
           className
         )}
       >
@@ -84,7 +84,7 @@ export function Unknown({
           <span className="min-w-0">{question}</span>
         </span>
         <span
-          className="min-w-0 flex-1 basis-40 truncate text-fg-mut"
+          className="line-clamp-2 min-w-0 flex-1 basis-40 break-words text-fg-mut"
           title={said}
         >
           {said}
