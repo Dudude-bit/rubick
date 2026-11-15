@@ -129,6 +129,32 @@ describe("flows on the map", () => {
     expect(drawn.groups.map((group) => group.id)).toContain("bank");
   });
 
+  /**
+   * A stand-in workload is drawn by its own kind and group: a namesake of a
+   * built-in from another group is a kind of its own, the built-in itself
+   * keeps its glyph.
+   */
+  it("draws a stand-in namesake as a kind of its own and a built-in with its glyph", () => {
+    const namesake: FlowEnd = {
+      is: "workload",
+      key: {
+        namespace: "shop",
+        group: "custom.io",
+        kind: "Deployment",
+        name: "odd",
+      },
+    };
+    const drawn = model(
+      [workload("Deployment", "cart"), namesake],
+      [[0, 1]],
+      []
+    );
+    expect(drawn.nodes.find((node) => node.label === "odd")?.crd).toBeNull();
+    expect(
+      drawn.nodes.find((node) => node.label === "cart")?.crd
+    ).toBeUndefined();
+  });
+
   /** An address outside every namespace is drawn outside every card. */
   it("draws an address outside every card", () => {
     const drawn = model(
