@@ -128,6 +128,56 @@ describe("an integration row's count over a namespace the cluster does not have"
   });
 });
 
+describe("an integration whose count is of the whole cluster", () => {
+  /**
+   * Argo CD 10 and Traefik 18 stood beside Prometheus with the missing-scope
+   * mark, in a namespace that is not there: the number was of the whole
+   * cluster and read as the namespace's. Fails if a counted integration row
+   * prints a number over a missing scope, or a cluster-wide one over a real
+   * scope does not say what it counted.
+   */
+  it("is marked missing over a missing scope and says it is cluster-wide over a real one", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.detectInClusterExtensions).mockResolvedValue([
+      { id: "argocd", installed: true, version: null },
+    ] as never);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      {
+        name: "a",
+        namespace: "x",
+        uid: "u",
+        spec: {},
+        status: {},
+        labels: {},
+        annotations: {},
+        ownerReferences: [],
+      },
+    ] as never);
+    const view = await renderWithRouter(
+      <Sidebar missing={{ missing: ["lena"], whole: true, checking: false }} />,
+      { at: "/c/acme-staging", route: "/c/$cluster/$" }
+    );
+    const argo = await row("Argo CD");
+    expect(
+      await within(argo).findByTestId("scope-missing-count")
+    ).toBeInTheDocument();
+    view.unmount();
+
+    await renderWithRouter(<Sidebar />, {
+      at: "/c/acme-staging",
+      route: "/c/$cluster/$",
+    });
+    const counted = await row("Argo CD");
+    await vi.waitFor(() =>
+      expect(
+        counted.querySelector("[title*='whole cluster']")
+      ).toBeInTheDocument()
+    );
+    vi.mocked(commands.detectInClusterExtensions).mockResolvedValue([]);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([]);
+  });
+});
+
 describe("the Routes row of a reader bound to their namespace", () => {
   /**
    * marco may list HTTPRoutes in his namespace and neither GRPCRoutes nor

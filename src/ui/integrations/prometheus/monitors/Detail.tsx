@@ -198,7 +198,7 @@ export function Detail({
             >
               {verdict.head}
             </p>
-            {verdict.body && (
+            {verdict.body && verdict.body !== t("monitors", "notConnected") && (
               <p className="mt-1 text-xs leading-relaxed text-fg-mut">
                 {verdict.body}
               </p>
@@ -481,6 +481,7 @@ function PickedUpStep({
 }) {
   const { pickedUp, monitor } = row;
   const saidAbove = row.findings[0]?.kind === "pickedUpUnknown";
+  const verdictSaysNone = row.findings[0]?.kind === "notPickedUp";
   const by =
     pickedUp.state === "notJudged"
       ? []
@@ -504,7 +505,9 @@ function PickedUpStep({
             ? t("monitors", "pickedUpCount", { n: pickedUp.by.length })
             : pickedUp.state === "unknown" && saidAbove
               ? t("monitors", "notChecked")
-              : null
+              : pickedUp.state === "judged" && verdictSaysNone
+                ? t("empty", "noneInline")
+                : null
       }
       last={false}
     >
@@ -571,16 +574,18 @@ function PickedUpStep({
           </div>
         );
       })}
-      {pickedUp.state === "judged" && pickedUp.by.length === 0 && (
-        <p
-          className={cn(
-            "text-xs",
-            row.scrape.state === "read" ? "text-err" : "text-warn"
-          )}
-        >
-          {t("monitors", "notPickedUp")}
-        </p>
-      )}
+      {pickedUp.state === "judged" &&
+        pickedUp.by.length === 0 &&
+        !verdictSaysNone && (
+          <p
+            className={cn(
+              "text-xs",
+              row.scrape.state === "read" ? "text-err" : "text-warn"
+            )}
+          >
+            {t("monitors", "notPickedUp")}
+          </p>
+        )}
       {pickedUp.state === "unknown" &&
         pickedUp.by.length === 0 &&
         !saidAbove && (
@@ -607,7 +612,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
         count={t("monitors", "notChecked")}
         last
       >
-        <p className="text-xs text-fg-mut">{t("monitors", "notConnected")}</p>
+        {null}
       </Step>
     );
   if (scrape.state === "unanswered")

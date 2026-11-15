@@ -163,6 +163,21 @@ describe("the freshness of the Applications read", () => {
       expect(screen.getAllByText("polling").length).toBeGreaterThan(0)
     );
   });
+
+  /**
+   * The chip sat on the tab row while every list wears it top right in the
+   * header. Fails if it is drawn outside the header beside Share, in the
+   * tab strip.
+   */
+  it("sits in the header row, not the tab row", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([]));
+    useClusterStore.setState({ isConnected: true });
+    await renderOn("applications");
+    const chip = (await screen.findAllByText("polling"))[0];
+    const heading = screen.getByRole("heading", { name: "Argo CD" });
+    expect(heading.parentElement).toContainElement(chip);
+    expect(screen.getByRole("tablist")).not.toContainElement(chip);
+  });
 });
 
 describe("Applications that are not in sync", () => {

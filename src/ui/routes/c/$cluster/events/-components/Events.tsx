@@ -268,7 +268,10 @@ function useFolded(
   const [countPx, setCountPx] = useState(0);
   useLayoutEffect(() => {
     if (!count) return;
-    const read = () => setCountPx(count.scrollWidth + TITLE_PX);
+    const read = () => {
+      if (count.hasAttribute("data-wrapped")) return;
+      setCountPx(count.scrollWidth + TITLE_PX);
+    };
     read();
     const observer = new MutationObserver(read);
     observer.observe(count, {
@@ -725,6 +728,7 @@ export function Events() {
           showSkeleton || nothingRead ? undefined : (
             <HeaderCount
               measure={setCount}
+              wrap={narrow}
               parts={summarise(
                 t,
                 warningCount,
@@ -1105,16 +1109,19 @@ function summarise(
 function HeaderCount({
   parts,
   measure,
+  wrap,
 }: {
   parts: CountPart[];
   measure: (element: HTMLElement | null) => void;
+  wrap: boolean;
 }) {
   const words = parts.map((part) => part.words).join(" · ");
   return (
     <span
       ref={measure}
       data-events-count
-      className="block truncate"
+      data-wrapped={wrap || undefined}
+      className={wrap ? "block" : "block truncate"}
       title={words}
     >
       <span className="sr-only">{words}</span>

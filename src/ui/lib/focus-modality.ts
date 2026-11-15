@@ -45,6 +45,25 @@ function tabbables(root: ParentNode): HTMLElement[] {
   );
 }
 
+/** A stop the browser would visit that an `overflow: hidden` ancestor has cut out of sight. */
+function clippedAway(el: HTMLElement): boolean {
+  const box = el.getBoundingClientRect();
+  if (box.width === 0 && box.height === 0) return false;
+  for (let up = el.parentElement; up; up = up.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(up);
+    if (!/hidden|clip/.test(overflowX + overflowY)) continue;
+    const edge = up.getBoundingClientRect();
+    if (
+      box.right <= edge.left ||
+      box.left >= edge.right ||
+      box.bottom <= edge.top ||
+      box.top >= edge.bottom
+    )
+      return true;
+  }
+  return false;
+}
+
 const isTab = (event: KeyboardEvent) =>
   event.key === "Tab" ||
   event.code === "Tab" ||
@@ -71,7 +90,8 @@ export function startFocusWrap(root: Document = document) {
     pressed = null;
     if (event.defaultPrevented) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const stops = tabbables(root);
+    const native = tabbables(root);
+    const stops = native.filter((el) => !clippedAway(el));
     if (stops.length === 0) return;
     const active = root.activeElement;
     const nowhere = !active || active === root.body;
@@ -86,9 +106,21 @@ export function startFocusWrap(root: Document = document) {
       : nowhere || at === last
         ? stops[0]
         : null;
-    if (!next) return;
+    const step = event.shiftKey ? -1 : 1;
+    const aside = active ? native.indexOf(active as HTMLElement) : -1;
+    const fromHere = (): HTMLElement | undefined => {
+      const ahead =
+        step > 0 ? native.slice(aside + 1) : native.slice(0, aside).reverse();
+      return ahead.find((el) => !clippedAway(el)) ?? stops[step > 0 ? 0 : last];
+    };
+    const target =
+      next ??
+      (aside >= 0 && native[aside + step] && clippedAway(native[aside + step])
+        ? fromHere()
+        : null);
+    if (!target) return;
     event.preventDefault();
-    next.focus();
+    target.focus();
   };
   window.addEventListener("pointerdown", onPointer, { capture: true });
   window.addEventListener("keydown", onKey);

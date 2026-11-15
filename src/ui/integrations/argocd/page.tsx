@@ -243,12 +243,6 @@ export default function ArgoCdPage() {
               })
         }
         description={t("empty", "argoPageDescription")}
-      />
-      <StaleRead read={applications} label="Argo CD" />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={setTab}
         actions={
           <>
             <DataFreshness
@@ -267,6 +261,8 @@ export default function ArgoCdPage() {
           </>
         }
       />
+      <StaleRead read={applications} label="Argo CD" />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }

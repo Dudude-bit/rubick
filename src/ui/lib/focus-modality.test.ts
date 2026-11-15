@@ -124,3 +124,49 @@ describe("Tab at either end of the window", () => {
     expect(document.activeElement).toBe(cluster);
   });
 });
+
+describe("Tab past a stop that is cut out of sight", () => {
+  const box = (el: HTMLElement, left: number, right: number) =>
+    (el.getBoundingClientRect = () =>
+      ({
+        left,
+        right,
+        top: 0,
+        bottom: 24,
+        width: right - left,
+        height: 24,
+      }) as DOMRect);
+
+  /**
+   * The status bar wraps a control it has no room for onto a line its
+   * `overflow: hidden` cuts off, and Tab still stopped there: presses with no
+   * ring anywhere before the focus wrapped. Fails if Tab, forward or back,
+   * lands on a stop an overflow-hidden ancestor has clipped away.
+   */
+  it("skips it forward and back, wrapping when nothing visible is left", () => {
+    stop = startFocusWrap();
+    document.body.innerHTML = `
+      <button id="first">first</button>
+      <div id="bar" style="overflow-x:hidden;overflow-y:hidden"><button id="seen">seen</button><button id="cut">cut</button></div>`;
+    const [first, seen, cut, bar] = ["first", "seen", "cut", "bar"].map((id) =>
+      document.getElementById(id)!
+    );
+    box(bar, 0, 100);
+    box(first, 0, 50);
+    box(seen, 10, 60);
+    box(cut, 120, 180);
+    const tab = (init: KeyboardEventInit = {}) =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", cancelable: true, ...init })
+      );
+    first.focus();
+    tab();
+    expect(document.activeElement).toBe(first);
+    seen.focus();
+    tab();
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    tab({ shiftKey: true });
+    expect(document.activeElement).toBe(seen);
+  });
+});

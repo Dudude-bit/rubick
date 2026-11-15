@@ -609,6 +609,7 @@ function IntegrationsGroup({ missing }: { missing: ScopeMissing }) {
   const vendor = useAppSearchValue("vendor") ?? null;
   const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
+  const scope = useClusterStore((state) => state.namespaceScope);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
   const [waking, setWaking] = React.useState<string | null>(null);
@@ -684,7 +685,12 @@ function IntegrationsGroup({ missing }: { missing: ScopeMissing }) {
       key={page.id}
       item={{ label: page.name, path: page.link, icon: page.icon }}
       value={page.count}
-      scopeGone={page.scoped ? missing : undefined}
+      scopeGone={page.counted ? missing : undefined}
+      wideNote={
+        page.counted && !page.scoped && scope.length > 0
+          ? t("cluster", "countClusterWide")
+          : undefined
+      }
       mark={page.tone ?? undefined}
       // Detected but refused: the row is drawn disabled with a vendor
       // reason instead of linking to a page that only errors.
@@ -896,6 +902,7 @@ function NavRow({
   missing,
   value,
   scopeGone,
+  wideNote,
   mark,
   note,
   lock,
@@ -908,6 +915,8 @@ function NavRow({
   missing?: ScopeMissing;
   /** For a row that carries its own count of the scope: where the scope has no namespace, the count is not read. */
   scopeGone?: ScopeMissing;
+  /** For a count that is of the whole cluster while the window is scoped to namespaces. */
+  wideNote?: string;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
   /**
@@ -1003,7 +1012,10 @@ function NavRow({
           ) : (
             // A count nobody could finish still sits beside a break that was read.
             (value !== null || mark) && (
-              <span className="ml-auto flex items-center gap-1.5 text-caption text-fg-fnt">
+              <span
+                title={wideNote}
+                className="ml-auto flex items-center gap-1.5 text-caption text-fg-fnt"
+              >
                 {mark && (
                   // A hollow ring for "could not be checked", the same shape
                   // the tab strip wears: a page that says nobody looked had

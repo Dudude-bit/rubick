@@ -218,3 +218,44 @@ describe("scaling when the write failed", () => {
     expect(screen.queryByText(/old failure/)).toBeNull();
   });
 });
+
+describe("what the dialog says before it scales", () => {
+  /**
+   * Opened from a list row, the dialog showed a bare field: no current count
+   * and no word on what the number does. Fails if the running count is not
+   * stated, or the change typed is not worded as pods started, stopped, none
+   * or all.
+   */
+  it("states the running count and what the typed number changes", async () => {
+    render(scale({ current: 3 }));
+    expect(screen.getByTestId("scale-current")).toHaveTextContent(
+      "Runs 3 replicas now."
+    );
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "The same as now"
+    );
+    const field = screen.getByLabelText("Number of replicas");
+    await userEvent.clear(field);
+    await userEvent.type(field, "5");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Starts 2 more pods."
+    );
+    await userEvent.clear(field);
+    await userEvent.type(field, "2");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Stops 1 pod."
+    );
+    await userEvent.clear(field);
+    await userEvent.type(field, "0");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Stops every pod"
+    );
+  });
+
+  /** Fails if a count that was not read is drawn as a number, or a change is claimed against it. */
+  it("says nothing about a count it has not read", () => {
+    render(scale({ current: undefined }));
+    expect(screen.queryByTestId("scale-current")).toBeNull();
+    expect(screen.queryByTestId("scale-change")).toBeNull();
+  });
+});

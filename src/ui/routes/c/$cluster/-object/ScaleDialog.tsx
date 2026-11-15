@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -89,6 +90,11 @@ export function ScaleDialog({
             })}
           </DialogTitle>
           {gate.notice}
+          {current !== undefined && (
+            <DialogDescription data-testid="scale-current">
+              {t("count", "scaleNow", { n: current })}
+            </DialogDescription>
+          )}
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
@@ -188,6 +194,17 @@ function ScaleForm({
             {current === undefined && typed === ""
               ? t("action", "scaleCountUnread")
               : t("action", "scaleNeedsCount")}
+          </p>
+        )}
+        {counted && replicas !== null && current !== undefined && (
+          <p className="text-caption text-fg-mut" data-testid="scale-change">
+            {replicas === current
+              ? t("action", "scaleNoChange")
+              : replicas === 0
+                ? t("action", "scaleToZero")
+                : replicas > current
+                  ? t("count", "scaleStarts", { n: replicas - current })
+                  : t("count", "scaleStops", { n: current - replicas })}
           </p>
         )}
       </div>

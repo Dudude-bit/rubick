@@ -894,6 +894,8 @@ export interface IntegrationPageEntry {
   count: number | null;
   /** The count is of the window's namespaces, so a scope with no namespace has none. */
   scoped: boolean;
+  /** The row carries a count at all; one that does is read in a scope that may not exist. */
+  counted: boolean;
   /**
    * The dot beside the count — the worst thing on the vendor's page, or
    * nothing. `null` wherever {@link count} is, and for a vendor whose page
@@ -1131,6 +1133,7 @@ export function useIntegrationPages(): {
         connections.get(vendor.id)?.state !== "connected",
       count: measured?.count ?? null,
       scoped: vendor.page?.count?.scoped === true,
+      counted: vendor.page?.count !== undefined,
       tone: measured?.tone ?? null,
       own: index !== -1,
       operator: vendor.extension.operator === true,

@@ -13,12 +13,13 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   // A dialog that hands its Cancel focus as it opens rings it however it was
   // opened: after a click, focus moved from code is not `:focus-visible`.
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info data-autofocus:focus:outline-hidden data-autofocus:focus:ring-1 data-autofocus:focus:ring-info disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info data-autofocus:focus:outline-hidden data-autofocus:focus:ring-1 data-autofocus:focus:ring-info disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
   {
     variants: {
       variant: {
         default: "bg-fg text-canvas hover:bg-fg-mid",
-        destructive: "bg-err/16 text-err hover:bg-err/24",
+        destructive:
+          "bg-err/16 text-err hover:bg-err/24 disabled:bg-sel disabled:text-fg-fnt",
         outline: "border border-hair text-fg-mid hover:bg-hover hover:text-fg",
         secondary: "bg-sel text-fg-mid hover:bg-hover hover:text-fg",
         ghost: "text-fg-mut hover:bg-hover hover:text-fg",

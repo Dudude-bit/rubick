@@ -2590,15 +2590,17 @@ describe("a feed beside a peek", () => {
   /**
    * Dana's header read "103 warning events · 897 normal events · of the
    * latest" with "1000" on a line of its own, and the toolbar under it moved
-   * down a row whenever the limit's digits changed. Fails if the count can
-   * take a second line, or still states the cut the notice under it states.
+   * down a row whenever the limit's digits changed. Fails if the cut is
+   * still stated in the header beside the notice that states it, or if a
+   * count with no room is cut instead of wrapped whole.
    */
-  it("keeps its header count on one line and leaves the cut to the notice", async () => {
+  it("leaves the cut to the notice and never cuts the count mid-phrase", async () => {
     pageOf(300);
     listEvents.mockResolvedValue(feed("prod", 500));
     await mount("list");
     const count = await screen.findByTitle("500 normal events");
-    expect(count).toHaveClass("truncate");
+    expect(count).not.toHaveClass("truncate");
+    expect(count).not.toHaveTextContent("of the latest");
     expect(
       screen.getByText(/^Only the latest 500 were read\./)
     ).toBeInTheDocument();
@@ -2643,6 +2645,21 @@ describe("a feed beside a peek", () => {
     expect(
       await screen.findByRole("button", { name: "Feed settings" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * At 1280 the Stories header was still cut "in those stories · of t..."
+   * after the toolbar folded, because the folded toolbar alone left the count
+   * less room than its words. Fails if a folded toolbar's count keeps
+   * truncating instead of wrapping whole.
+   */
+  it("wraps the count whole once the toolbar has folded and still leaves it no room", async () => {
+    pageOf(980, 300, 700, 400);
+    await mount("stories");
+    await screen.findByRole("button", { name: "Feed settings" });
+    const count = document.querySelector("[data-events-count]");
+    expect(count).not.toHaveClass("truncate");
+    expect(count).toHaveAttribute("data-wrapped");
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */
