@@ -292,6 +292,8 @@ function TopologyMap() {
     ...mapRail,
     ...vendorKinds.map((kind) => ({
       kind,
+      crd:
+        vendor.nodes.find((each) => each.node.kind === kind)?.node.crd ?? null,
       count: vendor.nodes.filter((each) => each.node.kind === kind).length,
       used: null,
       reading: null,
