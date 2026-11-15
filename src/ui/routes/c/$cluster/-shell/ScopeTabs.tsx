@@ -1256,11 +1256,18 @@ function NamespacePopover({
     .filter((name) => !drawn.includes(name));
   if (open && !opening && undrawn.length > 0) setDrawn([...drawn, ...undrawn]);
 
-  // By name, and nothing else: a row ordered by its problems or floated for
-  // being selected sat elsewhere at the next opening, and a click aimed from
-  // memory landed on another namespace. The counts and checks say the rest.
-  const ordered = [...shown].sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  // By name, a typed filter's prefix matches first; nothing else. A row
+  // ordered by its problems or floated for being selected sat elsewhere at
+  // the next opening, and a click aimed from memory landed on another
+  // namespace. The counts and checks say the rest.
+  const byName = (a: { name: string }, b: { name: string }) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  const startsWithNeedle = (name: string) =>
+    needle !== "" && name.toLowerCase().startsWith(needle);
+  const ordered = [...shown].sort(
+    (a, b) =>
+      Number(startsWithNeedle(b.name)) - Number(startsWithNeedle(a.name)) ||
+      byName(a, b)
   );
 
   const full = scope.length >= SCOPE_LIMIT;
@@ -1308,14 +1315,15 @@ function NamespacePopover({
   // the reader sees it before pressing: a listed name typed in full, then
   // "All namespaces" for its own first letters (typing "all" scoped the app
   // to a namespace of that name nobody has), then the first row the filter
-  // left, the typed row only when nothing listed matches.
+  // left, prefix matches first, the typed row only when nothing listed
+  // matches. With no filter, the scope the window is on.
   const exact = ordered.findIndex((ns) => ns.name === typedName);
   const meansAll =
-    needle.length >= 3 &&
+    needle.length >= 2 &&
     t("cluster", "allNamespaces").toLowerCase().startsWith(needle);
   const pick =
     needle === ""
-      ? -1
+      ? rows.findIndex((row) => row.selected)
       : exact >= 0
         ? exact + 1
         : meansAll

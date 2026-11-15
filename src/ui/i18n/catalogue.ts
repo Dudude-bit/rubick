@@ -1114,6 +1114,9 @@ export const en = {
     andClusterDefault: ", this cluster's default",
     scaleKind: "Scale {kind} {name}",
     replicasLabel: "Number of replicas",
+    scaleStillReading:
+      "What else sets this count has not answered yet. An autoscaler may take the number back.",
+    scaleReadingAutoscaler: "Reading what else sets this count...",
     scaleCountUnread:
       "The current count is not read yet. Type how many replicas to run.",
     scaleNeedsCount: "Type how many replicas to run, 0 or more.",
@@ -4249,10 +4252,11 @@ export const en = {
     hpaSeveralDetail:
       "{names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives.",
     hpaCannotActNow: "it is not currently able to act",
-    hpaOwnsStuckHead: "{name} owns this replica count, and is stuck.",
+    hpaOwnsStuckHead:
+      "The autoscaler {name} owns this replica count, and is stuck.",
     hpaOwnsStuckDetail:
       "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back.",
-    hpaWillRevertHead: "{name} will put this number back.",
+    hpaWillRevertHead: "The autoscaler {name} will put this number back.",
     hpaWillRevertDetail:
       "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
     hpaAutoscalerNamed: "The autoscaler {name}",

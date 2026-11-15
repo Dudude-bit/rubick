@@ -185,7 +185,13 @@ describe("a dialog the palette opens", () => {
     await screen.findByText("Scale");
     await user.keyboard("scale{Enter}");
 
-    const count = await screen.findByLabelText("Number of replicas");
+    const count = await screen.findByLabelText(
+      "Number of replicas",
+      undefined,
+      {
+        timeout: 4000,
+      }
+    );
     await vi.waitFor(() => expect(count).toHaveValue(2));
     await user.clear(count);
     await user.type(count, "3{Enter}");

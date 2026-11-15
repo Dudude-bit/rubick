@@ -625,6 +625,13 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
 
 const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
 
+const plainKey = (event: {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}) => !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+
 /**
  * Widgets that walk with Up and Down themselves; the list leaves those keys
  * to them. A tab strip walks with Left and Right, and nothing here uses j/k.
@@ -1390,6 +1397,12 @@ function DataTableInner<TData extends RowData>({
         return;
       case "Enter":
         if (isClickable) handleRowGesture(row, event);
+        return;
+      case " ":
+        if (isClickable && target === rowAt && plainKey(event)) {
+          event.preventDefault();
+          handleRowGesture(row, event);
+        }
     }
   };
 
@@ -1424,6 +1437,12 @@ function DataTableInner<TData extends RowData>({
     // A focused button or link owns its own Enter.
     if (event.key === "Enter" && isClickable) {
       if (target && target !== document.body && !inside) return false;
+      handleRowGesture(row.original, event);
+      return true;
+    }
+    if (event.key === " " && isClickable && plainKey(event)) {
+      if (target && target !== document.body) return false;
+      event.preventDefault();
       handleRowGesture(row.original, event);
       return true;
     }

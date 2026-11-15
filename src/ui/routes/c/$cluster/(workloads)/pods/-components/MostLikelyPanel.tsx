@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import { Clock, Copy, Search, Zap, type LucideIcon } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -16,6 +17,7 @@ import {
   type Check,
   type HintSaying,
   type MountedConfig,
+  type Trouble,
 } from "@/lib/hints";
 import { listLink } from "@/lib/links";
 import { mountSettled } from "@/lib/pod-cause";
@@ -55,12 +57,27 @@ const PANEL: Record<
   waiting: { frame: "border-info/40", icon: Clock, mark: "text-info" },
 };
 
+/**
+ * The page's cause block already names the exit and its last line, so a guess
+ * that only restates it is left out; one that names another cause (a liveness
+ * kill, a bare 137 read as memory) is not the same sentence and stays.
+ */
+function saidByCause(
+  trouble: Trouble,
+  cause: PodCause | null | undefined
+): boolean {
+  if (cause?.says !== "exits") return false;
+  if (trouble.reason === "crashLoop") return trouble.liveness === null;
+  return trouble.reason === "oomKilled" && trouble.saidOom;
+}
+
 export function MostLikelyPanel({
   pod,
   cause = null,
   events,
   eventsError,
   onOpenTab,
+  part = "panel",
 }: {
   pod: PodInfo;
   /** The cause the page leads with, read with its evidence. */
@@ -69,6 +86,8 @@ export function MostLikelyPanel({
   eventsError: string | null;
   /** The log tab is opened on a container, the way the Containers tab does. */
   onOpenTab: (tab: string, container?: string) => void;
+  /** `actions`: only the buttons, for a cause block that already says the guess. */
+  part?: "panel" | "actions";
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
@@ -87,6 +106,10 @@ export function MostLikelyPanel({
     settings.showPanel
   );
   const version = useAppInfo();
+
+  const echoed = trouble !== null && saidByCause(trouble, cause);
+  if (part === "actions" && !echoed) return null;
+  if (part === "panel" && echoed) return null;
 
   // A refused events read is not a pod with nothing wrong: three of the six
   // troubles are read from events, so the panel used to vanish rather than
@@ -163,6 +186,36 @@ export function MostLikelyPanel({
     copy(text, t("hints", "copiedForAgent", { n: text.length }));
   };
 
+  const actions = (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2",
+        part === "panel" && "mt-2"
+      )}
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleSearch}
+        disabled={!searchable}
+      >
+        <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+        {t("hints", "googleIt")}
+      </Button>
+      <Button variant="outline" size="sm" onClick={handleCopy}>
+        <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+        {t("hints", "copyForAgent")}
+      </Button>
+      <span className="text-caption text-fg-fnt">
+        {searchable
+          ? t("hints", "searchOpens", { site })
+          : t("hints", "searchNoEngine")}
+      </span>
+    </div>
+  );
+
+  if (part === "actions") return actions;
+
   const look =
     PANEL[
       trouble?.reason === "pending" && trouble.waiting ? "waiting" : "guess"
@@ -202,26 +255,7 @@ export function MostLikelyPanel({
           {t("count", "notReadList", { list: notRead.join("; ") })}
         </p>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSearch}
-          disabled={!searchable}
-        >
-          <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-          {t("hints", "googleIt")}
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleCopy}>
-          <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-          {t("hints", "copyForAgent")}
-        </Button>
-        <span className="text-caption text-fg-fnt">
-          {searchable
-            ? t("hints", "searchOpens", { site })
-            : t("hints", "searchNoEngine")}
-        </span>
-      </div>
+      {actions}
     </section>
   );
 }

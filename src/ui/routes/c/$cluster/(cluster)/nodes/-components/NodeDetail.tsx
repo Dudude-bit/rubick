@@ -568,7 +568,6 @@ export function NodeDetail() {
               icon={AlertTriangle}
               onClick={() => node && actions.drain(node.name)}
               disabled={!node}
-              danger
               reason={actions.denied(name ?? "")}
             />
             <ReasonedAction

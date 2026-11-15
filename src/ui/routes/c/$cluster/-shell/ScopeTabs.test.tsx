@@ -798,6 +798,86 @@ describe("watching several namespaces at once", () => {
     expect(scope()).toEqual([]);
   });
 
+  const listNamespaces = (...names: string[]) => {
+    summary.namespaces = names.map((name) => ({
+      name,
+      podCount: 1,
+      problems: null,
+    }));
+  };
+  const filterBox = () =>
+    screen.getByRole("combobox", { name: t("action", "filterNamespaces") });
+  const activeRow = () =>
+    document.getElementById(
+      filterBox().getAttribute("aria-activedescendant") ?? ""
+    );
+
+  /**
+   * "al" and Enter scoped the app to external-secrets, which holds the two
+   * letters mid-word. Fails if two letters of "All namespaces" lose to a
+   * namespace that merely contains them.
+   */
+  it("takes All namespaces for two letters, not a mid-word match", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("external-secrets", "ns-0");
+    await openPicker(user);
+    await user.keyboard("al{Enter}");
+    expect(scope()).toEqual([]);
+  });
+
+  /**
+   * A namespace literally called "all" is what the reader typed in full.
+   * Fails if All namespaces still wins over an exact name.
+   */
+  it("takes a namespace named exactly what was typed over All namespaces", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("all", "ns-0");
+    await openPicker(user);
+    await user.keyboard("all{Enter}");
+    expect(scope()).toEqual(["all"]);
+  });
+
+  /**
+   * Typing "ca" listed acart above cart because both held the letters and
+   * names sort alphabetically. Fails if a mid-word match outranks a prefix
+   * match, in the list or in what Enter takes.
+   */
+  it("ranks prefix matches above mid-word matches", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("acart", "cart", "ns-0");
+    await openPicker(user);
+    await user.keyboard("ca");
+    const names = screen
+      .getAllByRole("option")
+      .slice(1, 3)
+      .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
+    expect(names).toEqual(["cart", "acart"]);
+    await user.keyboard("{Enter}");
+    expect(scope()).toEqual(["cart"]);
+  });
+
+  /**
+   * An empty filter drew no active row, so Enter's answer was invisible.
+   * Fails if the open picker does not mark the scope the window is on, and
+   * All namespaces when it is on none.
+   */
+  it("draws the current scope's row as active before anything is typed", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-3"]);
+    await openPicker(user);
+    expect(activeRow()).toHaveTextContent("ns-3");
+    await user.keyboard("{Escape}");
+
+    await act(async () => {
+      useClusterStore.setState({ currentNamespace: "", namespaceScope: [] });
+    });
+    await openPicker(user);
+    expect(activeRow()).toHaveTextContent(t("cluster", "allNamespaces"));
+  });
+
   /**
    * A pod page under a scope that does not hold its namespace is a tab
    * naming one namespace over an object in another. Fails if a pick that
@@ -1039,8 +1119,9 @@ describe("watching several namespaces at once", () => {
     expect(list.querySelector("button")).toBeNull();
     expect(filter).toHaveFocus();
 
-    // Arrow onto a row: the caret stays put and the row is named instead.
-    await user.keyboard("{ArrowDown}{ArrowDown}");
+    // The picker opens on the scope the window is on (All namespaces); one
+    // arrow onto a row: the caret stays put and the row is named instead.
+    await user.keyboard("{ArrowDown}");
     expect(filter).toHaveAttribute("aria-activedescendant", rowFor("ns-0").id);
 
     await user.keyboard("{Control>}{Enter}{/Control}");

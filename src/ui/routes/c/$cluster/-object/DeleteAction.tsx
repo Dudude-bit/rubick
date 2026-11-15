@@ -117,7 +117,7 @@ export function DeleteAction({
   if (!mutation) return null;
   const action = restart
     ? podRestartAction(detail as PodInfo | undefined, t)
-    : { label: t("action", "delete"), icon: Trash2, danger: true };
+    : { label: t("action", "delete"), icon: Trash2 };
 
   return (
     <>
@@ -127,7 +127,6 @@ export function DeleteAction({
         onClick={() => setOpen(true)}
         disabled={disabled}
         busy={mutation.isPending}
-        danger={action.danger}
         reason={denied}
       />
       <DeletionDialog

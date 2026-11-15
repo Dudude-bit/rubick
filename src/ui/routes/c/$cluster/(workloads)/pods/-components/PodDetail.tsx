@@ -905,6 +905,22 @@ export function PodDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Pod, pod);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const likely = (part: "panel" | "actions" = "panel") =>
+    pod && (
+      <MostLikelyPanel
+        part={part}
+        pod={pod}
+        cause={cause}
+        events={podEvents.data ?? []}
+        eventsError={podEvents.error ? errorToShow(podEvents.error) : null}
+        // The log tab opened on the current run with no container selected
+        // landed on whatever the pane happened to be showing.
+        onOpenTab={(tab, container) =>
+          tab === "logs" && container ? openLogs(container) : openTab(tab)
+        }
+      />
+    );
+
   return (
     <>
       <ChainWatches services={chain.services} reads={[chain.key]} />
@@ -966,6 +982,7 @@ export function PodDetail() {
             </p>
           )
         }
+        tellsCause={Boolean(problem || causeSaid)}
         summary={
           (problem || causeSaid || pod?.status.gone === "replaced") && (
             <>
@@ -981,16 +998,21 @@ export function PodDetail() {
                   }
                   tone={causeSaid?.tone ?? problem?.tone}
                   action={
-                    <DetailAction
-                      label={t(
-                        "action",
-                        (problem?.tab ?? "conditions") === "containers"
-                          ? "seeContainers"
-                          : "seeConditions"
-                      )}
-                      icon={ArrowRight}
-                      onClick={() => setActiveTab(problem?.tab ?? "conditions")}
-                    />
+                    <>
+                      <DetailAction
+                        label={t(
+                          "action",
+                          (problem?.tab ?? "conditions") === "containers"
+                            ? "seeContainers"
+                            : "seeConditions"
+                        )}
+                        icon={ArrowRight}
+                        onClick={() =>
+                          setActiveTab(problem?.tab ?? "conditions")
+                        }
+                      />
+                      {likely("actions")}
+                    </>
                   }
                 />
               )}
@@ -1045,25 +1067,7 @@ export function PodDetail() {
                 {podStatus?.status !== "available" && (
                   <MetricsStatusBanner status={podStatus} />
                 )}
-                {pod && (
-                  <MostLikelyPanel
-                    pod={pod}
-                    cause={cause}
-                    events={podEvents.data ?? []}
-                    eventsError={
-                      podEvents.error ? errorToShow(podEvents.error) : null
-                    }
-                    // The log tab opened on the current run with no
-                    // container selected, so the row that says "read the
-                    // last lines of X before the exit" landed on whatever
-                    // the pane happened to be showing.
-                    onOpenTab={(tab, container) =>
-                      tab === "logs" && container
-                        ? openLogs(container)
-                        : openTab(tab)
-                    }
-                  />
-                )}
+                {likely()}
 
                 {/* A Pod is the only member of the family with no count block: it
                   does not have a replica count, it *is* one, and the page that

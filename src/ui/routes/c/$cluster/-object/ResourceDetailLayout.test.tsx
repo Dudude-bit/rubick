@@ -1,6 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useQuery } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
@@ -885,6 +891,50 @@ describe("DetailError says a read it could not do the way every unread is said",
       expect(chip).toHaveAttribute("title", "TooManyReplicas");
       expect(screen.getByTestId("findings-block")).toHaveTextContent(
         "TooManyReplicas"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
+   * A crash-looping pod's page said its cause in its own summary and again
+   * in the shell's findings block. Fails if a page that tells its own cause
+   * still draws the list row's finding beneath it.
+   */
+  it("draws no second block for a page that tells its own cause", async () => {
+    shellItems.items = [
+      {
+        key: "pod",
+        tone: "err",
+        kind: "Pod",
+        name: "api-1",
+        namespace: "lab",
+        reason: "Init:CrashLoopBackOff",
+        detail: null,
+        opens: { kind: "Pod", name: "api-1", namespace: "lab" },
+      },
+    ];
+    const page = (tellsCause: boolean) => (
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api-1" }}
+        title="api-1"
+        namespace="lab"
+        resourceKind="Pod"
+        statusBadge={<span>Init:CrashLoopBackOff</span>}
+        tellsCause={tellsCause}
+        activeTab="overview"
+        tabs={overview}
+      />
+    );
+    try {
+      await wrap(page(true));
+      expect(screen.queryByTestId("findings-block")).toBeNull();
+      cleanup();
+      await wrap(page(false));
+      expect(screen.getByTestId("findings-block")).toHaveTextContent(
+        "Init:CrashLoopBackOff"
       );
     } finally {
       shellItems.items = [];

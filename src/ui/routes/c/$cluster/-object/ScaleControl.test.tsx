@@ -56,6 +56,52 @@ describe("the Scale control", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  /**
+   * The autoscaler paragraph arrived half a second after the field and pushed
+   * it down 190px under the pointer. Fails if the field is drawn before the
+   * autoscaler read answered, or never drawn once it has.
+   */
+  it("holds the field back until the autoscaler read has answered", async () => {
+    const { rerender } = render(control({ reading: true }));
+    await userEvent.click(screen.getByRole("button", { name: /scale/i }));
+    expect(await screen.findByTestId("scale-pending")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/replicas/i)).toBeNull();
+
+    rerender(
+      control({
+        reading: false,
+        warnings: [
+          {
+            key: "hpa:web",
+            subject: "Autoscaler web",
+            lead: "The autoscaler web owns this replica count.",
+            description: "It will put this number back.",
+            to: null,
+          },
+        ],
+      })
+    );
+    expect(await screen.findByLabelText(/replicas/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("scale-pending")).toBeNull();
+    expect(
+      screen.getByText(/The autoscaler web owns this replica count/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A read that never answers must not lock the dialog on its placeholder.
+   * Fails if the field never appears, or appears without saying the read is
+   * still out.
+   */
+  it("shows the field and says the read is out when it does not answer", async () => {
+    render(control({ reading: true }));
+    await userEvent.click(screen.getByRole("button", { name: /scale/i }));
+    expect(
+      await screen.findByLabelText(/replicas/i, undefined, { timeout: 4000 })
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("scale-still-reading")).toBeInTheDocument();
+  }, 8000);
+
   /** Fails if a successful write leaves the dialog open over the new count. */
   it("closes when the write succeeds", async () => {
     const mutate = vi.fn((_n: number, options?: { onSuccess?: () => void }) =>

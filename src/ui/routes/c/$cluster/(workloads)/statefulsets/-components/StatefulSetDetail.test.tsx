@@ -419,7 +419,9 @@ describe("StatefulSetDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Scale" }));
 
     expect(
-      await screen.findByText(/hpa-stateful will put this number back/)
+      await screen.findByText(
+        /The autoscaler hpa-stateful will put this number back/
+      )
     ).toBeInTheDocument();
     expect(screen.getByText(/keeps this between 1 and 3/)).toBeInTheDocument();
     expect(

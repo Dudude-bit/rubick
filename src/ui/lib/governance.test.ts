@@ -555,6 +555,29 @@ describe("what the Scale dialog reads", () => {
     expect(warnings[0].description).toContain("1 and 2");
   });
 
+  /**
+   * "api owns this replica count" beside a Deployment named api read as the
+   * Deployment owning itself. Fails if the lead stops naming the kind.
+   */
+  it("names the autoscaler's kind in the sentence that says it owns the count", () => {
+    const [busy] = scaleWarnings(read([governs(hpa("api"))]), null, t);
+    expect(busy.lead).toBe("The autoscaler api will put this number back.");
+    const [stuck] = scaleWarnings(
+      read([
+        governs(
+          hpa("api", {
+            conditions: [condition("ScalingActive", "False", "Why", "no")],
+          })
+        ),
+      ]),
+      null,
+      t
+    );
+    expect(stuck.lead).toBe(
+      "The autoscaler api owns this replica count, and is stuck."
+    );
+  });
+
   it("says the number stands while the autoscaler cannot act", () => {
     const warnings = scaleWarnings(
       read([

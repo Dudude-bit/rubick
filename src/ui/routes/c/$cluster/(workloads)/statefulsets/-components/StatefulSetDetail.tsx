@@ -560,6 +560,7 @@ export function StatefulSetDetail() {
               ready={!!statefulSet}
               reason={scaleDenied}
               warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              reading={connections.isPending}
               mutation={scaleMutation}
             />
             <RestartAction

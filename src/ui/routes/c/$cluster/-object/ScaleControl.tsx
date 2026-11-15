@@ -21,6 +21,7 @@ export function ScaleControl({
   ready,
   reason,
   warnings,
+  reading = false,
   mutation,
 }: {
   kind: string;
@@ -30,6 +31,7 @@ export function ScaleControl({
   ready: boolean;
   reason?: string | null;
   warnings: ActionWarning[];
+  reading?: boolean;
   mutation: UseMutationResult<unknown, Error, number>;
 }) {
   const t = useT();
@@ -46,6 +48,7 @@ export function ScaleControl({
       />
       <ScaleDialog
         warnings={warnings}
+        reading={reading}
         open={open}
         onOpenChange={(next) => {
           if (next) mutation.reset();

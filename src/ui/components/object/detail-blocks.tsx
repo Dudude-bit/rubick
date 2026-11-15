@@ -340,7 +340,9 @@ export function ProblemSummary({
          *  of the page's actions rather than the way to the rest of this
          *  one. */}
         {action && (
-          <div className="-ml-1.5 mt-0.5 flex items-center">{action}</div>
+          <div className="-ml-1.5 mt-0.5 flex flex-wrap items-center gap-x-3">
+            {action}
+          </div>
         )}
       </div>
     </div>

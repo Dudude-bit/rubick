@@ -610,7 +610,6 @@ export function HelmDetail() {
                   label={t("action", "uninstall")}
                   icon={Trash2}
                   onClick={() => setShowUninstall(true)}
-                  danger
                 />
               </>
             )}

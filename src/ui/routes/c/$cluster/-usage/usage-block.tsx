@@ -375,20 +375,25 @@ export function UsageBlock({
             )}
             {shared && <UsageNote>{shared}</UsageNote>}
             {!live && idleNote && (
-              <p className="px-1.5 pb-1 pt-1 text-caption leading-snug text-fg-fnt">
-                {idleNote}{" "}
-                {kept === null
-                  ? t("empty", "readingWhatVendorKept", {
-                      vendor: past.vendor,
-                    })
-                  : kept
-                    ? t("empty", "noLiveLineVendorKept", {
-                        vendor: past.vendor,
-                      })
-                    : t("empty", "vendorNothingInWindow", {
-                        vendor: past.vendor,
-                      })}
-              </p>
+              <UsageNote>
+                {idleNote}
+                {past.status === "ready" && (
+                  <>
+                    {" "}
+                    {kept === null
+                      ? t("empty", "readingWhatVendorKept", {
+                          vendor: past.vendor,
+                        })
+                      : kept
+                        ? t("empty", "noLiveLineVendorKept", {
+                            vendor: past.vendor,
+                          })
+                        : t("empty", "vendorNothingInWindow", {
+                            vendor: past.vendor,
+                          })}
+                  </>
+                )}
+              </UsageNote>
             )}
           </>
         ) : (

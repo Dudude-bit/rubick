@@ -182,6 +182,8 @@ interface ResourceDetailLayoutProps {
   findings?: readonly Finding[];
   /** A page that already prints its own cause (a pod's summary) passes only the chip's part of it. */
   trouble?: Problem | null;
+  /** The page's summary already states the cause the shell's list row would repeat as a second block. */
+  tellsCause?: boolean;
   /** Reads beside the object that failed or were refused, by name: the header then says the page is partly unread instead of live. */
   unread?: readonly string[];
   /** Qualifiers shown beside the name. */
@@ -295,6 +297,7 @@ export function ResourceDetailLayout({
   goneNote,
   onRetry,
   summary,
+  tellsCause = false,
   headerNote,
   freshness,
   tabs: pageTabs,
@@ -387,7 +390,7 @@ export function ResourceDetailLayout({
     listedKindOf({ kind: resourceKind, crd }),
     namespace ?? null,
     title,
-    findings.length === 0 && !!resource
+    findings.length === 0 && !!resource && !tellsCause
   );
   const shown =
     findings.length > 0

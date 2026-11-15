@@ -100,6 +100,60 @@ beforeEach(() => {
   useHintSettingsStore.setState({ showPanel: true, stripNames: true });
 });
 
+describe("MostLikelyPanel beside a cause that already names the exit", () => {
+  const exits: PodCause = {
+    says: "exits",
+    container: "app",
+    restarts: 14,
+    run: null,
+    until: null,
+    later: null,
+  };
+  const mountWith = (part: "panel" | "actions", cause: PodCause | null) =>
+    renderWithRouter(
+      <MostLikelyPanel
+        part={part}
+        pod={crashing}
+        cause={cause}
+        events={[]}
+        eventsError={null}
+        onOpenTab={() => {}}
+      />,
+      { at: "/c/test", route: "/c/$cluster" }
+    );
+
+  /**
+   * A crash-looping pod said its cause in the page's summary and again, as a
+   * guess, in an amber box. Fails if the box returns while the summary
+   * already carries the exit.
+   */
+  it("leaves the guess out when the cause block says the same exit", async () => {
+    await mountWith("panel", exits);
+    expect(screen.queryByTestId("most-likely")).toBeNull();
+  });
+
+  /** Fails if the Search and Copy actions are lost with the box they sat in. */
+  it("keeps the search and copy actions for the cause block", async () => {
+    await mountWith("actions", exits);
+    expect(
+      await screen.findByRole("button", { name: /Search it/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Copy for agent/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("most-likely")).toBeNull();
+  });
+
+  /** Fails if the actions are drawn twice, once with the box and once under the cause. */
+  it("draws the actions part of nothing when the guess stands in its own box", async () => {
+    await mountWith("actions", null);
+    expect(screen.queryByRole("button", { name: /Search it/ })).toBeNull();
+    cleanup();
+    await mountWith("panel", null);
+    expect(await screen.findByTestId("most-likely")).toBeInTheDocument();
+  });
+});
+
 describe("MostLikelyPanel", () => {
   /**
    * The sentence follows the chain as it is read: first the crash alone,

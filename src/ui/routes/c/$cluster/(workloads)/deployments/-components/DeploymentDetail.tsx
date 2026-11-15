@@ -706,6 +706,7 @@ export function DeploymentDetail() {
               ready={!!deployment}
               reason={patchDenied}
               warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              reading={connections.isPending}
               mutation={scaleMutation}
             />
             <RestartAction

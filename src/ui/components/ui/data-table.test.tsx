@@ -799,6 +799,24 @@ describe("DataTable rows", () => {
         </>
       );
 
+    /** Space scrolled the page under a focused row instead of opening it. Fails if Space on the row is not Enter's peek with the page's own scroll held back. */
+    it("peeks at the focused row on Space and holds the page's scroll", async () => {
+      await renderTable();
+      const notPrevented = fireEvent.keyDown(row(), { key: " " });
+      expect(notPrevented).toBe(false);
+      await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+    });
+
+    /** Fails if Space on a button inside a row stops pressing that button and opens the row. */
+    it("leaves Space on a control inside the row to the control", async () => {
+      await wrap(
+        <DataTable<Item> columns={withControls} data={DATA} getRowHref={href} />
+      );
+      const copy = screen.getByRole("button", { name: "copy a-1" });
+      expect(fireEvent.keyDown(copy, { key: " " })).toBe(true);
+      await staysAt();
+    });
+
     /** Dana pressed Shift+Tab twelve times in Events and never left the table: every link in every row was a stop. Fails if a link or button inside a row is back in the Tab order. */
     it("is one stop in the Tab order, so Tab and Shift+Tab leave the table", async () => {
       await between(
@@ -954,6 +972,30 @@ describe("the list keys, from anywhere on a list page", () => {
     away();
     press("Enter");
     await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+  });
+
+  /** Fails if Space with nothing focused scrolls the page rather than opening the selected row. */
+  it("opens the selected row on Space with the focus on nothing", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    away();
+    press(" ");
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+  });
+
+  /** Fails if Space typed in a field elsewhere opens the selected row under it. */
+  it("leaves Space to a focused control elsewhere on the page", async () => {
+    await wrap(
+      <>
+        {page()}
+        <div tabIndex={0} data-testid="elsewhere" />
+      </>
+    );
+    press("ArrowDown");
+    const elsewhere = screen.getByTestId("elsewhere");
+    elsewhere.focus();
+    press(" ", elsewhere);
+    await staysAt();
   });
 
   /** Whatever holds the focus owns its Enter; the row must not open underneath it. */

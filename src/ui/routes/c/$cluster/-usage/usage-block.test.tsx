@@ -202,6 +202,34 @@ describe("UsageBlock when metrics-server is missing", () => {
   });
 });
 
+describe("UsageBlock on a pod that has ended", () => {
+  /**
+   * An ended pod with no Prometheus read "Reading what  kept from while it
+   * was running." with the vendor missing, at a different indent from the
+   * note under it. Fails if a vendor-less pod names a source it does not have,
+   * or the idle note leaves the plot's column.
+   */
+  it("names no history source it does not have, and aligns the note with the others", async () => {
+    await wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-ended"
+        cpu={null}
+        memory={null}
+        cpuLimit={200}
+        memoryLimit={null}
+        sampledAt={null}
+        live={false}
+        idleNote="This pod has finished."
+        status={{ status: "available", message: null }}
+      />
+    );
+    const note = screen.getByText("This pod has finished.");
+    expect(note.textContent).not.toMatch(/kept from|Reading what/);
+    expect(note.style.paddingLeft).toBe("104px");
+  });
+});
+
 describe("UsageBlock range picker", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 

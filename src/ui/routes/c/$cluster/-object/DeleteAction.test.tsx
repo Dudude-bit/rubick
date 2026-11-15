@@ -57,6 +57,14 @@ const renderDelete = () =>
   );
 
 describe("Delete on a detail page", () => {
+  /** Delete drew red at rest on every page header; red belongs to the confirmation. Fails if the header button carries the error colour again. */
+  it("is neutral at rest and leaves red to the confirmation", async () => {
+    await renderDelete();
+    expect(screen.getByRole("button", { name: "Delete" })).not.toHaveClass(
+      "text-err"
+    );
+  });
+
   /** Every detail page deleted on the click itself until this asked first. */
   it("asks first and deletes nothing on the click", async () => {
     await renderDelete();

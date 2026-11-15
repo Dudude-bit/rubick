@@ -1,4 +1,11 @@
-import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
@@ -19,6 +27,8 @@ import { useT } from "@/i18n/useT";
 import { useHoldWriteToasts } from "@/lib/write-hold";
 import { FailureSlot } from "./FailureSlot";
 import { qualified } from "../-peek/peek-actions";
+
+const READ_WAIT_MS = 2000;
 
 export interface ScaleDialogProps {
   open: boolean;
@@ -38,6 +48,8 @@ export interface ScaleDialogProps {
    * still scales — a warning changes the confirm word, not the outcome.
    */
   warnings?: ActionWarning[];
+  /** The autoscaler read has not answered; the dialog holds its pending shape rather than grow when it does. */
+  reading?: boolean;
 }
 
 /** Set a workload's replica count. Shared by the detail page and the peek. */
@@ -52,6 +64,7 @@ export function ScaleDialog({
   error,
   onSubmit,
   warnings = [],
+  reading = false,
 }: ScaleDialogProps) {
   const t = useT();
   useHoldWriteToasts(busy);
@@ -59,6 +72,13 @@ export function ScaleDialog({
   // change to that cluster, so the same typed-name gate the confirm dialogs
   // use guards the Scale button here too — notice and field cannot part ways.
   const gate = useCriticalGate(open);
+  const [waited, setWaited] = useState(false);
+  if (waited && (!open || !reading)) setWaited(false);
+  useEffect(() => {
+    if (!reading || !open) return;
+    const timer = setTimeout(() => setWaited(true), READ_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [reading, open]);
   const count = useRef<HTMLInputElement>(null);
   // A count read after the dialog opened remounts the field, which drops the
   // focus it held.
@@ -96,37 +116,72 @@ export function ScaleDialog({
             </DialogDescription>
           )}
         </DialogHeader>
-        {/* Radix drops the content when closed, so the field seeds itself from
-            the live count on every opening without an effect to sync it. */}
-        <ActionWarnings warnings={warnings} headingFor="warnRevertCount" />
-        {warnings.map(
-          (warning) =>
-            warning.autoscaler && (
-              <AutoscalerBounds
-                key={warning.key}
-                autoscaler={warning.autoscaler}
-                blocked={gate.blocked}
-              />
-            )
+        {reading && !waited ? (
+          <ScalePending onCancel={() => onOpenChange(false)} />
+        ) : (
+          <>
+            {/* Radix drops the content when closed, so the field seeds itself
+                from the live count on every opening without an effect. */}
+            {reading && (
+              <p
+                className="text-xs text-warn"
+                data-testid="scale-still-reading"
+              >
+                {t("action", "scaleStillReading")}
+              </p>
+            )}
+            <ActionWarnings warnings={warnings} headingFor="warnRevertCount" />
+            {warnings.map(
+              (warning) =>
+                warning.autoscaler && (
+                  <AutoscalerBounds
+                    key={warning.key}
+                    autoscaler={warning.autoscaler}
+                    blocked={gate.blocked}
+                  />
+                )
+            )}
+            <ScaleForm
+              key={current === undefined ? "unread" : "read"}
+              countRef={claimFocus}
+              current={current}
+              busy={busy}
+              error={error}
+              blocked={gate.blocked}
+              gateInput={gate.input}
+              confirmLabel={
+                warnings.length > 0
+                  ? t("action", "scaleAnyway")
+                  : t("action", "scale")
+              }
+              onCancel={() => onOpenChange(false)}
+              onSubmit={onSubmit}
+            />
+          </>
         )}
-        <ScaleForm
-          key={current === undefined ? "unread" : "read"}
-          countRef={claimFocus}
-          current={current}
-          busy={busy}
-          error={error}
-          blocked={gate.blocked}
-          gateInput={gate.input}
-          confirmLabel={
-            warnings.length > 0
-              ? t("action", "scaleAnyway")
-              : t("action", "scale")
-          }
-          onCancel={() => onOpenChange(false)}
-          onSubmit={onSubmit}
-        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ScalePending({ onCancel }: { onCancel: () => void }) {
+  const t = useT();
+  return (
+    <div className="grid gap-3" aria-busy="true" data-testid="scale-pending">
+      <p className="text-caption text-fg-mut">
+        {t("action", "scaleReadingAutoscaler")}
+      </p>
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="h-9 w-full" />
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          {t("action", "cancel")}
+        </Button>
+        <Button type="button" disabled>
+          {t("action", "scale")}
+        </Button>
+      </DialogFooter>
+    </div>
   );
 }
 

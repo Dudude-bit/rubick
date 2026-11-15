@@ -468,6 +468,7 @@ export function useObjectActions({
           busy={scale.isPending}
           error={scale.isError ? scale.error : null}
           warnings={scaleWarnings(governance, intercept("Scale"), t)}
+          reading={governance.isPending && governance.fetchStatus !== "idle"}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}
