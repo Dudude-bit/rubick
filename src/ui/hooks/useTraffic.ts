@@ -5,7 +5,7 @@
  * supplier that is not there or holds no source.
  */
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { WorkloadKey } from "@/generated/types";
 import { useCapabilityState, type CapabilityState } from "@/integrations";
@@ -21,8 +21,18 @@ import {
 } from "@/lib/traffic";
 import { useLiveQuery } from "./useLiveQuery";
 
-/** How long a supplier's list of sources stands: sources come with installs, not with traffic. */
-export const SOURCES_STALE = 5 * 60_000;
+/**
+ * How often a supplier is asked which sources it holds: they come with
+ * installs, not with traffic, so rarely; but a source that could not be
+ * looked for is asked again soon, or it is said failed for minutes after
+ * Prometheus has answered.
+ */
+export const sourcesRefresh = (
+  sources: readonly FlowSource[] | undefined
+): RefreshRate =>
+  sources?.some((source) => source.state.says === "failed")
+    ? "steady"
+    : "unserved";
 
 export type TrafficState =
   | { says: "absent" }
@@ -73,11 +83,14 @@ export function useTraffic(input: {
       ? power.endpoint
       : "";
 
-  const sources = useQuery({
-    queryKey: queryKeys.trafficSources(endpoint),
+  const client = useQueryClient();
+  const sourcesKey = queryKeys.trafficSources(endpoint);
+  const sources = useLiveQuery({
+    queryKey: sourcesKey,
     queryFn: () => ready!.use.sources(),
     enabled: enabled && ready !== null,
-    staleTime: SOURCES_STALE,
+    // The answer this hook re-renders on, read for the rate of the next ask.
+    refresh: sourcesRefresh(client.getQueryData<FlowSource[]>(sourcesKey)),
     retry: false,
   });
   const present = useMemo(
