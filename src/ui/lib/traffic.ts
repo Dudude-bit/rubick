@@ -104,6 +104,8 @@ export interface Reason {
   reason: string;
   rate: number;
   policies?: readonly PolicyRef[];
+  /** An L7 rule denied the request at the proxy; `reason` is then Hubble's "unknown". */
+  l7?: boolean;
 }
 
 /** One source's own numbers on a pair, for the panel. */
@@ -530,6 +532,7 @@ export function liveRow(pair: LivePair): FlowRow {
     reason: drop.reason,
     rate: drop.rate,
     policies: drop.policies,
+    l7: drop.l7,
   }));
   return {
     id: livePairId(pair),

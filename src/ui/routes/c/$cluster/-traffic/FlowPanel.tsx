@@ -108,11 +108,13 @@ export function FlowPanel({
             )}
             {line.reasons.map((reason) => (
               <p
-                key={`${reason.reason}:${policyWords(reason.policies ?? [])}`}
+                key={`${reason.reason}:${reason.l7 ? "l7" : ""}:${policyWords(reason.policies ?? [])}`}
                 className="text-[11.5px] text-warn"
               >
                 <span className="font-mono">
-                  {reason.reason}: {rate(reason.rate)}/s
+                  {reason.l7
+                    ? t("traffic", "panelL7Denied", { v: rate(reason.rate) })
+                    : `${reason.reason}: ${rate(reason.rate)}/s`}
                 </span>
                 {(reason.policies ?? []).length > 0 && (
                   <>

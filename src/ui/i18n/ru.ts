@@ -2512,6 +2512,7 @@ export const ru: Catalogue = {
     liveUntracked:
       "{untracked} не уместились в число пар, которые держатся одновременно, и не показаны.",
     panelDenied: "запрещено: {policies}",
+    panelL7Denied: "HTTP-запросы, отклонённые правилом L7: {v}/с",
     window5m: "последние 5 минут",
     window15m: "последние 15 минут",
     window1h: "последний час",

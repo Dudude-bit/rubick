@@ -75,6 +75,8 @@ pub struct LiveDrop {
     pub reason: String,
     pub rate: f64,
     pub policies: Vec<PolicyRef>,
+    /// A request an L7 rule denied at the proxy, which Hubble gives no reason code.
+    pub l7: bool,
 }
 
 /// One pair over the last `WINDOW_SECS`, every rate per second.
@@ -586,8 +588,8 @@ fn end_of(endpoint: Option<&flow::Endpoint>, address: &str, names: &[String]) ->
     }
 }
 
-/// A drop's reason and the policies behind it.
-type DropCause = (String, Vec<PolicyRef>);
+/// A drop's reason, whether an L7 rule denied it, and the policies behind it.
+type DropCause = (String, bool, Vec<PolicyRef>);
 
 #[derive(Default)]
 struct Second {
@@ -653,7 +655,10 @@ impl Fold {
             .l7
             .as_ref()
             .filter(|l7| l7.r#type == L7FlowType::Response as i32);
+        // A request an L7 rule denied is logged DROPPED (seven parser's
+        // decodeVerdict), and is the only L7 request counted.
         let counted = match (Verdict::try_from(one.verdict), &one.l7) {
+            (Ok(Verdict::Dropped), Some(_)) => true,
             (_, Some(_)) => response.is_some(),
             (Ok(Verdict::Forwarded | Verdict::Dropped), None) => true,
             _ => false,
@@ -715,7 +720,10 @@ impl Fold {
                 ]
                 .concat(),
             );
-            *second.drops.entry((reason, denied)).or_default() += 1;
+            *second
+                .drops
+                .entry((reason, one.l7.is_some(), denied))
+                .or_default() += 1;
         } else {
             second.forwarded += 1;
         }
@@ -786,10 +794,11 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
         drops: sum
             .drops
             .into_iter()
-            .map(|((reason, policies), n)| LiveDrop {
+            .map(|((reason, l7, policies), n)| LiveDrop {
                 reason,
                 rate: per(n),
                 policies,
+                l7,
             })
             .collect(),
         requests: answered.then(|| per(sum.requests)),
@@ -895,6 +904,32 @@ mod tests {
                 name: "deny-all".into(),
             }]
         );
+    }
+
+    /// A request an L7 rule denied is a drop the pair carries, marked as
+    /// such; a request the proxy let through is counted on its response only.
+    #[test]
+    fn a_request_an_l7_rule_denied_is_a_drop() {
+        let mut fold = Fold::new(100);
+        let request = |verdict| flow::Flow {
+            l7: Some(flow::Layer7 {
+                r#type: L7FlowType::Request as i32,
+                record: Some(flow::layer7::Record::Http(flow::Http {
+                    method: "PUT".into(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
+            ..event(verdict, "caller", "web")
+        };
+        fold.add(100, &request(Verdict::Dropped));
+        fold.add(100, &request(Verdict::Forwarded));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].dropped, 1.0);
+        assert_eq!(pairs[0].forwarded, 0.0);
+        assert!(pairs[0].drops[0].l7);
+        assert_eq!(pairs[0].drops[0].reason, "DROP_REASON_UNKNOWN");
     }
 
     /// HTTP is counted on its responses, with 5xx as errors and latency as

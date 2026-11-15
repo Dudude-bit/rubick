@@ -299,6 +299,7 @@ describe("a live pair as a row", () => {
             name: "deny-all",
           },
         ],
+        l7: false,
       },
     ],
     requests: null,

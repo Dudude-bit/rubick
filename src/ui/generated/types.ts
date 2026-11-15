@@ -1058,6 +1058,7 @@ export interface LiveDrop {
   reason: string;
   rate: number;
   policies: PolicyRef[];
+  l7: boolean;
 }
 
 export interface PolicyRef {

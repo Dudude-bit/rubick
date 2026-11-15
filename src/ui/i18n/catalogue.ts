@@ -2399,6 +2399,7 @@ export const en = {
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
     panelDenied: "denied by {policies}",
+    panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
     window1h: "last hour",
