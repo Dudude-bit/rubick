@@ -14,7 +14,7 @@ use super::project::{followed_by, FOLLOWED};
 use super::recorder::{Named, Recorder, Sight, Slot, SlotState};
 use super::spans::{Source, HEARTBEAT_MS};
 use super::ClusterTimeline;
-use crate::feeds::{FeedState, Subscription, Update, Whole};
+use crate::feeds::{Ask, Binding, FeedState, Subscription, Update, Whole};
 use crate::ownership::{KindKey, News, SlotKey};
 
 /// What the window tells a running follower.
@@ -51,6 +51,17 @@ pub fn followed_kinds() -> Vec<KindKey> {
             plural: "events".to_string(),
         }])
         .collect()
+}
+
+/// What the timeline asks the shared watches for: every followed kind, for
+/// the whole session, read in `scope` where the cluster refuses one across it.
+#[must_use]
+pub fn ask(scope: Option<Vec<String>>) -> Ask {
+    Ask {
+        kinds: followed_kinds(),
+        scope,
+        binding: Binding::Session,
+    }
 }
 
 fn is_events(kind: &KindKey) -> bool {

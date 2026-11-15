@@ -5,9 +5,8 @@ use tauri::State;
 
 use crate::commands::settings::{off_main, with_config};
 use crate::error::{Error, Result};
-use crate::feeds::{Ask, Binding};
 use crate::state::AppState;
-use crate::timeline::follow::{followed_kinds, Control};
+use crate::timeline::follow::{ask, Control};
 use crate::timeline::{Kept, TimelinePage, TimelineQuery};
 
 /// One page of a cluster's timeline, from memory: the first ask for a
@@ -64,17 +63,7 @@ pub async fn timeline_follow(
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }
-    let subscription = state
-        .feeds
-        .subscribe(
-            &here,
-            Ask {
-                kinds: followed_kinds(),
-                scope: scope.clone(),
-                binding: Binding::Session,
-            },
-        )
-        .await?;
+    let subscription = state.feeds.subscribe(&here, ask(scope.clone())).await?;
     timelines.follow(context, subscription, scope);
     Ok(Following { another_cluster })
 }

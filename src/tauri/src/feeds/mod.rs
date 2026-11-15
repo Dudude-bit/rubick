@@ -1878,6 +1878,79 @@ mod tests {
         context.end();
     }
 
+    /// The timeline follows for the whole session kinds that Audit and the
+    /// cluster map follow while on screen. With all three, each kind is one
+    /// watch; with the two pages closed, every kind the timeline asks for is
+    /// still watched and only the pages' own kinds stop. Would break if the
+    /// timeline spelled a kind its own way, or a page's leaving took a watch
+    /// a session subscriber still holds.
+    #[tokio::test]
+    async fn the_timeline_beside_audit_and_the_map_keeps_its_kinds_when_they_close() {
+        let feeds = feeds().lingering(Duration::ZERO, Duration::ZERO, QUEUE);
+        let context = feeds.context_for("prod", client().await);
+        let split = |ask: &Ask| {
+            let (known, unknown): (Vec<_>, Vec<_>) =
+                ask.kinds.iter().partition(|kind| built_in(kind).is_some());
+            let known: Vec<(KindKey, (ApiResource, bool))> = known
+                .into_iter()
+                .map(|kind| (kind.clone(), built_in(kind).expect("built in")))
+                .collect();
+            (known, unknown.into_iter().cloned().collect::<Vec<_>>())
+        };
+        let timeline = crate::timeline::follow::ask(None);
+        let audit = crate::audit::feed_ask(None);
+        let map = crate::topology::ask(None);
+        let (timeline_kinds, timeline_unserved) = split(&timeline);
+        let (audit_kinds, audit_unserved) = split(&audit);
+        let (map_kinds, map_unserved) = split(&map);
+        let _timeline = context.join(&timeline, &timeline_kinds, &timeline_unserved);
+        let audit_page = context.join(&audit, &audit_kinds, &audit_unserved);
+        let map_page = context.join(&map, &map_kinds, &map_unserved);
+
+        let ours: BTreeSet<&KindKey> = timeline_kinds.iter().map(|(kind, _)| kind).collect();
+        let either: BTreeSet<&KindKey> = timeline_kinds
+            .iter()
+            .chain(&audit_kinds)
+            .chain(&map_kinds)
+            .map(|(kind, _)| kind)
+            .collect();
+        let shared = audit_kinds
+            .iter()
+            .chain(&map_kinds)
+            .filter(|(kind, _)| ours.contains(kind))
+            .map(|(kind, _)| kind)
+            .collect::<BTreeSet<_>>()
+            .len();
+        assert!(
+            shared >= 8,
+            "the timeline shares {shared} kinds with the pages"
+        );
+        let mut spelled: BTreeMap<(&str, &str), BTreeSet<&KindKey>> = BTreeMap::new();
+        for kind in timeline.kinds.iter().chain(&audit.kinds).chain(&map.kinds) {
+            let stem = kind.plural.trim_end_matches('s');
+            spelled
+                .entry((kind.group.as_str(), stem))
+                .or_default()
+                .insert(kind);
+        }
+        let twice: Vec<_> = spelled.values().filter(|keys| keys.len() > 1).collect();
+        assert!(twice.is_empty(), "{twice:?}");
+        let generation = context.serving();
+        assert_eq!(generation.stops.lock().len(), either.len());
+
+        drop(audit_page);
+        drop(map_page);
+        context.reap(Instant::now());
+        for kind in &either {
+            assert_eq!(
+                generation.holds(&whole(kind)),
+                ours.contains(kind),
+                "{kind:?} after the pages closed"
+            );
+        }
+        context.end();
+    }
+
     /// A subscriber arriving after the list is handed what is there from
     /// the store, with no watch of its own, and then each change once, as
     /// the first one is. Fails if it misses the set, or a change reaches
