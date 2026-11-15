@@ -2476,6 +2476,8 @@ export const en = {
     quiet: "{source} saw no flows to or from it in the {window}.",
     quietNodeAgent:
       "{source} saw no flows to or from it in the {window}; it sees only the nodes its agent runs on.",
+    ofCronJob:
+      "Flows are counted for CronJob {name}, which made this Job: the sources file every run under it.",
     quietNotRead:
       "Whether {source} saw flows to or from it is not known: they could not be read ({said}).",
     quietUnmatched:

@@ -16,7 +16,11 @@ import {
 } from "@/lib/traffic";
 import { vendorLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
-import { Block } from "./workload-traffic";
+
+const traffic = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/useTraffic", () => ({ useTraffic: traffic }));
+
+const { Block, WorkloadFlows } = await import("./workload-traffic");
 
 const ISTIO: FlowSource = {
   id: "istio",
@@ -247,6 +251,50 @@ describe("a workload's Traffic block", () => {
     );
     expect(
       screen.getByText("Some of Istio's numbers could not be read: timed out")
+    ).toBeTruthy();
+  });
+
+  /**
+   * A CronJob's pods, and Hubble's names, file a run's flows under the
+   * CronJob: a Job asked about as itself is never any flow's end.
+   */
+  it("reads a Job a CronJob made as that CronJob, and says so", async () => {
+    traffic.mockReset();
+    traffic.mockReturnValue(read([ISTIO], [], null));
+    const owner = {
+      api_version: "batch/v1",
+      kind: "CronJob",
+      name: "backup",
+      uid: "u1",
+      controller: true,
+    };
+    const job = (owners?: (typeof owner)[]) =>
+      renderWithRouter(
+        <WorkloadFlows
+          kind="Job"
+          namespace="shop"
+          name="backup-28473000"
+          owners={owners}
+        />,
+        {
+          at: "/c/prod/jobs/shop/backup-28473000",
+          route: "/c/$cluster/jobs/$namespace/$name",
+        }
+      );
+    const loading = await job(undefined);
+    expect(traffic).not.toHaveBeenCalled();
+    loading.unmount();
+    await job([owner]);
+    expect(traffic.mock.calls.at(-1)?.[0].subject).toEqual({
+      namespace: "shop",
+      group: "batch",
+      kind: "CronJob",
+      name: "backup",
+    });
+    expect(
+      screen.getByText(
+        /Flows are counted for CronJob backup, which made this Job/
+      )
     ).toBeTruthy();
   });
 });

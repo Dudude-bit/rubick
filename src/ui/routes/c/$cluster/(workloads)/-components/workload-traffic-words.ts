@@ -1,7 +1,7 @@
 /** The words of a workload's Traffic block, for the block and its Share. */
 import { ArrowRightLeft } from "lucide-react";
 
-import type { WorkloadKey } from "@/generated/types";
+import type { OwnerReference, WorkloadKey } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { formatShare } from "@/lib/cost";
 import { iconSvg } from "@/lib/icon-svg";
@@ -37,6 +37,18 @@ export function subjectOf(
   return namespace && name
     ? { namespace, group: GROUP[kind] ?? "", kind, name }
     : null;
+}
+
+/**
+ * The CronJob a Job's flows are filed under: its pods are keyed to it, and
+ * Hubble strips the run's suffix too, so no flow ever names the Job.
+ */
+export function cronJobOf(owners: readonly OwnerReference[]): string | null {
+  return (
+    owners.find(
+      (owner) => owner.controller === true && owner.kind === "CronJob"
+    )?.name ?? null
+  );
 }
 
 /** A row's own rate, by the first family it has. */

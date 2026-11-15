@@ -7,7 +7,7 @@ import { Link } from "@tanstack/react-router";
 
 import { useShareSection } from "@/components/share/screen-share";
 import { Section, SectionHeader } from "@/components/ui/section";
-import type { WorkloadKey } from "@/generated/types";
+import type { OwnerReference, WorkloadKey } from "@/generated/types";
 import { useTraffic, type TrafficState } from "@/hooks/useTraffic";
 import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink } from "@/lib/links";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { AskAgain } from "../../-supplier/AskAgain";
 import { WINDOW_WORD } from "../../-traffic/traffic-words";
 import {
+  cronJobOf,
   rowWords,
   subjectNotes,
   subjectOf,
@@ -56,32 +57,51 @@ function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
   );
 }
 
-/** The block for a workload page, nothing until the page knows which workload. */
+/**
+ * The block for a workload page, nothing until the page knows which
+ * workload: a Job's, until it knows whether a CronJob made it.
+ */
 export function WorkloadFlows(props: {
   kind: string;
   namespace: string | null | undefined;
   name: string | null | undefined;
+  owners?: readonly OwnerReference[];
 }) {
-  const subject = subjectOf(props.kind, props.namespace, props.name);
-  return subject ? <WorkloadTraffic subject={subject} /> : null;
+  if (props.kind === "Job" && !props.owners) return null;
+  const cron = props.kind === "Job" ? cronJobOf(props.owners ?? []) : null;
+  const subject = cron
+    ? subjectOf("CronJob", props.namespace, cron)
+    : subjectOf(props.kind, props.namespace, props.name);
+  return subject ? (
+    <WorkloadTraffic subject={subject} viaCronJob={cron !== null} />
+  ) : null;
 }
 
-export function WorkloadTraffic({ subject }: { subject: WorkloadKey }) {
+export function WorkloadTraffic({
+  subject,
+  viaCronJob = false,
+}: {
+  subject: WorkloadKey;
+  viaCronJob?: boolean;
+}) {
   const state = useTraffic({
     scope: [subject.namespace],
     window: "5m",
     subject,
     refresh: "steady",
   });
-  return <Block state={state} subject={subject} />;
+  return <Block state={state} subject={subject} viaCronJob={viaCronJob} />;
 }
 
 export function Block({
   state,
   subject,
+  viaCronJob = false,
 }: {
   state: TrafficState;
   subject: WorkloadKey;
+  /** The subject is the CronJob that made the page's Job. */
+  viaCronJob?: boolean;
 }) {
   const t = useT();
   const window = t("traffic", WINDOW_WORD["5m"]);
@@ -90,7 +110,19 @@ export function Block({
   const callees = read
     ? read.rows.filter((row) => isEnd(row.from, subject))
     : [];
-  const notes = read ? subjectNotes(read.reading, subject, window, t) : [];
+  const notes = read
+    ? [
+        ...(viaCronJob
+          ? [
+              {
+                text: t("traffic", "ofCronJob", { name: subject.name }),
+                tone: "mute" as const,
+              },
+            ]
+          : []),
+        ...subjectNotes(read.reading, subject, window, t),
+      ]
+    : [];
   useShareSection(read ? "traffic" : null, () =>
     trafficSection(callers, callees, notes, t)
   );
