@@ -80,6 +80,23 @@ describe("Istio's queries", () => {
     expect(errors).toContain('grpc_response_status!="0",response_code!~"5.."');
   });
 
+  /**
+   * A share of errors over requests from another reporter can pass 100%:
+   * the client's errors count only where the server reported no requests.
+   */
+  it("takes the client's errors only for a pair the server reported no requests for", () => {
+    const errors = of(istio(), "errors");
+    const [server, rest] = errors.split(") or ((");
+    const [client, guard] = rest.split(" unless on(");
+    expect(server).toContain('reporter=~"destination|waypoint"');
+    expect(server).not.toContain('reporter="source"');
+    expect(client).toContain('reporter="source"');
+    expect(guard).toMatch(
+      /^source_workload_namespace, source_workload, destination_workload_namespace, destination_workload, destination_service_namespace, destination_service_name\) \(sum by \([^)]*request_protocol\) \(rate\(istio_requests_total\{reporter=~"destination\|waypoint"/
+    );
+    expect(guard).not.toContain('reporter="source"');
+  });
+
   /** `rate` drops a metric's name: sent and received are told apart before they are added. */
   it("adds sent and received bytes without one hiding the other", () => {
     const bytes = of(istio(), "bytes");
@@ -127,6 +144,10 @@ describe("the other sources' queries", () => {
     );
     expect(of(queries, "p95")).toMatch(/\* 1000\)?$/);
     expect(events).toContain("source_workload_kind");
+    const [, client] = of(queries, "errors").split(") or ((");
+    expect(client).toMatch(
+      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind\) \(.*reporter!="client"/
+    );
   });
 });
 

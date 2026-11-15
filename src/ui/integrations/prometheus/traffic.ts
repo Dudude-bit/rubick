@@ -86,6 +86,23 @@ const sum = (by: readonly string[], inner: string) =>
 const first = (...branches: string[]) =>
   branches.map((branch) => `(${branch})`).join(" or ");
 
+/**
+ * Each reporter's answer only on pairs no earlier reporter counted
+ * `requests` for: what is divided by requests comes from the same reporter.
+ */
+const sameReporterAs = (
+  pair: readonly string[],
+  requests: readonly string[],
+  answers: readonly string[]
+) =>
+  answers
+    .map((answer, i) =>
+      i === 0
+        ? `(${answer})`
+        : `((${answer}) unless on(${pair.join(", ")}) (${requests.slice(0, i).join(" or ")}))`
+    )
+    .join(" or ");
+
 interface Definition {
   id: string;
   name: string;
@@ -166,22 +183,19 @@ export function istioQueries(
     out.push(query(source, measure, promql, ISTIO_FROM, ISTIO_TO, more));
   if (found.includes("istio_requests_total")) {
     const metric = "istio_requests_total";
-    pair(
-      "requests",
-      first(
-        ...REPORTERS.map((r) =>
-          sum(
-            [...ISTIO_PAIR, "request_protocol"],
-            scoped(metric, [r], ISTIO_SCOPE, ask)
-          )
-        )
-      ),
-      { protocol: "request_protocol" }
+    const requests = REPORTERS.map((r) =>
+      sum(
+        [...ISTIO_PAIR, "request_protocol"],
+        scoped(metric, [r], ISTIO_SCOPE, ask)
+      )
     );
+    pair("requests", first(...requests), { protocol: "request_protocol" });
     pair(
       "errors",
-      first(
-        ...REPORTERS.map((r) =>
+      sameReporterAs(
+        ISTIO_PAIR,
+        requests,
+        REPORTERS.map((r) =>
           sum(
             ISTIO_PAIR,
             `${scoped(metric, [r, 'response_code=~"5.."'], ISTIO_SCOPE, ask)} or ${scoped(
@@ -318,22 +332,19 @@ export function hubbleQueries(
     );
   if (found.includes("hubble_http_requests_total")) {
     const reporters = ['reporter!="client"', 'reporter="client"'];
-    pair(
-      "requests",
-      first(
-        ...reporters.map((r) =>
-          sum(
-            [...pairs, "protocol"],
-            scoped("hubble_http_requests_total", [r], HUBBLE_SCOPE, ask)
-          )
-        )
-      ),
-      { protocol: "protocol" }
+    const requests = reporters.map((r) =>
+      sum(
+        [...pairs, "protocol"],
+        scoped("hubble_http_requests_total", [r], HUBBLE_SCOPE, ask)
+      )
     );
+    pair("requests", first(...requests), { protocol: "protocol" });
     pair(
       "errors",
-      first(
-        ...reporters.map((r) =>
+      sameReporterAs(
+        pairs,
+        requests,
+        reporters.map((r) =>
           sum(
             pairs,
             scoped(
