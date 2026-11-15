@@ -122,9 +122,17 @@ describe("the other sources' queries", () => {
     );
   });
 
-  /** One Caretta connection is a series per side: the client's is read, not both added. */
-  it("reads Caretta's client side only", () => {
-    expect(carettaQueries(0, [], ALL)[0].query).toContain('role="1"');
+  /**
+   * One Caretta connection is a series per side, each the bytes its own
+   * socket sent: read only the client's, a caller from outside the cluster
+   * is never seen, and the bytes are one direction where Istio's are both.
+   */
+  it("adds both sides of a Caretta connection under its pair", () => {
+    const [bytes] = carettaQueries(0, [], ALL);
+    expect(bytes.query).not.toContain("role");
+    expect(bytes.query).toMatch(
+      /^sum by \(client_namespace, client_name, client_kind, server_namespace, server_name, server_kind\)/
+    );
   });
 
   /** A flow Hubble saw arrive is preferred to the same flow seen leaving. */

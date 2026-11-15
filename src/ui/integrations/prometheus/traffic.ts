@@ -449,8 +449,9 @@ export function carettaQueries(
   _found: readonly string[],
   ask: Ask
 ): FlowQuery[] {
-  // One connection is two series, one for each side's bytes; the client's
-  // is read, as Caretta's own README reads it.
+  // Each side's agent writes what its own socket sent, under the same
+  // client and server labels (links_tracer.go): both roles added are both
+  // directions, and a caller no agent runs beside is still seen by the server's.
   return [
     query(
       source,
@@ -459,7 +460,7 @@ export function carettaQueries(
         CARETTA_PAIR,
         scoped(
           "caretta_links_observed",
-          ['role="1"'],
+          [],
           ["client_namespace", "server_namespace"],
           ask
         )
