@@ -251,6 +251,21 @@ export function fixYaml(
         at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;
       return `apiVersion: ${at?.group ?? "example.com"}/${current}\nkind: ${at?.kind ?? "Kind"}`;
     }
+    case "requests-above-usage": {
+      const over = finding?.what.filter(
+        (w): w is Extract<What, { says: "overRequested" }> =>
+          w.says === "overRequested"
+      );
+      const cpu = !over?.length || over.some((w) => w.resource === "cpu");
+      const memory = !over?.length || over.some((w) => w.resource === "memory");
+      const lines = [
+        ...(cpu ? ["    cpu: 100m"] : []),
+        ...(memory ? ["    memory: 128Mi"] : []),
+      ];
+      return pod(
+        inContainer(finding, ["resources:", "  requests:", ...lines].join("\n"))
+      );
+    }
     case "deprecated-api-requested": {
       const asked = first(finding, "requested");
       if (asked?.kind && asked.replacement)

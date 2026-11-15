@@ -29,6 +29,7 @@ const page: AuditPage = {
     unattributed: 0,
     enforced: [],
     upgrade: { read: "2026-11-14T10:00:00Z", server: "v1.31.4" },
+    usage: null,
   },
   rows: [
     {

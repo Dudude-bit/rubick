@@ -5,7 +5,7 @@ import type { ObjectAudit } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { renderWithRouter } from "@/test/render";
-import { auditMark } from "./audit-tab";
+import { auditMark, auditTab } from "./audit-tab";
 import { PeekAudit } from "./PeekAudit";
 import type { ObjectAuditQuery } from "./useAudit";
 
@@ -63,6 +63,44 @@ describe("the Audit tab's mark", () => {
     });
     expect(auditMark(low, null, t)).toEqual({ shows: "count", of: 1 });
     expect(auditMark(audit(), null, t)).toBeNull();
+  });
+});
+
+describe("the Audit tab with requests weighed against use", () => {
+  /**
+   * The tab's count and its rows read one answer, the usage finding in it
+   * like any other. Fails if the count were taken from somewhere the usage
+   * finding is not, or the rows dropped it.
+   */
+  it("counts every row it draws, the usage finding among them", async () => {
+    const data = audit({
+      findings: [
+        { rule: "no-liveness-probe", severity: "low", what: [] },
+        {
+          rule: "requests-above-usage",
+          severity: "low",
+          what: [
+            {
+              says: "overRequested",
+              resource: "cpu",
+              requested: 2000,
+              peak: 300,
+            },
+          ],
+        },
+      ],
+    });
+    const tab = auditTab(query(data), t);
+    expect(tab.mark).toEqual({ shows: "count", of: 2 });
+    await renderWithRouter(<>{tab.content}</>, {
+      at: "/c/prod/deployments/shop/web",
+      route: "/c/$cluster/deployments/$namespace/$name",
+    });
+    const rows = document.querySelectorAll("li[data-rule]");
+    expect(rows).toHaveLength(2);
+    expect(
+      document.querySelector('li[data-rule="requests-above-usage"]')
+    ).toHaveTextContent("CPU peaked at 300m of the 2.0 it requests");
   });
 });
 

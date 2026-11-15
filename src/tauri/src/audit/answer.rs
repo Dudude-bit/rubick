@@ -157,6 +157,8 @@ pub struct AuditSummary {
     /// Namespaces that enforce a Pod Security level, where it was read.
     pub enforced: Vec<Enforced>,
     pub upgrade: UpgradeRead,
+    /// Where requests against use stand: `None` where nothing asked.
+    pub usage: Option<super::UsageState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,6 +232,8 @@ pub struct World {
     pub unattributed: u32,
     /// When the upgrade rules' last pass over this scope ended.
     pub upgrade_read: Option<String>,
+    /// What the webview read of usage, where the page was asked with it.
+    pub usage: Option<super::UsageState>,
 }
 
 pub(super) fn in_scope(namespace: Option<&str>, scope: Option<&[String]>) -> bool {
@@ -746,7 +750,8 @@ fn judges(rule: RuleId, kind: &str) -> bool {
         | R::RemovedApiInHelmRelease
         | R::DeprecatedApiWriter
         | R::CrdVersionDeprecated
-        | R::DeprecatedApiRequested => false,
+        | R::DeprecatedApiRequested
+        | R::RequestsAboveUsage => false,
         _ => template,
     }
 }
@@ -780,6 +785,7 @@ fn summary(world: &World, enforced: Vec<Enforced>) -> AuditSummary {
             read: world.upgrade_read.clone(),
             server: None,
         },
+        usage: world.usage.clone(),
         ..AuditSummary::default()
     };
     let mut rules: BTreeMap<RuleId, RuleCount> = BTreeMap::new();

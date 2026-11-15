@@ -73,6 +73,7 @@ pub enum RuleId {
     DeprecatedApiWriter,
     CrdVersionDeprecated,
     DeprecatedApiRequested,
+    RequestsAboveUsage,
 }
 
 pub struct Rule {
@@ -173,6 +174,7 @@ pub const RULES: &[Rule] = &[
     rule(R::DeprecatedApiWriter, Upgrade, Medium, None, &[]),
     rule(R::CrdVersionDeprecated, Upgrade, Low, None, &[]),
     rule(R::DeprecatedApiRequested, Upgrade, Medium, None, &[]),
+    rule(R::RequestsAboveUsage, Efficiency, Low, None, &[]),
 ];
 
 pub const POD: &str = "Pod";

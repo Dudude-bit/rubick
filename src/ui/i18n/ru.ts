@@ -1983,6 +1983,12 @@ export const ru: Catalogue = {
     whyNoPrometheus:
       "к кластеру не подключён Prometheus, а собственный счёт устаревших запросов API-сервера читается из него",
     whyNotScraped: "в подключённом Prometheus нет ни одной метрики API-сервера",
+    whyNoUsage:
+      "к кластеру не подключён Prometheus, а потребление нагрузки за сутки читается из него",
+    whyNoSamples:
+      "в подключённом Prometheus нет ни одного замера её подов за последние сутки",
+    whyFolded:
+      "её нет среди нагрузок, которые запрашивают больше всех и чьё потребление читается по одной",
     pickNamespaces:
       "Выберите в списке пространств имён те, что вам доступны, и они будут прочитаны по одному.",
     late: "{kind} {where}: как было прочитано в {since}, с тех пор наблюдение не работает.",
@@ -2025,6 +2031,13 @@ export const ru: Catalogue = {
     upgradeRead:
       "Обновление: прочитано в {time}, сверено с Kubernetes {server}",
     upgradeReadUnversioned: "Обновление: прочитано в {time}",
+    usageNoSupplier:
+      "Запросы и потребление: не сравнивались, к кластеру не подключён Prometheus",
+    usageReading: "Запросы и потребление: ещё читаем потребление за сутки",
+    usageFailed:
+      "Запросы и потребление: потребление не удалось прочитать: {said}",
+    usageRead:
+      "Запросы и потребление: сравнены за последние {window}, так же, как на странице стоимости",
     helmRelease: "Helm-релиз",
     helmReleases: "Helm-релизы",
     deprecatedApi: "Устаревший API",
@@ -2140,6 +2153,10 @@ export const ru: Catalogue = {
       other: "{n} запроса за последние сутки",
     },
     wRequestedTodayNone: "за последние сутки запросов не было",
+    wOverRequested:
+      "{resource}: пик {peak} при запросе {requested}, за последние сутки",
+    wCpu: "CPU",
+    wMemory: "Память",
     pssHostProcess: "Запускается как HostProcess Windows",
     pssHostProcessWhy:
       "Контейнер HostProcess работает с правами самого узла Windows. Профиль Baseline это запрещает.",
@@ -2255,6 +2272,9 @@ export const ru: Catalogue = {
     noMemoryRequest: "Нет запроса памяти",
     noMemoryRequestWhy:
       "Без запроса памяти планировщик размещает под так, будто память ему не нужна, а когда её на узле не хватает, его выселяют одним из первых.",
+    requestsAboveUsage: "Запрашивает намного больше, чем потребляет",
+    requestsAboveUsageWhy:
+      "За последние сутки её пик не дошёл и до половины запроса, а именно так страница стоимости отмечает нагрузку с завышенным запросом. Планировщик держит для неё на узле весь запрос, и остаток оплачивается, хотя им никто не пользуется. Снизьте запрос ближе к пику, оставив запас на пики, которых за эти сутки не было.",
     removedApiInHelmRelease:
       "Helm-релиз хранит версию API, которую Kubernetes удаляет",
     removedApiInHelmReleaseWhy:

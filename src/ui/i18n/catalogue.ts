@@ -1937,6 +1937,12 @@ export const en = {
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
     whyNotScraped:
       "the connected Prometheus holds none of the API server's metrics",
+    whyNoUsage:
+      "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
+    whyNoSamples:
+      "the connected Prometheus holds no sample of its pods in the last day",
+    whyFolded:
+      "it is not among the workloads that request most, whose usage is read one by one",
     pickNamespaces:
       "Pick the namespaces you can read in the namespace picker, and they are read one by one.",
     late: "{kind} {where} as read at {since}; the watch has failed since.",
@@ -1967,6 +1973,12 @@ export const en = {
       "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
     upgradeRead: "Upgrade: read at {time}, against Kubernetes {server}",
     upgradeReadUnversioned: "Upgrade: read at {time}",
+    usageNoSupplier:
+      "Requests against use: not weighed, since no Prometheus is connected to this cluster",
+    usageReading: "Requests against use: still reading the last day of usage",
+    usageFailed: "Requests against use: the usage could not be read: {said}",
+    usageRead:
+      "Requests against use: weighed over the last {window}, as the Cost page reads them",
     helmRelease: "Helm release",
     helmReleases: "Helm releases",
     deprecatedApi: "Deprecated API",
@@ -2066,6 +2078,10 @@ export const en = {
       other: "{n} requests in the last day",
     },
     wRequestedTodayNone: "no request in the last day",
+    wOverRequested:
+      "{resource} peaked at {peak} of the {requested} it requests, over the last day",
+    wCpu: "CPU",
+    wMemory: "Memory",
     pssHostProcess: "Runs as a Windows HostProcess",
     pssHostProcessWhy:
       "A HostProcess container runs with the Windows node's own privileges. The Baseline profile forbids it.",
@@ -2180,6 +2196,9 @@ export const en = {
     noMemoryRequest: "No memory request",
     noMemoryRequestWhy:
       "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
+    requestsAboveUsage: "Requests far above what it uses",
+    requestsAboveUsageWhy:
+      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler keeps the whole request free for it on a node, so the rest is paid for and used by nothing. Lower the request toward the peak, keeping room for the peaks the day did not see.",
     removedApiInHelmRelease:
       "Helm release stores an API version Kubernetes removes",
     removedApiInHelmReleaseWhy:
