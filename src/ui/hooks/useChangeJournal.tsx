@@ -95,6 +95,8 @@ export function useChangeJournal() {
   const beginSpan = useChangeJournalStore((s) => s.beginSpan);
   const heartbeat = useChangeJournalStore((s) => s.heartbeat);
   const endSpan = useChangeJournalStore((s) => s.endSpan);
+  const wentDown = useChangeJournalStore((s) => s.wentDown);
+  const again = useChangeJournalStore((s) => s.again);
   // The watches of the scope being left, still watching until the next
   // scope's have synced: a scope switch is not a stretch nobody watched.
   const leaving = useRef<{ cluster: string; retire: (at: number) => void }>(
@@ -264,6 +266,7 @@ export function useChangeJournal() {
                 else {
                   goBlind();
                   retirePredecessor(Date.now());
+                  wentDown(cluster, Date.now(), payload.error ?? "");
                 }
                 continue;
               }
@@ -385,12 +388,14 @@ export function useChangeJournal() {
     connected,
     namespaces,
     restarts,
+    again,
     renewals,
     record,
     seenCluster,
     beginSpan,
     heartbeat,
     endSpan,
+    wentDown,
   ]);
 
   // After the effect above, so its cleanup has handed over before this ends it.

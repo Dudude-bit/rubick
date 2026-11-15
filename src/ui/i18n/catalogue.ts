@@ -1943,6 +1943,8 @@ export const en = {
     helmUnread: "Helm's history for {release} could not be read: {reason}",
     nothingInWindow: "Nothing on this clock in the window.",
     notWatchingNow: "Not watching this cluster's workloads right now.",
+    watchDown: "The watch stopped at {since}: {why}",
+    watchAgain: "Watch again",
     watchingNow: "Watching since {since}",
     earlierRows:
       "Rows before {since} were recorded by this app while it watched from {from} to {to}",

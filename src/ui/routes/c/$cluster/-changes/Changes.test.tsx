@@ -35,6 +35,40 @@ async function mount() {
   return () => collect!();
 }
 
+describe("a watch that stopped", () => {
+  /** Changes said only "Not watching" for minutes after a Deployments 500, with no reason and no way back. Fails if the stop loses its why, its when or its Watch again. */
+  it("says why and since when, and watches again on a click", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [{ from: NOW - 60_000, seenAt: NOW - 30_000, to: NOW - 30_000 }],
+      },
+      down: { prod: { at: NOW - 30_000, why: "the server returned 500" } },
+      again: 0,
+    });
+
+    const collect = await mount();
+    const said = `The watch stopped at ${formatWhen(NOW - 30_000, "clock")}: the server returned 500`;
+    expect(screen.getByTestId("changes-down")).toHaveTextContent(said);
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    expect(JSON.stringify(watched)).toMatch(
+      /The watch stopped at \d\d:\d\d[^:]*: the server returned 500/
+    );
+    screen.getByRole("button", { name: "Watch again" }).click();
+    expect(useChangeJournalStore.getState().again).toBe(1);
+
+    useChangeJournalStore.getState().beginSpan("prod", NOW);
+    expect(useChangeJournalStore.getState().down.prod).toBeUndefined();
+  });
+});
+
 describe("the stretches this app watched", () => {
   /**
    * Lena's page said "watching since 07:24:23" while it had watched

@@ -23,7 +23,8 @@ import {
   watchedStretches,
   windowEnd,
 } from "@/lib/changes";
-import { Eye, History, Lock } from "lucide-react";
+import { Eye, History, Lock, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -48,6 +49,10 @@ export function Changes() {
   const now = useNow();
   const entries = useChangeJournalStore((s) => s.entries);
   const spans = useChangeJournalStore((s) => s.spans);
+  const down = useChangeJournalStore((s) =>
+    currentContext ? s.down[currentContext] : undefined
+  );
+  const watchAgain = useChangeJournalStore((s) => s.watchAgain);
 
   const mine = useMemo(
     () =>
@@ -102,7 +107,7 @@ export function Changes() {
       t,
       range === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day")
     ),
-    watchedSection(watching, ours, items, t),
+    watchedSection(watching, ours, items, t, down),
   ]);
 
   if (!isConnected) {
@@ -133,7 +138,17 @@ export function Changes() {
               )}
             </>
           ) : (
-            t("changes", "notWatchingNow")
+            <>
+              {t("changes", "notWatchingNow")}
+              {down && (
+                <span className="ml-2 text-warn" data-testid="changes-down">
+                  {t("changes", "watchDown", {
+                    since: formatWhen(down.at, "clock"),
+                    why: down.why,
+                  })}
+                </span>
+              )}
+            </>
           )
         }
         description={
@@ -146,6 +161,12 @@ export function Changes() {
         }
         actions={
           <>
+            {!watching && (
+              <Button variant="outline" onClick={watchAgain}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                {t("changes", "watchAgain")}
+              </Button>
+            )}
             <SegmentedControl
               label={t("changes", "range")}
               value={range}

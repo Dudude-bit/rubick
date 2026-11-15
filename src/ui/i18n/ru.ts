@@ -2016,6 +2016,8 @@ export const ru: Catalogue = {
     helmUnread: "История Helm для {release} не прочитана: {reason}",
     nothingInWindow: "На этой шкале в окне ничего нет.",
     notWatchingNow: "Сейчас за нагрузками этого кластера не следим.",
+    watchDown: "Наблюдение прервалось в {since}: {why}",
+    watchAgain: "Следить снова",
     watchingNow: "Наблюдаем с {since}",
     earlierRows:
       "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",

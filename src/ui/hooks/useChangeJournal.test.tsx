@@ -188,6 +188,37 @@ describe("the change journal under a refused kind", () => {
   });
 });
 
+describe("a watch that failed and came back", () => {
+  /**
+   * Deployments answered 500 for a minute and Changes said "Not watching"
+   * for good, with no reason. Fails if the stop is not told with its why, if
+   * the relist that follows it does not watch again, or if Watch again does
+   * not open the watches anew.
+   */
+  it("says why it stopped, watches again after the relist, and on Watch again", async () => {
+    useChangeJournalStore.setState({ down: {}, again: 0 });
+    await journal();
+    await emit("ds", "synced");
+    expect(span()).toMatchObject({ to: null });
+
+    await emit("deploy", "failed", "the server returned 500");
+    expect(span()?.to).not.toBeNull();
+    expect(useChangeJournalStore.getState().down.dev).toMatchObject({
+      why: "the server returned 500",
+    });
+
+    await emit("deploy", ["restarted", "synced"]);
+    expect(span()).toMatchObject({ to: null });
+    expect(useChangeJournalStore.getState().down.dev).toBeUndefined();
+
+    const listed = () =>
+      vi.mocked(commands.subscribeDeploymentWatch).mock.calls.length;
+    const before = listed();
+    act(() => useChangeJournalStore.getState().watchAgain());
+    await waitFor(() => expect(listed()).toBe(before + 1));
+  });
+});
+
 describe("a kind refused in some namespaces of the scope", () => {
   /**
    * Marco's Changes over team-checkout and team-blind said "StatefulSet,

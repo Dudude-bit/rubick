@@ -622,7 +622,7 @@ impl WatchConfigs {
         K: Resource + Clone + DeserializeOwned + Debug + Send + Sync + 'static,
         K::DynamicType: Default + Eq + Hash + Clone,
     {
-        let (store, writer) = reflector::store();
+        let (store, mut writer) = reflector::store();
         let health = self.health.clone();
         let stop = self.stop.clone();
         let context = self.context.clone();
@@ -631,13 +631,13 @@ impl WatchConfigs {
         let refused = self.refused.clone();
         let changes = self.changes.clone();
         tokio::spawn(async move {
-            let events = reflector::reflector(
-                writer,
-                watcher::watcher(api, config)
+            let fresh = || {
+                watcher::watcher(api.clone(), config.clone())
                     .modify(strip)
-                    .default_backoff(),
-            );
-            futures::pin_mut!(events);
+                    .default_backoff()
+                    .boxed()
+            };
+            let mut events = fresh();
             loop {
                 let next = tokio::select! {
                     biased;
@@ -646,6 +646,7 @@ impl WatchConfigs {
                 };
                 match next {
                     Some(Ok(event)) => {
+                        writer.apply_watcher_event(&event);
                         health.lock().saw(kind, &event);
                         changes.note(&event);
                     }
@@ -668,6 +669,10 @@ impl WatchConfigs {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {
                             tracing::warn!(context, kind, %error, "overview watch broken; listing instead");
+                            // A watch kube resumes from its resourceVersion
+                            // answers nothing on a quiet kind, so the streak
+                            // never ends; a list's answer does end it.
+                            events = fresh();
                         }
                         if streak >= GIVE_UP_STREAK {
                             tracing::warn!(
@@ -927,6 +932,67 @@ mod tests {
             "a cache that is not serving announced a change"
         );
         cluster.stop.cancel();
+    }
+
+    /// The Overview said "polling" for minutes after Deployments came back from
+    /// a 500: kube resumed the watch in silence and the streak never ended.
+    /// Fails if a broken kind is not listed again, which is what ends it.
+    #[tokio::test]
+    async fn a_broken_kind_lists_again_and_serves_once_the_list_answers() {
+        use http::{Request, Response};
+        use kube::client::Body;
+
+        let lists = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let listed = lists.clone();
+        let service = tower::service_fn(move |request: Request<Body>| {
+            let watching = request.uri().query().unwrap_or_default().contains("watch=");
+            if !watching {
+                listed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+            async move {
+                let (code, body) = if watching {
+                    (
+                        500,
+                        r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"chaos","code":500}"#,
+                    )
+                } else {
+                    (
+                        200,
+                        r#"{"kind":"DeploymentList","apiVersion":"apps/v1","metadata":{"resourceVersion":"5"},"items":[]}"#,
+                    )
+                };
+                Ok::<_, std::convert::Infallible>(
+                    Response::builder()
+                        .status(code)
+                        .body(Body::from(body.as_bytes().to_vec()))
+                        .unwrap(),
+                )
+            }
+        });
+        let cluster = WatchConfigs {
+            context: "prod".to_string(),
+            health: Arc::new(Mutex::new(Health::new(KINDS))),
+            stop: CancellationToken::new(),
+            clusters: Arc::default(),
+            cooldown: Arc::default(),
+            refused: Arc::default(),
+            changes: Arc::new(Changes::default()),
+        };
+        let _store = cluster.spawn::<Deployment>(
+            "Deployment",
+            Api::all(Client::new(service, "default")),
+            WatcherConfig::default(),
+            |_| {},
+        );
+        let health = cluster.health.clone();
+        let came_back = tokio::time::timeout(Duration::from_secs(30), async {
+            while lists.load(std::sync::atomic::Ordering::SeqCst) < 2 || !health.lock().serves() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
+        cluster.stop.cancel();
+        assert!(came_back.is_ok(), "a broken kind never served again");
     }
 
     /// When each change in `noted` (ms) is announced under [`Pace`], as the announcer spends it.
