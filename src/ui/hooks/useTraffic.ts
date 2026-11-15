@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { WorkloadKey } from "@/generated/types";
-import { useCapabilityState } from "@/integrations";
+import { useCapabilityState, type CapabilityState } from "@/integrations";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import type { RefreshRate } from "@/lib/refresh";
@@ -27,7 +27,14 @@ export const SOURCES_STALE = 5 * 60_000;
 export type TrafficState =
   | { says: "absent" }
   | { says: "checking" }
-  | { says: "unreachable"; vendor: string; endpoint: string; reason: string }
+  | {
+      says: "unreachable";
+      /** The supplier as it did not answer, with the way to ask it again. */
+      power: Extract<
+        CapabilityState<"traffic.flows">,
+        { state: "unreachable" }
+      >;
+    }
   | { says: "looking"; endpoint: string }
   | { says: "noSource"; endpoint: string; sources: readonly FlowSource[] }
   | { says: "reading"; endpoint: string; sources: readonly FlowSource[] }
@@ -107,12 +114,7 @@ export function useTraffic(input: {
     case "reading":
       return { says: "checking" };
     case "unreachable":
-      return {
-        says: "unreachable",
-        vendor: power.vendor,
-        endpoint: power.endpoint,
-        reason: power.reason,
-      };
+      return { says: "unreachable", power };
     case "ready":
       break;
   }

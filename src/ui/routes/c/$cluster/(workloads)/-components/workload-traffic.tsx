@@ -13,6 +13,7 @@ import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink } from "@/lib/links";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { isEnd, type FlowRow } from "@/lib/traffic";
+import { AskAgain } from "../../-supplier/AskAgain";
 import { WINDOW_WORD } from "../../-traffic/traffic-words";
 import {
   rowWords,
@@ -112,15 +113,20 @@ export function Block({
         <Section>
           <SectionHeader title={t("traffic", "title")} />
           <p className="px-1.5 text-[11.5px] text-err">
-            {state.says === "unreachable"
-              ? t("traffic", "unreachable", {
-                  endpoint: state.endpoint,
-                  reason: state.reason,
-                })
-              : t("traffic", "failed", {
-                  endpoint: state.endpoint,
-                  said: state.said,
-                })}
+            {state.says === "unreachable" ? (
+              <>
+                {t("traffic", "unreachable", {
+                  endpoint: state.power.endpoint,
+                  reason: state.power.reason,
+                })}{" "}
+                <AskAgain power={state.power} />
+              </>
+            ) : (
+              t("traffic", "failed", {
+                endpoint: state.endpoint,
+                said: state.said,
+              })
+            )}
           </p>
         </Section>
       );

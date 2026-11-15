@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
+import { AskAgain } from "../-supplier/AskAgain";
 import {
   GraphCanvas,
   type GraphCanvasHandle,
@@ -182,10 +183,15 @@ export function Stopped({
       case "checking":
         return t("traffic", "checking");
       case "unreachable":
-        return t("traffic", "unreachable", {
-          endpoint: state.endpoint,
-          reason: state.reason,
-        });
+        return (
+          <>
+            {t("traffic", "unreachable", {
+              endpoint: state.power.endpoint,
+              reason: state.power.reason,
+            })}{" "}
+            <AskAgain power={state.power} />
+          </>
+        );
       case "looking":
         return t("traffic", "looking", { endpoint: state.endpoint });
       case "noSource":

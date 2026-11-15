@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import {
   afterEach,
@@ -19,6 +19,7 @@ import {
   type TrafficReading,
 } from "@/lib/traffic";
 import { useClusterStore } from "@/stores/clusterStore";
+import { vendorLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 
 const traffic = vi.fn<() => TrafficState>();
@@ -132,6 +133,17 @@ function read(set: Partial<Record<Measure, number>> | null): TrafficState {
   };
 }
 
+/** A supplier that did not answer its probe, as the capability hands it over. */
+const down = (askAgain: () => void) => ({
+  state: "unreachable" as const,
+  vendor: "Prometheus",
+  endpoint: "prom.example.com",
+  reason: "connection refused",
+  askAgain,
+  asking: false,
+  settings: vendorLink("prometheus", { tab: "connection" }),
+});
+
 const open = () =>
   renderWithRouter(<Traffic />, {
     at: "/c/prod/traffic",
@@ -180,9 +192,7 @@ describe("the Traffic page", () => {
     };
     const unreachable = await said({
       says: "unreachable",
-      vendor: "Prometheus",
-      endpoint: "prom.example.com",
-      reason: "connection refused",
+      power: down(() => {}),
     });
     const none = await said({
       says: "noSource",
@@ -206,6 +216,22 @@ describe("the Traffic page", () => {
     for (const text of [unreachable, none, failed])
       expect(text).not.toMatch(/saw no flows/);
     expect(stream.opened).toBe(0);
+  });
+
+  /**
+   * A probe's answer is cached and never retried behind the reader's back:
+   * where the page says the supplier did not answer, it offers to ask again
+   * and its Connection tab, or it says so after the supplier is back.
+   */
+  it("offers to ask a supplier that did not answer again, and its connection", async () => {
+    const askAgain = vi.fn();
+    traffic.mockReturnValue({ says: "unreachable", power: down(askAgain) });
+    await open();
+    fireEvent.click(screen.getByTestId("ask-supplier-again"));
+    expect(askAgain).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("link", { name: "Prometheus connection" })
+    ).toBeTruthy();
   });
 
   /** A reading draws the flows, holds the map's stream while on screen, and lets it go when left. */

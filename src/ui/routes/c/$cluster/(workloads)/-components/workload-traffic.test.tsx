@@ -1,5 +1,5 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { fireEvent, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type {
   FlowEnd,
@@ -14,6 +14,7 @@ import {
   type FlowSource,
   type TrafficReading,
 } from "@/lib/traffic";
+import { vendorLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 import { Block } from "./workload-traffic";
 
@@ -99,6 +100,29 @@ describe("a workload's Traffic block", () => {
       expect(container.textContent).toBe("");
       unmount();
     }
+  });
+
+  /**
+   * The block's "did not answer" is the page's: with the way to ask again,
+   * or it goes on saying so after the supplier is back.
+   */
+  it("offers to ask a supplier that did not answer again", async () => {
+    const askAgain = vi.fn();
+    await draw({
+      says: "unreachable",
+      power: {
+        state: "unreachable",
+        vendor: "Prometheus",
+        endpoint: "prom.example.com",
+        reason: "connection refused",
+        askAgain,
+        asking: false,
+        settings: vendorLink("prometheus", { tab: "connection" }),
+      },
+    });
+    expect(screen.getByText(/did not answer: connection refused/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("ask-supplier-again"));
+    expect(askAgain).toHaveBeenCalledTimes(1);
   });
 
   /** Callers and callees from the same rows the page draws, each with its number and source. */
