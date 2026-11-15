@@ -60,6 +60,8 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
   switch (trouble.kind) {
     case "noSeries":
       return t("cost", "noSeries", { endpoint: trouble.endpoint });
+    case "noNodePrices":
+      return t("cost", "noNodePrices", { endpoint: trouble.endpoint });
     case "unreachable":
       return t("cost", "unreachable", {
         endpoint: trouble.endpoint,

@@ -91,6 +91,14 @@ export type CostSource =
   | { kind: "opencost"; vendor: string; endpoint: string }
   | { kind: "estimate"; prices: Prices };
 
+/**
+ * OpenCost answers and prices none of the nodes: on kind, or a provider it
+ * has no price list for, it logs "No pricing found" and writes no node
+ * prices while every other series is there.
+ */
+export const pricesNoNode = (reading: CostReading): boolean =>
+  reading.nodes.length === 0;
+
 /** A sum that knows whether it is the whole of what it adds up. */
 export interface Amount {
   perHour: number;
@@ -202,6 +210,12 @@ export interface CostPicture {
 }
 
 export const monthOf = (perHour: number): number => perHour * HOURS_PER_MONTH;
+
+/** The nodes were read and none of them carries a price. */
+export const noNodePriced = (picture: CostPicture): boolean =>
+  picture.nodes !== null &&
+  picture.nodes.length > 0 &&
+  picture.nodes.every((node) => node.perHour === null);
 
 function sum(values: Iterable<number | null | undefined>): number {
   let total = 0;

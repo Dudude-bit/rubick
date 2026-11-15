@@ -247,6 +247,45 @@ describe("the Cost page", () => {
     );
   });
 
+  /**
+   * "Carries no price in OpenCost" is true and says neither why nor what to
+   * do: OpenCost found no price list, and either it is given custom pricing
+   * or prices are entered here.
+   */
+  it("says why OpenCost priced no node and offers to enter prices", async () => {
+    const unpriced = readingPicture(
+      BASIS,
+      { ...READING, nodes: [], allocatedByNode: {} },
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({
+      state: "picture",
+      picture: unpriced,
+      trouble: null,
+    });
+    await open();
+    const why = screen.getByTestId("cost-why-unpriced");
+    expect(why).toHaveTextContent("found no price list");
+    expect(why).toHaveTextContent("custom pricing");
+    expect(
+      within(why).getByRole("button", { name: "enter prices" })
+    ).toBeInTheDocument();
+  });
+
+  /** Some nodes priced: custom pricing is the way, entered prices would not apply. */
+  it("points at OpenCost's custom pricing where only some nodes carry no price", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    await open();
+    const why = screen.getByTestId("cost-why-unpriced");
+    expect(why).toHaveTextContent("custom pricing for them");
+    expect(within(why).queryByRole("button")).toBeNull();
+  });
+
   /** No node priced: idle says it is not known, never 0. */
   it("says idle is not known while no node carries a price", async () => {
     const unpriced = readingPicture(

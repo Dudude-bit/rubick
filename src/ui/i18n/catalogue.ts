@@ -2563,6 +2563,12 @@ export const en = {
       "Or {prices}, and this page estimates from node capacity and what each workload requests.",
     noSeries:
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
+    noNodePrices:
+      "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    whyNoNodePrices:
+      "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
+    whySomeNodePrices:
+      "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
     estimateMeanwhile:
