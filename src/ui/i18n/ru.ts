@@ -2051,6 +2051,12 @@ export const ru: Catalogue = {
       many: "{n} объектов",
       other: "{n} объекта",
     },
+    rulesCounted: {
+      one: "{n} правило",
+      few: "{n} правила",
+      many: "{n} правил",
+      other: "{n} правила",
+    },
     uncheckedOf: {
       one: "{n} не проверен",
       few: "{n} не проверены",
@@ -4452,6 +4458,9 @@ export const ru: Catalogue = {
       many: "{n} строк, из ответивших пространств имён",
       other: "{n} строки, из ответивших пространств имён",
     },
+    countedSoFar: "{counted}, из прочитанной части списка",
+    countedWhereAnswered: "{counted}, из ответивших пространств имён",
+    countedOfTotal: "{counted}, показано {shown}",
     longListTrim: {
       one: "{n} строка. Чтобы сократить список, сузьте область или поиск",
       few: "{n} строки. Чтобы сократить список, сузьте область или поиск",

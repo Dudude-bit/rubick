@@ -143,6 +143,19 @@ describe("the Audit page", () => {
     }
   });
 
+  /**
+   * The table's footer counts rules in its own words, not the row label
+   * glued to a count that already has its noun. Fails if it reads "1
+   * object Findings".
+   */
+  it("counts the table's rows as rules", async () => {
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    expect(await screen.findByText("1 rule")).toBeInTheDocument();
+  });
+
   /** The system's own findings are folded under one line with their count, never hidden. */
   it("folds the system's findings under one line that opens them", async () => {
     await renderWithRouter(<Audit />, {

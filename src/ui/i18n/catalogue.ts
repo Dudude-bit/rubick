@@ -1990,6 +1990,10 @@ export const en = {
       one: "{n} object",
       other: "{n} objects",
     },
+    rulesCounted: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
     uncheckedOf: {
       one: "{n} not checked",
       other: "{n} not checked",
@@ -4100,6 +4104,9 @@ export const en = {
       one: "{n} row, from the namespaces that answered",
       other: "{n} rows, from the namespaces that answered",
     },
+    countedSoFar: "{counted}, from the part of the list read so far",
+    countedWhereAnswered: "{counted}, from the namespaces that answered",
+    countedOfTotal: "{counted}, {shown} shown",
     longListTrim: {
       one: "{n} row. To trim the list, narrow the scope or search",
       other: "{n} rows. To trim the list, narrow the scope or search",

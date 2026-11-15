@@ -567,6 +567,7 @@ export function Audit() {
                     choose({ rule: row.rule === rule ? undefined : row.rule })
                   }
                   rowLabel={t("audit", "findings")}
+                  countWords={(n) => t("audit", "rulesCounted", { n })}
                   widthsKey="audit-rules"
                   emptyMessage={empty}
                   pageKeys
@@ -582,6 +583,7 @@ export function Audit() {
                     choose({ open: subjectKey(row.subject) })
                   }
                   rowLabel={t("audit", "objects")}
+                  countWords={(n) => t("audit", "objectsOf", { n })}
                   widthsKey="audit-objects"
                   emptyMessage={empty}
                   more={page?.next !== null && page?.next !== undefined}
