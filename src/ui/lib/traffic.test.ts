@@ -33,6 +33,7 @@ const source = (name: string, measures: readonly Measure[]): FlowSource => ({
   marks: false,
   nodeAgent: false,
   needsPods: false,
+  grpcErrors: name === "Istio",
 });
 
 const ISTIO = source("Istio", [
@@ -178,6 +179,23 @@ describe("the rows the page and the block draw", () => {
     expect(after.requests.state).toBe("notRead");
   });
 
+  /**
+   * Hubble's errors are HTTP 5xx: a pair that may carry gRPC has only a floor
+   * from it, while Istio counts gRPC statuses and vouches for its share.
+   */
+  it("takes a share as a floor from a source that cannot see gRPC fail", () => {
+    const hubble = source("Hubble", ["requests", "errors"]);
+    const on = (from: FlowSource, protocols: string[], errors = 0) =>
+      pairRows(
+        reading([from], [{ ...flow(0, { requests: 10, errors }), protocols }])
+      ).rows[0];
+    expect(on(hubble, ["HTTP/2"]).errorShare.floor).toBe(true);
+    expect(flowTone(on(hubble, ["HTTP/2"]))).toBe("mute");
+    expect(flowTone(on(hubble, ["HTTP/2"], 1))).toBe("err");
+    expect(on(hubble, ["HTTP/1.1"]).errorShare.floor).toBeUndefined();
+    expect(flowTone(on(ISTIO, ["grpc"]))).toBe("ok");
+  });
+
   /** The share of errors is over the same source's requests, and unknown where its errors were not read. */
   it("works the error share out of one source and leaves it unknown when its errors failed", () => {
     const [row] = pairRows(
@@ -310,6 +328,35 @@ describe("a live pair as a row", () => {
     const http = liveRow(pair({ requests: 10, errors: 1, p95: 12 }));
     expect(http.errorShare.value).toBe(0.1);
     expect(http.p95.value).toBe(12);
+  });
+
+  /**
+   * A failed gRPC call answers HTTP 200: over HTTP/2 the share Hubble counts
+   * is only a floor, and a floor under the warning line is never green.
+   */
+  it("calls a share over HTTP/2 a floor and never paints it ok", () => {
+    const grpc = liveRow(
+      pair({
+        dropped: 0,
+        drops: [],
+        requests: 10,
+        errors: 0,
+        protocols: ["HTTP/2"],
+      })
+    );
+    expect(grpc.errorShare.floor).toBe(true);
+    expect(flowTone(grpc)).toBe("mute");
+    const plain = liveRow(
+      pair({
+        dropped: 0,
+        drops: [],
+        requests: 10,
+        errors: 0,
+        protocols: ["HTTP/1.1"],
+      })
+    );
+    expect(plain.errorShare.floor).toBeUndefined();
+    expect(flowTone(plain)).toBe("ok");
   });
 
   /** A pair object the stream did not resend keeps its row, so it does not redraw. */

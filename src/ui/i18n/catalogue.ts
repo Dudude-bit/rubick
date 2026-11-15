@@ -2444,6 +2444,8 @@ export const en = {
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellFloor:
+      "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
     panelClose: "Close",
     panelSeenBy:
@@ -2452,6 +2454,8 @@ export const en = {
     panelNothing: "nothing in this window",
     panelRequests: "{v} requests/s",
     panelErrors: "{share} of them errors (5xx, or gRPC other than OK)",
+    panelErrorsHttp:
+      "{share} of them HTTP 5xx (a failed gRPC call is answered with a 200 and is not counted)",
     panelBytes: "{v}",
     panelEvents: "{v} flow events/s",
     panelDrops: "{v} drops/s",

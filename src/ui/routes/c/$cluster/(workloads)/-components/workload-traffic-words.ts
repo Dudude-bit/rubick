@@ -3,7 +3,6 @@ import { ArrowRightLeft } from "lucide-react";
 
 import type { OwnerReference, WorkloadKey } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { formatShare } from "@/lib/cost";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import {
@@ -14,6 +13,7 @@ import {
 } from "@/lib/traffic";
 import {
   bytesRate,
+  cellText,
   endLabel,
   endSub,
   ms,
@@ -67,7 +67,9 @@ export function rowWords(row: FlowRow, peer: "from" | "to", t: T): string[] {
     rateWords(row, t),
     row.errorShare.value === null
       ? ""
-      : t("traffic", "subErrors", { share: formatShare(row.errorShare.value) }),
+      : t("traffic", "subErrors", {
+          share: cellText(row.errorShare, "share", t),
+        }),
     row.p95.value === null ? "" : `p95 ${ms(row.p95.value, t)}`,
     row.requests.source ?? row.bytes.source ?? row.events.source ?? "",
   ];

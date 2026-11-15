@@ -118,7 +118,7 @@ export function cellText(cell: Cell, kind: CellKind, t: T): string {
     case "bytes":
       return bytesRate(cell.value);
     case "share":
-      return formatShare(cell.value);
+      return `${cell.floor ? "≥" : ""}${formatShare(cell.value)}`;
     case "ms":
       return ms(cell.value, t);
   }
@@ -134,6 +134,8 @@ const CELL_EMPTY: Record<CellState, (t: T) => string> = {
 export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
   switch (cell.state) {
     case "measured":
+      if (cell.floor)
+        return t("traffic", "cellFloor", { source: cell.source ?? "" });
       return cell.source
         ? t("traffic", "cellFrom", { source: cell.source })
         : "";
@@ -158,7 +160,11 @@ export function sourceLines(line: SourceLine, t: T): string[] {
     const errors = value("errors");
     if (errors !== null && requests > 0)
       out.push(
-        t("traffic", "panelErrors", { share: formatShare(errors / requests) })
+        t(
+          "traffic",
+          line.source.grpcErrors ? "panelErrors" : "panelErrorsHttp",
+          { share: formatShare(errors / requests) }
+        )
       );
   }
   const quantiles = (["p50", "p95", "p99"] as const)
@@ -193,7 +199,9 @@ export function edgeSub(row: FlowRow, t: T): string {
     parts.push(t("traffic", "subEvents", { v: rate(row.events.value) }));
   if (row.errorShare.value !== null)
     parts.push(
-      t("traffic", "subErrors", { share: formatShare(row.errorShare.value) })
+      t("traffic", "subErrors", {
+        share: cellText(row.errorShare, "share", t),
+      })
     );
   if (row.p95.value !== null) parts.push(`p95 ${ms(row.p95.value, t)}`);
   if ((row.drops.value ?? 0) > 0)

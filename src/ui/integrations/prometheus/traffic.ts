@@ -109,6 +109,7 @@ interface Definition {
   need: TrafficWord;
   marks: boolean;
   nodeAgent: boolean;
+  grpcErrors: boolean;
   presence: string[];
   /** From what the presence queries found, its state and what it measures. */
   judge: (
@@ -486,6 +487,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needIstio",
     marks: true,
     nodeAgent: false,
+    grpcErrors: true,
     presence: [
       'count by (__name__) ({__name__=~"istio_requests_total|istio_tcp_sent_bytes_total"})',
     ],
@@ -516,6 +518,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needHubble",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: [
       `count by (__name__) ({__name__=~"${HUBBLE_METRICS.join("|")}"})`,
       `count({__name__=~"${HUBBLE_METRICS.join("|")}", destination_workload!=""})`,
@@ -555,6 +558,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needBeyla",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: [`count by (__name__) (${BEYLA_METRIC})`],
     judge: ([names]) => ({
       state: { says: names.length > 0 ? "present" : "absent" },
@@ -570,6 +574,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needCaretta",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: ['count by (__name__) ({__name__="caretta_links_observed"})'],
     judge: ([names]) => ({
       state: { says: names.length > 0 ? "present" : "absent" },
@@ -591,6 +596,7 @@ export async function flowSources(): Promise<FlowSource[]> {
         need: definition.need,
         marks: definition.marks,
         nodeAgent: definition.nodeAgent,
+        grpcErrors: definition.grpcErrors,
       };
       try {
         const answers = await Promise.all(

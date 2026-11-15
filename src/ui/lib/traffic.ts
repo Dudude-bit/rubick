@@ -70,6 +70,8 @@ export interface FlowSource {
   nodeAgent: boolean;
   /** Some ends it writes are names only the pods resolve: unread pods hide its flows. */
   needsPods: boolean;
+  /** Its errors include a failed gRPC call; else HTTP 5xx only. */
+  grpcErrors: boolean;
 }
 
 /** One read: the present sources, positionally as each flow's `source`. */
@@ -86,7 +88,16 @@ export interface Cell {
   value: number | null;
   source: string | null;
   state: CellState;
+  /** A share of errors that is only a floor: its source cannot see a failed gRPC call. */
+  floor?: true;
 }
+
+/**
+ * gRPC answers a failed call with HTTP 200 and the status in a trailer, so
+ * a source counting HTTP 5xx misses it on anything but HTTP/1.
+ */
+export const mayCarryGrpc = (protocols: readonly string[]) =>
+  !(protocols.length > 0 && protocols.every((p) => p.startsWith("HTTP/1")));
 
 /** Why flows were dropped, and the policies that denied them where the source says. */
 export interface Reason {
@@ -221,18 +232,23 @@ function errorShareOf(
 ): Cell {
   const flow = requests.flow;
   if (!flow) return { ...requests.cell, value: null };
-  const source = reading.sources[flow.source]?.name ?? null;
+  const from = reading.sources[flow.source];
+  const source = from?.name ?? null;
   if (failed(flow.source, "errors"))
     return { value: null, source, state: "notRead" };
   const errors = flow.values[at("errors")];
   const total = requests.cell.value ?? 0;
+  const value =
+    errors === null || errors === undefined || total <= 0
+      ? null
+      : errors / total;
   return {
-    value:
-      errors === null || errors === undefined || total <= 0
-        ? null
-        : errors / total,
+    value,
     source,
     state: "measured",
+    ...(value !== null && !from?.grpcErrors && mayCarryGrpc(flow.protocols)
+      ? { floor: true as const }
+      : {}),
   };
 }
 
@@ -392,7 +408,9 @@ export function flowTone(row: FlowRow): MapTone {
           ? "err"
           : share.value >= WARN_AT
             ? "warn"
-            : "ok";
+            : share.floor
+              ? "mute"
+              : "ok";
   if ((row.drops.value ?? 0) > 0 && shareTone !== "err") return "warn";
   return shareTone;
 }
@@ -459,6 +477,7 @@ export const LIVE_SOURCE: FlowSource = {
   marks: false,
   nodeAgent: false,
   needsPods: false,
+  grpcErrors: false,
 };
 
 export const livePairId = (pair: { from: FlowEnd; to: FlowEnd }) =>
@@ -473,6 +492,16 @@ const measured = (value: number | null, source: string): Cell =>
  * A live pair as a row. Hubble sees HTTP only where L7 visibility is on, so
  * a pair with none is "not measured" there, never 0 requests.
  */
+function liveShare(pair: LivePair): Cell {
+  const cell = measured(
+    pair.requests && pair.errors !== null ? pair.errors / pair.requests : null,
+    LIVE_SOURCE.name
+  );
+  return cell.value !== null && mayCarryGrpc(pair.protocols)
+    ? { ...cell, floor: true }
+    : cell;
+}
+
 export function liveRow(pair: LivePair): FlowRow {
   const name = LIVE_SOURCE.name;
   const http = pair.requests !== null;
@@ -509,14 +538,7 @@ export function liveRow(pair: LivePair): FlowRow {
     from: pair.from,
     to: pair.to,
     requests: http ? measured(pair.requests, name) : unmeasured,
-    errorShare: http
-      ? measured(
-          pair.requests && pair.errors !== null
-            ? pair.errors / pair.requests
-            : null,
-          name
-        )
-      : unmeasured,
+    errorShare: http ? liveShare(pair) : unmeasured,
     p50: http ? measured(pair.p50, name) : unmeasured,
     p95: http ? measured(pair.p95, name) : unmeasured,
     p99: http ? measured(pair.p99, name) : unmeasured,

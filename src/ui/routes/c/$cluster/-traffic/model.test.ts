@@ -51,6 +51,7 @@ function model(
         marks: true,
         nodeAgent: false,
         needsPods: false,
+        grpcErrors: true,
       },
     ],
     window: "5m",

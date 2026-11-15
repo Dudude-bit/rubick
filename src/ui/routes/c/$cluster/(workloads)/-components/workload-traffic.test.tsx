@@ -32,6 +32,7 @@ const ISTIO: FlowSource = {
   marks: true,
   nodeAgent: false,
   needsPods: true,
+  grpcErrors: true,
 };
 const BEYLA: FlowSource = {
   ...ISTIO,
@@ -41,6 +42,7 @@ const BEYLA: FlowSource = {
   marks: false,
   nodeAgent: true,
   needsPods: false,
+  grpcErrors: false,
 };
 
 const key = (name: string): WorkloadKey => ({

@@ -82,6 +82,7 @@ const ISTIO: FlowSource = {
   marks: true,
   nodeAgent: false,
   needsPods: false,
+  grpcErrors: true,
 };
 const HUBBLE: FlowSource = {
   ...ISTIO,
@@ -91,6 +92,7 @@ const HUBBLE: FlowSource = {
   need: "needHubble",
   marks: false,
   nodeAgent: true,
+  grpcErrors: false,
 };
 
 const workload = (name: string): FlowEnd => ({

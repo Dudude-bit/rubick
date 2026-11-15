@@ -23,6 +23,7 @@ const source = (says: "present" | "absent"): FlowSource => ({
   marks: true,
   nodeAgent: false,
   needsPods: false,
+  grpcErrors: true,
 });
 
 const READING: TrafficReading = {

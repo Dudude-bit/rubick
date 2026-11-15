@@ -2557,6 +2557,8 @@ export const ru: Catalogue = {
     cellFrom: "по данным {source}",
     cellNotMeasured: "Не измеряется: {sources}",
     cellNotReadBy: "{source} не смог это прочитать",
+    cellFloor:
+      "Не меньше этой доли: {source} считает только HTTP 5xx, а неудачный вызов gRPC отвечает кодом 200.",
     panelLabel: "Один поток",
     panelClose: "Закрыть",
     panelSeenBy: "Видят {sources}; линия и таблица показывают числа {source}.",
@@ -2564,6 +2566,8 @@ export const ru: Catalogue = {
     panelNothing: "в этом окне ничего",
     panelRequests: "{v} запросов/с",
     panelErrors: "из них ошибки: {share} (5xx или gRPC, отличный от OK)",
+    panelErrorsHttp:
+      "из них HTTP 5xx: {share} (неудачный вызов gRPC отвечает кодом 200 и не учитывается)",
     panelBytes: "{v}",
     panelEvents: "{v} событий потоков/с",
     panelDrops: "{v} отброшенных/с",

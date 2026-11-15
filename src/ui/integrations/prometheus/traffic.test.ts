@@ -239,6 +239,7 @@ describe("which sources a Prometheus holds", () => {
       marks: id === "istio",
       nodeAgent: false,
       needsPods: false,
+      grpcErrors: false,
     });
     const absent = {
       ...present("hubble", []),
