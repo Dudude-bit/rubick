@@ -2807,6 +2807,9 @@ export const en = {
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",
+    nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
+    nothingSeenSinceCleared:
+      "nothing seen since {at}, when the timeline was cleared",
     waitingOn: "Waiting on",
     notLookedAt: "Not looked at",
     pinsFull: {
