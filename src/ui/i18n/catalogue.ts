@@ -1053,6 +1053,7 @@ export const en = {
     filterIdentitiesPlaceholder: "Filter by identity, client id or pod…",
     filterHostsPlaceholder: "Filter by host or Service…",
     askAgain: "Ask again",
+    supplierConnection: "{vendor} connection",
     readTheLast: "Read the last {range}",
     readWhatVendorKept: "Read what {vendor} kept",
     connectOne: "connect one",

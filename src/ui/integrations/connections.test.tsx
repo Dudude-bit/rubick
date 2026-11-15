@@ -256,6 +256,42 @@ describe("a basic-auth address where it is drawn", () => {
     expect(power.result.current.state).toBe("reading");
   });
 
+  /**
+   * A probe that failed is cached and never retried on its own, so a
+   * supplier that came back stayed "did not answer" on every page until
+   * somebody opened its integration. Asking again from the sentence runs
+   * the integration's own probe, and the state follows its answer.
+   */
+  it("asks an unreachable supplier again, and follows its new answer", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue(saved);
+    vi.mocked(commands.probePrometheus).mockResolvedValueOnce({
+      ok: false,
+      at: 1,
+      latencyMs: 0,
+      reason: "connection refused",
+      noAddress: false,
+    });
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const power = renderHook(() => useCapabilityState("usage.history"), {
+      wrapper,
+    });
+    await waitFor(() => expect(power.result.current.state).toBe("unreachable"));
+    const unreachable = power.result.current;
+    if (unreachable.state !== "unreachable") throw new Error("unreachable");
+    expect(unreachable.settings).toMatchObject({
+      to: "/c/$cluster/integrations/$vendor",
+      search: { tab: "connection" },
+    });
+    act(() => unreachable.askAgain());
+    await waitFor(() => expect(power.result.current.state).toBe("ready"));
+  });
+
   it("names the host alone as where a chart's numbers come from", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },

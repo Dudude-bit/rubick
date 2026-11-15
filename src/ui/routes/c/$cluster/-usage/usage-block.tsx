@@ -4,6 +4,7 @@
  * Everything a detail page says about resource consumption lives here, so
  * the answer cannot drift between kinds.
  */
+import { AskAgain } from "../-supplier/AskAgain";
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +16,7 @@ import { BAND_H } from "./band-frame";
 import { NO_LIMIT_NOTE, UsageChart, WATCHING_NOTE } from "./usage-chart";
 import { useUsageHistory } from "./useUsageHistory";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
+import type { CapabilityState } from "@/integrations";
 import type {
   DeclaredHistory,
   NodeBasis,
@@ -402,6 +404,12 @@ function HistoryNote({
           vendor: state.vendor,
           reason: state.reason,
         })}
+        {state.unreachable && (
+          <>
+            {" "}
+            <AskAgain power={state.unreachable} />
+          </>
+        )}
       </p>
     );
   }
@@ -486,6 +494,11 @@ function RangePicker({
 interface RangedHistory {
   /** Which of the three states the supplier is in. */
   status: "absent" | "reading" | "unreachable" | "ready";
+  /** The supplier's probe, where it is what did not answer. */
+  unreachable: Extract<
+    CapabilityState<"usage.history">,
+    { state: "unreachable" }
+  > | null;
   /** True only where a range could actually be asked for and drawn. */
   enabled: boolean;
   /** Whether the quiet offer is worth making — see {@link HistoryNote}. */
@@ -587,6 +600,7 @@ function useRangedHistory(
 
   return {
     status,
+    unreachable: power.state === "unreachable" ? power : null,
     enabled,
     // Offered only where a scope exists to ask about: a block that cannot be
     // upgraded must not advertise an upgrade.
