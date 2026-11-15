@@ -308,37 +308,39 @@ function ChangesPanel({
     () => coverageOf(read.spans, [subject.kind], scope, show),
     [read.spans, subject.kind, scope, show]
   );
-  const items = useMemo(
-    () =>
-      timelineOf({
-        revisions,
-        deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
-        helm,
-        journal: read.rows,
-        spans: coverage.covering,
-        watching: coverage.watching,
-        scope,
-        window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
-        createdAt: subject.createdAt,
-        show,
-        letGo: read.letGo,
-        readFrom: read.readFrom,
-      }),
-    [
+  const known = read.read;
+  const items = useMemo(() => {
+    const drawn = timelineOf({
       revisions,
-      deliveries,
+      deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
       helm,
-      read.rows,
-      read.letGo,
-      read.readFrom,
-      coverage,
-      spans,
-      subject.createdAt,
+      journal: read.rows,
+      spans: coverage.covering,
+      watching: coverage.watching,
       scope,
-      now,
+      window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
+      createdAt: subject.createdAt,
       show,
-    ]
-  );
+      letGo: read.letGo,
+      readFrom: read.readFrom,
+    });
+    // An unread timeline has no spans: no stretch of it is known either way.
+    return known ? drawn : drawn.filter((item) => item.kind !== "gap");
+  }, [
+    known,
+    revisions,
+    deliveries,
+    helm,
+    read.rows,
+    read.letGo,
+    read.readFrom,
+    coverage,
+    spans,
+    subject.createdAt,
+    scope,
+    now,
+    show,
+  ]);
   const watching = spans.find((span) => span.to === null);
   const lines = [...keepingWords(read, t), ...unread];
 
