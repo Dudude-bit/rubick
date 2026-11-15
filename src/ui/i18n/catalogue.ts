@@ -4973,6 +4973,7 @@ export const en = {
       "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
     attentionNothing: "nothing needs attention",
     attentionNoneFound: "no problems found · not all checked",
+    attentionWaiting: "changed · shown when the pointer leaves the list",
     attentionNotChecked: "Not checked",
     attentionUnconfirmed:
       "its controller has said {word} for {age}; its pods were not read",

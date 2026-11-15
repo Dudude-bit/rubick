@@ -1,6 +1,12 @@
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, cleanup, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter, testQueryClient } from "@/test/render";
@@ -971,6 +977,122 @@ describe("the Needs attention heading", () => {
       screen.getByText("2 · worst first · not all checked")
     ).toBeInTheDocument();
     unmount();
+  });
+});
+
+describe("the Needs attention rows while the list changes", () => {
+  const panel = (attention: Attention) => (
+    <AttentionPanel
+      attention={attention}
+      pods={RUNNING}
+      podsUnread={[]}
+      nodes={[]}
+      nodesKnown={true}
+    />
+  );
+  const names = () =>
+    screen
+      .getAllByTestId("attention-said")
+      .map((said) =>
+        ["cart", "web", "api"].find((name) => said.textContent?.includes(name))
+      );
+
+  /**
+   * During an incident the rows reordered every few seconds under a resting
+   * pointer, and the page scrolled after the row it was on. Fails if a new
+   * order is drawn while the pointer is on the list, if the list does not
+   * say it is holding a change, or if it holds one after the pointer leaves.
+   */
+  it("keeps its order while the pointer is on it, says a change is waiting, and takes it when it leaves", async () => {
+    const first = attentionFrom([
+      { ...problem, name: "cart" },
+      {
+        ...problem,
+        name: "web",
+        since: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const next = attentionFrom([
+      {
+        ...problem,
+        name: "cart",
+        since: new Date(Date.now() - 120_000).toISOString(),
+      },
+      { ...problem, name: "web" },
+      { ...problem, name: "api" },
+    ]);
+    const { rerender } = await wrap(panel(first));
+    expect(names()).toEqual(["cart", "web"]);
+
+    fireEvent.pointerMove(screen.getByTestId("attention-rows"));
+    await rerender(
+      panel(
+        attentionFrom([
+          { ...problem, name: "cart" },
+          {
+            ...problem,
+            name: "web",
+            since: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ])
+      )
+    );
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent("");
+
+    await rerender(panel(next));
+    expect(names()).toEqual(["cart", "web"]);
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent(
+      /shown when the pointer leaves the list/
+    );
+
+    fireEvent.pointerMove(document.body);
+    await act(async () => {});
+    expect(names()).toEqual(["web", "api", "cart"]);
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent("");
+  });
+
+  /**
+   * A column sized by the grid from its cells widened when a row came, and
+   * WebKit kept every other row's height from before: a wrapped sentence
+   * printed over the next row's name. Fails if a column goes back to being
+   * sized by the grid, or if a measured one is narrower than its widest cell.
+   */
+  it("sizes its columns from the widest cell, never from the grid", async () => {
+    const restarting: ClusterProblem = {
+      ...problem,
+      kind: "Pod",
+      name: "api-1",
+      reason: "Init:CreateContainerConfigError",
+      restarts: 3,
+    };
+    const widths: Record<string, number> = { "2": 0, "4": 0, "5": 0, "6": 0 };
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const col = this.dataset.col;
+      if (!col) return original.call(this);
+      const width =
+        col === "2"
+          ? (this.textContent?.length ?? 0) * 7
+          : col === "5"
+            ? 64
+            : 30;
+      widths[col] = Math.max(widths[col], width);
+      return { ...original.call(this), width };
+    };
+    try {
+      await wrap(panel(attentionFrom([problem, restarting])));
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
+    const rows = screen.getByTestId("attention-rows");
+    expect(rows.className).not.toMatch(
+      /grid-cols-\[[^\]]*(auto|fit-content|min-content|max-content)/
+    );
+    for (const col of ["2", "4", "5", "6"])
+      expect(rows.style.getPropertyValue(`--col-${col}`)).toBe(
+        `${widths[col]}px`
+      );
+    expect(widths["2"]).toBeGreaterThan(0);
   });
 });
 
@@ -2477,8 +2599,9 @@ describe("what Needs attention says it checked", () => {
   /**
    * Dana read "CreateContainerCon…" in the reason column of Needs attention,
    * the one word she matches against kubectl. jsdom lays nothing out, so this
-   * asserts the column's pixels: fails if the grid stops giving the longest
-   * waiting reason, Init:CreateContainerConfigError, its whole width.
+   * asserts the cell's cap, which the column is measured from: fails if it
+   * stops giving the longest waiting reason, Init:CreateContainerConfigError,
+   * its whole width.
    */
   it("gives a reason the room of the longest waiting status", async () => {
     await panel(
@@ -2486,12 +2609,10 @@ describe("what Needs attention says it checked", () => {
         { ...problem, kind: "Pod", reason: "CreateContainerConfigError" },
       ])
     );
-    const rows = screen
+    const cell = screen
       .getByText("CreateContainerConfigError")
-      .closest('[role="link"]')!.parentElement!;
-    const reasonPx = Number(
-      /grid-cols-\[auto_fit-content\((\d+)px\)_/.exec(rows.className)?.[1]
-    );
+      .closest("[data-col]")!;
+    const reasonPx = Number(/max-w-\[(\d+)px\]/.exec(cell.className)?.[1]);
     expect(reasonPx).toBeGreaterThanOrEqual(
       "Init:CreateContainerConfigError".length * 7.2 + 14
     );
@@ -2694,7 +2815,9 @@ describe("what Needs attention says it checked", () => {
     expect(row).toHaveClass("grid-cols-subgrid");
     const rows = row.parentElement!;
     expect(rows).toHaveClass("@container");
-    expect(rows.className).toContain("minmax(12rem,1fr)_auto_auto_auto]");
+    expect(rows.className).toContain(
+      "minmax(12rem,1fr)_var(--col-4,0px)_var(--col-5,0px)_var(--col-6,0px)]"
+    );
     const drawn = screen
       .getAllByTestId("attention-trend")
       .map((cell) => cell.querySelector("svg"))

@@ -2279,6 +2279,7 @@ export interface ClusterProblem {
   foldedPods: number | null;
   replaced: boolean;
   workload?: PodWorkload;
+  node?: string;
 }
 
 export interface ProbeFailure {

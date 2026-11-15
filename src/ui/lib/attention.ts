@@ -83,6 +83,8 @@ export interface AttentionItem {
   replaced: boolean;
   /** The workload a pod's row belongs to, whose row the list draws it under. */
   workload?: PodWorkload;
+  /** The node a pod's row ran on: where that node's row says it went down, the pod is drawn under it. */
+  node?: string;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
@@ -338,6 +340,7 @@ const itemOf = (problem: ClusterProblem): AttentionItem =>
     foldedPods: problem.foldedPods,
     replaced: problem.replaced,
     workload: problem.workload,
+    node: problem.node,
     opens: {
       kind: problem.kind,
       name: problem.name,
@@ -946,20 +949,57 @@ export interface AttentionInputs {
 
 const SEVERITY: Record<AttentionTone, number> = { err: 0, warn: 1 };
 
-const dated = (since: string | null) =>
-  since === null ? 0 : Date.parse(since) || 0;
+/** As `src/contracts/attention-rank-conformance.json` states it for both halves. */
+export const LONG_STANDING_HOURS = 24;
 
-function ranked(items: AttentionItem[]): AttentionItem[] {
-  return [...items].sort(
-    (a, b) =>
-      SEVERITY[a.tone] - SEVERITY[b.tone] ||
-      Number(a.replaced) - Number(b.replaced) ||
-      dated(a.since) - dated(b.since)
-  );
+// Not the first row's: what is happening now ranks above an older, worse one.
+const worstOf = (items: readonly AttentionItem[]): AttentionTone | null =>
+  items.some((item) => item.tone === "err")
+    ? "err"
+    : items.length > 0
+      ? "warn"
+      : null;
+
+const wentDown = (item: Pick<AttentionItem, "kind" | "reason">) =>
+  item.kind === "Node" && item.reason === "NotReady";
+
+function rankKey(item: AttentionItem, now: number): number[] {
+  const at = item.since === null ? NaN : Date.parse(item.since);
+  const undated = Number.isNaN(at);
+  return [
+    wentDown(item) ? 0 : 1,
+    !undated && now - at >= LONG_STANDING_HOURS * 3_600_000 ? 1 : 0,
+    SEVERITY[item.tone],
+    Number(item.replaced),
+    Number(undated),
+    undated ? 0 : -at,
+  ];
+}
+
+/**
+ * The backend's `rank_key`, applied again with this side's rows beside its
+ * own: a node that went down first; then, worst first, what began within a
+ * day or has no date; then what has stood longer. Pods already replaced come
+ * after what is down, a dated row before an undated one, the newest first.
+ * A spot node lost a minute ago sat under month-old Job failures.
+ */
+export function ranked(items: AttentionItem[], now: number): AttentionItem[] {
+  const keys = new Map(items.map((item) => [item, rankKey(item, now)]));
+  return [...items].sort((a, b) => {
+    const ka = keys.get(a)!;
+    const kb = keys.get(b)!;
+    for (let i = 0; i < ka.length; i++)
+      if (ka[i] !== kb[i]) return ka[i] - kb[i];
+    return 0;
+  });
 }
 
 export type AttentionLine =
-  | { at: "item"; item: AttentionItem; under: null | "class" | "policy" }
+  | {
+      at: "item";
+      item: AttentionItem;
+      under: null | "class" | "policy" | "node";
+    }
   | {
       at: "item";
       item: AttentionItem;
@@ -984,7 +1024,8 @@ export function causeTold(head: AttentionItem, row: AttentionItem): boolean {
  * The list as it is drawn, each group where the first of it ranked:
  * Ingresses asking for the same missing IngressClass under one line that says
  * so, Services one NetworkPolicy shuts the same way under one line that says
- * that, and a workload's pods under the workload's own row.
+ * that, a workload's pods under the workload's own row, and the pods on a
+ * node that went down under the node's, whatever their workload.
  */
 export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   const byClass = new Map<string, AttentionItem[]>();
@@ -998,14 +1039,18 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
     const key = workloadKey(item.kind, item.name, item.namespace);
     if (!item.workload && !heads.has(key)) heads.set(key, item);
   }
+  const down = new Map(
+    items.filter(wentDown).map((item) => [item.name, item] as const)
+  );
   const rowsOf = new Map<AttentionItem, AttentionItem[]>();
   const headOf = new Map<AttentionItem, AttentionItem>();
   for (const item of items) {
     const head =
-      item.workload &&
-      heads.get(
-        workloadKey(item.workload.kind, item.workload.name, item.namespace)
-      );
+      (item.kind === "Pod" && item.node && down.get(item.node)) ||
+      (item.workload &&
+        heads.get(
+          workloadKey(item.workload.kind, item.workload.name, item.namespace)
+        ));
     if (!head) continue;
     headOf.set(item, head);
     rowsOf.set(head, [...(rowsOf.get(head) ?? []), item]);
@@ -1019,12 +1064,16 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
       placed.add(head);
       lines.push({ at: "item", item: head, under: null });
       for (const row of rowsOf.get(head) ?? [])
-        lines.push({
-          at: "item",
-          item: row,
-          under: "workload",
-          sameCause: causeTold(head, row),
-        });
+        lines.push(
+          wentDown(head)
+            ? { at: "item", item: row, under: "node" }
+            : {
+                at: "item",
+                item: row,
+                under: "workload",
+                sameCause: causeTold(head, row),
+              }
+        );
       continue;
     }
     const shut = item.shutBy?.key;
@@ -1129,9 +1178,9 @@ export function namespaceAttention(
             (entry) => entry.namespace !== null && entry.namespace !== namespace
           ))
     ),
-    worst:
-      attention.items.find((item) => item.namespace === namespace)?.tone ??
-      null,
+    worst: worstOf(
+      attention.items.filter((item) => item.namespace === namespace)
+    ),
   };
 }
 
@@ -1158,7 +1207,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ...gatewayItems(input.gatewayApi.pulse),
     ...routeItems(input.gatewayApi.board.notServing, t),
   ];
-  const items = ranked([...backend, ...ours]);
+  const items = ranked([...backend, ...ours], input.now);
 
   const servicesUnread =
     services.unread === "reading"
@@ -1206,7 +1255,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     total: items.length + overview.problemsTruncated,
     checks,
     complete: checks.every((check) => check.state === "read"),
-    worst: items[0]?.tone ?? null,
+    worst: worstOf(items),
     byNamespace: countByNamespace(overview, backend, ours),
     unconfirmed: unconfirmedItems(overview.unconfirmed),
   };

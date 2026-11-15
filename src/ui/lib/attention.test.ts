@@ -23,9 +23,12 @@ import {
   foldedWords,
   namespaceAttention,
   problemsKept,
+  ranked,
   reasonWord,
   servicesKept,
+  LONG_STANDING_HOURS,
   type AttentionInputs,
+  type AttentionItem,
   type GatewayApiInputs,
 } from "./attention";
 import type { RouteRow } from "./route-rows";
@@ -36,6 +39,7 @@ import {
 } from "./ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "./service-health";
 import { namesRebound } from "./kept-by-name";
+import rankCorpus from "../../contracts/attention-rank-conformance.json";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -892,6 +896,147 @@ describe("what Needs attention lists beyond pods", () => {
   });
 
   /**
+   * What began today now ranks above a failure that has stood for days, so
+   * the first row is no longer the worst. Fails if the panel's dot, the
+   * sidebar's tone or a namespace's verdict is read off the first row again
+   * and turns a cluster with a red row amber.
+   */
+  it("calls a list with a days-old error in it red, though a newer warning leads", () => {
+    const row = (
+      severity: ClusterProblem["severity"],
+      name: string,
+      since: string
+    ): ClusterProblem => ({
+      severity,
+      kind: "Pod",
+      name,
+      namespace: "shop",
+      reason: severity === "critical" ? "Failed" : "Unhealthy",
+      detail: null,
+      since,
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+    });
+    const listed = attention({
+      overview: overview({
+        problems: [
+          row("critical", "old", "2026-09-01T00:00:00Z"),
+          row("warning", "new", "2026-10-05T11:59:00Z"),
+        ],
+      }),
+    });
+
+    expect(listed.items.map((item) => item.name)).toEqual(["new", "old"]);
+    expect(listed.worst).toBe("err");
+    expect(namespaceAttention(listed, "shop").worst).toBe("err");
+  });
+
+  /**
+   * The ranking both halves apply, held to one corpus: this side re-ranks
+   * the backend's rows with its own beside them. Fails if this side's order
+   * or its long-standing line drifts from the file the Rust side reads.
+   */
+  it("ranks as the shared corpus says", () => {
+    expect(LONG_STANDING_HOURS).toBe(rankCorpus.longStandingHours);
+    const now = Date.parse(rankCorpus.now);
+    for (const { name, rows, order } of rankCorpus.cases) {
+      const items = rows.map((row): AttentionItem => ({
+        key: row.id,
+        tone: row.severity === "warning" ? "warn" : "err",
+        kind: row.kind,
+        name: row.id,
+        namespace: null,
+        reason: row.reason,
+        detail: null,
+        since: row.since,
+        restarts: null,
+        foldedPods: null,
+        replaced: row.replaced ?? false,
+        opens: { kind: row.kind, name: row.id, namespace: null },
+      }));
+      expect(
+        ranked(items, now).map((item) => item.name),
+        name
+      ).toEqual(order);
+    }
+  });
+
+  /**
+   * A spot node went NotReady and its pods were
+   * terminated for its shutdown, while Needs attention led with a Service's
+   * "no endpoints" and a Job failure 38 days old, and the node sat at row 17.
+   * Fails if the node does not lead, if a pod it took down is not drawn
+   * under it (its own workload's row included), or if the days-old failure
+   * is not last.
+   */
+  it("leads with a node that went down and draws the pods it took down under it", () => {
+    const at = (minutesAgo: number) =>
+      new Date(NOW - minutesAgo * 60_000).toISOString();
+    const row = (over: Partial<ClusterProblem>): ClusterProblem => ({
+      severity: "critical",
+      kind: "Pod",
+      name: "",
+      namespace: "shop",
+      reason: "Terminated",
+      detail: null,
+      since: at(1),
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+      ...over,
+    });
+    const api = { kind: "Deployment", name: "api" };
+    const lines = attentionLines(
+      attention({
+        overview: overview({
+          problems: [
+            row({
+              kind: "Job",
+              name: "parser-29857320",
+              reason: "BackoffLimitExceeded",
+              since: at(38 * 24 * 60),
+            }),
+            row({ name: "api-1", workload: api, node: "spot-1" }),
+            row({ kind: "Deployment", name: "api", reason: "Unavailable" }),
+            row({ name: "api-2", workload: api, node: "spot-1", since: at(2) }),
+            row({
+              kind: "Node",
+              name: "spot-1",
+              namespace: null,
+              reason: "NotReady",
+              since: at(5),
+            }),
+            row({
+              name: "nats-box-1",
+              namespace: "nats",
+              node: "spot-1",
+              replaced: true,
+            }),
+            row({ name: "web-1", node: "spot-2", reason: "CrashLoopBackOff" }),
+          ],
+        }),
+        services: services([["web"], 0]),
+      }).items
+    );
+
+    expect(
+      lines.map((line) =>
+        line.at === "item" ? [line.item.name, line.under] : line.at
+      )
+    ).toEqual([
+      ["spot-1", null],
+      ["api-1", "node"],
+      ["api-2", "node"],
+      ["nats-box-1", "node"],
+      ["api", null],
+      ["web-1", null],
+      ["web", null],
+      ["parser-29857320", null],
+    ]);
+  });
+
+  /**
    * Live, 25 pods its ReplicaSet had replaced three days earlier sat above the
    * pods crash-looping now, oldest first. Fails if a replaced row ranks above
    * what is down now in its tone, or is worded as a failed Job's runs.
@@ -1017,8 +1162,8 @@ describe("what Needs attention lists beyond pods", () => {
       )
     ).toEqual([
       ["app", null, false],
-      ["app-1", "workload", true],
       ["app-2", "workload", false],
+      ["app-1", "workload", true],
       ["lonely", null, false],
     ]);
   });

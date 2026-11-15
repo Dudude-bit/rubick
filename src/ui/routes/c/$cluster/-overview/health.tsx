@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { CircleSlash, EyeOff, Info, Lock, TriangleAlert } from "lucide-react";
@@ -71,6 +72,7 @@ import {
   type StatusRole,
 } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
+import { HOLD_ATTRIBUTE, usePointerOnTable } from "@/lib/pointer-hold";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
@@ -105,9 +107,43 @@ function Unit({ children }: { children: React.ReactNode }) {
 
 // One grid for every row, so a column is as wide as what its rows hold: the
 // reason up to Init:CreateContainerConfigError, a count or an age only where
-// a row has one, and the sentence the rest.
+// a row has one, and the sentence the rest. Widths are measured, never
+// left to the grid: see `useMeasuredColumns`.
 const ROWS =
-  "@container grid grid-cols-[auto_fit-content(240px)_minmax(12rem,1fr)_auto_auto_auto] gap-x-2.5";
+  "@container grid grid-cols-[12px_var(--col-2,0px)_minmax(12rem,1fr)_var(--col-4,0px)_var(--col-5,0px)_var(--col-6,0px)] gap-x-2.5";
+const REASON_CELL = "w-max max-w-[240px]";
+const MEASURED = ["2", "4", "5", "6"] as const;
+
+/**
+ * Sets each measured column to its widest cell. A column the grid sized from
+ * its cells (`auto`, `fit-content`) widened when a row came, and WebKit's
+ * subgrid kept the other rows' heights from before: a sentence that wrapped
+ * onto a new line printed over the next row, and gaps opened where one
+ * unwrapped.
+ */
+function useMeasuredColumns(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const cells = [...root.querySelectorAll<HTMLElement>("[data-col]")];
+    const measure = () => {
+      for (const col of MEASURED) {
+        let widest = 0;
+        for (const cell of cells)
+          if (cell.dataset.col === col)
+            widest = Math.max(widest, cell.getBoundingClientRect().width);
+        const width = `${Math.ceil(widest)}px`;
+        if (root.style.getPropertyValue(`--col-${col}`) !== width)
+          root.style.setProperty(`--col-${col}`, width);
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    for (const cell of cells) observer.observe(cell);
+    return () => observer.disconnect();
+  });
+}
 // Baselines, not centres: a detail that wraps keeps the marks on its first line.
 const ROW =
   "col-span-full grid grid-cols-subgrid items-baseline rounded-[5px] px-1.5 py-[5px] text-xs";
@@ -199,7 +235,11 @@ function ClassMarker({ name }: { name: string }) {
     <span
       role="img"
       aria-label={t("empty", "noIngressClassNamed", { name })}
-      className="inline-flex min-w-0 items-center gap-1 pl-3 font-mono text-err"
+      data-col="2"
+      className={cn(
+        "inline-flex min-w-0 items-center gap-1 pl-3 font-mono text-err",
+        REASON_CELL
+      )}
     >
       <CircleSlash className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
       <span className="truncate">{name}</span>
@@ -218,8 +258,10 @@ function ShutRow({ head, members }: { head: AttentionItem; members: number }) {
     <OpensRow link={policy && objectLink(policy)} testId="attention-shut">
       <SeverityIcon className={cn(MARK, tone)} aria-hidden="true" />
       <span
+        data-col="2"
         className={cn(
           "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+          REASON_CELL,
           tone
         )}
       >
@@ -258,7 +300,13 @@ function UnservedRow({
   return (
     <div className={ROW} data-testid="attention-unserved">
       <SeverityIcon className={cn(MARK, ROLE_TEXT.err)} aria-hidden="true" />
-      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err">
+      <span
+        data-col="2"
+        className={cn(
+          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err",
+          REASON_CELL
+        )}
+      >
         <CircleSlash
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
@@ -299,6 +347,7 @@ function AttentionRow({
   const marked = under === "class" ? item.unservedClass : undefined;
   const shut = under === "policy" ? item.shutBy : undefined;
   const pod = under === "workload" || shut !== undefined;
+  const indented = pod || under === "node";
   const folded = foldedWords(item, t);
   const detail: AttentionItem["detail"] = shut
     ? null
@@ -317,9 +366,11 @@ function AttentionRow({
         <ClassMarker name={marked.name} />
       ) : (
         <span
+          data-col="2"
           className={cn(
             "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
-            pod && "pl-3",
+            REASON_CELL,
+            indented && "pl-3",
             tone
           )}
         >
@@ -377,12 +428,19 @@ function AttentionRow({
         )}
       </span>
       {/* The first to give way: it draws nothing the row does not already say. */}
-      <span className="self-start" data-testid="attention-trend">
+      <span
+        data-col="4"
+        className="w-max self-start"
+        data-testid="attention-trend"
+      >
         {item.kind === "Pod" && restarts > 0 && (
           <RisingLine className={cn("mt-px @max-[56rem]:hidden", tone)} />
         )}
       </span>
-      <span className="whitespace-nowrap text-right font-mono text-fg-mut">
+      <span
+        data-col="5"
+        className="w-max justify-self-end whitespace-nowrap text-right font-mono text-fg-mut"
+      >
         {restarts > 0 && (
           <>
             {restarts}
@@ -390,7 +448,10 @@ function AttentionRow({
           </>
         )}
       </span>
-      <span className="whitespace-nowrap text-right text-caption leading-4 text-fg-fnt">
+      <span
+        data-col="6"
+        className="w-max justify-self-end whitespace-nowrap text-right text-caption leading-4 text-fg-fnt"
+      >
         {item.since === null ? (
           // A standing condition has no moment it began that anything recorded.
           <span className="text-fg-mut" data-testid="attention-ongoing">
@@ -708,12 +769,20 @@ function useHeldRoom() {
 }
 
 /** Focus on nothing in particular: the page itself, or the scroller a click on its canvas lands in. */
+/** What the list draws, so a recomputed answer that changes nothing is not news. */
+const drawnAs = (attention: Attention) =>
+  [
+    attention.total,
+    ...attention.items.map((item) => `${item.key}:${item.tone}`),
+    ...attention.checks.map((check) => `${checkKey(check)}:${check.state}`),
+  ].join("|");
+
 function holdsNoControl(active: Element | null) {
   return active === document.body || active?.id === "main-content";
 }
 
 export function AttentionPanel({
-  attention,
+  attention: live,
   pods,
   podsUnlisted = [],
   podsUnread,
@@ -736,8 +805,15 @@ export function AttentionPanel({
   nodesKnown: boolean;
 }) {
   const t = useT();
-  useShareSection("overview-problems", () => attentionShare(attention, t));
-  useShareSection("overview-unchecked", () => uncheckedShare(attention, t));
+  useShareSection("overview-problems", () => attentionShare(live, t));
+  useShareSection("overview-unchecked", () => uncheckedShare(live, t));
+  // Rows reordered under a resting pointer every few seconds during an
+  // incident; what is drawn waits for the pointer to leave the list.
+  const pointed = usePointerOnTable();
+  const [held, setHeld] = useState(live);
+  if (!pointed && held !== live) setHeld(live);
+  const attention = pointed ? held : live;
+  const waiting = pointed && drawnAs(held) !== drawnAs(live);
   const { items, total, complete, worst } = attention;
   const expanded = useAttentionExpanded((state) => state.expanded);
   const setExpanded = useAttentionExpanded((state) => state.setExpanded);
@@ -764,6 +840,7 @@ export function AttentionPanel({
   const summaryRole: StatusRole = worst ?? (whole ? "ok" : "neutral");
   const [overallBox, overallContent, overallRoom] = useHeldRoom();
   const rowsRef = useRef<HTMLDivElement>(null);
+  useMeasuredColumns(rowsRef);
   useEffect(() => {
     const enter = (event: KeyboardEvent) => {
       if (
@@ -799,8 +876,25 @@ export function AttentionPanel({
               ? t("cluster", "attentionNothing")
               : t("cluster", "attentionNoneFound")
         }
+        actions={
+          <span
+            role="status"
+            data-testid="attention-waiting"
+            className={cn(
+              "whitespace-nowrap text-caption text-info",
+              !waiting && "invisible"
+            )}
+          >
+            {waiting && t("cluster", "attentionWaiting")}
+          </span>
+        }
       />
-      <div ref={rowsRef} className={ROWS} {...{ [ANCHOR_ROWS]: "" }}>
+      <div
+        ref={rowsRef}
+        className={ROWS}
+        data-testid="attention-rows"
+        {...{ [ANCHOR_ROWS]: "", [HOLD_ATTRIBUTE]: "" }}
+      >
         {unchecked.length + attention.unconfirmed.length > 0 && (
           <div
             className="col-span-full mb-1 border-b border-hair pb-1.5"
@@ -863,7 +957,13 @@ export function AttentionPanel({
             )}
             aria-hidden="true"
           />
-          <span className="truncate font-mono font-medium text-fg-mut">
+          <span
+            data-col="2"
+            className={cn(
+              "truncate font-mono font-medium text-fg-mut",
+              REASON_CELL
+            )}
+          >
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           {/* Every count stays whole with its words, and the line breaks

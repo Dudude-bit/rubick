@@ -254,6 +254,9 @@ pub struct ClusterProblem {
     /// The workload a row of pods belongs to, which the list draws it under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workload: Option<crate::resources::PodWorkload>,
+    /// The node a pod's row ran on: a node that went down draws it under its own row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<String>,
 }
 
 /// Requested vs allocatable for one resource dimension, plus live usage.
@@ -903,10 +906,15 @@ fn pod_problems<'a>(
             pod_problem(pod, now).map(|problem| ClusterProblem {
                 replaced: crate::resources::replaced(pod),
                 workload: crate::resources::PodWorkload::of(pod),
+                node: node_of(pod),
                 ..problem
             })
         })
         .collect()
+}
+
+fn node_of(pod: &Pod) -> Option<String> {
+    pod.spec.as_ref().and_then(|spec| spec.node_name.clone())
 }
 
 /// The single worst thing to say about one pod, or `None` if it is fine.
@@ -950,6 +958,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -977,6 +986,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1000,6 +1010,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1032,6 +1043,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1057,6 +1069,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             });
         }
     }
@@ -1080,6 +1093,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1150,6 +1164,7 @@ fn probe_problems<'a>(
                 folded_pods: None,
                 replaced: crate::resources::replaced(pod),
                 workload: crate::resources::PodWorkload::of(pod),
+                node: None,
             })
         })
         .collect()
@@ -1238,6 +1253,7 @@ fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<C
             folded_pods: None,
             replaced: false,
             workload: crate::resources::PodWorkload::of(pod),
+            node: node_of(pod),
         })
         .collect()
 }
@@ -1406,6 +1422,7 @@ fn deployments_saying<'a>(
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             })
         })
         .collect()
@@ -1475,6 +1492,7 @@ fn set_problem(
         folded_pods: None,
         replaced: false,
         workload: None,
+        node: None,
     })
 }
 
@@ -1643,6 +1661,7 @@ fn job_problems<'a>(
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             })
         })
         .collect()
@@ -1688,6 +1707,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             if let Some(pressure) = node_pressure(n) {
@@ -1706,6 +1726,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             // Cordoned nodes are usually intentional, but a node left
@@ -1727,6 +1748,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             None
@@ -2387,10 +2409,15 @@ fn fold_replaced<'a>(
             continue;
         }
         let pods = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        let node = rows[0]
+            .node
+            .clone()
+            .filter(|node| rows.iter().all(|row| row.node.as_ref() == Some(node)));
         let Some(newest) = rows.into_iter().max_by(|a, b| a.since.cmp(&b.since)) else {
             continue;
         };
         kept.push(ClusterProblem {
+            node,
             workload: Some(crate::resources::PodWorkload {
                 kind: kind.clone(),
                 name: name.clone(),
@@ -2407,17 +2434,49 @@ fn fold_replaced<'a>(
     kept
 }
 
-/// Worst first, then oldest first — the top row is both the most severe and
-/// the one that has been broken longest — then cut to `MAX_PROBLEMS`. Pods
-/// their controller already replaced come after what is down now, however
-/// long ago they failed. Returns the list and how many rows the cut dropped.
-fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usize) {
-    problems.sort_by(|a, b| {
-        (a.severity == ProblemSeverity::Warning)
-            .cmp(&(b.severity == ProblemSeverity::Warning))
-            .then_with(|| a.replaced.cmp(&b.replaced))
-            .then_with(|| a.since.cmp(&b.since))
-    });
+/// How long a failure stands before it ranks below what began since, as
+/// `src/contracts/attention-rank-conformance.json` states it for both halves.
+pub const LONG_STANDING_HOURS: i64 = 24;
+
+/// What is happening now before what has stood for days: a node that went
+/// down first, since everything on it goes with it; then, worst first, what
+/// began within [`LONG_STANDING_HOURS`] or has no date; then what is older.
+/// Pods already replaced come after what is down, a dated row before an
+/// undated one, and the newest first. A spot node lost a minute ago sat under
+/// month-old Job failures.
+fn rank_key(
+    problem: &ClusterProblem,
+    now: DateTime<Utc>,
+) -> (
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    std::cmp::Reverse<Option<DateTime<Utc>>>,
+) {
+    let since = problem
+        .since
+        .as_deref()
+        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.with_timezone(&Utc));
+    (
+        !(problem.kind == "Node" && problem.reason == "NotReady"),
+        since.is_some_and(|at| now - at >= chrono::Duration::hours(LONG_STANDING_HOURS)),
+        problem.severity == ProblemSeverity::Warning,
+        problem.replaced,
+        since.is_none(),
+        std::cmp::Reverse(since),
+    )
+}
+
+/// Ranked as [`rank_key`] says, then cut to `MAX_PROBLEMS`, so what the cut
+/// drops is the oldest news. Returns the list and how many rows it dropped.
+fn rank_and_cap(
+    mut problems: Vec<ClusterProblem>,
+    now: DateTime<Utc>,
+) -> (Vec<ClusterProblem>, usize) {
+    problems.sort_by_cached_key(|problem| rank_key(problem, now));
     let truncated = problems.len().saturating_sub(MAX_PROBLEMS);
     problems.truncate(MAX_PROBLEMS);
     (problems, truncated)
@@ -2573,7 +2632,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         beside,
         unconfirmed,
     ));
-    let (unconfirmed, _) = rank_and_cap(said);
+    let (unconfirmed, _) = rank_and_cap(said, input.now);
     problems.extend(job_problems(refs(input.jobs), beside));
     problems.extend(node_problems(refs(nodes)));
     problems.extend(warned_while_starting(&warned_rows));
@@ -2595,7 +2654,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         }
         _ => Vec::new(),
     };
-    let (problems, problems_truncated) = rank_and_cap(problems);
+    let (problems, problems_truncated) = rank_and_cap(problems, input.now);
 
     // The lists this query already had to read answer their own counts, so
     // those four kinds cost no extra request. A refused node read is `None`,
@@ -4449,6 +4508,10 @@ mod tests {
         }
     }
 
+    fn noon() -> DateTime<Utc> {
+        "2026-08-05T12:00:00Z".parse().expect("a time")
+    }
+
     fn problem(reason: &str, severity: ProblemSeverity, since: Option<&str>) -> ClusterProblem {
         ClusterProblem {
             severity,
@@ -4462,6 +4525,7 @@ mod tests {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         }
     }
 
@@ -4660,8 +4724,8 @@ mod tests {
     }
 
     /// The namespace picker counted problems in the list after it was cut to
-    /// fifty, worst first: fifty-one failed pods in one namespace pushed every
-    /// other namespace's warnings off it, and those namespaces read "0".
+    /// fifty: fifty-one failed pods in one namespace pushed another
+    /// namespace's days-old row off it, and that namespace read "0".
     #[test]
     fn a_namespace_counts_its_problems_before_the_list_is_cut() {
         let now = Utc::now();
@@ -4678,7 +4742,7 @@ mod tests {
                 failed
             })
             .collect();
-        let mut waiting = pending_pod("web", now, 3600);
+        let mut waiting = pending_pod("web", now, 3 * 24 * 3600);
         waiting.metadata.namespace = Some("dev".to_string());
         pods.push(waiting);
 
@@ -6141,13 +6205,13 @@ mod tests {
             })
             .collect();
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
         assert_eq!(kept.len(), MAX_PROBLEMS);
         assert_eq!(truncated, overflow);
     }
 
     #[test]
-    fn cap_keeps_the_worst_and_oldest_rows() {
+    fn cap_keeps_the_worst_rows() {
         let mut problems = vec![problem(
             "Restarting",
             ProblemSeverity::Warning,
@@ -6161,7 +6225,7 @@ mod tests {
             )
         }));
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
         assert_eq!(truncated, 1);
         assert!(
             kept.iter().all(|p| p.severity == ProblemSeverity::Critical),
@@ -6171,11 +6235,14 @@ mod tests {
 
     #[test]
     fn short_problem_lists_are_not_truncated() {
-        let (kept, truncated) = rank_and_cap(vec![problem(
-            "Pending",
-            ProblemSeverity::Critical,
-            Some("2026-08-05T00:00:00Z"),
-        )]);
+        let (kept, truncated) = rank_and_cap(
+            vec![problem(
+                "Pending",
+                ProblemSeverity::Critical,
+                Some("2026-08-05T00:00:00Z"),
+            )],
+            noon(),
+        );
         assert_eq!(kept.len(), 1);
         assert_eq!(truncated, 0);
     }
@@ -6816,6 +6883,7 @@ mod tests {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         };
         let problems = [row("repo-server-mpmgs"), row("search-77fbd8f66-52kp8")];
         let pods = [ready, quiet, unready];
@@ -7478,13 +7546,13 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                ("Pod", "lonely", false),
                 ("Pod", "recs-abc-4", false),
-                ("Pod", "db-0", true),
+                ("Pod", "lonely", false),
                 ("Deployment", "recs", true),
+                ("Pod", "db-0", true),
             ]
         );
-        let folded = &overview.problems[3];
+        let folded = &overview.problems[2];
         assert_eq!(folded.reason, "Evicted");
         assert_eq!(folded.folded_pods, Some(3));
         assert_eq!(folded.since, Some(ago(24 * 60)));
@@ -7494,7 +7562,7 @@ mod tests {
                 text: "The node was low on resource: ephemeral-storage.".to_string()
             })
         );
-        assert_eq!(overview.problems[2].folded_pods, None);
+        assert_eq!(overview.problems[3].folded_pods, None);
         let workloads: Vec<_> = overview
             .problems
             .iter()
@@ -7507,10 +7575,10 @@ mod tests {
         assert_eq!(
             workloads,
             vec![
+                Some(("Deployment", "recs")),
                 None,
                 Some(("Deployment", "recs")),
                 Some(("StatefulSet", "db")),
-                Some(("Deployment", "recs")),
             ]
         );
         assert_eq!(
@@ -7745,6 +7813,7 @@ mod tests {
                 kind: "Deployment".to_string(),
                 name: "repo-server".to_string(),
             }),
+            node: None,
         }];
         let troubled = deployments_troubled(&deployments, &problems);
         assert_eq!(troubled, vec![true, false]);
@@ -9073,6 +9142,10 @@ mod across_namespaces {
         assert_eq!(reasons, ["FailedScheduling", "BackOff"]);
     }
 
+    fn noon() -> DateTime<Utc> {
+        "2026-08-05T12:00:00Z".parse().expect("a time")
+    }
+
     fn problem_in(
         namespace: &str,
         name: &str,
@@ -9091,6 +9164,7 @@ mod across_namespaces {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         }
     }
 
@@ -9099,36 +9173,129 @@ mod across_namespaces {
     /// `CrashLoopBackOff` in the second.
     #[test]
     fn the_worst_row_leads_whichever_namespace_it_came_from() {
-        let (kept, _) = rank_and_cap(vec![
-            problem_in(
-                PROD,
-                "web-1",
-                ProblemSeverity::Warning,
-                Some("2026-08-05T08:00:00Z"),
-            ),
-            problem_in(
-                STAGING,
-                "api-1",
-                ProblemSeverity::Critical,
-                Some("2026-08-05T10:00:00Z"),
-            ),
-        ]);
+        let (kept, _) = rank_and_cap(
+            vec![
+                problem_in(
+                    PROD,
+                    "web-1",
+                    ProblemSeverity::Warning,
+                    Some("2026-08-05T08:00:00Z"),
+                ),
+                problem_in(
+                    STAGING,
+                    "api-1",
+                    ProblemSeverity::Critical,
+                    Some("2026-08-05T10:00:00Z"),
+                ),
+            ],
+            noon(),
+        );
         let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["api-1", "web-1"]);
     }
 
-    /// Oldest first inside a severity: the top row is what has been broken
-    /// longest, and an unknown age is not evidence that a problem is young.
+    /// Newest first inside a tier, what began today above what has no date,
+    /// and that above what has stood for days. Fails if a month-old failure
+    /// leads again, or an undated row is taken for the oldest.
     #[test]
-    fn equal_severities_are_ordered_by_age_undated_first() {
+    fn what_began_today_leads_then_the_undated_then_what_has_stood_for_days() {
         let critical = ProblemSeverity::Critical;
-        let (kept, _) = rank_and_cap(vec![
-            problem_in(PROD, "recent", critical, Some("2026-08-05T10:00:00Z")),
-            problem_in(PROD, "undated", critical, None),
-            problem_in(STAGING, "old", critical, Some("2026-08-05T01:00:00Z")),
-        ]);
+        let (kept, _) = rank_and_cap(
+            vec![
+                problem_in(PROD, "earlier", critical, Some("2026-08-05T01:00:00Z")),
+                problem_in(PROD, "undated", critical, None),
+                problem_in(STAGING, "old", critical, Some("2026-07-01T00:00:00Z")),
+                problem_in(STAGING, "later", critical, Some("2026-08-05T10:00:00Z")),
+            ],
+            noon(),
+        );
         let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["undated", "old", "recent"]);
+        assert_eq!(names, ["later", "earlier", "undated", "old"]);
+    }
+
+    /// The ranking both halves apply, held to one corpus: the frontend
+    /// re-ranks the backend's rows with its own beside them. Fails if this
+    /// side's order or its long-standing line drifts from the file.
+    #[test]
+    fn the_ranking_matches_the_shared_corpus() {
+        const FILE: &str = include_str!("../../../contracts/attention-rank-conformance.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        assert_eq!(file["longStandingHours"], LONG_STANDING_HOURS);
+        let now: DateTime<Utc> = file["now"].as_str().expect("now").parse().expect("a time");
+        for case in file["cases"].as_array().expect("cases") {
+            let rows = case["rows"].as_array().expect("rows");
+            let problems = rows
+                .iter()
+                .map(|row| ClusterProblem {
+                    severity: if row["severity"] == "warning" {
+                        ProblemSeverity::Warning
+                    } else {
+                        ProblemSeverity::Critical
+                    },
+                    kind: row["kind"].as_str().expect("kind").to_string(),
+                    name: row["id"].as_str().expect("id").to_string(),
+                    reason: row["reason"].as_str().expect("reason").to_string(),
+                    since: row["since"].as_str().map(str::to_string),
+                    replaced: row["replaced"].as_bool().unwrap_or(false),
+                    ..problem_in("", "", ProblemSeverity::Critical, None)
+                })
+                .collect();
+            let (kept, _) = rank_and_cap(problems, now);
+            let order: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+            let expected: Vec<_> = case["order"]
+                .as_array()
+                .expect("order")
+                .iter()
+                .map(|id| id.as_str().expect("id"))
+                .collect();
+            assert_eq!(order, expected, "{}", case["name"]);
+        }
+    }
+
+    /// A spot node went `NotReady` and its pods were
+    /// terminated for its shutdown, beside Job failures a month old. Fails if
+    /// the node does not lead, or a pod it took down does not carry its name.
+    #[test]
+    fn a_node_that_went_down_leads_and_its_pods_name_it() {
+        let now = Utc::now();
+        let down = serde_json::from_value::<Node>(node("spot-1", false)).expect("a node");
+        let mut problems = node_problems([&down]);
+        let terminated = |name: &str| {
+            serde_json::from_value::<Pod>(serde_json::json!({
+                "metadata": {"name": name, "namespace": "shop", "uid": name},
+                "spec": {"nodeName": "spot-1", "containers": [{"name": "app"}]},
+                "status": {
+                    "phase": "Failed",
+                    "reason": "Terminated",
+                    "message": "Pod was terminated in response to imminent node shutdown.",
+                    "startTime": (now - chrono::Duration::minutes(5)).to_rfc3339()
+                }
+            }))
+            .expect("a pod")
+        };
+        let pods = [
+            terminated("api-1"),
+            terminated("api-2"),
+            terminated("worker-1"),
+        ];
+        let from_pods = pod_problems(&pods, now);
+        assert_eq!(from_pods.len(), 3, "{from_pods:?}");
+        assert!(from_pods
+            .iter()
+            .all(|p| p.node.as_deref() == Some("spot-1")));
+        problems.extend(from_pods);
+        problems.push(ClusterProblem {
+            kind: "Job".to_string(),
+            name: "parser-29857320".to_string(),
+            reason: "BackoffLimitExceeded".to_string(),
+            since: Some((now - chrono::Duration::days(38)).to_rfc3339()),
+            ..problem_in("", "", ProblemSeverity::Critical, None)
+        });
+
+        let (kept, _) = rank_and_cap(problems, now);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names[0], "spot-1");
+        assert_eq!(names.last(), Some(&"parser-29857320"));
     }
 
     /// Would grow the panel by fifty rows per namespace watched, on exactly
@@ -9153,7 +9320,7 @@ mod across_namespaces {
         let mut problems = many(PROD, MAX_PROBLEMS, ProblemSeverity::Warning);
         problems.extend(many(STAGING, MAX_PROBLEMS + 3, ProblemSeverity::Critical));
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
 
         assert_eq!(kept.len(), MAX_PROBLEMS);
         assert!(kept.iter().all(|p| p.severity == ProblemSeverity::Critical));

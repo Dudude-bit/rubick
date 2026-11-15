@@ -5571,6 +5571,8 @@ export const ru: Catalogue = {
       "Поды в фазе Succeeded и Failed не занимают места на узле, поэтому счётчики подов на этой странице их не учитывают, как и kubectl describe node.",
     attentionNothing: "ничего не требует внимания",
     attentionNoneFound: "проблем не найдено · проверено не всё",
+    attentionWaiting:
+      "есть изменения · покажем, когда указатель уйдёт со списка",
     attentionNotChecked: "Не проверено",
     attentionUnconfirmed:
       "контроллер говорит {word} уже {age}; поды не прочитаны",
