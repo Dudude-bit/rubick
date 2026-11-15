@@ -846,6 +846,45 @@ describe("a watch that has recorded nothing", () => {
   });
 });
 
+describe("warnings only, where the Event watch was refused", () => {
+  const MIN = 60_000;
+  /**
+   * A ClusterRole without events, then a RoleBinding that grants them: under
+   * Warnings only the hour without events read "Watching since" its start
+   * and "No warning recorded in the window." Fails if a stretch the Event
+   * watch was refused is drawn as watched there.
+   */
+  it("draws the refused stretch as not observed and watches from where events were let in", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const refused = {
+      from: NOW - 60 * MIN,
+      seenAt: NOW - 30 * MIN,
+      to: NOW - 30 * MIN,
+      unwatched: ["Event"],
+    };
+    const granted = { from: NOW - 30 * MIN, seenAt: NOW, to: null };
+    recorded({ entries: [], spans: { prod: [refused, granted] } });
+    await mount();
+    act(() => screen.getByRole("button", { name: "Warnings only" }).click());
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          `Watching since ${formatWhen(granted.from, "clock")}`,
+          { exact: false }
+        )
+      ).toBeInTheDocument()
+    );
+    const unobserved = screen.getByText(/^Not observed /).textContent ?? "";
+    expect(unobserved).toMatch(
+      new RegExp(` to ${formatWhen(refused.to, "moment")}$`)
+    );
+  });
+});
+
 describe("the Changes window toggle", () => {
   /** Russian read "24ч" and "7д" here and "24 ч" on every age beside it. Fails if the toggle stops using the locale's own units. */
   it("names its windows the way every age in the reader's language is written", async () => {

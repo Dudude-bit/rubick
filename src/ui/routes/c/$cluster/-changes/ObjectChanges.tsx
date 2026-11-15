@@ -11,13 +11,12 @@ import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { formatWhen } from "@/lib/utils";
 import {
   changesCount,
+  coverageOf,
   helmReleaseOf,
   revisionOfController,
   revisionOfReplicaSet,
   REVISED_KINDS,
-  spansCovering,
   spansFor,
-  spansWatching,
   timelineOf,
   windowEnd,
   type Revision,
@@ -305,6 +304,10 @@ function ChangesPanel({
     () => (subject.namespace ? [subject.namespace] : []),
     [subject.namespace]
   );
+  const coverage = useMemo(
+    () => coverageOf(read.spans, [subject.kind], scope, show),
+    [read.spans, subject.kind, scope, show]
+  );
   const items = useMemo(
     () =>
       timelineOf({
@@ -312,11 +315,8 @@ function ChangesPanel({
         deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
         helm,
         journal: read.rows,
-        spans: spansCovering(spans, {
-          kinds: [subject.kind],
-          namespaces: scope,
-        }),
-        watching: spansWatching(spans, [subject.kind]),
+        spans: coverage.covering,
+        watching: coverage.watching,
         scope,
         window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
         createdAt: subject.createdAt,
@@ -331,8 +331,8 @@ function ChangesPanel({
       read.rows,
       read.letGo,
       read.readFrom,
+      coverage,
       spans,
-      subject.kind,
       subject.createdAt,
       scope,
       now,

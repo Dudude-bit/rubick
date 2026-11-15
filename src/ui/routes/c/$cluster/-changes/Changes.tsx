@@ -46,6 +46,8 @@ const WINDOWS = {
 type Window = keyof typeof WINDOWS;
 
 const NO_SPANS: ObservedSpan[] = [];
+const NO_KINDS: string[] = [];
+const EVENTS = ["Event"];
 
 const moment = (ms: number) => formatWhen(ms, "moment");
 
@@ -67,9 +69,12 @@ export function Changes() {
 
   const ours = read.spans?.followed ?? NO_SPANS;
   const meta = read.spans?.meta ?? NO_SPANS;
+  // Under warnings only the rows are the cluster's events: a stretch their
+  // watch was refused is not one that had none.
+  const events = show === "warnings" ? EVENTS : NO_KINDS;
   const covering = useMemo(
-    () => spansCovering(ours, { kinds: [], namespaces: scope.scope }),
-    [ours, scope.scope]
+    () => spansCovering(ours, { kinds: events, namespaces: scope.scope }),
+    [ours, events, scope.scope]
   );
   const end = windowEnd(ours, now);
   const knownFrom = changesKnownFrom(read);
@@ -81,7 +86,7 @@ export function Changes() {
       helm: [],
       journal: read.rows,
       spans: covering,
-      watching: spansWatching(ours, []),
+      watching: spansWatching(ours, events),
       scope: scope.scope,
       window: { from, to: end },
       show,
@@ -98,7 +103,18 @@ export function Changes() {
       knownFrom
     );
     return merged(timeline, stretches.sort(newestFirst));
-  }, [read, ours, covering, now, end, window, scope.scope, show, knownFrom]);
+  }, [
+    read,
+    ours,
+    covering,
+    events,
+    now,
+    end,
+    window,
+    scope.scope,
+    show,
+    knownFrom,
+  ]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.

@@ -562,6 +562,76 @@ export function spansCovering<S extends SpanLike>(
   );
 }
 
+/**
+ * Where both sets of spans watched: a timeline whose rows come from two
+ * watches was watched only where both were, so a gap in either is a gap.
+ */
+export function bothCovering(
+  a: readonly SpanLike[],
+  b: readonly SpanLike[]
+): SpanLike[] {
+  const end = (span: SpanLike) => span.to ?? Number.POSITIVE_INFINITY;
+  const runs = (spans: readonly SpanLike[]) => {
+    const out: SpanLike[] = [];
+    for (const span of [...spans].sort((x, y) => x.from - y.from)) {
+      const last = out.at(-1);
+      if (last && span.from <= end(last)) {
+        if (end(span) > end(last)) last.to = span.to;
+        last.seenAt = Math.max(last.seenAt, span.seenAt);
+      } else out.push({ from: span.from, to: span.to, seenAt: span.seenAt });
+    }
+    return out;
+  };
+  const [x, y] = [runs(a), runs(b)];
+  const out: SpanLike[] = [];
+  for (let i = 0, j = 0; i < x.length && j < y.length;) {
+    const from = Math.max(x[i].from, y[j].from);
+    const to = Math.min(end(x[i]), end(y[j]));
+    if (to > from)
+      out.push({
+        from,
+        to: Number.isFinite(to) ? to : null,
+        seenAt: Math.min(x[i].seenAt, y[j].seenAt),
+      });
+    if (end(x[i]) < end(y[j])) i += 1;
+    else j += 1;
+  }
+  return out;
+}
+
+/** The kind the cluster's events are, as the followed spans name it. */
+const EVENT_KIND = "Event";
+
+/**
+ * The spans that watched what one object's timeline draws under `show`:
+ * each kind's changes, on the source that reads it, and the cluster's events,
+ * which the followed watches read whatever the object's kind. `watching` is
+ * the first kind's, for the words a gap is said in.
+ */
+export function coverageOf(
+  spans: { followed: ObservedSpan[]; meta: ObservedSpan[] } | undefined,
+  kinds: readonly string[],
+  namespaces: readonly string[],
+  show: Show
+): { covering: SpanLike[]; watching: SpanLike[] } {
+  const parts: { covering: SpanLike[]; watching: SpanLike[] }[] = [];
+  const read = (of: SpanLike[], kind: string) =>
+    parts.push({
+      covering: spansCovering(of, { kinds: [kind], namespaces }),
+      watching: spansWatching(of, [kind]),
+    });
+  if (show !== "warnings")
+    for (const kind of new Set(kinds)) read(spansFor(spans, kind), kind);
+  if (show !== "changes") read(spans?.followed ?? [], EVENT_KIND);
+  if (parts.length === 0) return { covering: [], watching: [] };
+  return {
+    covering: parts
+      .map((part) => part.covering)
+      .reduce((all, next) => bothCovering(all, next)),
+    watching: parts[0].watching,
+  };
+}
+
 /** The spans that watched every one of `kinds` somewhere, whatever namespaces they were on. */
 export function spansWatching<S extends SpanLike>(
   spans: readonly S[],

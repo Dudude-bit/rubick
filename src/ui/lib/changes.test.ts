@@ -10,7 +10,9 @@ import { ru } from "@/i18n/ru";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import {
+  bothCovering,
   COMPARED_FIELDS,
+  coverageOf,
   diffRevisions,
   earlierRowsWords,
   gapsOf,
@@ -792,6 +794,60 @@ describe("gapsOf", () => {
     expect(end).toBe(T0 + 90_000);
     expect(gapsOf([before, next], T0, end)).toEqual([
       { from: T0 + 60_000, to: T0 + 90_000 },
+    ]);
+  });
+});
+
+describe("what one object's timeline was watched by", () => {
+  const span = (
+    from: number,
+    to: number | null,
+    over: Partial<ObservedSpan> = {}
+  ) => ({
+    from,
+    seenAt: to ?? from,
+    to,
+    unwatched: [],
+    unwatchedIn: [],
+    scope: [],
+    kinds: ["Deployment"],
+    ...over,
+  });
+
+  /**
+   * A CronJob's own rows come from the name-only reading, its events from
+   * the followed watches. Fails if its warnings are drawn watched while the
+   * Event watch was refused, or its changes stop reading the name-only spans.
+   */
+  it("takes each kind's changes from its own source and events from the followed watches", () => {
+    const spans = {
+      followed: [
+        span(T0, T0 + HOUR, { unwatched: ["Event"] }),
+        span(T0 + HOUR, null),
+      ],
+      meta: [span(T0, null, { kinds: [] })],
+    };
+    const gaps = (show: "all" | "changes" | "warnings") =>
+      gapsOf(
+        coverageOf(spans, ["CronJob"], [], show).covering,
+        T0,
+        T0 + 2 * HOUR
+      );
+    expect(gaps("changes")).toEqual([]);
+    expect(gaps("warnings")).toEqual([{ from: T0, to: T0 + HOUR }]);
+    expect(gaps("all")).toEqual([{ from: T0, to: T0 + HOUR }]);
+  });
+
+  /** Two watches drawn as one: fails if a gap in either is drawn as watched. */
+  it("watches only where both sets of spans did", () => {
+    expect(
+      bothCovering(
+        [span(T0, T0 + 3 * HOUR), span(T0 + 4 * HOUR, null)],
+        [span(T0 + HOUR, T0 + 5 * HOUR)]
+      ).map(({ from, to }) => [from, to])
+    ).toEqual([
+      [T0 + HOUR, T0 + 3 * HOUR],
+      [T0 + 4 * HOUR, T0 + 5 * HOUR],
     ]);
   });
 });
