@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { DataFreshness } from "@/components/ui/realtime";
 import { SectionHeader } from "@/components/ui/section";
+import { useT } from "@/i18n/useT";
 import { HeldLines } from "./HeldLines";
 
 interface ResourceListHeaderProps {
@@ -23,6 +24,8 @@ interface ResourceListHeaderProps {
   slowRead?: boolean;
   /** The cluster refused the last read; see `DataFreshness`. */
   refusedAt?: number | null;
+  /** A notice changed while the pointer rested on the table and is waiting for it to leave. */
+  held?: boolean;
 }
 
 /**
@@ -42,7 +45,9 @@ export function ResourceListHeader({
   stale,
   slowRead,
   refusedAt,
+  held = false,
 }: ResourceListHeaderProps) {
+  const t = useT();
   return (
     <SectionHeader
       title={title}
@@ -59,6 +64,17 @@ export function ResourceListHeader({
       description={description && <HeldLines>{description}</HeldLines>}
       actions={
         <>
+          {held && (
+            <span className="relative w-0 self-center">
+              <span
+                role="status"
+                data-testid="list-held"
+                className="absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-caption text-info"
+              >
+                {t("readings", "listNoticeWaiting")}
+              </span>
+            </span>
+          )}
           {/* First: the room it keeps for its longest reading falls left of the actions. */}
           <DataFreshness
             dataUpdatedAt={dataUpdatedAt}

@@ -206,4 +206,17 @@ describe("the Deployments tile", () => {
       { label: "Ready", qualifier: "with a problem", count: 1, tone: "warn" },
     ]);
   });
+
+  /**
+   * The Deployments tile counted "1 Unavailable with a problem" in amber while
+   * Needs attention marked the same Deployment red. Fails if an error word
+   * carved out as troubled stops wearing the error colour.
+   */
+  it("draws an Unavailable Deployment with a problem in red, as its row in Needs attention is", () => {
+    const troubled = deploymentSegments(
+      [{ reason: "Unavailable", count: 1, podsUnread: false, troubled: 1 }],
+      t
+    ).find(({ qualifier }) => qualifier === "with a problem");
+    expect(troubled?.tone).toBe("err");
+  });
 });

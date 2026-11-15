@@ -3379,6 +3379,7 @@ export const en = {
     storyEndedGoneHint:
       "The {kind} {name} these events were about was read as deleted, with nothing in its place, so nothing more can happen to it.",
     refusedToRead: "Your access does not allow reading {kind} {name}.",
+    listNoticeWaiting: "changed · shown when the pointer leaves the table",
     namedRowsOnly: {
       one: "Showing only the {n} row the Overview listed as needing attention.",
       other:
@@ -4659,6 +4660,8 @@ export const en = {
     metricsShortForbidden: "metrics not readable with this access",
     metricsShortError: "metrics API failing",
     metricNotAvailable: "n/a",
+    metricPrintedUnknown:
+      "The cluster printed <unknown>: this metric could not be read",
     metricNoSampleYet: "no sample yet",
     sizeB: "{n} B",
     sizeKi: "{n}Ki",
@@ -7117,6 +7120,10 @@ export const en = {
       "Reading {label} in {scope} did not finish within {seconds} s.",
     readDeadlineHint:
       "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
+    stillReadingCluster: "Still reading {label}",
+    readDeadlineCluster: "Reading {label} did not finish within {seconds} s.",
+    couldNotReadCluster: "Could not read {label}.",
+    noneInCluster: "No {label} in this cluster.",
     couldNotReadInScope: "Could not read {label} in this scope.",
     staleRows:
       "Could not read {label}. The rows below are from {time}, the last read that answered.",

@@ -340,7 +340,8 @@ export function EventsTable({
   const { shown, waiting, show } = useHeldRows(
     events,
     held && events.length > 0,
-    question
+    question,
+    uidOf
   );
   const rowHref = useCallback(
     (event: EventInfo) => hrefOfEvent(event, past),

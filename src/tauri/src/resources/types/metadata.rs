@@ -159,13 +159,11 @@ impl From<&Event> for EventInfo {
             // last — so the newest events from anything modern landed at
             // the bottom of a feed whose whole promise is "newest first".
             // `events.k8s.io` leaves `series` unset on an event seen once.
-            count: event
-                .count
-                .or_else(|| match (&event.series, &event.event_time) {
-                    (Some(series), _) => series.count,
-                    (None, Some(_)) => Some(1),
-                    (None, None) => None,
-                }),
+            count: event.count.or(match (&event.series, &event.event_time) {
+                (Some(series), _) => series.count,
+                (None, Some(_)) => Some(1),
+                (None, None) => None,
+            }),
             first_timestamp: event
                 .first_timestamp
                 .as_ref()

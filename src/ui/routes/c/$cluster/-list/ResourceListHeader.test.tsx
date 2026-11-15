@@ -110,3 +110,20 @@ describe("the list header beside a peek", () => {
     expect(screen.getByText("онлайн")).not.toHaveClass("sr-only");
   });
 });
+
+describe("ResourceListHeader held notice", () => {
+  /** Fails if a table whose notices are held back says nothing, or says it when nothing is held. */
+  it("says a notice is waiting only while one is held", () => {
+    const header = (held: boolean) => (
+      <TooltipProvider>
+        <ResourceListHeader title="Pods" count={13} live held={held} />
+      </TooltipProvider>
+    );
+    const { rerender } = render(header(false));
+    expect(screen.queryByTestId("list-held")).toBeNull();
+    rerender(header(true));
+    expect(screen.getByTestId("list-held")).toHaveTextContent(
+      "shown when the pointer leaves the table"
+    );
+  });
+});

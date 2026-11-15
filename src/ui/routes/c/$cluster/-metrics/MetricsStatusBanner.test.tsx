@@ -18,7 +18,7 @@ import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import { queryKeys } from "@/lib/query-keys";
 import { formatWhen } from "@/lib/utils";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
-import { ListUnread } from "../-list/list-unread";
+import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "../-list/list-unread";
 
 const available = { status: "available" as const, message: null };
 const notInstalled = {
@@ -155,15 +155,15 @@ describe("MetricsStatusBanner", () => {
     ).toBeInTheDocument();
   });
 
-  /** The notice sat at 68ch above a full-width refusal line; fails if it takes a width of its own again. */
-  it("spans the content column like every other notice above a list", async () => {
+  /** The notice spanned the whole column while the list's own read notices stopped at 68ch; fails if it takes a width other than theirs. */
+  it("keeps to the one width every list notice has", async () => {
     await renderWithRouter(
       <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
     );
     const banner = bannerOf(
       "Metrics are not readable with this access, so CPU and memory are not shown"
     );
-    expect(banner.className).not.toMatch(/max-w-/);
+    expect(banner.className).toContain(LIST_NOTICE_WIDTH);
   });
 
   /**
@@ -381,6 +381,20 @@ describe("MetricsStatusBanner", () => {
       <ListUnread.Provider value>
         <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
       </ListUnread.Provider>
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  /**
+   * Over "No resources of this type in the current scope" the CPU and memory
+   * notice sat full width with nothing to measure. Fails if it is drawn over
+   * a list that was read and has no rows.
+   */
+  it("says nothing over a list that was read and is empty", async () => {
+    const { container } = await renderWithRouter(
+      <ListEmpty.Provider value>
+        <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+      </ListEmpty.Provider>
     );
     expect(container).toBeEmptyDOMElement();
   });

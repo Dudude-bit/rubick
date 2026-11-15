@@ -98,7 +98,8 @@ beforeEach(() => {
         namespace: "default",
         nodeName: "gone",
         status: { phase: "Running" },
-      }) as PodRow
+        containers: [],
+      }) as unknown as PodRow
   );
   state.metrics = state.pods.map(({ name, namespace }) => ({
     name,
@@ -234,7 +235,8 @@ it("keeps a watched namespace's pods when a re-read misses it", async () => {
       name: "worker",
       namespace: "staging",
       status: { phase: "Running" },
-    } as PodRow;
+      containers: [],
+    } as unknown as PodRow;
     expect(result.current.watchLive).toBe(true);
     state.fresh = {
       rows: [state.pods[0]],

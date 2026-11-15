@@ -13,7 +13,7 @@ import { parseRefusal } from "@/lib/refusal";
 import { formatWhen } from "@/lib/utils";
 import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
-import { ListUnread } from "../-list/list-unread";
+import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "../-list/list-unread";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES } from "@/lib/error-utils";
@@ -191,6 +191,7 @@ export function MetricsStatusBanner({
   const t = useT();
   const queryClient = useQueryClient();
   const listUnread = useContext(ListUnread);
+  const listEmpty = useContext(ListEmpty);
   const checking = useIsFetching({ queryKey: queryKeys.metrics.all() }) > 0;
   const context = useClusterStore((s) => s.currentContext);
   const hidden =
@@ -231,6 +232,7 @@ export function MetricsStatusBanner({
       />
     ) : null;
   }
+  if (listEmpty) return null;
   if (absence === "notInstalled" && hidden.includes(absence)) return null;
   if (!settled) return null;
 
@@ -243,6 +245,7 @@ export function MetricsStatusBanner({
       data-read={information ? undefined : absence}
       className={cn(
         "mb-2 flex items-start gap-2 rounded-md border border-hair px-3 py-2 text-xs",
+        LIST_NOTICE_WIDTH,
         !information && "border-dashed",
         className
       )}

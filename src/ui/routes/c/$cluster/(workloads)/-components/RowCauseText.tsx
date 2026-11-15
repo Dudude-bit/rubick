@@ -49,7 +49,7 @@ export function VerdictWithCause({
 }) {
   return (
     <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
-      <span className="min-w-0 shrink-[0.01]">{children}</span>
+      <span className="min-w-0 shrink-0">{children}</span>
       <RowCauseText cause={cause} verdict={verdict} />
     </span>
   );

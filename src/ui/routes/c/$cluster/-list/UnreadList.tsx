@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { LIST_NOTICE_WIDTH } from "./list-unread";
 import type { ReactNode } from "react";
 import { FolderOpen } from "lucide-react";
 
@@ -39,7 +41,7 @@ export function UnreadList({
   children?: ReactNode;
 }) {
   return (
-    <div className="max-w-[68ch] pb-8" data-testid="unread-list">
+    <div className={cn(LIST_NOTICE_WIDTH, "pb-8")} data-testid="unread-list">
       <Unknown question={words} error={error} onRetry={onRetry} />
       {askedAgainAfter !== null && <AskedAgain since={askedAgainAfter} />}
       {children}

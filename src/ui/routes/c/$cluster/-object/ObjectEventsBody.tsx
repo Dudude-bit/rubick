@@ -48,7 +48,12 @@ export function ObjectEventsBody({
   const about = everyObject
     ? (rows[0]?.namespace ?? "")
     : `${subject.kind}/${subject.namespace}/${subject.name}`;
-  const held = useHeldRows(rows, pointed && rows.length > 0, about);
+  const held = useHeldRows(
+    rows,
+    pointed && rows.length > 0,
+    about,
+    (event) => event.uid
+  );
   if (error)
     return (
       <div

@@ -3623,6 +3623,8 @@ export const ru: Catalogue = {
     storyEndedGoneHint:
       "Объект {kind} {name}, о котором эти события, удалён, и другого с этим именем нет, поэтому с ним больше ничего не произойдёт.",
     refusedToRead: "Ваш доступ не позволяет читать {kind} {name}.",
+    listNoticeWaiting:
+      "есть изменения · покажем, когда указатель уйдёт с таблицы",
     namedRowsOnly: {
       one: "Показана только {n} строка, которую Обзор отметил как требующую внимания.",
       few: "Показаны только {n} строки, которые Обзор отметил как требующие внимания.",
@@ -5222,6 +5224,8 @@ export const ru: Catalogue = {
     metricsShortForbidden: "метрики недоступны с этими правами",
     metricsShortError: "API метрик отвечает ошибкой",
     metricNotAvailable: "н/д",
+    metricPrintedUnknown:
+      "Кластер вывел <unknown>: эту метрику не удалось прочитать",
     metricNoSampleYet: "замера пока нет",
     sizeB: "{n} Б",
     sizeKi: "{n} КиБ",
@@ -7846,6 +7850,10 @@ export const ru: Catalogue = {
     readDeadline: "Чтение {label} в {scope} не уложилось в {seconds} с.",
     readDeadlineHint:
       "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
+    stillReadingCluster: "Всё ещё читаем {label}",
+    readDeadlineCluster: "Чтение {label} не уложилось в {seconds} с.",
+    couldNotReadCluster: "Не удалось прочитать {label}.",
+    noneInCluster: "В кластере нет объектов: {label}.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
     staleRows:
       "Не удаётся прочитать {label}. Строки ниже получены в {time}, при последнем успешном чтении.",

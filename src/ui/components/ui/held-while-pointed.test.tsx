@@ -89,3 +89,51 @@ describe("a notice arriving above a table", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 });
+
+describe("telling that something is held", () => {
+  function Signed({
+    signature,
+    onWaiting,
+  }: {
+    signature: string;
+    onWaiting: (waiting: boolean) => void;
+  }) {
+    return (
+      <>
+        <HeldWhilePointed signature={signature} onWaiting={onWaiting}>
+          <p>{signature}</p>
+        </HeldWhilePointed>
+        <table data-pointer-hold="">
+          <tbody>
+            <tr>
+              <td>row</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>elsewhere</p>
+      </>
+    );
+  }
+
+  /**
+   * A table that said "changed, shown when the pointer leaves" while nothing
+   * had changed would be a lie in the other direction. Fails if a redraw with
+   * the same signature reports waiting, if a new signature under the pointer
+   * does not, or if leaving the table leaves the report standing.
+   */
+  it("reports waiting only for a different signature while the pointer rests on the table", () => {
+    const heard = vi.fn();
+    const { rerender } = render(<Signed signature="a" onWaiting={heard} />);
+    fireEvent.pointerMove(screen.getByText("row"));
+    rerender(<Signed signature="a" onWaiting={heard} />);
+    expect(heard).not.toHaveBeenCalledWith(true);
+
+    rerender(<Signed signature="b" onWaiting={heard} />);
+    expect(heard).toHaveBeenLastCalledWith(true);
+    expect(screen.queryByText("b")).toBeNull();
+
+    fireEvent.pointerMove(screen.getByText("elsewhere"));
+    expect(heard).toHaveBeenLastCalledWith(false);
+    expect(screen.getByText("b")).toBeInTheDocument();
+  });
+});

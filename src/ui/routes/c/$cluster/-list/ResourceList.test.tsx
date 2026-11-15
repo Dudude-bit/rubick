@@ -44,6 +44,7 @@ import {
 import type { PlacedSection } from "@/lib/report-parts";
 import { commands, wrapCommand } from "@/lib/commands";
 import { currentConnection, forgetRefusals, noteRefusal } from "@/lib/refusals";
+import { ListEmpty } from "./list-unread";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import {
@@ -117,6 +118,49 @@ describe("a list a search narrows", () => {
     await userEvent.clear(screen.getByLabelText("Search..."));
     await waitFor(() => expect(screen.queryByText("1 of 3")).toBeNull());
     expect(screen.getByText("3")).toBeInTheDocument();
+  });
+});
+
+describe("a list's header content", () => {
+  function Probe() {
+    return (
+      <>
+        <ListEmpty.Consumer>
+          {(empty) => <span data-testid="probe">{String(empty)}</span>}
+        </ListEmpty.Consumer>
+      </>
+    );
+  }
+
+  /**
+   * The CPU and memory notice sat over "No resources of this type" with
+   * nothing to measure. Fails if the list stops telling its header content
+   * that it was read and has no rows, or says so while it has rows.
+   */
+  it("tells what it holds that it was read and is empty, and not while it has rows", async () => {
+    const { unmount } = await draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[]}
+        headerContent={<Probe />}
+      />
+    );
+    expect(screen.getByTestId("probe")).toHaveTextContent("true");
+    unmount();
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[{ name: "web-1", namespace: "shop" }]}
+        headerContent={<Probe />}
+      />
+    );
+    expect(screen.getByTestId("probe")).toHaveTextContent("false");
   });
 });
 
@@ -848,6 +892,42 @@ describe("a read on a large cluster", () => {
       /Still reading persistent volumes/
     );
     expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+  });
+
+  /**
+   * "Still reading persistent volumes in any namespace" named a scope a
+   * cluster-scoped kind does not have. Fails if the line says "in" anything
+   * for a kind without a namespace, or drops it for a namespaced one.
+   */
+  it("names no scope while reading a cluster-scoped kind, and names it for a namespaced one", async () => {
+    vi.useFakeTimers();
+    const reading = (kind: string, label: string) => (
+      <ResourceList<Item>
+        title={label}
+        kind={kind as never}
+        columns={columns}
+        emptyStateLabel={label}
+        queryKey={["scope-words", kind]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    const { unmount } = await draw(
+      reading("PersistentVolume", "Persistent Volumes")
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /^Still reading persistent volumes$/
+    );
+    unmount();
+    await draw(reading("Pod", "Pods"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading pods in /
+    );
   });
 
   /**

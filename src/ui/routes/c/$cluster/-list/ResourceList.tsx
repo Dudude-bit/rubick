@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { ReactNode, useMemo, useState } from "react";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -73,7 +74,7 @@ import { rowName } from "@/lib/links";
 import { StaleRows } from "@/components/ui/stale-rows";
 import { HeldWhilePointed } from "@/components/ui/held-while-pointed";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
-import { ListUnread } from "./list-unread";
+import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
 import { Reading } from "@/components/ui/states";
@@ -244,6 +245,28 @@ export interface ResourceListProps<
   listQuery?: ListQuery;
 }
 
+/** The sentences about reading a list, naming the scope only for a kind that has one. */
+function useListReadWords(
+  namespaced: boolean,
+  label: string,
+  emptyLabel: string,
+  scope: string
+) {
+  const t = useT();
+  const seconds = LIST_DEADLINE_SECONDS;
+  return namespaced
+    ? {
+        stillReading: t("empty", "stillReading", { label, scope }),
+        readDeadline: t("empty", "readDeadline", { label, scope, seconds }),
+        couldNotRead: t("empty", "couldNotReadInScope", { label: emptyLabel }),
+      }
+    : {
+        stillReading: t("empty", "stillReadingCluster", { label }),
+        readDeadline: t("empty", "readDeadlineCluster", { label, seconds }),
+        couldNotRead: t("empty", "couldNotReadCluster", { label: emptyLabel }),
+      };
+}
+
 export function ResourceList<
   Row extends { name: string; namespace?: string | null },
 >({
@@ -383,6 +406,7 @@ export function ResourceList<
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
   const scope = useNamespaceScope();
+  const namespacedKind = listKind ? listQueryFor(listKind).namespaced : true;
   const scopeMissing = useScopeMissing();
   // Not a quiet namespace: a list of one the cluster does not have read
   // nothing, and its empty sentence and count would say there is none.
@@ -594,17 +618,17 @@ export function ResourceList<
   // What the file says about the read, in the words the screen uses: a list
   // nobody could read, or read only part of, is not an empty or a whole one.
   const label = emptyStateLabel.toLowerCase();
+  const readWords = useListReadWords(
+    namespacedKind,
+    label,
+    emptyStateLabel,
+    scope.inWords
+  );
   const failedWords = failed
     ? ranOutOfTime
-      ? t("empty", "readDeadline", {
-          label,
-          scope: scope.inWords,
-          seconds: LIST_DEADLINE_SECONDS,
-        })
+      ? readWords.readDeadline
       : `${
-          isRefusal(failed)
-            ? refusalWords
-            : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
+          isRefusal(failed) ? refusalWords : readWords.couldNotRead
         } (${verbatim(failed.message)})`
     : null;
   const listUnread =
@@ -653,6 +677,14 @@ export function ResourceList<
     () => tableSection(NO_TABLE, share, t)
   );
 
+  const [noticesWaiting, setNoticesWaiting] = useState(false);
+  const noticesSignature = [
+    stale,
+    warm && freshList.unread?.message,
+    !!unreadError,
+    unread.map((namespace) => namespace.namespace).join(","),
+  ].join("|");
+
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
@@ -699,6 +731,7 @@ export function ResourceList<
           stale={stale || warm || (failed !== null && !isRefusal(failed))}
           slowRead={!live && queryResult.freshness.slowRead}
           refusedAt={refused ? refusedAt : warmRefusedAt}
+          held={noticesWaiting}
         />
       )}
       {!embedded && <ListedHere kind={listKind} />}
@@ -709,12 +742,18 @@ export function ResourceList<
           whole={failed === null && !partial}
         />
       )}
-      <HeldWhilePointed>
+      <HeldWhilePointed
+        signature={noticesSignature}
+        onWaiting={setNoticesWaiting}
+      >
         <ListUnread.Provider value={!!unreadError && resources.length === 0}>
-          {headerContent}
+          <ListEmpty.Provider value={resources.length === 0 && !nothingRead}>
+            {headerContent}
+          </ListEmpty.Provider>
         </ListUnread.Provider>
         {stale && (
           <StaleRows
+            className={cn("mb-2", LIST_NOTICE_WIDTH)}
             label={emptyStateLabel.toLowerCase()}
             since={dataUpdatedAt}
             error={failed}
@@ -724,7 +763,7 @@ export function ResourceList<
         {warm && freshList.unread && (
           <Unknown
             compact
-            className="mb-2"
+            className={cn("mb-2", LIST_NOTICE_WIDTH)}
             question={t("empty", "watchLiveListFailing", {
               label: emptyStateLabel.toLowerCase(),
             })}
@@ -753,12 +792,7 @@ export function ResourceList<
         <div data-testid="reading-list" className="relative h-0">
           {noticed && (
             <div className="absolute left-44 top-0 flex h-7 items-center">
-              <Reading>
-                {t("empty", "stillReading", {
-                  label: emptyStateLabel.toLowerCase(),
-                  scope: scope.inWords,
-                })}
-              </Reading>
+              <Reading>{readWords.stillReading}</Reading>
             </div>
           )}
         </div>
@@ -768,15 +802,10 @@ export function ResourceList<
           variant="warn"
           role="status"
           data-testid="slow-read"
-          className="mb-2"
+          className={cn("mb-2", LIST_NOTICE_WIDTH)}
         >
           <p className="flex items-baseline gap-2 text-fg">
-            <span>
-              {t("empty", "stillReading", {
-                label: emptyStateLabel.toLowerCase(),
-                scope: scope.inWords,
-              })}
-            </span>
+            <span>{readWords.stillReading}</span>
             <span className="font-mono tabular-nums text-warn">
               {t("count", "secondsShort", {
                 n: Math.round(waitedMs / 1000),
@@ -806,17 +835,11 @@ export function ResourceList<
           variant="warn"
           role="status"
           data-testid="read-deadline"
-          className="max-w-[68ch]"
+          className={LIST_NOTICE_WIDTH}
         >
           <TriangleAlert aria-hidden="true" />
           <p className="text-fg">
-            <span>
-              {t("empty", "readDeadline", {
-                label: emptyStateLabel.toLowerCase(),
-                scope: scope.inWords,
-                seconds: LIST_DEADLINE_SECONDS,
-              })}
-            </span>
+            <span>{failedWords}</span>
           </p>
           {/* Not a fault to retry into: a deadline on a big cluster is the
               cluster being big, so the narrower question comes first. */}
@@ -845,11 +868,7 @@ export function ResourceList<
           error={unreadError}
           // A refusal is not a failure, and saying "could not read" about
           // one invites a retry that will be refused the same way.
-          words={
-            isRefusal(unreadError)
-              ? refusalWords
-              : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
-          }
+          words={isRefusal(unreadError) ? refusalWords : readWords.couldNotRead}
           onRetry={retry}
           askedAgainAfter={refused && askingAgain ? refusedAt : null}
         >
@@ -921,7 +940,10 @@ export function ResourceList<
                       scope.scope,
                       unread
                     )
-                  : emptyMessage
+                  : (emptyMessage ??
+                    (namespacedKind
+                      ? undefined
+                      : t("empty", "noneInCluster", { label })))
           }
           emptyAction={
             filteredToNone && (

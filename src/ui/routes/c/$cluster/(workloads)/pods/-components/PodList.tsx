@@ -19,6 +19,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   badgeCellPx,
+  statusCellPx,
   nodeCellPx,
   yielding,
 } from "../../../-list/columns";
@@ -54,6 +55,11 @@ import {
 import { problemOfRow, rowProblems } from "../../../-object/row-items";
 import { useAttention } from "@/hooks/useAttention";
 import { statusRole } from "@/lib/status-role";
+
+const STATUS_FLOOR_GLYPHS = 15;
+
+const cappedBadgePx = (words: readonly string[]) =>
+  Math.min(badgeCellPx(words), statusCellPx(STATUS_FLOOR_GLYPHS));
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics> & { problem?: Problem | null };
@@ -94,6 +100,17 @@ function restartsCellPx(t: Translate, rows: readonly PodRow[]): number {
   return widestText([said], "mono", 7.2) + 20;
 }
 
+const RESTARTS_AGE_GLYPHS = 6;
+
+/** The count and the start of its age, the rest whole on hover: what a port with no column left to give up still has to hold. */
+function restartsFloorPx(t: Translate, rows: readonly PodRow[]): number {
+  const most = Math.max(...rows.map((pod) => pod.restartCount));
+  return Math.min(
+    restartsCellPx(t, rows),
+    Math.ceil((String(most).length + RESTARTS_AGE_GLYPHS) * 7.2) + 20
+  );
+}
+
 function readyText(pod: PodRow): string {
   const { ready, total } = podReadiness(pod);
   return `${ready}/${total}`;
@@ -132,27 +149,30 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
-      // The widest status its rows say, with a problem's mark at its
-      // narrowest; "CreateContainerConfigError" before any row is read.
+      // The widest status its rows say, up to STATUS_FLOOR_GLYPHS (the rest
+      // is whole on hover), with a problem's mark at its narrowest: one long
+      // status must not take the room Node and IP need for every row.
       floor: (_t, rows: readonly PodRow[]) =>
         rows.length === 0
           ? 224
           : Math.max(
-              badgeCellPx(rows.map((pod) => pod.status.display)),
+              cappedBadgePx(rows.map((pod) => pod.status.display)),
               ...rows
                 .filter((pod) => pod.problem)
                 .map(
                   (pod) =>
-                    badgeCellPx([pod.status.display]) +
+                    cappedBadgePx([pod.status.display]) +
                     PROBLEM_MARK_COMPACT_PX +
                     (pod.problem?.stale ? PROBLEM_STALE_PX : 0)
                 )
             ),
       // The mark's words and "already replaced" beside the badge while the port has room.
       ideal: (t, rows: readonly PodRow[]) => {
+        const widest = badgeCellPx(rows.map((pod) => pod.status.display));
         const replaced = rows.filter((pod) => pod.status.gone === "replaced");
         const troubled = rows.filter((pod) => pod.problem);
         return Math.max(
+          widest,
           replaced.length === 0
             ? 0
             : badgeCellPx(replaced.map((pod) => pod.status.display)) +
@@ -239,7 +259,9 @@ export const columns: ColumnDef<PodRow>[] = [
     enableSorting: true,
     meta: {
       floor: (t, rows: readonly PodRow[]) =>
-        rows.length === 0 ? 136 : restartsCellPx(t, rows),
+        rows.length === 0 ? 136 : restartsFloorPx(t, rows),
+      ideal: (t, rows: readonly PodRow[]) =>
+        rows.length === 0 ? 0 : restartsCellPx(t, rows),
       label: { section: "columns", key: "restarts" },
       share: (pod: PodRow) => ({
         text: String(pod.restartCount),

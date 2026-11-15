@@ -896,20 +896,62 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
 
   /**
    * Lena read "15 (13 мин наза…" on Pods with room beside the column. Fails
-   * if the Restarts floor stops holding the most restarts its rows count
-   * with the widest age a restart is told in, in the reader's language.
+   * if the Restarts ideal stops holding the most restarts its rows count
+   * with the widest age a restart is told in, in the reader's language, or if
+   * its floor stops giving the age up (the list beside a peek scrolled
+   * sideways because nothing else could).
    */
   it("holds a restart count and the age of the last one whole on Pods", () => {
     useLocaleStore.setState({ choice: "ru" });
     const restarts = (pods as Column[]).find((c) => nameOf(c) === "restarts")!;
-    expect(columnFloor(restarts, ru, LENAS_ROWS)).toBeGreaterThanOrEqual(
+    expect(columnIdeal(restarts, ru, LENAS_ROWS)).toBeGreaterThanOrEqual(
+      "15 (59 мин назад)".length * 7.2 + 20
+    );
+    expect(columnFloor(restarts, ru, LENAS_ROWS)).toBeLessThan(
       "15 (59 мин назад)".length * 7.2 + 20
     );
     useLocaleStore.setState({ choice: null });
   });
 
-  /** Fails if the Pods status column keeps room for "CreateContainerConfigError" its rows never say, or stops holding the widest they do. */
-  it("holds the Pods status column to the widest status its rows say", () => {
+  /**
+   * lab's Pods beside the peek (about 560px) kept Name, Status and Restarts at
+   * floors that summed past the port, with nothing left to hide: a sideways
+   * scroll and "Init:CrashLoopBa" cut. Fails if the columns that cannot yield
+   * stop fitting that port for a crash-looping pod.
+   */
+  it("fits Name, Status and Restarts of a crash-looping pod beside a peek without a sideways scroll", () => {
+    const rows = [
+      {
+        name: "api-794978b95b-g7jpd",
+        namespace: "lab",
+        status: { display: "Init:CrashLoopBackOff" },
+        problem: { tone: "err", n: 1, title: "migrate" },
+        nodeName: "gke-prod-pool-1-a3f9-x2kd",
+        restartCount: 17,
+      },
+    ];
+    const shown = pods.filter((c) => nameOf(c) !== "namespace");
+    const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+    const specs = [...shown, folded].map((c, index) => ({
+      id: index < shown.length ? nameOf(c) : "actions",
+      floor: columnFloor(c, en, rows),
+      yields: (c as Column).meta?.yields,
+    }));
+    const port = 560;
+    const hidden = yieldedColumns(specs, port);
+    const kept = specs.filter((spec) => !hidden.includes(spec.id));
+    expect(kept.reduce((sum, spec) => sum + spec.floor, 0)).toBeLessThanOrEqual(
+      port
+    );
+    expect(hidden).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^(name|status|restarts)$/),
+      ])
+    );
+  });
+
+  /** Fails if one long status in the list makes the Pods status floor grow past 15 glyphs, which hides Node for every row, or if the ideal stops asking for the whole word. */
+  it("caps the Pods status floor and asks for the whole word only while there is room", () => {
     const status = (pods as Column[]).find((c) => nameOf(c) === "status")!;
     const running = [{ status: { display: "Running" } }];
     const failing = [
@@ -919,7 +961,10 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(columnFloor(status, en, running)).toBeLessThan(
       columnFloor(status, en, failing)
     );
-    expect(columnFloor(status, en, failing)).toBeGreaterThanOrEqual(
+    expect(columnFloor(status, en, failing)).toBeLessThanOrEqual(
+      statusCellPx(15)
+    );
+    expect(columnIdeal(status, en, failing)).toBeGreaterThanOrEqual(
       Math.ceil("CreateContainerConfigError".length * 6.6 + 14 + 20)
     );
   });

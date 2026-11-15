@@ -482,14 +482,14 @@ export function deploymentSegments(
       unread: true,
       refused: podsRefused,
     }));
-  // Apart and amber: "Ready" alone said nothing of its pods failing a probe.
+  // Apart, amber where the word itself is not an error: "Ready" alone said nothing of its pods failing a probe, and an Unavailable one is red as its row in Needs attention is.
   const troubled = read
     .filter((entry) => entry.troubled > 0)
     .map(({ reason, troubled: count }): Segment => ({
       label: rolloutCounted(t)(reason, count) ?? reason,
       qualifier: t("statusWords", "troubledCounted", { n: count }),
       count,
-      tone: "warn",
+      tone: statusRole(reason) === "err" ? "err" : "warn",
     }));
   return [
     ...wordSegments(

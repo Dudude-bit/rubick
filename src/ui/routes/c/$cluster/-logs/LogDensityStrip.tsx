@@ -674,7 +674,7 @@ function Slice({
       >
         <span
           aria-hidden="true"
-          className={`block w-full ${inView ? "bg-fg" : ""}`}
+          className={`block w-full ${inView ? "bg-fg-mut" : ""}`}
           style={{ height: RULER_PX }}
         />
         <span
@@ -706,7 +706,7 @@ function Slice({
           reads as a fence. */}
       <span
         aria-hidden="true"
-        className={`block w-full ${inView ? "bg-fg" : ""}`}
+        className={`block w-full ${inView ? "bg-fg-mut" : ""}`}
         style={{ height: RULER_PX }}
       />
       {/* "There are errors here" said by a mark and not only by a hue. */}

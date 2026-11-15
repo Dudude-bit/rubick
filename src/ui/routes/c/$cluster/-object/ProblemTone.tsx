@@ -47,13 +47,13 @@ export function WithProblem({
   children,
 }: {
   problem: Problem | null;
-  /** The role the wrapped badge is drawn in. */
-  role: StatusRole;
+  /** The role the wrapped badge is drawn in; null for what is not a status word, such as a name. */
+  role: StatusRole | null;
   children: ReactNode;
 }) {
   const t = useT();
   if (!problem) return <>{children}</>;
-  const quiet = role !== "warn" && role !== "err";
+  const quiet = role !== null && role !== "warn" && role !== "err";
   // A problem nobody could look at again is a read we could not do, amber
   // whatever it was when it was seen.
   const tone = problem.stale ? "warn" : problem.tone;
