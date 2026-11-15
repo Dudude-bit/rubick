@@ -15,6 +15,7 @@ import { pageLink } from "@/lib/links";
 import type { SupplierTrouble } from "@/hooks/useCost";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { pictureNotes, troubleWords } from "./cost-words";
+import { AskAgain } from "../-supplier/AskAgain";
 
 export function CostNotes({
   picture,
@@ -34,9 +35,9 @@ export function CostNotes({
   useShareCaveat(notes.length > 0 ? notes.join(" ") : null);
   return (
     <div className="flex flex-col gap-1.5" data-testid="cost-notes">
-      {said && (
+      {said && trouble && (
         <p className="text-xs text-warn" data-testid="cost-trouble">
-          {said}
+          {said} <AskAgainFor trouble={trouble} />
         </p>
       )}
       {notes.map((note) => (
@@ -89,6 +90,13 @@ function PricesLink({ onPrices }: { onPrices: () => void }) {
   );
 }
 
+/** Where the supplier did not answer its probe, the way to ask it again. */
+function AskAgainFor({ trouble }: { trouble: SupplierTrouble }) {
+  return trouble.kind === "unreachable" ? (
+    <AskAgain power={trouble.power} />
+  ) : null;
+}
+
 /** The supplier gave nothing and nobody entered prices. */
 export function SupplierOnly({
   trouble,
@@ -106,7 +114,7 @@ export function SupplierOnly({
       data-testid="cost-supplier"
     >
       <p className={trouble.kind === "noSeries" ? "text-fg-mut" : "text-warn"}>
-        {said}
+        {said} <AskAgainFor trouble={trouble} />
       </p>
       <p className="text-fg-mut">
         {parts(t("cost", "pricesOffer"), {

@@ -7,7 +7,7 @@
 import { useCallback, useMemo } from "react";
 
 import { useCapabilityState } from "@/integrations";
-import type { CostRange, CostTrend } from "@/integrations";
+import type { CapabilityState, CostRange, CostTrend } from "@/integrations";
 import { commands } from "@/lib/commands";
 import {
   estimatePicture,
@@ -26,7 +26,14 @@ import { useClusterStore } from "@/stores/clusterStore";
 /** Why the supplier gave no picture, said beside an estimate or alone. */
 export type SupplierTrouble =
   | { kind: "noSeries"; vendor: string; endpoint: string }
-  | { kind: "unreachable"; vendor: string; endpoint: string; said: string }
+  | {
+      kind: "unreachable";
+      vendor: string;
+      endpoint: string;
+      said: string;
+      /** The supplier's probe, to ask again from the sentence. */
+      power: Extract<CapabilityState<"cost.now">, { state: "unreachable" }>;
+    }
   | { kind: "failed"; vendor: string; endpoint: string; said: string };
 
 export type CostState =
@@ -116,6 +123,7 @@ export function useCost(
         vendor: power.vendor,
         endpoint: power.endpoint,
         said: power.reason,
+        power,
       };
     if (power.state === "ready") {
       if (reading.data?.reading)

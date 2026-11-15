@@ -630,6 +630,14 @@ describe("UsageBlock and a history supplier", () => {
     expect(
       screen.queryByText(/Longer than this needs a Prometheus/i)
     ).toBeNull();
+
+    // A probe that failed is never retried on its own: the sentence offers
+    // to ask again, and asking runs the probe once more.
+    probePrometheus.mockResolvedValue(ANSWERED);
+    await userEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() =>
+      expect(screen.queryByText(/did not answer/i)).toBeNull()
+    );
   });
 
   /**
