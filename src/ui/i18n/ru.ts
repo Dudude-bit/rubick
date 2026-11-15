@@ -2461,10 +2461,10 @@ export const ru: Catalogue = {
   },
   traffic: {
     title: "Трафик",
-    canvasLabel: "Потоки между рабочими нагрузками",
+    canvasLabel: "Потоки между нагрузками",
     sources: "Источники",
     fit: "Вписать карту",
-    searchPlaceholder: "Найти рабочую нагрузку…",
+    searchPlaceholder: "Найти нагрузку…",
     integrationsLink: "Интеграции › Prometheus",
     absent:
       "Трафик читается из рядов Istio, Hubble, Beyla или Caretta в Prometheus, подключённом к этому кластеру; Rubick ничего из этого не устанавливает. Подключите его в разделе {integrations}. Что нужно каждому источнику:",
@@ -2527,17 +2527,17 @@ export const ru: Catalogue = {
     railAbsent: "рядов нет",
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
-    measureFailed: "Не удалось прочитать {measure}: {said}",
+    measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
     coverage:
       "Меш {source}: все поды у {marked}, часть подов у {partly}, {of} здесь.",
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
-    nothingInWindow: "{sources}: потоков в {scope} за {window} нет.",
+    nothingInWindow: "{sources}: потоков в {scope} нет ({window}).",
     notReadInWindow:
       "{sources}: потоки прочитать не удалось, поэтому неизвестно, были ли они.",
     cut: "Показаны {kept} с наибольшим трафиком; ещё {cut} потише не показаны.",
     podsFailed:
-      "Не удалось прочитать поды ({said}), поэтому имена, которые написали источники, не сопоставлены с рабочими нагрузками.",
+      "Не удалось прочитать поды ({said}), поэтому имена, которые написали источники, не сопоставлены с нагрузками.",
     podsLabel: "поды",
     sourceFailed: "Не удалось проверить {source}: {said}",
     sourcePartly: "Часть чисел {source} прочитать не удалось: {said}",
@@ -2546,10 +2546,10 @@ export const ru: Catalogue = {
     endAmbiguous: "это имя носят {kinds}",
     endNotListed: "названо потоком; в {namespace} такого нет",
     endPodsUnread: "названо потоком; поды в {namespace} прочитать не удалось",
-    endService: "Service в {namespace}, а не рабочая нагрузка",
-    endServiceNowhere: "сервис, названный источником, вне неймспейсов",
+    endService: "Service в {namespace}, а не нагрузка",
+    endServiceNowhere: "сервис, названный источником, вне пространств имён",
     endNode: "узел",
-    endAddress: "адрес, которого нет ни у одной рабочей нагрузки",
+    endAddress: "адрес, которого нет ни у одной нагрузки",
     endUnidentified: "источник не опознал",
     milliseconds: "{v} мс",
     cellNotRead: "не прочитано",
@@ -2599,7 +2599,7 @@ export const ru: Catalogue = {
     quietUnmatched:
       "{source} называет нагрузки по их подам, а поды в пространстве имён {namespace} прочитать не удалось, поэтому потоки этой нагрузки в {source} не найдены.",
     shareWay: "Направление",
-    sharePeer: "Рабочая нагрузка",
+    sharePeer: "Нагрузка",
     shareNumbers: "Числа",
   },
   cost: {
