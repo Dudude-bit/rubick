@@ -346,14 +346,9 @@ impl Timelines {
 
     /// Records `context` from what `subscription` hands over, in place of
     /// whatever was recorded before.
-    pub(crate) fn follow(
-        &self,
-        context: String,
-        subscription: crate::feeds::Subscription,
-        scope: Option<Vec<String>>,
-    ) {
+    pub(crate) fn follow(&self, context: String, subscription: crate::feeds::Subscription) {
         let cluster = self.cluster(&context);
-        *self.following.lock() = Some(follow::spawn(context, cluster, subscription, scope));
+        *self.following.lock() = Some(follow::spawn(context, cluster, subscription));
     }
 
     /// Tells the follower of `context`, where it is the one recording.

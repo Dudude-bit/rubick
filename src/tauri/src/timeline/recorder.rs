@@ -85,9 +85,6 @@ pub struct Recorder {
     objects: HashMap<(&'static str, &'static str, Option<String>), Objects>,
     named: HashMap<String, Named>,
     slots: BTreeMap<(Source, Slot), SlotState>,
-    /// The window's namespaces, where a kind refused across the cluster is
-    /// read instead.
-    scope: Vec<String>,
 }
 
 fn now() -> i64 {
@@ -96,19 +93,13 @@ fn now() -> i64 {
 
 impl Recorder {
     #[must_use]
-    pub fn new(timeline: Arc<ClusterTimeline>, scope: Vec<String>) -> Self {
+    pub fn new(timeline: Arc<ClusterTimeline>) -> Self {
         Self {
             timeline,
             objects: HashMap::new(),
             named: HashMap::new(),
             slots: BTreeMap::new(),
-            scope,
         }
-    }
-
-    /// The window's namespaces changed.
-    pub fn rescope(&mut self, scope: Vec<String>) {
-        self.scope = scope;
     }
 
     fn row(followed: &Followed, key: &Key, what: RowSays) -> TimelineRow {
@@ -323,7 +314,8 @@ impl Recorder {
                 .push((&slot.namespace, state));
         }
         let mut cover = Cover::default();
-        let mut narrowed = false;
+        // The namespaces every kind not read across the cluster is read in.
+        let mut narrowed: Option<BTreeSet<&str>> = None;
         let mut refused_in = BTreeSet::new();
         for (kind, slots) in by_kind {
             let live = slots.iter().any(|(_, state)| *state == SlotState::Live);
@@ -338,7 +330,17 @@ impl Recorder {
                         .filter_map(|(namespace, _)| namespace.as_ref())
                         .map(|namespace| format!("{kind}/{namespace}")),
                 );
-                narrowed |= !wide;
+                if !wide {
+                    let here: BTreeSet<&str> = slots
+                        .iter()
+                        .filter(|(_, state)| *state == SlotState::Live)
+                        .filter_map(|(namespace, _)| namespace.as_deref())
+                        .collect();
+                    narrowed = Some(match narrowed {
+                        None => here,
+                        Some(all) => all.intersection(&here).copied().collect(),
+                    });
+                }
             } else {
                 cover.unwatched.push(kind.to_string());
             }
@@ -349,10 +351,14 @@ impl Recorder {
             }
         }
         cover.unwatched_in = refused_in.into_iter().collect();
-        // A kind read only in the window's namespaces makes the whole span
-        // speak for those alone: saying less is the honest side.
-        if narrowed {
-            cover.scope.clone_from(&self.scope);
+        // A kind read only in some namespaces makes the whole span speak for
+        // those alone, as its watches report them: saying less is the honest
+        // side, and a span no namespace is whole in speaks for none.
+        if let Some(namespaces) = narrowed {
+            if namespaces.is_empty() {
+                return None;
+            }
+            cover.scope = namespaces.into_iter().map(str::to_string).collect();
         }
         Some(cover)
     }

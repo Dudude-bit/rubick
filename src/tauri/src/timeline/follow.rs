@@ -54,12 +54,14 @@ pub fn followed_kinds() -> Vec<KindKey> {
 }
 
 /// What the timeline asks the shared watches for: every followed kind, for
-/// the whole session, read in `scope` where the cluster refuses one across it.
+/// the whole session, across the cluster and in `scope` where the cluster
+/// refuses one across it. The window's namespaces narrow nothing it records.
 #[must_use]
 pub fn ask(scope: Option<Vec<String>>) -> Ask {
     Ask {
         kinds: followed_kinds(),
         scope,
+        narrow: false,
         binding: Binding::Session,
     }
 }
@@ -240,12 +242,11 @@ pub(crate) fn spawn(
     context: String,
     timeline: Arc<ClusterTimeline>,
     subscription: Subscription,
-    scope: Option<Vec<String>>,
 ) -> Follower {
     let stop = CancellationToken::new();
     let (control, mut controls) = mpsc::unbounded_channel();
     let Subscription { mut updates, lease } = subscription;
-    let mut recorder = Recorder::new(timeline, scope.unwrap_or_default());
+    let mut recorder = Recorder::new(timeline);
     // Every kind asked for holds the span shut until its watch has spoken.
     for kind in followed_kinds() {
         if let Some(name) = followed_name(&kind) {
@@ -272,10 +273,7 @@ pub(crate) fn spawn(
                     None => break,
                 },
                 control = controls.recv() => match control {
-                    Some(Control::Rescope(scope)) => {
-                        recorder.rescope(scope.clone().unwrap_or_default());
-                        lease.rescope(scope);
-                    }
+                    Some(Control::Rescope(scope)) => lease.rescope(scope),
                     Some(Control::Meta(rx)) => meta = Some(rx),
                     None => break,
                 },
