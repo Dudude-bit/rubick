@@ -12,6 +12,7 @@ import {
   GIB,
   MAX_COST_ROWS,
   costOf,
+  cronJobOf,
   estimatePicture,
   monthOf,
   readingPicture,
@@ -466,6 +467,28 @@ describe("one object's cost", () => {
         name: "gone",
       })
     ).toBeNull();
+  });
+});
+
+describe("whose row a Job's cost is", () => {
+  /** The rule `cost_basis` folds a Job by: its controller, when that is a CronJob. */
+  it("is its CronJob's where a CronJob controls it, and its own otherwise", () => {
+    const owner = (kind: string, controller: boolean) => ({
+      api_version: "batch/v1",
+      kind,
+      name: "backup",
+      uid: "u",
+      controller,
+    });
+    expect(cronJobOf({ ownerReferences: [owner("CronJob", true)] })).toEqual({
+      group: "batch",
+      kind: "CronJob",
+      name: "backup",
+    });
+    expect(
+      cronJobOf({ ownerReferences: [owner("CronJob", false)] })
+    ).toBeNull();
+    expect(cronJobOf({ ownerReferences: [] })).toBeNull();
   });
 });
 

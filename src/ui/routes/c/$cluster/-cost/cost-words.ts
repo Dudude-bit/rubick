@@ -146,9 +146,12 @@ export function costLineWords(
 ): string {
   const of = costOf(picture, target);
   if (!of) {
-    if ("kind" in target && picture.rest)
+    if (!("kind" in target)) return t("cost", "lineNothingOnANode");
+    if (picture.rest)
       return t("cost", "lineCut", { kept: picture.workloads.length });
-    return t("cost", "lineNothingOnANode");
+    // The line is drawn beside running pods: a workload with no row was not
+    // in what the cost was read from, which says nothing about its pods.
+    return t("cost", "lineNotRead");
   }
   if (of.perHour === null) return t("cost", "lineNotPriced");
   const currency = currencyOf(picture);

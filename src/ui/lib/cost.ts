@@ -10,6 +10,7 @@
  */
 import type {
   CostBasis,
+  OwnerReference,
   ReadFailure,
   UnreadNamespace,
   WorkloadBasis,
@@ -210,6 +211,19 @@ export interface CostPicture {
 }
 
 export const monthOf = (perHour: number): number => perHour * HOURS_PER_MONTH;
+
+/**
+ * The CronJob a Job's cost is billed to: its controller, by the same rule
+ * `cost_basis` folds a Job's pods into the CronJob's row.
+ */
+export const cronJobOf = (
+  job: { ownerReferences: readonly OwnerReference[] } | null | undefined
+): { group: string; kind: string; name: string } | null => {
+  const owner = job?.ownerReferences.find(
+    (o) => o.controller === true && o.kind === "CronJob"
+  );
+  return owner ? { group: "batch", kind: "CronJob", name: owner.name } : null;
+};
 
 /** The nodes were read and none of them carries a price. */
 export const noNodePriced = (picture: CostPicture): boolean =>

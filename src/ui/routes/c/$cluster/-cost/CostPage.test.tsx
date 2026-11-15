@@ -397,4 +397,76 @@ describe("one workload's cost", () => {
       `${amount} per hour`
     );
   });
+
+  /**
+   * A running Job a CronJob made said on its own page that nothing of it ran
+   * on a node: its pods are billed to the CronJob's row, and the line looked
+   * for the Job's. It reads the CronJob's row and says whose it is.
+   */
+  it("reads a CronJob's run from the CronJob's row, and says so", async () => {
+    const withCron = readingPicture(
+      {
+        ...BASIS,
+        workloads: [
+          {
+            key: {
+              namespace: "ops",
+              group: "batch",
+              kind: "CronJob",
+              name: "backup",
+            },
+            pods: 1,
+            cpu: 500,
+            memory: GIB,
+            gpus: 0,
+            claimBytes: 0,
+          },
+        ],
+      },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({
+      state: "picture",
+      picture: withCron,
+      trouble: null,
+    });
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="batch"
+        kind="Job"
+        name="backup-29"
+        namespace="ops"
+        billedTo={{ group: "batch", kind: "CronJob", name: "backup" }}
+      />,
+      { at: "/c/prod/jobs", route: "/c/$cluster/jobs" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent("Billed to CronJob backup:");
+    expect(line).toHaveTextContent(
+      `${formatMoney(withCron.workloads[0]!.perHour!, "")} per hour`
+    );
+  });
+
+  /** The line is drawn beside running pods: no row is never "nothing runs". */
+  it("never says nothing runs for a running workload it has no row for", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="new"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent("Not in the cost read yet.");
+    expect(line).not.toHaveTextContent(/runs on a node/);
+  });
 });
