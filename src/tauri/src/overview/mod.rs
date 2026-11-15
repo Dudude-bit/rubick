@@ -43,6 +43,9 @@ const BROKEN_STREAK: u32 = 3;
 const GIVE_UP_STREAK: u32 = 10;
 /// How long a dropped cluster waits before a request may start it again.
 const COOLDOWN: Duration = Duration::from_mins(5);
+/// What is left of that wait once a whole listing has answered: the cluster
+/// is back, and the Overview said "polling" for minutes after every fault.
+const EASED: Duration = Duration::from_secs(30);
 /// Watches nobody has asked for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
@@ -453,6 +456,19 @@ impl OverviewCache {
     #[must_use]
     pub fn watching(&self) -> Vec<String> {
         self.clusters.iter().map(|e| e.key().clone()).collect()
+    }
+
+    /// A listing of the whole overview answered for `context`: what is left
+    /// of a pause after the watches gave up is cut to [`EASED`], so they
+    /// start again soon rather than five minutes after the cluster is back.
+    pub fn listed_whole(&self, context: &str) {
+        self.ease_cooldown(context, Instant::now());
+    }
+
+    fn ease_cooldown(&self, context: &str, now: Instant) {
+        if let Some(mut until) = self.cooldown.get_mut(context) {
+            *until = (*until).min(now + EASED);
+        }
     }
 
     fn cooling_down(&self, context: &str) -> bool {
@@ -1054,6 +1070,31 @@ mod tests {
             .probed
             .insert(("prod".to_string(), scope.clone()), (aged, lost));
         assert_eq!(cache.probed("prod", &scope), None);
+    }
+
+    /// After a fault cleared the Overview polled for up to five minutes,
+    /// grey "polling" beside every list's "live". Fails if a whole listing
+    /// does not cut the pause to the eased wait, or lengthens a shorter one.
+    #[test]
+    fn a_whole_listing_cuts_the_pause_after_the_watches_gave_up() {
+        let cache = OverviewCache::default();
+        let now = Instant::now();
+        cache.cooldown.insert("prod".to_string(), now + COOLDOWN);
+        cache.ease_cooldown("prod", now);
+        assert_eq!(
+            cache.cooldown.get("prod").map(|until| *until),
+            Some(now + EASED)
+        );
+        cache
+            .cooldown
+            .insert("prod".to_string(), now + Duration::from_secs(5));
+        cache.ease_cooldown("prod", now);
+        assert_eq!(
+            cache.cooldown.get("prod").map(|until| *until),
+            Some(now + Duration::from_secs(5))
+        );
+        cache.ease_cooldown("stage", now);
+        assert!(cache.cooldown.get("stage").is_none());
     }
 
     #[test]

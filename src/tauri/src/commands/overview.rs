@@ -3002,6 +3002,10 @@ pub async fn cluster_overview(
         overview
             .counts_partial
             .extend(beside.partial.iter().cloned());
+        let failed = |short: &EventsShort| matches!(short, EventsShort::Failed { .. });
+        if overview.unread.is_empty() && !overview.warnings_short.iter().any(failed) {
+            state.overview_cache.listed_whole(&context);
+        }
         return Ok(overview);
     };
     Ok(followed(&snapshot, scope, &beside, &looked))
