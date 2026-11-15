@@ -169,6 +169,24 @@ describe("which source a cost is read from", () => {
     expect(cost.state === "picture" && cost.trouble?.kind).toBe("noNodePrices");
   });
 
+  /**
+   * A re-render with nothing new keeps the picture: the tables beneath it
+   * re-derive their rows and widths only when it changes.
+   */
+  it("keeps the picture across renders while nothing it is made of changed", async () => {
+    const answer = ready(async () => ({
+      ...READING,
+      nodes: [{ name: "node-a", perHour: 0.2, instanceType: null, spot: null }],
+    }));
+    capability.mockReturnValue(answer);
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    const first = hook.result.current.cost;
+    hook.rerender();
+    hook.rerender();
+    expect(hook.result.current.cost).toBe(first);
+  });
+
   /** No series and no prices is its own sentence, not "nothing set up". */
   it("says the supplier holds no series where no prices are entered", async () => {
     capability.mockReturnValue(ready(async () => null));

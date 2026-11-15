@@ -425,6 +425,19 @@ export function useClasslessTakers(): ClasslessTakers {
 export function useCapabilityState<K extends CapabilityKey>(
   key: K
 ): CapabilityState<K> {
+  const state = useCapabilityStateNow(key);
+  // Built afresh on every render; held by what it says, so a reader that
+  // derives a picture from it is not rebuilt on every render with it.
+  const said = JSON.stringify(state, (_, value: unknown) =>
+    typeof value === "function" ? (value.name ?? "fn") : value
+  );
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => state, [said]);
+}
+
+function useCapabilityStateNow<K extends CapabilityKey>(
+  key: K
+): CapabilityState<K> {
   const { data } = useDetected();
   const connections = useConnections();
   const client = useQueryClient();

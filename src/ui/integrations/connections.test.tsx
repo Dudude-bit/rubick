@@ -292,6 +292,31 @@ describe("a basic-auth address where it is drawn", () => {
     await waitFor(() => expect(power.result.current.state).toBe("ready"));
   });
 
+  /**
+   * The state was built afresh on every render, so every reader memoizing
+   * on it rebuilt on every render: the Cost page re-derived its picture,
+   * three tables and their widths each time, and the stall counter climbed.
+   * Held by what it says, it keeps its identity while nothing changed.
+   */
+  it("keeps its identity across renders while nothing about it changed", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue(saved);
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const power = renderHook(() => useCapabilityState("cost.now"), {
+      wrapper,
+    });
+    await waitFor(() => expect(power.result.current.state).toBe("ready"));
+    const first = power.result.current;
+    power.rerender();
+    power.rerender();
+    expect(power.result.current).toBe(first);
+  });
+
   it("names the host alone as where a chart's numbers come from", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
