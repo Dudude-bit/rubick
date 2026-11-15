@@ -33,7 +33,7 @@ import {
   openNamespacePicker,
   SLOW_READ_MS,
 } from "@/lib/read-deadline";
-import { useNowSeconds } from "@/hooks/useNow";
+import { useLastPassed, useNowSeconds } from "@/hooks/useNow";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ReadAgain } from "@/components/ui/read-again";
@@ -85,6 +85,9 @@ import type { PeekTarget } from "@/hooks/usePeek";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 const NO_ROWS: never[] = [];
+
+/** What a skeleton draws for a list whose length nothing has told us: the fewest rows that still read as a table. */
+const UNKNOWN_COUNT_ROWS = 3;
 
 export interface ResourceDeleteConfig<Row> {
   /** Function to delete a resource */
@@ -563,8 +566,14 @@ export function ResourceList<
       : queryResult.freshness.waitingSince) ?? skeletonSince;
   const waitedMs =
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
-  const slow = waitedMs >= SLOW_READ_MS;
-  const noticed = waitedMs >= NOTICE_READ_MS;
+  // Timed to the deadline itself: the one-second clock above lands them up to a second late.
+  const deadlines =
+    showSkeleton && waitingSince !== null
+      ? [waitingSince + NOTICE_READ_MS, waitingSince + SLOW_READ_MS]
+      : [];
+  const passed = useLastPassed(deadlines);
+  const noticed = deadlines.length > 0 && passed >= deadlines[0];
+  const slow = deadlines.length > 0 && passed >= deadlines[1];
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
@@ -857,7 +866,7 @@ export function ResourceList<
           onRowMenu={rowMenu.open}
           isLoading={showSkeleton}
           onMatched={setMatched}
-          loadingRows={knownCount}
+          loadingRows={knownCount ?? UNKNOWN_COUNT_ROWS}
           loadingGrouped={
             grouping === undefined
               ? !!listKind &&

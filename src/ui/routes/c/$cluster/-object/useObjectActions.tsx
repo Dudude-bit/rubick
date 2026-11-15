@@ -53,6 +53,7 @@ import type {
 } from "@/generated/types";
 
 import { ScaleDialog } from "./ScaleDialog";
+import { useOpening } from "./use-opening";
 import { RestartDialog } from "./RestartDialog";
 import {
   deleteCommandFor,
@@ -322,7 +323,9 @@ export function useObjectActions({
     },
   });
 
+  const scaleOpening = useOpening(dialog === "scale");
   const busy: Partial<Record<PeekActionId, boolean>> = {
+    scale: scaleOpening.opening,
     restart: restart.isPending,
     delete: remove.isPending,
     portForward: !!service && backend.fetching,
@@ -374,7 +377,7 @@ export function useObjectActions({
       case "portForward":
         return setDialog("portForward");
       case "scale":
-        return setDialog("scale");
+        return scaleOpening.begin(() => setDialog("scale"));
       case "restart":
         // A pod's restart is its deletion, owned or not.
         if (kind === "Pod") return setConfirming("restart");

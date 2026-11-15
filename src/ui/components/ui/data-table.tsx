@@ -1659,7 +1659,8 @@ function DataTableInner<TData extends RowData>({
                 </span>
               </div>
             ) : (
-              isLong && (
+              isLong &&
+              searchValue.trim() === "" && (
                 <span className="text-caption text-fg-fnt">
                   {t("readings", "longListTrim", { n: data.length })}
                 </span>

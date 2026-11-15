@@ -173,7 +173,10 @@ describe("one object's events, live", () => {
       </ObjectUnreadContext.Provider>
     );
     expect(screen.getByTestId("waits-on-object")).toHaveTextContent(
-      "Read through Deployment web, which could not be read just now."
+      "Events of what it owns are not shown: Deployment web could not be read."
+    );
+    expect(screen.getByTestId("waits-on-object")).not.toHaveTextContent(
+      /just now/
     );
     expect(
       screen.queryByRole("button", { name: /Try the read again/ })

@@ -109,7 +109,7 @@ export function ObjectEventsBody({
           data-read={isRefusal(query.ownedUnread.error) ? "refused" : "failed"}
         >
           {unreadObject ? (
-            <WaitsOnObject unread={unreadObject} />
+            <WaitsOnObject ownedEvents unread={unreadObject} />
           ) : (
             <Unknown
               question={t("empty", query.ownedUnread.unread)}

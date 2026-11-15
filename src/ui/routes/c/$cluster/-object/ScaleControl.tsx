@@ -6,6 +6,7 @@ import { ReasonedAction } from "@/components/object/detail-blocks";
 import { useT } from "@/i18n/useT";
 import type { ActionWarning } from "@/lib/governance";
 import { ScaleDialog } from "./ScaleDialog";
+import { useOpening } from "./use-opening";
 
 /**
  * The Scale button and its dialog, holding the open state themselves. Held by
@@ -33,13 +34,15 @@ export function ScaleControl({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const { opening, begin } = useOpening(open);
   return (
     <>
       <ReasonedAction
         label={t("action", "scale")}
         reason={reason}
         icon={Scale}
-        onClick={() => ready && setOpen(true)}
+        busy={opening}
+        onClick={() => ready && begin(() => setOpen(true))}
       />
       <ScaleDialog
         warnings={warnings}

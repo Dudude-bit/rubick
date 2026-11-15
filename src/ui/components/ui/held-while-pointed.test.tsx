@@ -10,19 +10,21 @@ import {
 
 import { HeldWhilePointed } from "./held-while-pointed";
 
-function Page({ notice }: { notice: boolean }) {
+function Page({ notice, table = true }: { notice: boolean; table?: boolean }) {
   return (
     <>
       <HeldWhilePointed>
         {notice && <p role="status">The read failed</p>}
       </HeldWhilePointed>
-      <table data-pointer-hold="">
-        <tbody>
-          <tr>
-            <td>row</td>
-          </tr>
-        </tbody>
-      </table>
+      {table && (
+        <table data-pointer-hold="">
+          <tbody>
+            <tr>
+              <td>row</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       <p>elsewhere</p>
     </>
   );
@@ -33,12 +35,12 @@ afterEach(() => vi.useRealTimers());
 
 describe("a notice arriving above a table", () => {
   /**
-   * A refusal notice inserted above the Pods table slid the rows 100 px
-   * under the pointer and the click landed on another row. Fails if the
-   * notice appears while the pointer is moving over the rows or pressed on
-   * one, or does not appear once the pointer is still, has left, or is up.
+   * A refusal notice inserted above the Pods table slid the rows 140 px
+   * under a pointer that had stopped on one. Fails if the notice appears
+   * while the pointer moves over, rests on or is pressed on the rows, or does
+   * not appear once the pointer has left the table.
    */
-  it("waits while the pointer moves over the rows and lands when it stops or leaves", () => {
+  it("waits while the pointer is on the rows, even resting, and lands when it leaves", () => {
     const { rerender } = render(<Page notice={false} />);
     const row = screen.getByText("row");
     fireEvent.pointerMove(row);
@@ -46,19 +48,26 @@ describe("a notice arriving above a table", () => {
     expect(screen.queryByRole("status")).toBeNull();
 
     act(() => {
-      vi.advanceTimersByTime(900);
+      vi.advanceTimersByTime(60_000);
     });
-    expect(screen.getByRole("status")).toBeInTheDocument();
-
-    fireEvent.pointerMove(row);
-    rerender(<Page notice={false} />);
-    expect(screen.getByRole("status")).toBeInTheDocument();
-    fireEvent.pointerMove(screen.getByText("elsewhere"));
     expect(screen.queryByRole("status")).toBeNull();
+
+    fireEvent.pointerMove(screen.getByText("elsewhere"));
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
-  /** Fails if a held-down press, which is a click in progress, lets the notice in after the pointer stops. */
-  it("stays held for as long as the button is down on a row", () => {
+  /** Fails if a table that left the page keeps holding notices for a pointer that last touched it. */
+  it("lets go when the table the pointer rested on is gone", () => {
+    const { rerender } = render(<Page notice={false} />);
+    fireEvent.pointerMove(screen.getByText("row"));
+    rerender(<Page notice />);
+    expect(screen.queryByRole("status")).toBeNull();
+    rerender(<Page notice table={false} />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  /** Fails if a held-down press, which is a click in progress, lets the notice in. */
+  it("stays held while the button is down on a row", () => {
     const { rerender } = render(<Page notice={false} />);
     const row = screen.getByText("row");
     fireEvent.pointerDown(row);
@@ -68,6 +77,7 @@ describe("a notice arriving above a table", () => {
     });
     expect(screen.queryByRole("status")).toBeNull();
     fireEvent.pointerUp(row);
+    fireEvent.pointerMove(screen.getByText("elsewhere"));
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 

@@ -671,6 +671,20 @@ describe("a value a cell says in words", () => {
   );
 
   /**
+   * When a refusal turned CPU and Memory into locks the
+   * table reflowed and hid Node. Fails if a lock cell needs more width than
+   * the figure it stands in for, in either metric column.
+   */
+  it("never asks a lock for more room than a figure", () => {
+    const measured = [{ name: "web-0", cpuMillicores: 12, memoryBytes: 3e7 }];
+    for (const id of ["cpu", "memory"])
+      for (const absence of ["notInstalled", "forbidden", "error"] as const)
+        expect(floorOf(pods, id, en, unmeasured, absence)).toBeLessThanOrEqual(
+          floorOf(pods, id, en, measured)
+        );
+  });
+
+  /**
    * With metrics-server not installed every CronJob row said "n/a" in a
    * column holding "no sample", and Last run cut "Pod Security rest…".
    * Fails if a column whose rows all say "n/a" keeps the room of a word
@@ -685,9 +699,10 @@ describe("a value a cell says in words", () => {
     (_page, columns) => {
       for (const id of ["cpu", "memory"]) {
         const column = columns.find((c) => nameOf(c) === id) ?? {};
-        expect(
-          floorOf(columns, id, en, unmeasured, "notInstalled")
-        ).toBeLessThanOrEqual(Math.max(headerFloor(column, en), 14 + 20));
+        for (const absence of ["notInstalled", "forbidden", "error"] as const)
+          expect(
+            floorOf(columns, id, en, unmeasured, absence)
+          ).toBeLessThanOrEqual(Math.max(headerFloor(column, en), 14 + 20));
       }
     }
   );

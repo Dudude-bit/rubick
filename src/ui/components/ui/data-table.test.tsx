@@ -2599,6 +2599,20 @@ describe("a list past the virtualisation threshold", () => {
     expect(screen.queryByText(/To trim the list/)).toBeNull();
   });
 
+  /**
+   * "102 rows. To trim the list, narrow the scope or search"
+   * sat beside "0 of 102" while a search was on. Fails if the advice to search
+   * is still given once a search is typed.
+   */
+  it("gives no advice to search while a search is on", async () => {
+    await long();
+    expect(screen.getByText(/To trim the list/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "zzz-nothing" },
+    });
+    expect(screen.queryByText(/To trim the list/)).toBeNull();
+  });
+
   /** Rebuilding descriptors or sorting on scroll makes windowing cost the entire list. */
   it.each([false, true])(
     "reuses descriptors and navigation indexes when the scroll offset changes with grouping %s",

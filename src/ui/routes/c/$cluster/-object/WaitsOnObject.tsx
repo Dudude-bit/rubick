@@ -13,9 +13,11 @@ import type { ObjectUnread } from "./object-unread";
 export function WaitsOnObject({
   unread,
   className,
+  ownedEvents = false,
 }: {
   unread: ObjectUnread;
   className?: string;
+  ownedEvents?: boolean;
 }) {
   const t = useT();
   const refused = isRefusal(unread.failure);
@@ -30,10 +32,17 @@ export function WaitsOnObject({
       )}
     >
       <Glyph className="mt-px h-3 w-3 flex-none text-warn" aria-hidden="true" />
-      {t("empty", refused ? "waitsOnRefusedObject" : "waitsOnFailedObject", {
-        kind: unread.kind,
-        name: unread.name,
-      })}
+      {t(
+        "empty",
+        ownedEvents
+          ? refused
+            ? "ownedEventsWaitOnRefusedObject"
+            : "ownedEventsWaitOnFailedObject"
+          : refused
+            ? "waitsOnRefusedObject"
+            : "waitsOnFailedObject",
+        { kind: unread.kind, name: unread.name }
+      )}
     </p>
   );
 }

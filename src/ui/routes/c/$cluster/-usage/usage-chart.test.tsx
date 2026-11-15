@@ -257,6 +257,26 @@ describe("UsageChart before there is a line", () => {
     // And no empty band where a chart would go.
     expect(container.querySelector("svg")).toBeNull();
   });
+
+  /**
+   * A pod that had finished said "not reporting", a fault's
+   * wording. Fails if an idle object keeps that word, or a running one with
+   * no reading loses it.
+   */
+  it("says nothing is running, not that it is not reporting, where nothing runs", async () => {
+    await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[]}
+        limit={null}
+        current={null}
+        idle
+      />
+    );
+    expect(screen.getByText("nothing running")).toBeInTheDocument();
+    expect(screen.queryByText("not reporting")).toBeNull();
+  });
 });
 
 describe("UsageChart gaps", () => {

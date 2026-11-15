@@ -82,6 +82,8 @@ export interface UsageChartProps {
    * window nobody is watching.
    */
   live?: boolean;
+  /** Nothing runs behind this object, so a missing reading is the expected one. */
+  idle?: boolean;
   /**
    * A supplier's window is on screen rather than the watched buffer. The
    * number on the right then carries the window's average and peak as well,
@@ -136,6 +138,7 @@ function UsageChartInner({
   current,
   suppressNote = false,
   live = true,
+  idle = false,
   ranged = false,
   request = null,
   declared,
@@ -187,12 +190,15 @@ function UsageChartInner({
           {value === null ? (
             // The block only draws bands while metrics-server is available,
             // so a missing value here is the server having nothing to say
-            // about this object — usually a container that is not running.
+            // about this object. Where nothing runs behind the window that is
+            // the answer, not a fault.
             <span
               className="text-fg-fnt"
-              title={t("empty", "noMetricsReading")}
+              title={idle ? undefined : t("empty", "noMetricsReading")}
             >
-              {t("readings", "usageNotReporting")}
+              {idle
+                ? t("empty", "nothingRunning")
+                : t("readings", "usageNotReporting")}
             </span>
           ) : (
             <>

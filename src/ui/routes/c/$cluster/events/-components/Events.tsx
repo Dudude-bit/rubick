@@ -874,7 +874,13 @@ export function Events() {
               </>
             )}
             <DataFreshness
-              dataUpdatedAt={freshness.dataUpdatedAt}
+              dataUpdatedAt={
+                warm
+                  ? probed
+                    ? probe.freshness.dataUpdatedAt
+                    : freshList.since
+                  : freshness.dataUpdatedAt
+              }
               live={watching && !watch.resyncing && !warm}
               slowed={!fromWatch && freshness.slowed}
               slowRead={!fromWatch && freshness.slowRead}
@@ -1159,7 +1165,7 @@ function HeaderCount({
                 {formatCount(part.n)}
               </span>
             ) : (
-              part.words
+              <span className="whitespace-nowrap">{part.words}</span>
             )}
           </Fragment>
         ))}

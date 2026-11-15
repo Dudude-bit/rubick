@@ -270,7 +270,8 @@ describe("a feed a watch keeps", () => {
    * Dana's All events re-read the latest 500 every second, 350 KB each
    * time. Fails if the feed is polled once its watch has its rows (its
    * one-row probe aside), if the newest are not on top of a burst that
-   * arrived in the API's order, or if the cut stops saying which 500 these are.
+   * arrived in the API's order, or if the cut stops saying which 500 these are,
+   * or says it in a phrase that can wrap mid-way ("of / the latest 500").
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
     layOutRows();
@@ -284,6 +285,9 @@ describe("a feed a watch keeps", () => {
     expect(
       await screen.findByText("500 normal events · of the latest 500")
     ).toBeInTheDocument();
+    expect(screen.getByText("of the latest 500")).toHaveClass(
+      "whitespace-nowrap"
+    );
     expect(rowAt(0)?.textContent).toContain("prod-pod-0");
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -322,6 +326,37 @@ describe("a feed a watch keeps", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
   });
+
+  /**
+   * While every events list failed, "last answer" read 0s ago
+   * again at each watch event, as if the failing read had answered. Fails if
+   * a watch event resets the age of a read that has not answered since it
+   * began to fail.
+   */
+  it("keeps counting the last answer of the failing read while the watch delivers", async () => {
+    await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(asked().some((filters) => filters.limit === 1)).toBe(true)
+    );
+    listEvents.mockRejectedValue(
+      Object.assign(new Error("etcdserver: request timed out"), {
+        code: "NO_ANSWER",
+      })
+    );
+    await screen.findByText(
+      /A fresh list of events is failing/,
+      {},
+      { timeout: 3000 }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    burst([dated("prod", 1)]);
+    expect(
+      await screen.findByText(/^last answer [1-9]\d*s ago$/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("last answer 0s ago")).toBeNull();
+  }, 30_000);
 
   // As the overview answers it: a failed events list sits with the cut ones
   // in `warningsShort`, never in `unread`.

@@ -3773,7 +3773,7 @@ describe("a governed workload's peek beside its list", () => {
     expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
     expect(chip).toHaveAttribute("title", "TooManyReplicas");
     expect(screen.getByText("read failing")).toBeVisible();
-    expect(screen.getByText(/^last answer \d+s ago$/)).toBeVisible();
+    expect(screen.getByText(/^last answer (29|30|31)s ago$/)).toBeVisible();
   });
 
   /**

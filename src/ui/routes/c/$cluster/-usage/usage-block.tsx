@@ -299,6 +299,7 @@ export function UsageBlock({
               current={available ? (cpu ?? null) : null}
               suppressNote={shared !== null}
               live={liveLine}
+              idle={!live}
               ranged={past.window !== null}
               declared={
                 declared === undefined
@@ -321,6 +322,7 @@ export function UsageBlock({
               current={available ? (memory ?? null) : null}
               suppressNote={shared !== null}
               live={liveLine}
+              idle={!live}
               ranged={past.window !== null}
               declared={
                 declared === undefined

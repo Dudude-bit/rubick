@@ -947,6 +947,37 @@ describe("a read on a large cluster", () => {
   });
 
   /**
+   * The reading line was still missing at 3 s, because it waited
+   * for the next tick of a one-second clock. Fails if the line is later than
+   * the deadline by more than a timer's slack, or if a list of unknown length
+   * draws more than three skeleton rows.
+   */
+  it("says it is still reading the moment three seconds are up, over three skeleton rows", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "exact"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS - 50);
+    });
+    expect(screen.getByTestId("reading-list")).toBeEmptyDOMElement();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
+    expect(screen.getAllByTestId("skeleton-row")).toHaveLength(3);
+  });
+
+  /**
    * The reading line sat in the flow above the skeleton and the real table
    * landed 24 px higher. Fails if the line takes any height in the flow.
    */

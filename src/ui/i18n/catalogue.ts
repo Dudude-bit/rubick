@@ -6826,9 +6826,12 @@ export const en = {
     couldNotReadKind: "Could not read this {kind}: {error}",
     couldNotReadEvents: "Could not read events.",
     waitsOnRefusedObject:
-      "Read through {kind} {name}, which the cluster will not let you read just now.",
-    waitsOnFailedObject:
-      "Read through {kind} {name}, which could not be read just now.",
+      "Read through {kind} {name}, which the cluster will not let you read.",
+    ownedEventsWaitOnRefusedObject:
+      "Events of what it owns are not shown: the cluster will not let you read {kind} {name}.",
+    ownedEventsWaitOnFailedObject:
+      "Events of what it owns are not shown: {kind} {name} could not be read.",
+    waitsOnFailedObject: "Read through {kind} {name}, which could not be read.",
     replicaSetWarningsUnread:
       "Could not read the events of its ReplicaSets, where a failure to create its pods is written.",
     jobWarningsUnread:
@@ -7284,6 +7287,8 @@ export const en = {
       "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
     usageIdleNote:
       "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
+    usagePodEndedNote:
+      "This pod has finished, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     usageNoPodsNote:
       "Usage is summed from running pods, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",
