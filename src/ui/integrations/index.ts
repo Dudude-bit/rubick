@@ -258,7 +258,13 @@ export type ConnectionState =
   | { state: "reading" }
   | { state: "notConfigured" }
   | { state: "connected"; saved: SavedConnection; probe: ProbeResult }
-  | { state: "unreachable"; saved: SavedConnection; reason: string };
+  | {
+      state: "unreachable";
+      saved: SavedConnection;
+      reason: string;
+      /** Asked again and not answered yet. */
+      asking: boolean;
+    };
 
 /**
  * The saved address and the probe, for every tier-3 vendor.
@@ -324,6 +330,7 @@ function useConnections(): Map<string, ConnectionState> {
             state: "unreachable",
             saved: connection.data,
             reason: errorToShow(probe.error),
+            asking: probe.isFetching,
           },
         ];
       }
@@ -337,6 +344,7 @@ function useConnections(): Map<string, ConnectionState> {
               probe?.data?.ok === false
                 ? sayWords(probe.data.reason, t)
                 : t("empty", "noAnswer"),
+            asking: probe?.isFetching ?? false,
           },
         ];
       }
@@ -419,6 +427,8 @@ export function useCapabilityState<K extends CapabilityKey>(
 ): CapabilityState<K> {
   const { data } = useDetected();
   const connections = useConnections();
+  const client = useQueryClient();
+  const context = useClusterStore((state) => state.currentContext);
 
   const installed = new Set(
     (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
@@ -450,11 +460,15 @@ export function useCapabilityState<K extends CapabilityKey>(
       continue;
     }
     if (connection.state === "unreachable") {
+      const probe = queryKeys.integrationProbe(vendor.id, context);
       return {
         state: "unreachable",
         vendor: vendor.name,
         endpoint: addressOf(connection.saved.url).shown,
         reason: connection.reason,
+        askAgain: () => void client.invalidateQueries({ queryKey: probe }),
+        asking: connection.asking,
+        settings: vendorLink(vendor.id, { tab: "connection" }),
       };
     }
     return {

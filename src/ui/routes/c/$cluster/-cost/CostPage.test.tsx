@@ -20,6 +20,8 @@ import {
 import type { UsageReading } from "@/lib/efficiency";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
+import { vendorLink } from "@/lib/links";
+import userEvent from "@testing-library/user-event";
 
 const cost = vi.fn<() => CostState>();
 const usage = vi.fn<() => UsageReading>();
@@ -171,7 +173,14 @@ describe("the Cost page", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the server's words when the supplier did not answer", async () => {
+  /**
+   * A probe's answer is cached and never retried on its own: the sentence
+   * that says the supplier did not answer has to offer to ask again, and the
+   * supplier's Connection tab. Without them it said so for as long as the
+   * page was open after Prometheus came back.
+   */
+  it("keeps the server's words when the supplier did not answer, and offers to ask again", async () => {
+    const askAgain = vi.fn();
     cost.mockReturnValue({
       state: "supplier",
       trouble: {
@@ -179,12 +188,29 @@ describe("the Cost page", () => {
         vendor: "Prometheus",
         endpoint: "prom.example.com",
         said: "dial tcp 10.0.0.9:9090: connection refused",
+        power: {
+          state: "unreachable",
+          vendor: "Prometheus",
+          endpoint: "prom.example.com",
+          reason: "dial tcp 10.0.0.9:9090: connection refused",
+          askAgain,
+          asking: false,
+          settings: vendorLink("prometheus", { tab: "connection" }),
+        },
       },
     });
     await open();
-    expect(screen.getByTestId("cost-supplier")).toHaveTextContent(
+    const said = screen.getByTestId("cost-supplier");
+    expect(said).toHaveTextContent(
       "dial tcp 10.0.0.9:9090: connection refused"
     );
+    await userEvent.click(
+      within(said).getByRole("button", { name: "Ask again" })
+    );
+    expect(askAgain).toHaveBeenCalledOnce();
+    expect(
+      within(said).getByRole("link", { name: "Prometheus connection" })
+    ).toHaveAttribute("href", "/c/prod/integrations/prometheus?tab=connection");
   });
 
   /**

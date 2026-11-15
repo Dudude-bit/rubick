@@ -1050,6 +1050,7 @@ export const ru: Catalogue = {
       "Фильтр по удостоверению, ID клиента или поду…",
     filterHostsPlaceholder: "Фильтр по хосту или Service…",
     askAgain: "Спросить снова",
+    supplierConnection: "Подключение {vendor}",
     readTheLast: "Прочитать за последние {range}",
     readWhatVendorKept: "Прочитать, что сохранил {vendor}",
     connectOne: "подключите его",
