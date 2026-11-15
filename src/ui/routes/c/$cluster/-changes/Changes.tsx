@@ -72,7 +72,7 @@ export function Changes() {
     [ours, scope.scope]
   );
   const end = windowEnd(ours, now);
-  const knownFrom = changesKnownFrom(read.letGo);
+  const knownFrom = changesKnownFrom(read);
   const items = useMemo(() => {
     const from = now - WINDOWS[window];
     const timeline = timelineOf({

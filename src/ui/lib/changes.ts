@@ -713,7 +713,7 @@ export function watchedStretches(
     });
 }
 
-/** When the running watch began, if it has recorded no change since; `null` otherwise, or where changes since were let go. */
+/** When the running watch began, if it has recorded no change since; `null` otherwise, or where changes since were let go or not read yet. */
 export function quietSince(
   watching: Pick<ObservedSpan, "from"> | undefined,
   items: readonly ChangeItem[],
@@ -953,9 +953,17 @@ const CLASSES_SHOWN: Record<Show, readonly (keyof LetGoes)[]> = {
   warnings: ["warnings"],
 };
 
-/** Since when the timeline's change rows are all there: past a let-go line some were not kept. */
-export function changesKnownFrom(letGo: LetGoes | undefined): number {
-  return letGo?.changes?.before ?? Number.NEGATIVE_INFINITY;
+/**
+ * Since when every change row is in hand: past a let-go line some were not
+ * kept, and below the rows read so far some were not read yet.
+ */
+export function changesKnownFrom(
+  read: { letGo: LetGoes | undefined; readFrom: number | null } | undefined
+): number {
+  return Math.max(
+    read?.letGo?.changes?.before ?? Number.NEGATIVE_INFINITY,
+    read?.readFrom ?? Number.NEGATIVE_INFINITY
+  );
 }
 
 export const newestFirst = (a: ChangeItem, b: ChangeItem) =>

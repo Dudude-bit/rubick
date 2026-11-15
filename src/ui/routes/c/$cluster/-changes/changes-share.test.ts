@@ -182,11 +182,36 @@ describe("what the shared Changes report says beyond the changes", () => {
       unreadable: 0,
       error: null,
       letGo: undefined,
+      readFrom: null,
     });
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toContain(
       "Kept for this session only: keeping between restarts is off in Settings."
     );
     expect(section.body.role).toBe("warn");
+  });
+
+  /**
+   * A busy cluster's first page is five hundred events, and the edit made
+   * before them is below the rows read. Fails if the file calls the watch
+   * quiet over rows nobody read.
+   */
+  it("calls no watch quiet over rows not read yet", () => {
+    const span = { from, seenAt: to, to: null };
+    const read = (readFrom: number | null) => ({
+      keeping: { says: "kept" as const },
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom,
+    });
+    const unread = watchedSection(span, [span], [], t, read(from + 60_000));
+    expect(unread.body.type === "text" && unread.body.text).not.toContain(
+      "No change recorded"
+    );
+    const whole = watchedSection(span, [span], [], t, read(null));
+    expect(whole.body.type === "text" && whole.body.text).toContain(
+      "No change recorded"
+    );
   });
 });

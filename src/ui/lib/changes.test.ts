@@ -17,6 +17,7 @@ import {
   gapWords,
   helmReleaseOf,
   quietSince,
+  changesKnownFrom,
   rowWords,
   spansFor,
   watchedStretches,
@@ -1423,6 +1424,14 @@ describe("the cluster's events and the recorded changes on one clock", () => {
   it("does not call a watch quiet when its changes were let go", () => {
     expect(quietSince({ from: T0 }, [], T0 + HOUR)).toBeNull();
     expect(quietSince({ from: T0 }, [])).toBe(T0);
+  });
+
+  /** Rows below the first page were not read. Fails if a watch older than them is called quiet. */
+  it("knows the change rows only from where they were read", () => {
+    const known = (readFrom: number | null) =>
+      changesKnownFrom({ letGo: undefined, readFrom });
+    expect(quietSince({ from: T0 }, [], known(T0 + HOUR))).toBeNull();
+    expect(quietSince({ from: T0 }, [], known(null))).toBe(T0);
   });
 
   /** Older rows not read yet sit below the end of what is drawn. Fails if a gap or a revision is drawn among rows that were never read. */
