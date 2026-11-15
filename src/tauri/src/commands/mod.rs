@@ -59,6 +59,7 @@ pub mod settings;
 pub mod sharing;
 pub mod storage;
 pub mod terminal;
+pub mod timeline;
 pub mod topology;
 pub mod watch;
 pub mod workloads;

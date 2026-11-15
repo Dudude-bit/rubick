@@ -6,6 +6,7 @@
  * in it along, and this page exists to be glanced at from a peek.
  */
 
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { Info } from "lucide-react";
 
@@ -94,6 +95,17 @@ export function NamespaceDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.Namespace, name: name ?? "" }),
+    changesTab(
+      ns
+        ? {
+            kind: "Namespace",
+            name: ns.name,
+            namespace: null,
+            createdAt: ns.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: "Namespace YAML",
       yaml,

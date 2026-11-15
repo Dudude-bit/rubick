@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
@@ -449,6 +450,17 @@ export function IngressDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.Ingress, name: name ?? "" }),
+    changesTab(
+      ingress
+        ? {
+            kind: "Ingress",
+            name: ingress.name,
+            namespace: ingress.namespace,
+            createdAt: ingress.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Ingress" }),
       yaml: ingressYaml,

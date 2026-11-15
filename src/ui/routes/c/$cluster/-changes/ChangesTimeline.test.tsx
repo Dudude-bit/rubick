@@ -1,18 +1,58 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { ChangeItem, Revision } from "@/lib/changes";
+import type { ChangeItem, ChangeRow, Revision } from "@/lib/changes";
 import type { AccessQuery } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
+import { layOutVirtualLists } from "@/test/virtual-layout";
 import { useRollback } from "../-object/useRollback";
 import { ChangesTimeline } from "./ChangesTimeline";
 
 const T0 = Date.parse("2026-09-08T02:10:00Z");
 const HOUR = 60 * 60_000;
+
+/** One recorded change of Deployment shop/api. */
+function change(
+  id: string,
+  at: number,
+  path: string,
+  from: string,
+  to: string
+): ChangeRow {
+  return {
+    id,
+    seq: at,
+    at,
+    kind: "Deployment",
+    group: "apps",
+    namespace: "shop",
+    name: "api",
+    what: {
+      says: "changed",
+      fields: [{ says: "moved", path, from, to }],
+      more: 0,
+      before: null,
+    },
+    atRelist: false,
+  };
+}
+
+let unlaid = () => {};
+beforeEach(() => {
+  unlaid = layOutVirtualLists();
+});
+afterEach(() => unlaid());
 
 function mount(items: ChangeItem[], since?: number) {
   return renderWithRouter(
@@ -53,18 +93,13 @@ describe("ChangesTimeline", () => {
       {
         kind: "journal",
         at: T0 + 6 * HOUR,
-        entry: {
-          id: "j",
-          context: "dev",
-          kind: "Deployment",
-          namespace: "shop",
-          name: "api",
-          at: T0 + 6 * HOUR,
-          field: "image",
-          key: "0",
-          from: "app:1",
-          to: "app:2",
-        },
+        row: change(
+          "j",
+          T0 + 6 * HOUR,
+          "spec.template.spec.containers[app].image",
+          "app:1",
+          "app:2"
+        ),
       },
       {
         kind: "gap",
@@ -155,34 +190,12 @@ describe("ChangesTimeline", () => {
         {
           kind: "journal",
           at: T0 + 2 * HOUR,
-          entry: {
-            id: "new",
-            context: "dev",
-            kind: "Deployment",
-            namespace: "shop",
-            name: "api",
-            at: T0 + 2 * HOUR,
-            field: "replicas",
-            key: null,
-            from: "2",
-            to: "3",
-          },
+          row: change("new", T0 + 2 * HOUR, "spec.replicas", "2", "3"),
         },
         {
           kind: "journal",
           at: T0,
-          entry: {
-            id: "old",
-            context: "dev",
-            kind: "Deployment",
-            namespace: "shop",
-            name: "api",
-            at: T0,
-            field: "replicas",
-            key: null,
-            from: "1",
-            to: "2",
-          },
+          row: change("old", T0, "spec.replicas", "1", "2"),
         },
       ],
       T0 + HOUR
@@ -472,5 +485,139 @@ describe("a rollback the cluster will not take from this reader", () => {
       vi.mocked(invoke).mock.calls.map(([command]) => command)
     ).not.toContain("rollback_workload");
     vi.mocked(invoke).mockImplementation(async () => undefined);
+  });
+});
+
+describe("a week of rows", () => {
+  /**
+   * A busy cluster's week is thousands of rows; drawn whole, scrolling the
+   * page laid all of them out. Fails if rows out of view are in the document.
+   */
+  it("draws only the rows in view", async () => {
+    const items: ChangeItem[] = Array.from({ length: 2000 }, (_, n) => ({
+      kind: "journal" as const,
+      at: T0 - n * 60_000,
+      row: change(String(n), T0 - n * 60_000, "spec.replicas", "1", "2"),
+    }));
+    await mount(items);
+    const drawn = screen.getAllByRole("listitem").length;
+    expect(drawn).toBeGreaterThan(10);
+    expect(drawn).toBeLessThan(100);
+  });
+
+  /** Fails if the reader nears the last row read and older ones are never asked for. */
+  it("asks for older rows when the reader nears the last one read", async () => {
+    const onEnd = vi.fn();
+    const items: ChangeItem[] = Array.from({ length: 5 }, (_, n) => ({
+      kind: "journal" as const,
+      at: T0 - n * 60_000,
+      row: change(String(n), T0 - n * 60_000, "spec.replicas", "1", "2"),
+    }));
+    await renderWithRouter(<ChangesTimeline items={items} onEnd={onEnd} />, {
+      at: "/c/dev",
+      route: "/c/$cluster",
+    });
+    expect(onEnd).toHaveBeenCalled();
+  });
+});
+
+describe("the rows the timeline recorded", () => {
+  /** The cluster's words, untranslated, with the series counted. Fails if a repeat reads as one event. */
+  it("draws an event series with its reason, its words and its count", async () => {
+    const at = T0;
+    await mount([
+      {
+        kind: "event",
+        at,
+        row: { ...change("e", at, "x", "a", "b"), kind: "Pod" },
+        event: {
+          name: "api-1.1",
+          namespace: "shop",
+          uid: "e",
+          type: "Warning",
+          reason: "BackOff",
+          message: "Back-off restarting failed container app",
+          source: "kubelet",
+          involvedObject: {
+            kind: "Pod",
+            name: "api-1",
+            namespace: "shop",
+            uid: "p",
+          },
+          count: 14,
+          firstTimestamp: new Date(at - HOUR).toISOString(),
+          lastTimestamp: new Date(at).toISOString(),
+        },
+      },
+    ]);
+    expect(screen.getByText("BackOff")).toBeInTheDocument();
+    expect(
+      screen.getByText("Back-off restarting failed container app")
+    ).toBeInTheDocument();
+    expect(screen.getByText("×14")).toHaveAttribute("title");
+  });
+
+  /** Rows let go at a bound are said as such: fails if their stretch has no row. */
+  it("says where older rows were let go", async () => {
+    await mount([
+      {
+        kind: "letGo",
+        at: T0,
+        of: "warnings",
+        letGo: { before: T0, cleared: false },
+      },
+    ]);
+    expect(screen.getByTestId("changes-let-go").textContent).toMatch(
+      /^Older warnings were let go to stay under the limit; kept from /
+    );
+  });
+
+  /** A change of many fields names the first and folds the rest behind their count, and none is lost. */
+  it("folds the fields past the first behind their count, and shows them on asking", async () => {
+    const row = change("m", T0, "spec.a", "1", "2");
+    row.what = {
+      says: "changed",
+      fields: ["a", "b", "c", "d", "e"].map((name) => ({
+        says: "moved" as const,
+        path: `spec.${name}`,
+        from: "1",
+        to: "2",
+      })),
+      more: 0,
+      before: null,
+    };
+    await mount([{ kind: "journal", at: T0, row }]);
+    expect(screen.queryByText("spec.d")).toBeNull();
+    await userEvent.click(screen.getByText("and 2 more fields"));
+    expect(screen.getByText("spec.e")).toBeInTheDocument();
+  });
+
+  /**
+   * On a page of many objects, "roll back to before this" leads to the
+   * object's own tab, marked from that moment, where the dialog is. Fails if
+   * a template change offers no way there, or a scale offers one.
+   */
+  it("leads from a template change to its object's tab, marked from that moment", async () => {
+    const rolled = change(
+      "r",
+      T0,
+      "spec.template.spec.containers[app].image",
+      "a",
+      "b"
+    );
+    rolled.what = { ...rolled.what, before: "3" } as ChangeRow["what"];
+    const scaled = change("s", T0 - HOUR, "spec.replicas", "1", "2");
+    await mount([
+      { kind: "journal", at: T0, row: rolled },
+      { kind: "journal", at: T0 - HOUR, row: scaled },
+    ]);
+    const links = screen.getAllByRole("link", {
+      name: "Roll back to before this…",
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute("href")).toContain("tab=changes");
+    expect(links[0].getAttribute("href")).toContain(
+      `since=${encodeURIComponent(new Date(T0).toISOString())}`
+    );
   });
 });

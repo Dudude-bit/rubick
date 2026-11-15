@@ -62,6 +62,7 @@ import type {
   EventInfo,
   FileRead,
   FlowQuery,
+  Following,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -81,6 +82,7 @@ import type {
   IssuanceStory,
   JobDetailInfo,
   JobInfo,
+  Kept,
   KubeconfigSource,
   LatestEvents,
   Lineage,
@@ -149,6 +151,8 @@ import type {
   TcpProbe,
   TerminalSessionInfo,
   ThemeConfig,
+  TimelinePage,
+  TimelineQuery,
   TlsCertificate,
   TrafficAnswer,
   UpdaterConfig,
@@ -2263,4 +2267,32 @@ export async function listDependentsBeside(
   scope: string[] | null
 ): Promise<Beside> {
   return invoke<Beside>("list_dependents_beside", { owner, uid, scope });
+}
+
+export async function timelineRead(
+  query: TimelineQuery
+): Promise<TimelinePage> {
+  return invoke<TimelinePage>("timeline_read", { query });
+}
+
+export async function timelineKept(): Promise<Kept> {
+  return invoke<Kept>("timeline_kept");
+}
+
+export async function timelineSetKeep(keep: boolean): Promise<void> {
+  return invoke<void>("timeline_set_keep", { keep });
+}
+
+export async function timelineClear(): Promise<void> {
+  return invoke<void>("timeline_clear");
+}
+
+export async function timelineHold(scope: string[] | null): Promise<boolean> {
+  return invoke<boolean>("timeline_hold", { scope });
+}
+
+export async function timelineFollow(
+  scope: string[] | null
+): Promise<Following> {
+  return invoke<Following>("timeline_follow", { scope });
 }

@@ -79,6 +79,9 @@ pub struct AppConfig {
     /// Where a report may be published, and the key that lets it
     #[serde(default)]
     pub sharing: SharingConfig,
+    /// Whether what the timeline saw is kept between restarts
+    #[serde(default)]
+    pub timeline: TimelineConfig,
 }
 
 impl AppConfig {
@@ -243,6 +246,21 @@ impl Default for UpdaterConfig {
         Self {
             auto_check_enabled: true,
         }
+    }
+}
+
+/// The timeline's own setting: a table of its own, which 4.21.2 ignores.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineConfig {
+    /// Keep what the timeline saw on disk, between restarts.
+    #[serde(default = "default_true")]
+    pub keep: bool,
+}
+
+impl Default for TimelineConfig {
+    fn default() -> Self {
+        Self { keep: true }
     }
 }
 

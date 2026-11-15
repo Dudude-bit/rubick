@@ -3,14 +3,7 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import {
-  AlignLeft,
-  BadgeCheck,
-  Info,
-  Layers2,
-  Scale,
-  History,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2, Scale } from "lucide-react";
 
 import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -60,7 +53,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { RevisionRows } from "../../../-object/child-rows";
-import { ChangesTab } from "../../-components/ChangesTab";
+import { changesTab } from "../../../-changes/changes-tab";
 import { useRollback } from "../../../-object/useRollback";
 import { revisionOfReplicaSet } from "@/lib/changes";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
@@ -609,23 +602,19 @@ export function DeploymentDetail() {
         />
       ),
     },
-    {
-      id: "changes",
-      label: t("changes", "title"),
-      glyph: viewGlyph(History),
-      content: deployment ? (
-        <ChangesTab
-          subject={{
+    changesTab(
+      deployment
+        ? {
             kind: "Deployment",
             name: deployment.name,
             namespace: deployment.namespace,
             labels: deployment.labels,
             annotations: deployment.annotations,
             createdAt: deployment.createdAt,
-          }}
-        />
-      ) : null,
-    },
+          }
+        : null,
+      t
+    ),
     {
       id: "logs",
       label: t("action", "logs"),

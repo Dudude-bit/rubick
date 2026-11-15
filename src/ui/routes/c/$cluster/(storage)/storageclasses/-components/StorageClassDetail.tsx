@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { Info, SlidersHorizontal } from "lucide-react";
@@ -94,6 +95,17 @@ export function StorageClassDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.StorageClass, name: name ?? "" }),
+    changesTab(
+      sc
+        ? {
+            kind: "StorageClass",
+            name: sc.name,
+            namespace: null,
+            createdAt: sc.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "StorageClass" }),
       yaml: scYaml,

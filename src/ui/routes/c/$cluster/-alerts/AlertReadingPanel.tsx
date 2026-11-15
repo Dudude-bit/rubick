@@ -1,7 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
-import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
+import {
+  changesLink,
+  hrefOf,
+  isClusterScoped,
+  objectLink,
+  type AppLink,
+} from "@/lib/links";
 import { formatAge, cn, formatWhen } from "@/lib/utils";
 import {
   clusterChoices,
@@ -9,7 +15,7 @@ import {
   type Provenance,
   severityTone,
 } from "@/lib/alerts";
-import { hasChangesTab } from "@/lib/changes";
+import { isRevisedKind } from "@/lib/changes";
 import { SEVERITY_CHIP } from "./severity-tone";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useShownPath } from "@/lib/hide-paths";
@@ -70,13 +76,10 @@ export function AlertReadingPanel({
     const cluster = context ?? undefined;
     // `since` is read by the Changes tab and by nothing else, so it travels
     // with the tab that reads it. Sent alone it marked a timeline nobody had
-    // opened; sent to a page with no such tab it would open no panel at all.
-    if (reading.firedAt === null || !hasChangesTab(object.kind))
+    // opened. A workload's tab holds its rollouts; anything else opens whole.
+    if (reading.firedAt === null || !isRevisedKind(object.kind))
       return objectLink(ref, { cluster });
-    const changes = objectLink(ref, { tab: "changes", cluster });
-    if (!changes) return null;
-    const since = new Date(reading.firedAt.value).toISOString();
-    return { ...changes, search: { tab: "changes", since } };
+    return changesLink(ref, reading.firedAt.value, cluster);
   }, [object, namespace, reading.firedAt, context]);
 
   const namespaceLink =

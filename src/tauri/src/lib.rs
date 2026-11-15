@@ -52,6 +52,7 @@ pub mod search;
 pub mod shell;
 pub mod state;
 pub mod terminal;
+pub mod timeline;
 pub mod tls;
 pub mod topology;
 pub mod utils;

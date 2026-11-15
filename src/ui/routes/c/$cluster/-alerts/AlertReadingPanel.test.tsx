@@ -218,11 +218,11 @@ Labels:
   });
 
   /**
-   * Only three kinds have a Changes tab. `?tab=changes` on any other page
-   * names a tab that page does not have, and the reader lands on a detail
-   * page with no panel open at all.
+   * A pod's Changes tab holds its events and little else; the rollout an
+   * alert's moment points at is its workload's. Fails if a pod's alert
+   * lands on that tab instead of the page that says what is wrong.
    */
-  it("does not send a kind with no Changes tab to one", async () => {
+  it("sends a pod to its page, not to its Changes tab", async () => {
     const opened = vi.fn();
     await renderWithRouter(
       <AlertReadingPanel

@@ -12,6 +12,7 @@ import {
   EnvironmentBlocksReading,
 } from "./diagnostics/EnvironmentBlocks";
 import { FindingsList } from "./diagnostics/FindingsList";
+import { KeptPanel } from "./diagnostics/KeptPanel";
 import { PerformancePanel } from "./diagnostics/PerformancePanel";
 import { asMarkdown } from "./diagnostics/report";
 import { useT } from "@/i18n/useT";
@@ -151,6 +152,7 @@ export function DiagnosticsSettings() {
       </p>
 
       <PerformancePanel />
+      <KeptPanel />
     </div>
   );
 }

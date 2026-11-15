@@ -10,6 +10,7 @@
  * reads, so a route broken here is broken there in the same words.
  */
 
+import { changesTab } from "../../../-changes/changes-tab";
 import { Info, Route as RouteGlyph, Tag } from "lucide-react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 
@@ -277,6 +278,18 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
       ),
     },
     eventsTab(events, t, { kind, name: name ?? "" }),
+    changesTab(
+      route
+        ? {
+            kind: kind,
+            group: "gateway.networking.k8s.io",
+            name: route.name,
+            namespace: route.namespace,
+            createdAt: route.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: `${kind} YAML`,
       yaml,

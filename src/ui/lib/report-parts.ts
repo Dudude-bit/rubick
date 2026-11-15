@@ -11,18 +11,25 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { ConditionInfo, EventInfo } from "@/generated/types";
+import type {
+  ConditionInfo,
+  EventInfo,
+  FieldMove,
+  LetGoes,
+  SpanSets,
+  TimelineRow,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import {
   gapsOf,
   gapWords,
+  isChange,
+  letGoWords,
+  REVISED_KINDS,
+  rowWords,
   spansCovering,
   spansWatching,
-  hasChangesTab,
-  journalWords,
   type Gap,
-  type JournalEntry,
-  type ObservedSpan,
 } from "./changes";
 import { conditionRole } from "./condition-health";
 import { iconSvg } from "./icon-svg";
@@ -280,23 +287,25 @@ export function eventsSection(
  * Each value marked so the file can draw it as one, and an image cut to its
  * tag where both sides are the same repository.
  */
-function valuesOf(entry: JournalEntry) {
-  const from = entry.from ? parseImageRef(entry.from) : null;
-  const to = entry.to ? parseImageRef(entry.to) : null;
+function markedValue(value: string | null, field: FieldMove): string {
+  const image =
+    field.says === "moved" && field.path.endsWith(".image")
+      ? [field.from, field.to].map((side) =>
+          side ? parseImageRef(side) : null
+        )
+      : null;
   const sameRepository =
-    entry.field === "image" &&
-    from !== null &&
-    to !== null &&
-    from.registry === to.registry &&
-    from.repository === to.repository;
-  return (value: string | null) => {
-    const parsed = sameRepository && value ? parseImageRef(value) : null;
-    const shown =
-      value === null
-        ? "∅"
-        : (parsed?.tag ?? parsed?.digest?.slice(0, 19) ?? value);
-    return `${VALUE_OPEN}${shown}${VALUE_CLOSE}`;
-  };
+    image !== null &&
+    image[0] !== null &&
+    image[1] !== null &&
+    image[0].registry === image[1].registry &&
+    image[0].repository === image[1].repository;
+  const parsed = sameRepository && value ? parseImageRef(value) : null;
+  const shown =
+    value === null
+      ? "∅"
+      : (parsed?.tag ?? parsed?.digest?.slice(0, 19) ?? value);
+  return `${VALUE_OPEN}${shown}${VALUE_CLOSE}`;
 }
 
 /**
@@ -317,90 +326,102 @@ export function gapChange(gap: Gap, t: T): ReportChange {
   };
 }
 
+/** An object as the timeline is asked about it. */
+export interface TimelineTarget {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
 /** A ReplicaSet is named for its Deployment plus the template hash. */
 const TEMPLATE_HASH = /^(.+)-[bcdfghjklmnpqrstvwxz2456789]{5,10}$/;
 
 /**
- * The watched workloads a change to would be a change to this object: the
- * object itself when the journal watches its kind, otherwise the owner its
- * `ownerReferences` name — through the ReplicaSet, for a Deployment's pod.
- * `null` when there is none, and then nothing about changes can be said.
+ * Whose changes are this object's: the object itself, and the workload that
+ * owns it — through the ReplicaSet, for a Deployment's pod — since a pod's
+ * story is mostly its owner's rollouts. A custom kind is left to its owner:
+ * a namesake of a built-in is not the object the timeline recorded.
  */
-function watchedAs(
-  subject: { kind: ResourceKind | null; name: string },
-  owners: readonly { kind: string; name: string }[]
-): { kind: string; name: string }[] | null {
-  if (subject.kind && hasChangesTab(subject.kind))
-    return [{ kind: subject.kind, name: subject.name }];
-  const out = owners.flatMap((owner) => {
-    if (hasChangesTab(owner.kind)) return [owner];
-    const deployment =
-      owner.kind === "ReplicaSet" ? TEMPLATE_HASH.exec(owner.name)?.[1] : null;
-    return deployment ? [{ kind: "Deployment", name: deployment }] : [];
-  });
-  return out.length > 0 ? out : null;
-}
-
-/**
- * What this app watched change on the object or on the workload that owns
- * it, one row per moment, with the stretches it was not watching as rows of
- * their own. `null` for an object no watched workload owns: the journal has
- * nothing to say about it, and an empty list would read as "nothing changed".
- */
-export function changesSection(
-  journal: {
-    entries: readonly JournalEntry[];
-    spans: readonly ObservedSpan[];
-  },
-  context: string,
+export function changesTargets(
   subject: {
-    /** The registry's kind, `null` for a custom one: a namesake is not the workload the journal watched. */
     kind: ResourceKind | null;
     name: string;
     namespace: string | null;
-    /** The built-in kinds that own it. */
-    owners: readonly { kind: string; name: string }[];
   },
+  owners: readonly { kind: string; name: string }[]
+): TimelineTarget[] {
+  const out: TimelineTarget[] = subject.kind
+    ? [{ kind: subject.kind, name: subject.name, namespace: subject.namespace }]
+    : [];
+  for (const owner of owners) {
+    const deployment =
+      owner.kind === "ReplicaSet" ? TEMPLATE_HASH.exec(owner.name)?.[1] : null;
+    if ((REVISED_KINDS as readonly string[]).includes(owner.kind))
+      out.push({ ...owner, namespace: subject.namespace });
+    else if (deployment)
+      out.push({
+        kind: "Deployment",
+        name: deployment,
+        namespace: subject.namespace,
+      });
+  }
+  return out;
+}
+
+/**
+ * What this app recorded change on the object and on the workload that owns
+ * it, one row per moment, with the stretches it was not watching and the
+ * rows it let go as rows of their own. `null` for an object nothing is asked
+ * of: an empty list would read as "nothing changed".
+ */
+export function changesSection(
+  read: {
+    rows: readonly TimelineRow[];
+    spans: SpanSets | undefined;
+    letGo: LetGoes | undefined;
+  },
+  targets: readonly TimelineTarget[],
   capturedAt: string,
   t: T
 ): PlacedSection | null {
-  const targets = watchedAs(subject, subject.owners);
-  if (!targets) return null;
-  const spans = spansCovering(journal.spans, {
+  if (targets.length === 0) return null;
+  const namespaces = targets[0].namespace ? [targets[0].namespace] : [];
+  const followed = read.spans?.followed ?? [];
+  const spans = spansCovering(followed, {
     kinds: targets.map((target) => target.kind),
-    namespaces: subject.namespace ? [subject.namespace] : [],
+    namespaces,
   });
-  const all = journal.entries.filter(
-    (entry) =>
-      entry.context === context &&
-      entry.namespace === (subject.namespace ?? "") &&
+  const all = read.rows
+    .filter(isChange)
+    .filter((row) =>
       targets.some(
-        (target) => target.kind === entry.kind && target.name === entry.name
+        (target) =>
+          target.kind === row.kind &&
+          target.name === row.name &&
+          target.namespace === row.namespace
       )
-  );
-  const mine = all.slice(-MAX_CHANGES);
-  const watched =
-    spans.length > 0 ||
-    journal.entries.some((entry) => entry.context === context);
+    );
+  const mine = all.slice(0, MAX_CHANGES);
+  const watched = spans.length > 0 || all.length > 0;
   const out: (ReportChange & { key: string; ms: number })[] = [];
-  for (const entry of [...mine].reverse()) {
-    const at = new Date(entry.at).toISOString();
-    const key = `${at}/${entry.kind}/${entry.name}`;
+  for (const row of mine) {
+    const at = new Date(row.at).toISOString();
+    const key = `${at}/${row.kind}/${row.name}`;
     const parts = [
       {
-        text: journalWords(entry, t, valuesOf(entry)),
-        quiet: entry.field === "generation",
+        text: rowWords(row, t, markedValue),
+        quiet: row.what.says === "generation",
       },
-      ...(entry.atRelist
+      ...(row.atRelist
         ? [{ text: t("changes", "journalSeenAtRelist"), quiet: true }]
         : []),
     ];
     const last = out.at(-1);
     if (last && last.key === key) last.parts.push(...parts);
-    else out.push({ key, ms: entry.at, at, ref: refOf(entry), parts });
+    else out.push({ key, ms: row.at, at, ref: refOf(row), parts });
   }
   const now = Date.parse(capturedAt);
-  // As far back as the journal keeps, or as the oldest row shown.
+  // As far back as the timeline keeps, or as the oldest row shown.
   const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
   const gaps = watched
     ? gapsOf(
@@ -408,12 +429,13 @@ export function changesSection(
         from,
         now,
         spansWatching(
-          journal.spans,
+          followed,
           targets.map((target) => target.kind)
         ),
-        subject.namespace ? [subject.namespace] : []
+        namespaces
       )
     : [];
+  const letGo = read.letGo?.changes;
   const rows: (ReportChange & { ms: number })[] = [
     ...out.map(({ ms, at, ref, parts }) => ({
       ms,
@@ -422,6 +444,21 @@ export function changesSection(
       parts: [...parts].sort((a, b) => Number(a.quiet) - Number(b.quiet)),
     })),
     ...gaps.map((gap) => ({ ms: gap.to, ...gapChange(gap, t) })),
+    ...(letGo && letGo.before >= from
+      ? [
+          {
+            ms: letGo.before,
+            at: null,
+            ref: null,
+            parts: [
+              {
+                text: letGoWords({ letGo, of: "changes" }, t, utcMoment),
+                quiet: false,
+              },
+            ],
+          },
+        ]
+      : []),
   ].sort((a, b) => b.ms - a.ms);
   const changes: ReportChange[] = !watched
     ? [

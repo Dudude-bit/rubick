@@ -1,13 +1,18 @@
 import { Eye, History } from "lucide-react";
 
-import type { ChangeItem, ObservedSpan, SpanCover } from "@/lib/changes";
+import type { Show } from "@/generated/types";
+import type { ChangeItem, SpanCover, SpanLike } from "@/lib/changes";
 import {
+  changesKnownFrom,
   earlierRowsWords,
   gapWords,
-  journalWords,
+  letGoWords,
   quietSince,
+  rowWords,
   unwatchedWords,
 } from "@/lib/changes";
+import { errorToShow } from "@/lib/error-utils";
+import type { TimelineRead } from "@/hooks/useTimeline";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportChange } from "@/lib/report";
 import {
@@ -19,7 +24,6 @@ import {
 } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
 import { listWords } from "@/i18n/say";
-import { JOURNAL_KINDS } from "@/hooks/useChangeJournal";
 import { getDisplayPlural } from "@/lib/resource-registry";
 import { dateFormat } from "@/lib/utils";
 import { currentLocale } from "@/stores/localeStore";
@@ -33,34 +37,89 @@ const clock = (ms: number) =>
     timeZone: "UTC",
   }).format(ms)} UTC`;
 
+/** What keeps the timeline from being whole, as the page says it above its rows. */
+export function keepingWords(
+  read: Pick<TimelineRead, "keeping" | "unreadable" | "error">,
+  t: T
+): string[] {
+  const lines: string[] = [];
+  if (read.error)
+    lines.push(t("changes", "readFailed", { reason: errorToShow(read.error) }));
+  if (read.keeping?.says === "off") lines.push(t("changes", "keptSessionOnly"));
+  if (read.keeping?.says === "failed")
+    lines.push(t("changes", "keptFailed", { error: read.keeping.message }));
+  if (read.unreadable > 0)
+    lines.push(t("changes", "keptUnreadable", { n: read.unreadable }));
+  return lines;
+}
+
+const SHOW_WORDS = {
+  all: null,
+  changes: "showChanges",
+  warnings: "showWarnings",
+} as const satisfies Record<Show, string | null>;
+
 /**
  * The cluster-wide timeline as one row per object, since `report-parts`'
  * `changesSection` narrows to a single subject and this page mixes every
- * workload it watched. A gap is drawn as its own row rather than dropped, so
+ * object it watched. A gap is drawn as its own row rather than dropped, so
  * a stretch nobody watched is not read as a stretch nothing happened.
  */
 export function changesScreenSection(
   items: readonly ChangeItem[],
   t: T,
   /** How far back the screen was looking, as its own toggle words it. */
-  window: string
+  window: string,
+  show: Show = "all"
 ): PlacedSection {
   const changes: ReportChange[] = items.flatMap((item): ReportChange[] => {
     if (item.kind === "journal") {
-      const { entry } = item;
+      const { row } = item;
       return [
         {
-          at: new Date(entry.at).toISOString(),
-          ref: refOf(entry),
+          at: new Date(row.at).toISOString(),
+          ref: refOf({
+            kind: row.kind,
+            name: row.name,
+            namespace: row.namespace,
+          }),
           parts: [
-            { text: journalWords(entry, t), quiet: false },
-            ...(entry.atRelist
+            { text: rowWords(row, t), quiet: false },
+            ...(row.atRelist
               ? [{ text: t("changes", "journalSeenAtRelist"), quiet: true }]
               : []),
           ],
         },
       ];
     }
+    if (item.kind === "event") {
+      const { event } = item;
+      const said = [event.type, event.reason, event.message]
+        .filter(Boolean)
+        .join(" · ");
+      const count = event.count ?? 0;
+      return [
+        {
+          at: new Date(item.at).toISOString(),
+          ref: refOf({
+            kind: event.involvedObject.kind,
+            name: event.involvedObject.name,
+            namespace: event.involvedObject.namespace,
+          }),
+          parts: [
+            { text: count > 1 ? `${said} ×${count}` : said, quiet: false },
+          ],
+        },
+      ];
+    }
+    if (item.kind === "letGo")
+      return [
+        {
+          at: null,
+          ref: null,
+          parts: [{ text: letGoWords(item, t, utcMoment), quiet: false }],
+        },
+      ];
     if (item.kind === "gap") return [gapChange(item.gap, t)];
     if (item.kind === "watched") {
       const refused = item.refused && unwatchedWords(item.refused, t, true);
@@ -93,8 +152,15 @@ export function changesScreenSection(
     order: ORDER.changes,
     title: t("share", "sectionChanges"),
     icon: iconSvg(History),
-    count: items.filter((item) => item.kind === "journal").length,
-    caption: t("share", "changesWindow", { window }),
+    count: items.filter(
+      (item) => item.kind === "journal" || item.kind === "event"
+    ).length,
+    caption: [
+      t("share", "changesWindow", { window }),
+      SHOW_WORDS[show] && t("changes", SHOW_WORDS[show]),
+    ]
+      .filter(Boolean)
+      .join(" · "),
     body: {
       type: "changes",
       changes:
@@ -117,23 +183,24 @@ export function changesScreenSection(
  * again as a fact nobody can scroll past.
  */
 /**
- * The kinds the journal follows, named: a quiet stretch speaks for these and
- * for nothing else. Without the ones `watch` was refused everywhere, which
- * it watches nowhere and cannot call quiet.
+ * The kinds the running watch follows, named: a quiet stretch speaks for
+ * these and for nothing else. Without the ones it was refused everywhere,
+ * which it watches nowhere and cannot call quiet.
  */
 export const journalKindsWords = (t: T, watch?: SpanCover): string =>
   listWords(
-    JOURNAL_KINDS.filter((kind) => !watch?.unwatched?.includes(kind)).map(
-      getDisplayPlural
-    ),
+    (watch?.kinds ?? [])
+      .filter((kind) => !watch?.unwatched?.includes(kind))
+      .map(getDisplayPlural),
     t
   );
 
 export function watchedSection(
-  watching: ObservedSpan | undefined,
-  spans: readonly ObservedSpan[],
+  watching: SpanLike | undefined,
+  spans: readonly SpanLike[],
   items: readonly ChangeItem[],
-  t: T
+  t: T,
+  read?: Pick<TimelineRead, "keeping" | "unreadable" | "error" | "letGo">
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
   const refused = watching && unwatchedWords(watching, t);
@@ -142,15 +209,18 @@ export function watchedSection(
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");
-  const quiet = quietSince(watching, items);
+  const quiet = quietSince(watching, items, changesKnownFrom(read?.letGo));
   const nothing =
     quiet !== null &&
     t("changes", "nothingRecordedSince", {
       since: clock(quiet),
       kinds: journalKindsWords(t, watching),
     });
-  const base = [since, refused, earlier, nothing].filter(Boolean).join(" · ");
-  const warn = !watching || gaps > 0 || Boolean(refused);
+  const keeping = read ? keepingWords(read, t) : [];
+  const base = [since, refused, earlier, nothing, ...keeping]
+    .filter(Boolean)
+    .join(" · ");
+  const warn = !watching || gaps > 0 || Boolean(refused) || keeping.length > 0;
   return {
     id: "changes-watched",
     order: ORDER.summary,

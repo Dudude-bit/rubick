@@ -34,6 +34,8 @@ pub struct Node {
     pub name: String,
     pub namespace: Option<String>,
     pub owners: Vec<OwnerLink>,
+    /// `metadata.generation`, where the kind keeps one.
+    pub generation: Option<i64>,
 }
 
 /// One dependent, as a tree row draws it.
@@ -107,15 +109,23 @@ impl Graph {
         self.relisting.insert(slot.clone(), HashSet::new());
     }
 
-    /// The list is complete; whatever the slot held and did not list is gone.
-    pub fn listed(&mut self, slot: &SlotKey) {
+    /// The list is complete; whatever the slot held and did not list is
+    /// gone, and is returned.
+    pub fn listed(&mut self, slot: &SlotKey) -> Vec<String> {
         let Some(listed) = self.relisting.remove(slot) else {
-            return;
+            return Vec::new();
         };
         let held = self.slots.get(slot).cloned().unwrap_or_default();
-        for uid in held.difference(&listed) {
+        let gone: Vec<String> = held.difference(&listed).cloned().collect();
+        for uid in &gone {
             self.delete(slot, uid);
         }
+        gone
+    }
+
+    /// Every object held, by uid.
+    pub fn each(&self) -> impl Iterator<Item = (&String, &Node)> {
+        self.nodes.iter()
     }
 
     /// Forget everything one slot read, when it stops.
@@ -315,6 +325,7 @@ mod tests {
                     controller: *controller,
                 })
                 .collect(),
+            generation: None,
         }
     }
 

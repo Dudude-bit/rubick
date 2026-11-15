@@ -49,6 +49,45 @@ pub fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     }
 }
 
+/// Append `bytes` to `path`, creating it readable only by this user. For a
+/// file only ever added to, where a whole rewrite per line would cost the
+/// file instead of the line.
+///
+/// # Errors
+///
+/// Returns the underlying I/O error.
+pub fn append(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.append(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(OWNER_ONLY);
+    }
+    // `mode` applies only to a file this call creates.
+    harden(path);
+    options.open(path)?.write_all(bytes)
+}
+
+/// Create a directory, and its parents, that only this user can enter.
+///
+/// # Errors
+///
+/// Returns the underlying I/O error.
+pub fn dir(path: &Path) -> std::io::Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        builder.mode(0o700);
+        builder.create(path)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+    }
+    #[cfg(not(unix))]
+    builder.create(path)
+}
+
 /// Take an existing file's permissions down to owner-only.
 ///
 /// Best-effort and silent on failure: this runs on every config read, and a

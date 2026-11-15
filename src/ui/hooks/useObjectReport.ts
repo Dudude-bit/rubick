@@ -37,6 +37,7 @@ import {
   eventsSection,
   frameIcons,
   frameWords,
+  changesTargets,
   kindIcon,
   placed,
   refOf,
@@ -46,12 +47,15 @@ import {
 import { graphSections } from "@/lib/report-graph";
 import { kindHue } from "@/lib/resource-identity";
 import { ResourceType } from "@/lib/resource-registry";
-import { useChangeJournalStore } from "@/stores/changeJournalStore";
+import { useTimeline, withNewer } from "@/hooks/useTimeline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocale } from "@/stores/localeStore";
 import type { ConditionInfo } from "@/generated/types";
 import { Server } from "lucide-react";
+
+/** How far back Share reads the timeline: as far as it keeps. */
+const CHANGES_WINDOW_MS = 7 * 24 * 60 * 60_000;
 
 export interface ObjectSubject {
   kind: string;
@@ -124,14 +128,39 @@ export function useObjectReport(
   const t = useT();
   const locale = useLocale();
   const context = useClusterStore((s) => s.currentContext) ?? "";
-  const journal = useChangeJournalStore((s) => s.entries);
-  const spans = useChangeJournalStore((s) => s.spans);
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
   const vendors = useCapabilities("object.report");
   const href = useLocationHref();
   const builtIn = subject && builtInKindOf(subject);
   const graphed = !!builtIn && CONNECTED_KINDS.has(builtIn);
+  // The object's own changes and its owning workload's, read only for Share.
+  const targets = useMemo(
+    () =>
+      subject
+        ? changesTargets(
+            {
+              kind: builtIn ?? null,
+              name: subject.name,
+              namespace: subject.namespace,
+            },
+            ownersIn(resource)
+          )
+        : [],
+    [subject, builtIn, resource]
+  );
+  const ownChanges = useTimeline({
+    subject: targets[0] && { ...targets[0], group: null },
+    windowMs: CHANGES_WINDOW_MS,
+    show: "changes",
+    enabled: capturing && targets.length > 0,
+  });
+  const ownerChanges = useTimeline({
+    subject: targets[1] && { ...targets[1], group: null },
+    windowMs: CHANGES_WINDOW_MS,
+    show: "changes",
+    enabled: capturing && targets.length > 1,
+  });
   const silent = useSilentNodes(capturing);
 
   // The chain as the page draws it: a read its watches have outrun is still
@@ -213,14 +242,12 @@ export function useObjectReport(
           : null,
     });
     const changes = changesSection(
-      { entries: journal, spans: spans[context] ?? [] },
-      context,
       {
-        kind: builtIn,
-        name: subject.name,
-        namespace: subject.namespace,
-        owners: ownersIn(resource),
+        rows: withNewer(ownChanges.rows, ownerChanges.rows),
+        spans: ownChanges.spans,
+        letGo: ownChanges.letGo,
       },
+      targets,
       capturedAt,
       t
     );
@@ -312,11 +339,13 @@ export function useObjectReport(
     events.short,
     t,
     resource,
-    journal,
-    spans,
+    targets,
+    ownChanges.rows,
+    ownChanges.spans,
+    ownChanges.letGo,
+    ownerChanges.rows,
     silent,
     context,
-    builtIn,
     graphed,
     connections,
     routed.certificates,

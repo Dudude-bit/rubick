@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { AlignLeft, BadgeCheck, Info, Layers2 } from "lucide-react";
@@ -332,6 +333,17 @@ export function ReplicaSetDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.ReplicaSet, name: name ?? "" }),
+    changesTab(
+      replicaSet
+        ? {
+            kind: "ReplicaSet",
+            name: replicaSet.name,
+            namespace: replicaSet.namespace,
+            createdAt: replicaSet.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       yaml,
       onCopy: copyYaml,

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { ExternalLink, PinOff } from "lucide-react";
 
 import { ObjectLink } from "@/components/object/ResourceRef";
-import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
 import {
   pinShare,
@@ -22,7 +21,6 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
 import {
   CARD_REFRESH,
-  changesFor,
   entryPointsOf,
   openQuestionsOf,
   pinKey,
@@ -37,9 +35,13 @@ import {
   type WayState,
 } from "@/lib/my-services";
 import { ASK_SHORT } from "@/lib/tell-me-when";
-import { useChangeJournalStore } from "@/stores/changeJournalStore";
+import { useTimeline } from "@/hooks/useTimeline";
+import { isChange, rowWords } from "@/lib/changes";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
+
+/** How far back a card looks for its service's last change: as far as the timeline keeps. */
+const LAST_CHANGE_MS = 7 * 24 * 60 * 60_000;
 
 const WAY_TONE: Record<WayState, string> = {
   noController: "text-err",
@@ -86,7 +88,16 @@ export function ServiceCard({
     true,
     CARD_REFRESH
   );
-  const entries = useChangeJournalStore((s) => s.entries);
+  const timeline = useTimeline({
+    subject: {
+      kind: pin.kind,
+      group: null,
+      namespace: pin.namespace,
+      name: pin.name,
+    },
+    windowMs: LAST_CHANGE_MS,
+    show: "changes",
+  });
   const watches = useTellMeWhenStore((s) => s.watches);
 
   const state = stateOf(
@@ -111,9 +122,11 @@ export function ServiceCard({
   );
   const ways = entryPointsOf(connections.data, chains);
   const unread = openQuestionsOf(connections.data);
-  const changes = useMemo(() => changesFor(entries, pin), [entries, pin]);
   const waiting = useMemo(() => waitingFor(watches, pin), [watches, pin]);
-  const latest = changes[0] ?? null;
+  // Not read yet, or not readable, is not "nothing seen".
+  const latest = timeline.read
+    ? (timeline.rows.find(isChange) ?? null)
+    : undefined;
   const [allWays, setAllWays] = useState(false);
   const shownWays = allWays ? ways.entries : ways.entries.slice(0, WAYS_SHOWN);
 
@@ -209,13 +222,13 @@ export function ServiceCard({
 
         <dt className="text-fg-fnt">{t("services", "lastChange")}</dt>
         <dd className="min-w-0 truncate text-fg-mut">
-          {latest === null ? (
+          {latest === undefined ? (
+            <span className="text-fg-fnt">{t("services", "notReadYet")}</span>
+          ) : latest === null ? (
             <span className="text-fg-fnt">{t("services", "nothingSeen")}</span>
           ) : (
             <>
-              <span className="font-mono">
-                <Journal item={latest} />
-              </span>
+              <span className="font-mono">{rowWords(latest, t)}</span>
               <span className="ml-1 text-fg-fnt">
                 <RealtimeAge timestamp={new Date(latest.at).toISOString()} />
               </span>

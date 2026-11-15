@@ -23,7 +23,6 @@ import {
   type ChainPath,
   type ChainHop,
 } from "@/lib/connections";
-import type { JournalEntry } from "@/lib/changes";
 import type { IngressAddress } from "@/lib/ingress-health";
 import { isPolicyStop } from "@/lib/policy-door";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
@@ -390,22 +389,6 @@ export function openQuestionsOf(
   return (connections?.notLookedAt ?? []).filter(
     (entry) => !policiesElsewhere(entry)
   );
-}
-
-/** This service's entries, newest first. */
-export function changesFor(
-  entries: JournalEntry[],
-  pin: { context: string; kind: string; namespace: string; name: string }
-): JournalEntry[] {
-  return entries
-    .filter(
-      (entry) =>
-        entry.context === pin.context &&
-        entry.kind === pin.kind &&
-        entry.namespace === pin.namespace &&
-        entry.name === pin.name
-    )
-    .sort((a, b) => b.at - a.at);
 }
 
 /** The questions still open on this service, newest first. */
