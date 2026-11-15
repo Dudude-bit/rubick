@@ -439,6 +439,8 @@ pub struct AuditIndex {
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
+    /// The reader asked again: a source that failed is read at once.
+    again: Notify,
     /// The page asked: an upgrade pass held while it was off screen goes.
     asked: Notify,
 }
@@ -470,6 +472,7 @@ impl AuditIndex {
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
             rescoped: Notify::new(),
+            again: Notify::new(),
             asked: Notify::new(),
         }
     }
@@ -710,6 +713,14 @@ impl AuditIndexes {
         Ok(index)
     }
 
+    /// Reads the upgrade rules' sources again at once, where the page has
+    /// the index running: what a reader asks for after a source came back.
+    pub fn read_again(&self, context: &str) {
+        if let Some(index) = self.running(context) {
+            index.again.notify_one();
+        }
+    }
+
     /// A context's index where one is already running; none is started.
     #[must_use]
     pub fn running(&self, context: &str) -> Option<Arc<AuditIndex>> {
@@ -815,6 +826,7 @@ async fn next_pass(index: &AuditIndex, every: Duration, asked_within: Duration) 
         biased;
         () = index.stop.cancelled() => return false,
         () = index.rescoped.notified() => return true,
+        () = index.again.notified() => return true,
         () = tokio::time::sleep(every) => {}
     }
     while index.last_used.lock().elapsed() > asked_within {
@@ -1131,6 +1143,22 @@ pub(super) mod tests {
         index.asked.notify_one();
         let released = tokio::time::timeout(Duration::from_secs(1), off_screen).await;
         assert!(released.expect("the ask releases it").expect("joined"));
+    }
+
+    /// A reader asking again after a source came back is read at once, not
+    /// at the next pass minutes on. Fails if "ask again" waited out the
+    /// interval, which leaves a failed line standing.
+    #[tokio::test]
+    async fn asking_again_reads_the_sources_at_once() {
+        let index = AuditIndex::holding(client().await, None);
+        let waiting = tokio::spawn({
+            let index = index.clone();
+            async move { next_pass(&index, Duration::from_secs(600), Duration::from_secs(600)).await }
+        });
+        tokio::task::yield_now().await;
+        index.again.notify_one();
+        let read = tokio::time::timeout(Duration::from_secs(1), waiting).await;
+        assert!(read.expect("read at once").expect("joined"));
     }
 
     /// Every `Deployment`, `StatefulSet`, `Pod` and `CronJob` in the Audit fixture,
