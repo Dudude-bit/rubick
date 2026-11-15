@@ -1,3 +1,4 @@
+import { hashKey } from "@tanstack/react-query";
 import { CircleOff, History, Monitor, Moon, Sun } from "lucide-react";
 
 import {
@@ -35,6 +36,11 @@ import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT, type T } from "@/i18n/useT";
+import {
+  readName,
+  useUnreadOnScreen,
+  type UnreadRead,
+} from "./unread-on-screen";
 
 /**
  * Which renewal states put a sign-in hint in the strip, as a total map.
@@ -94,6 +100,7 @@ export function StatusBar({
   const connect = useClusterStore((s) => s.connect);
   const scope = useClusterStore((s) => s.namespaceScope);
   const counts = useShellCounts();
+  const unreadHere = useUnreadOnScreen();
   const podLock = useListLocks(POD_KINDS)[ResourceType.Pod];
   const podsRefused =
     podLock !== undefined &&
@@ -262,7 +269,10 @@ export function StatusBar({
                       </span>
                     )}
                     <span>·</span>
-                    <ProblemCount attention={here.attention} />
+                    <ProblemCount
+                      attention={here.attention}
+                      allRead={unreadHere.length === 0}
+                    />
                   </>
                 )}
                 {!missing.whole && (
@@ -300,6 +310,9 @@ export function StatusBar({
                 <p className="mb-1 text-warn">
                   {t("cluster", "countsKindRefused")}
                 </p>
+              )}
+              {unreadHere.length > 0 && (
+                <UnreadHere reads={unreadHere} context={currentContext} />
               )}
               {(counts.late || counts.failed) && counts.readAt !== null && (
                 <p className="mb-1 text-warn">
@@ -372,8 +385,17 @@ function podsUnreadIn(
       });
 }
 
-/** The count the Overview's panel heads, in the colour of its worst row. */
-function ProblemCount({ attention }: { attention: Attention }) {
+/**
+ * The count the Overview's panel heads, in the colour of its worst row; not
+ * whole while a read on screen was refused or failed, whichever page it is.
+ */
+function ProblemCount({
+  attention,
+  allRead,
+}: {
+  attention: Attention;
+  allRead: boolean;
+}) {
   const t = useT();
   const { total, complete, worst } = attention;
   return (
@@ -383,8 +405,41 @@ function ProblemCount({ attention }: { attention: Attention }) {
         worst === "warn" && "text-warn"
       )}
     >
-      {attentionWords({ total, complete }, t)}
+      {attentionWords({ total, complete: complete && allRead }, t)}
     </span>
+  );
+}
+
+const UNREAD_NAMED = 4;
+
+/** What on screen could not be read, by name, so "not all checked" says what it means. */
+function UnreadHere({
+  reads,
+  context,
+}: {
+  reads: readonly UnreadRead[];
+  context: string | null;
+}) {
+  const t = useT();
+  const named = reads.slice(0, UNREAD_NAMED);
+  return (
+    <div className="mb-1 text-warn" data-testid="unread-on-screen">
+      <p>{t("cluster", "unreadOnScreen")}</p>
+      <ul>
+        {named.map((read) => (
+          <li key={hashKey(read.key)}>
+            {t(
+              "cluster",
+              read.refused ? "unreadOnScreenRefused" : "unreadOnScreenFailed",
+              { name: readName(read.key, context) }
+            )}
+          </li>
+        ))}
+      </ul>
+      {reads.length > named.length && (
+        <p>{t("empty", "andMore", { n: reads.length - named.length })}</p>
+      )}
+    </div>
   );
 }
 

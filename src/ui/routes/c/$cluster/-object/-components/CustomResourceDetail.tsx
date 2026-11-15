@@ -20,6 +20,9 @@ import { DeleteAction } from "../DeleteAction";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { stateOf } from "../facets";
+import { listedKindOf } from "../problem";
+import { PodsTroubleLines } from "../PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../pods-trouble";
 import { servedOf } from "../served";
 import { noteDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
@@ -27,7 +30,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { OwnerRef } from "../../-peek/OwnerRef";
 import { RelatedPanel } from "../RelatedPanel";
 import { relatedMark, useRelatedObjects } from "../useRelatedObjects";
-import { KeyValueSection, type KeyValue } from "../detail-kv";
+import { BreakableKey, KeyValueSection, type KeyValue } from "../detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
@@ -109,8 +112,11 @@ function JsonRow({
   if (!isContainer(value)) {
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
-        <span className="wrap-break-word text-caption text-fg-fnt">
-          {label}
+        <span
+          className="min-w-0 overflow-hidden text-ellipsis text-caption text-fg-fnt"
+          title={label}
+        >
+          <BreakableKey text={label} />
         </span>
         <span className="min-w-0 text-xs">
           <JsonLeaf value={value} />
@@ -126,8 +132,11 @@ function JsonRow({
   return (
     <div className="border-b border-hair py-1 last:border-b-0">
       <div className="flex items-baseline gap-2">
-        <span className="wrap-break-word text-caption font-medium text-fg-mid">
-          {label}
+        <span
+          className="min-w-0 overflow-hidden text-ellipsis text-caption font-medium text-fg-mid"
+          title={label}
+        >
+          <BreakableKey text={label} />
         </span>
         <span className="text-caption text-fg-fnt">{size}</span>
       </div>
@@ -271,6 +280,14 @@ export function CustomResourceDetail({
   });
 
   const status = stateOf(resource?.status) ?? null;
+  const podsOwner = crdInfo
+    ? listedKindOf({ kind: crdInfo.kind, crd: crdName })
+    : null;
+  const podsTrouble = usePodsTrouble(
+    podsOwner ?? "",
+    namespace,
+    podsOwner ? name : undefined
+  );
   const owners = resource?.ownerReferences ?? [];
   const finalizers = resource?.finalizers ?? [];
 
@@ -346,11 +363,14 @@ export function CustomResourceDetail({
       label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <KeyValueSection
-          title={t("columns", "object")}
-          items={facts}
-          className="max-w-lg"
-        />
+        <>
+          <PodsTroubleLines pods={podsTrouble} className="mb-4" />
+          <KeyValueSection
+            title={t("columns", "object")}
+            items={facts}
+            className="max-w-lg"
+          />
+        </>
       ),
     },
     {
@@ -504,6 +524,7 @@ export function CustomResourceDetail({
       namespace={resource?.namespace ?? undefined}
       createdAt={resource?.createdAt}
       statusBadge={status && <StatusBadge status={status} />}
+      trouble={withPodsTrouble([], podsTrouble)}
       badges={
         resource && (
           <span className="font-mono text-caption text-fg-fnt">

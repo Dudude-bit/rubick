@@ -59,7 +59,12 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { Finding } from "@/lib/governance";
 import type { StatusRole } from "@/lib/status-role";
 import { FindingsBlock, WithProblem } from "./ProblemTone";
-import { problemOf, useListedProblem, type Problem } from "./problem";
+import {
+  listedKindOf,
+  problemOf,
+  useListedProblem,
+  type Problem,
+} from "./problem";
 import { ShareObjectAction } from "@/components/share/ShareAction";
 import type {
   ShareContribution,
@@ -368,7 +373,7 @@ export function ResourceDetailLayout({
   // The chip never says less than the list's row: a findings read that
   // failed, or has not caught up after the object came back, finds nothing.
   const listed = useListedProblem(
-    builtIn,
+    listedKindOf({ kind: resourceKind, crd }),
     namespace ?? null,
     title,
     !found && !!resource

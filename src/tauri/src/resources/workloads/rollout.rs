@@ -479,7 +479,19 @@ pub fn with_pods_warned<'a, S: BuildHasher>(
 /// Deployment named `<deployment>-<pod-template-hash>`.
 #[must_use]
 pub fn deployment_of(pod: &Pod) -> Option<&str> {
-    let hash = pod.metadata.labels.as_ref()?.get(POD_TEMPLATE_HASH)?;
+    named_by_hash(pod, POD_TEMPLATE_HASH)
+}
+
+/// The Argo Rollout a pod runs for, read as a Deployment's is: Argo names
+/// its `ReplicaSet` `<rollout>-<hash>` under a label of its own.
+fn rollout_of(pod: &Pod) -> Option<&str> {
+    named_by_hash(pod, ROLLOUTS_POD_TEMPLATE_HASH)
+}
+
+const ROLLOUTS_POD_TEMPLATE_HASH: &str = "rollouts-pod-template-hash";
+
+fn named_by_hash<'a>(pod: &'a Pod, label: &str) -> Option<&'a str> {
+    let hash = pod.metadata.labels.as_ref()?.get(label)?;
     let owner = pod
         .metadata
         .owner_references
@@ -498,6 +510,9 @@ pub fn deployment_of(pod: &Pod) -> Option<&str> {
 pub fn workload_of(pod: &Pod) -> Option<(&str, &str)> {
     if let Some(deployment) = deployment_of(pod) {
         return Some(("Deployment", deployment));
+    }
+    if let Some(rollout) = rollout_of(pod) {
+        return Some(("Rollout", rollout));
     }
     pod.metadata
         .owner_references
@@ -1009,6 +1024,35 @@ mod tests {
         let bare = owned("cart-legacy", None);
         assert_eq!(deployment_of(&bare), None);
         assert_eq!(workload_of(&bare), Some(("ReplicaSet", "cart-legacy")));
+    }
+
+    /// realtime-gateway's `node` pod failed its readiness probe and every
+    /// screen said so but the Rollout's own peek: the pod was credited to its
+    /// `ReplicaSet`, which nothing draws. Fails if a pod Argo Rollouts runs is
+    /// not read as its Rollout's, or if any other label hash names one.
+    #[test]
+    fn a_pod_runs_for_the_argo_rollout_its_replica_set_is_named_after() {
+        let owned = |label: &str| -> Pod {
+            pod(serde_json::json!({
+                "metadata": {
+                    "name": "node-5c8f7b9d4b-q7w2r",
+                    "labels": { "app": "node", label: "5c8f7b9d4b" },
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                        "name": "node-5c8f7b9d4b", "uid": "rs", "controller": true,
+                    }],
+                },
+            }))
+        };
+        let rolled = owned(ROLLOUTS_POD_TEMPLATE_HASH);
+        assert_eq!(rollout_of(&rolled), Some("node"));
+        assert_eq!(deployment_of(&rolled), None);
+        assert_eq!(workload_of(&rolled), Some(("Rollout", "node")));
+        let deployed = owned(POD_TEMPLATE_HASH);
+        assert_eq!(rollout_of(&deployed), None);
+        assert_eq!(workload_of(&deployed), Some(("Deployment", "node")));
+        let other = owned("controller-revision-hash");
+        assert_eq!(workload_of(&other), Some(("ReplicaSet", "node-5c8f7b9d4b")));
     }
 
     /// Sam deleted big-pull and applied it again: the new Deployment made a

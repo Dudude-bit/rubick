@@ -96,6 +96,13 @@ const overviewOf = (
   };
 };
 
+/** The reads on screen whose latest answer was refused or failed. */
+const onScreen = vi.hoisted(() => ({ reads: [] as unknown[] }));
+vi.mock("./unread-on-screen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./unread-on-screen")>()),
+  useUnreadOnScreen: () => onScreen.reads,
+}));
+
 let renewal = "scheduled";
 vi.mock("@/hooks/useCredentialRenewal", () => ({
   useRenewal: () => renewal,
@@ -109,6 +116,7 @@ import { StatusBar } from "./StatusBar";
 
 beforeEach(() => {
   renewal = "scheduled";
+  onScreen.reads = [];
   whole.podCount = 3;
   whole.refused = false;
   attentions.askedCluster = 0;
@@ -627,5 +635,37 @@ describe("what the problem count counts", () => {
     const counts = screen.getByTestId("scope-counts");
     expect(counts).toHaveTextContent("not all checked");
     expect(counts).not.toHaveTextContent("0 problems");
+  });
+
+  /**
+   * Shots r7-17 and r7-27: a Deployment page refused and Argo CD timing out,
+   * and the strip said "1 problem in api" and "0 problems in argocd". Fails
+   * if a read on screen that was refused or failed leaves the count whole,
+   * or the hover does not say which reads they were.
+   */
+  it("is not all checked while a read on screen was refused or failed, and names them", async () => {
+    attentions.here = attentionOf(1);
+    onScreen.reads = [
+      { key: ["deployment", "api", "api"], refused: true },
+      { key: ["prod", "argocd", "applications"], refused: false },
+    ];
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("1 problem · not all checked");
+    await userEvent.hover(counts);
+    const named = await screen.findAllByTestId("unread-on-screen");
+    expect(named[0]).toHaveTextContent("Deployment api: refused");
+    expect(named[0]).toHaveTextContent("argocd applications: the read failed");
+  });
+
+  /** Fails if the strip says "not all checked" with every read on screen answered. */
+  it("stays whole while every read on screen answered", () => {
+    attentions.here = attentionOf(1);
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("1 problem");
+    expect(counts).not.toHaveTextContent("not all checked");
   });
 });

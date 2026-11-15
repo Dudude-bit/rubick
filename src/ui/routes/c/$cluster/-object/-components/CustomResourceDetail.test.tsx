@@ -26,6 +26,11 @@ const answers = vi.hoisted(() => ({
   connections: vi.fn(() => new Promise(() => {})),
 }));
 
+const shell = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => (shell.items.length > 0 ? { items: shell.items } : null),
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getCrd: () => answers.crdRead?.() ?? Promise.resolve(answers.crd),
@@ -83,6 +88,7 @@ const open = (crdName: string, tab = "overview") =>
   );
 
 beforeEach(() => {
+  shell.items = [];
   useClusterStore.setState({ currentContext: "test", isConnected: true });
   answers.read = null;
   answers.yaml = null;
@@ -334,5 +340,51 @@ describe("what a custom resource's page could not read", () => {
       "frontend"
     );
     expect(screen.queryByText(/Could not read this Widget/)).toBeNull();
+  });
+});
+
+describe("the page of a custom resource that runs pods", () => {
+  /**
+   * Vercel r7-15: an Argo Rollout's page and peek said Healthy while its pod
+   * failed its readiness probe on every other screen. Fails if the page's
+   * chip does not count its pods' rows, or its Overview does not name them.
+   */
+  it("counts and names its pods' problems as a Deployment's page does", async () => {
+    answers.crd = crd("argoproj.io", "Rollout", "rollouts");
+    answers.resource = {
+      ...object("argoproj.io/v1alpha1", "Rollout"),
+      status: { phase: "Healthy" },
+    };
+    shell.items = [
+      {
+        key: "Pod/storefront/frontend-5c8f7b9d4b-q7w2r/readiness",
+        tone: "warn",
+        kind: "Pod",
+        name: "frontend-5c8f7b9d4b-q7w2r",
+        namespace: "storefront",
+        reason: "readiness",
+        detail: null,
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+        workload: { kind: "Rollout", name: "frontend" },
+        opens: {
+          kind: "Pod",
+          name: "frontend-5c8f7b9d4b-q7w2r",
+          namespace: "storefront",
+        },
+      },
+    ];
+    await open("rollouts.argoproj.io");
+
+    expect(await screen.findByTestId("pods-trouble")).toHaveTextContent(
+      "frontend-5c8f7b9d4b-q7w2r"
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).toHaveTextContent(
+        /1 problem.*Healthy/
+      )
+    );
   });
 });

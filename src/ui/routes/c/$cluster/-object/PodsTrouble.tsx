@@ -5,13 +5,37 @@ import { ProblemSummary } from "@/components/object/detail-blocks";
 import { useT } from "@/i18n/useT";
 import { reasonWord, type AttentionItem } from "@/lib/attention";
 import { ResourceType } from "@/lib/resource-registry";
+import { cn } from "@/lib/utils";
 import { detailWords } from "../-overview/health-share";
+import { usePodsTrouble } from "./pods-trouble";
+
+/** {@link PodsTroubleLines} for an owner no screen of its own reads them for: any custom resource that runs pods. */
+export function OwnedPodsTrouble({
+  kind,
+  namespace,
+  name,
+  className,
+}: {
+  kind: string;
+  namespace: string | undefined;
+  name: string;
+  className?: string;
+}) {
+  return (
+    <PodsTroubleLines
+      pods={usePodsTrouble(kind, namespace, name)}
+      className={className}
+    />
+  );
+}
 
 /** One line per thing its pods are failing: how many, what, and a link to each. */
 export function PodsTroubleLines({
   pods,
+  className,
 }: {
   pods: readonly AttentionItem[] | null;
+  className?: string;
 }) {
   const t = useT();
   const groups = useMemo(() => {
@@ -22,7 +46,10 @@ export function PodsTroubleLines({
   }, [pods]);
   if (groups.length === 0) return null;
   return (
-    <div className="mb-1 flex flex-col gap-2" data-testid="pods-trouble">
+    <div
+      className={cn("mb-1 flex flex-col gap-2", className)}
+      data-testid="pods-trouble"
+    >
       {groups.map((group) => {
         const worst = group.find(({ tone }) => tone === "err") ?? group[0];
         const n = group.reduce((sum, item) => sum + (item.foldedPods ?? 1), 0);

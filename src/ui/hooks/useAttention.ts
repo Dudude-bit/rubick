@@ -9,7 +9,12 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useClaimReads } from "@/hooks/useStorageClasses";
 import { useT } from "@/i18n/useT";
-import { attentionOf, servicesKept, type Attention } from "@/lib/attention";
+import {
+  attentionOf,
+  problemsKept,
+  servicesKept,
+  type Attention,
+} from "@/lib/attention";
 import { claimNeeds } from "@/lib/claim-cause";
 import { commands } from "@/lib/commands";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
@@ -101,6 +106,11 @@ export function useAttention({
     enabled && overview.data !== undefined && !overview.isPlaceholderData
       ? overview.data
       : null;
+  const keptKey = `${context}\n${cacheKey ?? EVERY_NAMESPACE}`;
+  // The same list for every poll that told it again, so the count's readers
+  // draw only when a problem goes unseen or is seen again.
+  const kept =
+    answered && problemsKept(keptKey, answered, overview.dataUpdatedAt);
   // A clock that moves in steps, so the cached answer holds between them.
   const now = useNow();
   const detection = useGatewayApi();
@@ -173,14 +183,12 @@ export function useAttention({
         {
           overview: answered,
           scope: wire,
+          kept: kept || undefined,
           services: {
             answered: services.answered,
             unread: services.unread,
             overdue: servicesLate,
-            kept: servicesKept(
-              `${context}\n${cacheKey ?? EVERY_NAMESPACE}`,
-              services.answered
-            ),
+            kept: servicesKept(keptKey, services.answered),
           },
           ingresses: {
             data: ingressData,
@@ -202,9 +210,9 @@ export function useAttention({
       ),
     [
       answered,
+      kept,
       wire,
-      context,
-      cacheKey,
+      keptKey,
       services,
       servicesLate,
       ingressData,

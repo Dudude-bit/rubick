@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
 import { Spinner } from "@/components/ui/spinner";
-import { conditionRole } from "@/lib/condition-health";
+import { conditionRole, spokenCondition } from "@/lib/condition-health";
 import { involvedNamespace } from "@/lib/event-incarnation";
 import { withoutCredentials } from "@/lib/hints";
 import { eventReasonMark } from "@/lib/event-reason";
@@ -210,6 +210,7 @@ function ConditionRow({
   dated: boolean;
 }) {
   const role = conditionRole(condition, among);
+  const { reason, message } = spokenCondition(condition);
   // Colour is spent on anomalies only: five of a pod's six conditions are
   // satisfied on every healthy pod, and five green ticks per row is the wall
   // of colour that makes the sixth invisible. A satisfied condition keeps its
@@ -223,7 +224,7 @@ function ConditionRow({
   const Icon = ROLE_ICON[role];
   const age = useRealtimeAge(condition.lastTransitionTime ?? null);
   const stamp = formatDate(condition.lastTransitionTime) ?? undefined;
-  const detail = condition.message || condition.reason;
+  const detail = message || reason;
   // The one fact a satisfied condition's glyph has not already given: since
   // when. It reads on from the status word — `Ready True for 3d` — so it takes
   // the sentence's place, and the row has no second place to print it.
@@ -260,8 +261,8 @@ function ConditionRow({
         {condition.status}
       </span>
       <span className="truncate text-fg-mut">
-        {condition.reason && detail !== condition.reason && (
-          <span className="font-mono">{condition.reason} </span>
+        {reason && detail !== reason && (
+          <span className="font-mono">{reason} </span>
         )}
         {detail && (
           <ResourceMessage message={detail} subject={subject} oneLine />

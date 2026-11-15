@@ -225,8 +225,12 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
     const marked = line.under === "class" ? item.unservedClass : undefined;
     const shut = line.under === "policy" ? item.shutBy : undefined;
     const tag = marked?.name ?? shut?.policies.join(", ");
+    const said = tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t);
     return {
-      title: tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t),
+      // Kept over a read that no longer answers: last known, as the screen says.
+      title: item.stale
+        ? `${said} · ${t("cluster", "problemNotRechecked")}`
+        : said,
       detail:
         [
           foldedWords(item, t),
@@ -238,7 +242,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         ]
           .filter((part) => part !== null)
           .join(" · ") || null,
-      role: item.tone,
+      role: item.stale ? "warn" : item.tone,
       ref: refOf({
         kind: item.kind,
         name: item.name,

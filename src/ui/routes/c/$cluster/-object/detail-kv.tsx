@@ -35,8 +35,11 @@ export interface KeyValueRowProps {
   className?: string;
 }
 
-function Breakable({ text }: { text: string }) {
-  return text.split(/(?<=[./-])/).map((part, index) => (
+/** After `.`, `/` and `-`, and between the words of a camelCase field. */
+const KEY_BREAKS = /(?<=[./-])|(?<=[a-z\d])(?=[A-Z])/;
+
+export function BreakableKey({ text }: { text: string }) {
+  return text.split(KEY_BREAKS).map((part, index) => (
     <React.Fragment key={index}>
       {index > 0 && <wbr />}
       {part}
@@ -58,15 +61,20 @@ export function KeyValueRow({
         className
       )}
     >
-      {/* A key breaks after `.`, `/` and `-` first; `wrap-break-word` is
-       *  only the last resort for a segment wider than the track. */}
+      {/* A plain key's word wider than the track is cut with an ellipsis,
+       *  never broken inside; the whole key is the tooltip. */}
       <dt
-        className="min-w-0 wrap-break-word text-caption text-fg-fnt"
+        className={cn(
+          "min-w-0 text-caption text-fg-fnt",
+          typeof label === "string"
+            ? "overflow-hidden text-ellipsis"
+            : "wrap-break-word"
+        )}
         // Only a plain label can be its own tooltip; a rendered one carries
         // its own affordances and would announce them twice.
         title={typeof label === "string" ? label : undefined}
       >
-        {typeof label === "string" ? <Breakable text={label} /> : label}
+        {typeof label === "string" ? <BreakableKey text={label} /> : label}
       </dt>
       <dd
         className={cn(

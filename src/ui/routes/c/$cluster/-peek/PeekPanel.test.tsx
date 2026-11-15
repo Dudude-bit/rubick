@@ -3917,3 +3917,92 @@ describe("a pod's peek beside the Pods list", () => {
     expect(await screen.findByText("live")).toBeVisible();
   });
 });
+
+describe("the peek of a custom resource that runs pods", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+  });
+
+  const ROLLOUT_PEEK =
+    "/c/prod/events?peek=rollouts.argoproj.io/Rollout/realtime-gateway/node";
+  const rollout = (): CustomResourceDetailInfo => ({
+    ...buildApplication(),
+    name: "node",
+    namespace: "realtime-gateway",
+    apiVersion: "argoproj.io/v1alpha1",
+    kind: "Rollout",
+    spec: { replicas: 3 },
+    status: {
+      phase: "Healthy",
+      conditions: [
+        {
+          type: "Paused",
+          status: "False",
+          reason: "RolloutPaused",
+          message: "Rollout is paused",
+        },
+      ],
+    },
+  });
+  const PROBE = {
+    key: "Pod/realtime-gateway/node-5c8f7b9d4b-q7w2r/readiness",
+    tone: "warn",
+    kind: "Pod",
+    name: "node-5c8f7b9d4b-q7w2r",
+    namespace: "realtime-gateway",
+    reason: "readiness",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    workload: { kind: "Rollout", name: "node" },
+    opens: {
+      kind: "Pod",
+      name: "node-5c8f7b9d4b-q7w2r",
+      namespace: "realtime-gateway",
+    },
+  };
+
+  /**
+   * Vercel r7-15: Rollout/node peeked "Healthy Rollout" while its pod failed
+   * its readiness probe on the Pods row, the pod's page, the Overview and
+   * the status bar. Fails if the chip of an owner that is a custom resource
+   * does not count its pods' rows, or its body does not name them.
+   */
+  it("counts and names its pods' problems as a Deployment's peek does", async () => {
+    connected();
+    vi.mocked(commands.getCustomResource).mockResolvedValue(rollout());
+    shell.items = [PROBE];
+    await wrap(ROLLOUT_PEEK);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    expect(document.querySelector('[data-problem="warn"]')).toHaveTextContent(
+      /1 problem.*Healthy/
+    );
+    expect(await screen.findByTestId("pods-trouble")).toHaveTextContent(
+      "node-5c8f7b9d4b-q7w2r"
+    );
+  });
+
+  /**
+   * Vercel r7-15: "conditions.Paused False (RolloutPaused): Rollout is
+   * paused" in red, the healthy value drawn as an error in words that deny
+   * it. Fails if the row is coloured as trouble or speaks the paused words.
+   */
+  it("draws a resumed rollout's Paused=False as healthy, without the paused words", async () => {
+    connected();
+    vi.mocked(commands.getCustomResource).mockResolvedValue(rollout());
+    await wrap(ROLLOUT_PEEK);
+
+    const row = (await screen.findByText(/^conditions\.Paused$/)).closest(
+      "div"
+    ) as HTMLElement;
+    const value = row.querySelector("dd") as HTMLElement;
+    expect(value).toHaveTextContent(/^False$/);
+    expect(value.className).toContain("text-ok");
+  });
+});

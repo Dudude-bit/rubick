@@ -1117,6 +1117,8 @@ export const en = {
     scaleCountUnread:
       "The current count is not read yet. Type how many replicas to run.",
     scaleNeedsCount: "Type how many replicas to run, 0 or more.",
+    scaleToZero: "Stops every pod. Nothing serves until it is scaled back up.",
+    scaleNoChange: "The same as now, so nothing changes.",
     scopeWindowToIt: "Scope this window to it",
     itsOwnAlb: "its own ALB",
     filterLoadBalancers: "Filter load balancers",
@@ -4668,6 +4670,8 @@ export const en = {
     freshOffline: "offline",
     freshStale: "read failing",
     freshAnswerAge: "last answer {age} ago",
+    countClusterWide:
+      "Counted across the whole cluster, not only the namespaces in this scope.",
     countsKindRefused:
       "The last read of this was refused or failed, so this number may not be current.",
     freshLiveNote:
@@ -4934,6 +4938,15 @@ export const en = {
       other: "{n} problems · not all checked",
     },
     problemsNoneNotAllChecked: "no problems found · not all checked",
+    problemNotRechecked: "not rechecked",
+    problemNotRecheckedRefused:
+      "Not rechecked: the cluster refused the read that would check this again. Last known at {time}.",
+    problemNotRecheckedFailed:
+      "Not rechecked: the read that would check this again failed. Last known at {time}.",
+    unreadOnScreen:
+      "Not everything on this screen could be read, so the count may leave something out:",
+    unreadOnScreenRefused: "{name}: refused",
+    unreadOnScreenFailed: "{name}: the read failed",
     finishedOnNode: "Finished here",
     finishedOnNodeNote:
       "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
@@ -6804,6 +6817,8 @@ export const en = {
     metricOfLimit: "{used} / {limit} limit ({percent}%)",
     metricRequestedNoLimit: "{used} · {requested} requested, no limit",
     metricNoLimit: "{used} · no limit",
+    metricOfCapacity: "{used} / {limit} capacity ({percent}%)",
+    metricNoCapacity: "{used} · capacity not known",
     couldNotReadCertificates: "Could not read this cluster’s certificates",
     couldNotReadCertificatesBody:
       "Every row on this page comes from the cert-manager objects in this API server, and that request failed, so the list would be a guess rather than an answer.",
@@ -8980,6 +8995,15 @@ export const en = {
     },
     gwBackendsAllExist: "All {n} backend Services exist, ports match",
     restartPods: { one: "{n} pod", other: "{n} pods" },
+    scaleNow: {
+      one: "Runs {n} replica now.",
+      other: "Runs {n} replicas now.",
+    },
+    scaleStarts: {
+      one: "Starts {n} more pod.",
+      other: "Starts {n} more pods.",
+    },
+    scaleStops: { one: "Stops {n} pod.", other: "Stops {n} pods." },
     restartUnavailable: {
       one: "at most {n} unavailable",
       other: "at most {n} unavailable",

@@ -60,7 +60,7 @@ import { statusRole, type StatusRole } from "@/lib/status-role";
 import { WithProblem } from "../-object/ProblemTone";
 import {
   GOVERNED,
-  MARKED,
+  listedKindOf,
   problemOf,
   useListedProblem,
 } from "../-object/problem";
@@ -183,7 +183,6 @@ export function PeekContent({
           : null
       )
     ) !== null;
-  const marked = !!builtIn && MARKED.has(builtIn);
   const held = useHeldRow(
     builtIn,
     namespace,
@@ -364,7 +363,7 @@ export function PeekContent({
             />
           ) : summary?.status ? (
             <GovernedStatus
-              on={marked && !gone}
+              on={!gone}
               target={target}
               namespace={namespace}
               role={summary.statusRole ?? statusRole(summary.status)}
@@ -831,9 +830,9 @@ function PeekEvents({ target }: { target: PeekTarget }) {
 }
 
 /**
- * The status chip of a kind whose list row carries a problem mark, carrying
- * what that row carries, or, before the shell has answered, the worst
- * finding of what governs it read here.
+ * The status chip carrying what the shell carries on the object (its pods'
+ * rows, what opens it from elsewhere), or, before the shell has answered,
+ * the worst finding of what governs it read here.
  */
 function GovernedStatus({
   on,
@@ -883,7 +882,12 @@ function GovernedProblem({
     ? problemOf(governanceFindings(governing.data, t))
     : null;
   // The row's own count first, so the two never disagree on it.
-  const listed = useListedProblem(kind, namespace ?? null, target.name, true);
+  const listed = useListedProblem(
+    listedKindOf(target),
+    namespace ?? null,
+    target.name,
+    true
+  );
   return (
     <WithProblem problem={listed ?? found} role={role}>
       {children}

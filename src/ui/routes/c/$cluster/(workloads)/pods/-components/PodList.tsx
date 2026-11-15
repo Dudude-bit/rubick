@@ -48,6 +48,7 @@ import { WithProblem } from "../../../-object/ProblemTone";
 import {
   PROBLEM_MARK_COMPACT_PX,
   PROBLEM_MARK_PX,
+  PROBLEM_STALE_PX,
   type Problem,
 } from "../../../-object/problem";
 import { problemOfRow, rowProblems } from "../../../-object/row-items";
@@ -142,7 +143,9 @@ export const columns: ColumnDef<PodRow>[] = [
                 .filter((pod) => pod.problem)
                 .map(
                   (pod) =>
-                    badgeCellPx([pod.status.display]) + PROBLEM_MARK_COMPACT_PX
+                    badgeCellPx([pod.status.display]) +
+                    PROBLEM_MARK_COMPACT_PX +
+                    (pod.problem?.stale ? PROBLEM_STALE_PX : 0)
                 )
             ),
       // The mark's words and "already replaced" beside the badge while the port has room.
@@ -163,7 +166,10 @@ export const columns: ColumnDef<PodRow>[] = [
             ? 0
             : badgeCellPx(troubled.map((pod) => pod.status.display)) +
                 6 +
-                PROBLEM_MARK_PX
+                PROBLEM_MARK_PX +
+                (troubled.some((pod) => pod.problem?.stale)
+                  ? PROBLEM_STALE_PX
+                  : 0)
         );
       },
       label: { section: "columns", key: "status" },

@@ -112,6 +112,37 @@ describe("a key-value row", () => {
     expect(row.className).not.toContain("min-content");
   });
 
+  /**
+   * Vercel r7-15: "blueGreen.prePromotionAnalysisRu / nStatus.name", a key
+   * cut inside a word because its one dotted segment was wider than the
+   * track. Fails if a camelCase key offers no break between its words, or
+   * if a word wider than the track is broken inside rather than cut whole
+   * with the key as its tooltip.
+   */
+  it("breaks a camelCase key between its words and never inside one", () => {
+    const key = "blueGreen.prePromotionAnalysisRunStatus.name";
+    const { container } = render(
+      <KeyValueList items={[{ label: key, value: "x" }]} />
+    );
+    const dt = container.querySelector("dt") as HTMLElement;
+    const parts = [...dt.childNodes]
+      .filter((node) => node.nodeName !== "WBR")
+      .map((node) => node.textContent);
+    expect(parts).toEqual([
+      "blue",
+      "Green.",
+      "pre",
+      "Promotion",
+      "Analysis",
+      "Run",
+      "Status.",
+      "name",
+    ]);
+    expect(dt.className).not.toMatch(/wrap-break-word|break-all|wrap-anywhere/);
+    expect(dt.className).toContain("text-ellipsis");
+    expect(dt).toHaveAttribute("title", key);
+  });
+
   /** Fails if a long key loses its break opportunities after `.`, `/` and `-`. */
   it("offers a break after the separators of a long key", () => {
     const { container } = render(

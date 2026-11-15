@@ -22,6 +22,7 @@ import {
   eventsChecks,
   foldedWords,
   namespaceAttention,
+  problemsKept,
   reasonWord,
   servicesKept,
   type AttentionInputs,
@@ -34,6 +35,7 @@ import {
   type NamespaceBacking,
 } from "./ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "./service-health";
+import { namesRebound } from "./kept-by-name";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -1690,5 +1692,103 @@ describe("which rows rest on a read that failed", () => {
         row
       )
     ).toBe(false);
+  });
+});
+
+describe("a problem whose read went unread since it was told", () => {
+  const probing: ClusterProblem = {
+    severity: "warning",
+    kind: "Pod",
+    name: "node-5skbg",
+    namespace: "chat",
+    reason: "Unhealthy",
+    detail: null,
+    since: null,
+    restarts: 1,
+    foldedPods: null,
+    replaced: false,
+  };
+  const told = overview({ problems: [probing] });
+  const refused = overview({
+    unread: [
+      {
+        kind: "Pod",
+        namespace: null,
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ],
+  });
+  const failedIn = (namespace: string) =>
+    overview({
+      unread: [{ kind: "Pod", namespace, code: "KUBE_API_ERROR", message: "" }],
+    });
+
+  /**
+   * With pods refused the pod's row turned green "Running" and its peek lost
+   * the problem: the read was refused, the pod had not recovered. Fails if
+   * the last told problem is dropped, is not marked stale, or loses when it
+   * was told and that the read was refused.
+   */
+  it("keeps a pod's last told problem, stale, while its pods are refused", () => {
+    const key = "keeps-while-refused";
+    expect(problemsKept(key, told, 1000)).toEqual([]);
+    const kept = problemsKept(key, refused, 2000);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({
+      kind: "Pod",
+      name: "node-5skbg",
+      stale: true,
+      lastKnown: { at: 1000, refused: true },
+    });
+
+    const listed = attention({ overview: refused, kept });
+    expect(listed.items.map((item) => item.name)).toEqual(["node-5skbg"]);
+    expect(listed.total).toBe(1);
+    expect(listed.complete).toBe(false);
+    expect(itemIsStale(listed, listed.items[0])).toBe(true);
+    expect(listed.byNamespace.get("chat")).toBe(1);
+  });
+
+  /** Fails if a kept problem outlives the read that answers for its kind again. */
+  it("lets it go once the pods are read again", () => {
+    const key = "lets-go-once-read";
+    problemsKept(key, told, 1000);
+    expect(problemsKept(key, refused, 2000)).toHaveLength(1);
+    expect(problemsKept(key, overview(), 3000)).toEqual([]);
+    expect(problemsKept(key, refused, 4000)).toEqual([]);
+  });
+
+  /** Fails if a failure in another namespace keeps this one's problem, or a failure says it was refused. */
+  it("keeps it only where its kind went unread, and says the read failed", () => {
+    const key = "keeps-where-unread";
+    problemsKept(key, told, 1000);
+    expect(problemsKept(key, failedIn("web"), 2000)).toEqual([]);
+    problemsKept(key, told, 3000);
+    expect(problemsKept(key, failedIn("chat"), 4000)[0]?.lastKnown).toEqual({
+      at: 3000,
+      refused: false,
+    });
+  });
+
+  /** Fails if a later answer telling the same problem again does not move when it was last known. */
+  it("dates it by the last answer that told it", () => {
+    const key = "dates-by-last-answer";
+    problemsKept(key, told, 1000);
+    problemsKept(key, told, 5000);
+    expect(problemsKept(key, refused, 6000)[0]?.lastKnown?.at).toBe(5000);
+  });
+
+  /** Fails if a refusal invents a problem nobody ever saw. */
+  it("keeps nothing where nothing was told", () => {
+    expect(problemsKept("nothing-told", refused, 1000)).toEqual([]);
+  });
+
+  /** Another cluster behind the name: fails if its window inherits the old cluster's pod. */
+  it("forgets what it kept when the kubeconfig puts another cluster behind the name", () => {
+    const key = "forgets-on-rebind";
+    problemsKept(key, told, 1000);
+    namesRebound();
+    expect(problemsKept(key, refused, 2000)).toEqual([]);
   });
 });

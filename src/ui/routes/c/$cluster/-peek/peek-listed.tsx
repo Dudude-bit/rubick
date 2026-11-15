@@ -23,14 +23,19 @@ export function PodListedFindings({ pod }: { pod: PodInfo }) {
   const t = useT();
   const items = useListedItems("Pod", pod.namespace, pod.name, true) ?? [];
   if (items.length === 0) return null;
+  // A finding kept over a read that no longer answers is last known, as the chip says.
+  const kept = (item: AttentionItem, headline: string) =>
+    item.stale
+      ? `${headline} · ${t("cluster", "problemNotRechecked")}`
+      : headline;
   return (
     <div className="mt-3 flex flex-col gap-2" data-testid="listed-findings">
       {items.map((item) =>
         item.detail?.says === "probe" ? (
           <ProblemSummary
             key={item.key}
-            tone={item.tone}
-            headline={probeFailureHeadline(item.detail.failure, t)}
+            tone={item.stale ? "warn" : item.tone}
+            headline={kept(item, probeFailureHeadline(item.detail.failure, t))}
             detail={
               <ProbeFailureDetail pod={pod} failure={item.detail.failure} />
             }
@@ -38,8 +43,8 @@ export function PodListedFindings({ pod }: { pod: PodInfo }) {
         ) : (
           <ProblemSummary
             key={item.key}
-            tone={item.tone}
-            headline={item.reason}
+            tone={item.stale ? "warn" : item.tone}
+            headline={kept(item, item.reason)}
             detail={detailWords(item.detail, t)}
           />
         )

@@ -12,11 +12,19 @@ import type { StatusRole } from "@/lib/status-role";
  * True is a fault: they name a thing that is usually not happening, so False
  * is the quiet value. What True means for them is decided by `ADVISORY`.
  */
-const HEALTHY_WHEN_FALSE = new Set([
+const HEALTHY_WHEN_FALSE = [
   "memorypressure",
   "diskpressure",
   "pidpressure",
   "networkunavailable",
+  // The node problem detector's, which GKE and AKS nodes report.
+  "kerneldeadlock",
+  "readonlyfilesystem",
+  "frequentkubeletrestart",
+  "frequentdockerrestart",
+  "frequentcontainerdrestart",
+  "frequentunregisternetdevice",
+  "corruptdockeroverlay2",
   "replicafailure",
   "failed",
   "failuretarget",
@@ -25,21 +33,97 @@ const HEALTHY_WHEN_FALSE = new Set([
   // Gateway API listeners: a controller that looked writes these False.
   "conflicted",
   "overlappingtlsconfig",
+  "partiallyinvalid",
   // An HPA inside its range says False; True is the floor or the ceiling.
   "scalinglimited",
   // kstatus, as Flux writes it: True is a reconcile under way, or one that gave up.
   "reconciling",
   "stalled",
+  "fetchfailed",
+  "buildfailed",
+  "artifactoutdated",
   // A CRD whose schema the API server cannot prune or default by.
   "nonstructuralschema",
-  // A pod about to be evicted or preempted.
+  // A pod about to be evicted or preempted, or being resized.
   "disruptiontarget",
+  "podresizepending",
+  "podresizeinprogress",
+  // A claim being grown or modified.
+  "resizing",
+  "filesystemresizepending",
+  "modifyingvolume",
+  "modifyvolumeerror",
   // A namespace being deleted: True is what the deletion waits on or failed at.
   "namespacedeletiondiscoveryfailure",
   "namespacedeletiongroupversionparsingfailure",
   "namespacedeletioncontentfailure",
   "namespacecontentremaining",
   "namespacefinalizersremaining",
+  // cert-manager's request that cannot be served as written, or was refused.
+  "invalidrequest",
+  "denied",
+  // Argo Rollouts, and KEDA's scaler: True is held, or a spec it cannot run.
+  "paused",
+  "invalidspec",
+  "fallback",
+  // Karpenter's node whose spec has moved on from what it runs.
+  "drifted",
+] as const;
+
+/** Conditions whose unremarkable value is `True`: the Ready kind, from the core API and the operators this app reads. */
+const HEALTHY_WHEN_TRUE = [
+  "ready",
+  "containersready",
+  "podscheduled",
+  "initialized",
+  "podreadytostartcontainers",
+  "available",
+  "progressing",
+  "complete",
+  "successcriteriamet",
+  "disruptionallowed",
+  "abletoscale",
+  "scalingactive",
+  "established",
+  "namesaccepted",
+  "kubernetesapiapprovalpolicyconformant",
+  "approved",
+  // cert-manager's: `SAID` reads True and an issued False; any other False failed.
+  "issuing",
+  "accepted",
+  "programmed",
+  "resolvedrefs",
+  "healthy",
+  "completed",
+  "released",
+  "testsuccess",
+  "artifactinstorage",
+  "sourceverified",
+  "reconciled",
+  "synced",
+  "installed",
+  "offered",
+  "active",
+  "launched",
+  "registered",
+  "validationsucceeded",
+  "continuousarchiving",
+  "lastbackupsucceeded",
+] as const;
+
+type KnownType =
+  | (typeof HEALTHY_WHEN_FALSE)[number]
+  | (typeof HEALTHY_WHEN_TRUE)[number];
+
+/**
+ * The value each type this app knows the sense of is satisfied at. A type
+ * not here is drawn neither as health nor as trouble: an operator's
+ * `Degraded=True` drew a green tick and Argo Rollouts' `Paused=False` a red
+ * cross, each read as if it were a Ready.
+ */
+const SATISFIED_AT: ReadonlyMap<string, "true" | "false"> = new Map([
+  ...HEALTHY_WHEN_FALSE.map((type) => [type, "false"] as const),
+  ...HEALTHY_WHEN_TRUE.map((type) => [type, "true"] as const),
 ]);
 
 /**
@@ -54,12 +138,15 @@ const HEALTHY_WHEN_FALSE = new Set([
  * `Complete` yet is running, and a `Suspended` one is suspended because
  * somebody suspended it.
  */
-const ADVISORY = new Set([
+const ADVISORY: ReadonlySet<string> = new Set<KnownType>([
   "disruptionallowed",
   "suspended",
   "complete",
+  "completed",
   "successcriteriamet",
   "terminating",
+  "paused",
+  "active",
 ]);
 
 /**
@@ -73,7 +160,10 @@ const ADVISORY = new Set([
  * `Ready`, its container states and its events, all of which are louder and
  * none of which are guesses.
  */
-const LIFECYCLE_STEP = new Set(["podreadytostartcontainers", "initialized"]);
+const LIFECYCLE_STEP: ReadonlySet<string> = new Set<KnownType>([
+  "podreadytostartcontainers",
+  "initialized",
+]);
 
 /**
  * Conditions whose off value is a caution, not a fault.
@@ -84,12 +174,14 @@ const LIFECYCLE_STEP = new Set(["podreadytostartcontainers", "initialized"]);
  * An HPA at its ceiling, or blind to its metrics, holds the workload at the
  * size it has: the amber `autoscalerVerdict` gives the same two.
  */
-const CAUTION = new Set([
+const CAUTION: ReadonlySet<string> = new Set<KnownType>([
   "overlappingtlsconfig",
   "scalinglimited",
   "scalingactive",
   "nonstructuralschema",
   "disruptiontarget",
+  "drifted",
+  "fallback",
 ]);
 
 /** The kubelet's reasons on a pod that has ended, which only some of its conditions carry. */
@@ -124,9 +216,48 @@ const SAID: Record<string, StatusRole> = {
   "reconciling=true": "pending",
   "namespacecontentremaining=true": "pending",
   "namespacefinalizersremaining=true": "pending",
+  // A claim or a pod being resized: under way, until it says it failed.
+  "resizing=true": "pending",
+  "filesystemresizepending=true": "pending",
+  "modifyingvolume=true": "pending",
+  "podresizeinprogress=true": "pending",
+  "podresizepending=true/Deferred": "pending",
 };
 
 const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
+
+/** Argo Rollouts says Healthy=False for as long as a rollout waits on its pause: held, not broken. */
+const heldByPause = (type: string, among: readonly ConditionInfo[]) =>
+  type === "healthy" &&
+  among.some(
+    (other) =>
+      normalize(other.type) === "paused" &&
+      other.status.toLowerCase() === "true"
+  );
+
+/**
+ * Words a controller writes on a condition whichever value it holds, by
+ * `type=status/reason`, with its message where that is as fixed. Argo
+ * Rollouts writes `Paused=False` with `RolloutPaused` and "Rollout is
+ * paused", which beside False say the opposite of it.
+ */
+const FIXED_WORDS: Readonly<Record<string, string | null>> = {
+  "paused=false/RolloutPaused": "Rollout is paused",
+  "completed=false/RolloutCompleted": "RolloutCompleted",
+  "healthy=false/RolloutHealthy": null,
+};
+
+/** The condition as a row speaks it: without the words its controller writes on it whatever its value. */
+export function spokenCondition(condition: ConditionInfo): ConditionInfo {
+  const key = `${normalize(condition.type)}=${condition.status.toLowerCase()}/${condition.reason ?? ""}`;
+  if (!(key in FIXED_WORDS)) return condition;
+  const fixed = FIXED_WORDS[key];
+  return {
+    ...condition,
+    reason: null,
+    message: condition.message === fixed ? null : condition.message,
+  };
+}
 
 /**
  * What a condition is, in the same five roles every other state in the app is
@@ -152,9 +283,10 @@ export function conditionRole(
   // failing, it is the object being unreadable, which is `warn` everywhere
   // else in the app.
   if (status !== "true" && status !== "false") return "warn";
-  const healthyValue = HEALTHY_WHEN_FALSE.has(type) ? "false" : "true";
+  const healthyValue = SATISFIED_AT.get(type);
+  if (!healthyValue) return "neutral";
   if (status === healthyValue) return "ok";
-  if (ADVISORY.has(type)) return "neutral";
+  if (ADVISORY.has(type) || heldByPause(type, among)) return "neutral";
   if (CAUTION.has(type)) return "warn";
   if (!LIFECYCLE_STEP.has(type)) return "err";
   return among.some((other) => ENDED.has(other.reason ?? ""))
@@ -199,5 +331,9 @@ export function cautioningCondition(
 }
 
 /** What the controller said, in its own words: reason and message, else type and status. */
-export const conditionSaid = (c: ConditionInfo): string =>
-  [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`;
+export function conditionSaid(condition: ConditionInfo): string {
+  const c = spokenCondition(condition);
+  return (
+    [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`
+  );
+}

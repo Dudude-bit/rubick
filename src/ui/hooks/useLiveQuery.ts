@@ -618,7 +618,7 @@ export function useLiveQuery<
   );
 
   const turnsAt =
-    data === undefined ? NaN : Date.parse(changesAt?.(data) ?? "");
+    data == null ? NaN : Date.parse(changesAt?.(data) ?? "");
   const readsAgain =
     enabled && visible && !gone && !refused && !Number.isNaN(turnsAt);
   useEffect(() => {

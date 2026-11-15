@@ -617,6 +617,25 @@ describe("a Service row whose pods share a cause", () => {
   });
 });
 
+describe("a problem kept over a read that no longer answers", () => {
+  /** Fails if Share hands on a last-known problem as a current one, in its old tone, while the screen says "not rechecked". */
+  it("is shared as last known, amber", () => {
+    const read = attentionFrom([problem]);
+    const kept = {
+      ...read,
+      items: read.items.map((item) => ({
+        ...item,
+        stale: true,
+        lastKnown: { at: 0, refused: true },
+      })),
+    };
+    const share = attentionShare(kept, t);
+    const items = share.body.type === "findings" ? share.body.items : [];
+    expect(items[0]?.title).toMatch(/· not rechecked$/);
+    expect(items[0]?.role).toBe("warn");
+  });
+});
+
 describe("the detail line on a problem row", () => {
   /** The row carries two unlike things. `said` is the cluster's own
    *  message and has to survive a language switch untouched; the rest are

@@ -10,6 +10,7 @@ import { WithProblem } from "../../-object/ProblemTone";
 import {
   PROBLEM_MARK_COMPACT_PX,
   PROBLEM_MARK_PX,
+  PROBLEM_STALE_PX,
   type Problem,
 } from "../../-object/problem";
 import { RolloutBadge } from "../../-object/RolloutSummary";
@@ -60,6 +61,7 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
       ideal: (t, rows: readonly Row[]) =>
         FLOOR +
         (rows.some((row) => row.problem) ? PROBLEM_MARK_PX : 0) +
+        (rows.some((row) => row.problem?.stale) ? PROBLEM_STALE_PX : 0) +
         causeCellPx(
           rows.map((row) => ({
             podsCause: row.podsCause,

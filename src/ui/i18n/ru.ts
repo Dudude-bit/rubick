@@ -1114,6 +1114,9 @@ export const ru: Catalogue = {
     scaleCountUnread:
       "Текущее количество ещё не прочитано. Укажите, сколько реплик запустить.",
     scaleNeedsCount: "Укажите, сколько реплик запустить: 0 или больше.",
+    scaleToZero:
+      "Останавливает все поды. Ничего не отвечает, пока не вернуть реплики.",
+    scaleNoChange: "Столько же, сколько сейчас, ничего не изменится.",
     scopeWindowToIt: "Переключить окно на него",
     itsOwnAlb: "собственный ALB",
     filterLoadBalancers: "Фильтр балансировщиков",
@@ -5227,6 +5230,8 @@ export const ru: Catalogue = {
     freshOffline: "нет связи",
     freshStale: "чтение не удаётся",
     freshAnswerAge: "последний ответ {age} назад",
+    countClusterWide:
+      "Посчитано по всему кластеру, а не только по пространствам имён этого окна.",
     countsKindRefused:
       "Последнее чтение этого не удалось или было отклонено, поэтому число может быть не актуальным.",
     freshLiveNote:
@@ -5531,6 +5536,15 @@ export const ru: Catalogue = {
       other: "{n} проблемы · проверено не всё",
     },
     problemsNoneNotAllChecked: "проблем не найдено · проверено не всё",
+    problemNotRechecked: "не перепроверено",
+    problemNotRecheckedRefused:
+      "Не перепроверено: кластер отклонил чтение, которое проверило бы это снова. Последние известные данные на {time}.",
+    problemNotRecheckedFailed:
+      "Не перепроверено: чтение, которое проверило бы это снова, не удалось. Последние известные данные на {time}.",
+    unreadOnScreen:
+      "Не всё на этом экране удалось прочитать, поэтому счёт может что-то упускать:",
+    unreadOnScreenRefused: "{name}: отклонено",
+    unreadOnScreenFailed: "{name}: чтение не удалось",
     finishedOnNode: "Завершились здесь",
     finishedOnNodeNote:
       "Поды в фазе Succeeded и Failed не занимают места на узле, поэтому счётчики подов на этой странице их не учитывают, как и kubectl describe node.",
@@ -7527,6 +7541,8 @@ export const ru: Catalogue = {
     metricOfLimit: "{used} / {limit} лимита ({percent}%)",
     metricRequestedNoLimit: "{used} · запрошено {requested}, без лимита",
     metricNoLimit: "{used} · без лимита",
+    metricOfCapacity: "{used} из {limit} ёмкости ({percent}%)",
+    metricNoCapacity: "{used} · ёмкость неизвестна",
     couldNotReadCertificates: "Не удалось прочитать сертификаты этого кластера",
     couldNotReadCertificatesBody:
       "Каждая строка на этой странице берётся из объектов cert-manager в этом API-сервере, а этот запрос не удался, поэтому список был бы догадкой, а не ответом.",
@@ -10664,6 +10680,24 @@ export const ru: Catalogue = {
       other: "(+{n} из наборов)",
     },
     gwBackendsAllExist: "Все {n} бэкенд-Service существуют, порты совпадают",
+    scaleNow: {
+      one: "Сейчас запущена {n} реплика.",
+      few: "Сейчас запущено {n} реплики.",
+      many: "Сейчас запущено {n} реплик.",
+      other: "Сейчас запущено {n} реплики.",
+    },
+    scaleStarts: {
+      one: "Запустится ещё {n} под.",
+      few: "Запустится ещё {n} пода.",
+      many: "Запустится ещё {n} подов.",
+      other: "Запустится ещё {n} пода.",
+    },
+    scaleStops: {
+      one: "Остановится {n} под.",
+      few: "Остановится {n} пода.",
+      many: "Остановится {n} подов.",
+      other: "Остановится {n} пода.",
+    },
     restartPods: {
       one: "{n} под",
       few: "{n} пода",

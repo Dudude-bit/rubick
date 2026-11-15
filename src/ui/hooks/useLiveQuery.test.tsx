@@ -923,4 +923,19 @@ describe("an answer that says when it stops being true", () => {
     await advance(1);
     expect(reads).toBe(2);
   });
+  /** Fails if a read that answered nothing at all throws from the turn time it never named, taking its page down with it. */
+  it("draws on when a read answers with nothing", async () => {
+    function Nothing() {
+      useLiveQuery<{ turnsAt: string | null } | null>({
+        queryKey: ["nothing"],
+        queryFn: async () => null,
+        refresh: "unserved",
+        changesAt: (answer) => answer!.turnsAt,
+      });
+      return <p>drawn</p>;
+    }
+    wrap(<Nothing />);
+    await settle();
+    expect(screen.getByText("drawn")).toBeInTheDocument();
+  });
 });

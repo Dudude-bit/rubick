@@ -91,6 +91,8 @@ export interface AttentionItem {
   shutBy?: { key: string; policies: string[] };
   /** The last answer about it, kept while the reads that would tell it again fail. */
   stale?: boolean;
+  /** Where `stale`: when the answer it is kept from came, and whether the reads since were refused rather than failed. */
+  lastKnown?: { at: number; refused: boolean };
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -489,6 +491,67 @@ export function servicesKept(
   return kept;
 }
 
+const toldBy = new Map<
+  string,
+  {
+    overview: ClusterOverview;
+    answeredAt: number;
+    told: ReadonlyMap<string, { item: AttentionItem; at: number }>;
+    kept: AttentionItem[];
+  }
+>();
+keptByName(() => toldBy.clear());
+
+/**
+ * The backend's problems under `key` (a cluster and a scope) whose kind went
+ * unread where they live, as the last answer that read it there told them,
+ * until a read of it there answers again. A pod whose list was refused has
+ * not recovered; it has gone unseen. Moved on once per answer, as
+ * {@link servicesKept} is.
+ */
+export function problemsKept(
+  key: string,
+  overview: ClusterOverview,
+  answeredAt: number
+): AttentionItem[] {
+  const was = toldBy.get(key);
+  if (was?.overview === overview && was.answeredAt === answeredAt)
+    return was.kept;
+  const current = problemItems(overview.problems);
+  // An answer identical to the last comes back as the same object: it told
+  // the same problems again, later.
+  if (was?.overview === overview) {
+    const told = new Map(was.told);
+    for (const item of current) told.set(item.key, { item, at: answeredAt });
+    toldBy.set(key, { ...was, answeredAt, told });
+    return was.kept;
+  }
+  const told = new Map<string, { item: AttentionItem; at: number }>();
+  const kept: AttentionItem[] = [];
+  const answered = new Set(current.map((item) => item.key));
+  for (const [itemKey, last] of was?.told ?? []) {
+    if (answered.has(itemKey)) continue;
+    const lost = overview.unread.find(
+      (entry) =>
+        entry.kind === last.item.kind &&
+        (entry.namespace === null || entry.namespace === last.item.namespace)
+    );
+    if (!lost) continue;
+    told.set(itemKey, last);
+    kept.push({
+      ...last.item,
+      stale: true,
+      lastKnown: {
+        at: last.at,
+        refused: lost.code === ERROR_CODES.PERMISSION,
+      },
+    });
+  }
+  for (const item of current) told.set(item.key, { item, at: answeredAt });
+  toldBy.set(key, { overview, answeredAt, told, kept });
+  return kept;
+}
+
 /** The backend kinds whose pods decide a Service's stop, as unread over `overview`. */
 const lostBackend = remember((overview: ClusterOverview) =>
   overview.unread.filter((entry) => entry.kind !== "Node")
@@ -866,6 +929,8 @@ export interface AttentionInputs {
     /** The last answer for Services whose verdicts `answered` cannot tell now. */
     kept?: ServiceHealthInputs[];
   };
+  /** The backend's last told problems whose kind `overview` could not read again where they live ({@link problemsKept}). */
+  kept?: AttentionItem[];
   ingresses: Answer<Scoped<IngressHealthInput>>;
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
@@ -1076,6 +1141,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   );
   const backend = problemItems(overview.problems);
   const ours = [
+    ...(input.kept ?? []),
     ...serviceItems(services.answered, t),
     ...keptItems(services.kept ?? NO_SERVICES, t),
     ...ingress.items,

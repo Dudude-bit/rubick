@@ -13,6 +13,7 @@ import {
 import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 import { WORKLOAD_SOURCES } from "../../../-peek/peek-sources-workloads";
 import { podSegments, podsServing } from "../../../-overview/health-share";
+import { PROBLEM_STALE_PX } from "../../../-object/problem";
 import { columns } from "./PodList";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -29,7 +30,12 @@ type Row = {
   initContainers?: RowContainer[];
   nodeSilence?: unknown;
   kubeletWarned?: boolean;
-  problem?: { tone: "err" | "warn"; n: number; title: string };
+  problem?: {
+    tone: "err" | "warn";
+    n: number;
+    title: string;
+    stale?: { at: number | null; refused: boolean };
+  };
 };
 
 function statusCell(original: Row) {
@@ -72,6 +78,34 @@ describe("a Running pod whose probe fails", () => {
     expect(container.textContent?.indexOf("1 problem")).toBeLessThan(
       container.textContent?.indexOf("Running") ?? -1
     );
+  });
+});
+
+describe("a pod whose problem the read of pods could not check again", () => {
+  const kept = {
+    tone: "err" as const,
+    n: 1,
+    title: "Unhealthy: Readiness probe failed",
+    stale: { at: 1000, refused: true },
+  };
+
+  /**
+   * Shot r7-13: pods refused, and node-5skbg's row lost its mark and read
+   * green "Running". Fails if the row drops the kept problem, does not say
+   * it was not rechecked, or its column leaves no room for that beside the
+   * status word.
+   */
+  it("says not rechecked, and its column makes room for it", () => {
+    render(<>{statusCell({ status: RUNNING, problem: kept })}</>);
+    expect(screen.getByText("not rechecked")).toBeInTheDocument();
+
+    const column = (columns as ColumnDef<Row>[]).find((c) => c.id === "status");
+    const floor = column?.meta?.floor as (t: T, rows: readonly Row[]) => number;
+    const fresh = { ...kept, stale: undefined };
+    expect(
+      floor(t, [{ status: RUNNING, problem: kept }]) -
+        floor(t, [{ status: RUNNING, problem: fresh }])
+    ).toBe(PROBLEM_STALE_PX);
   });
 });
 

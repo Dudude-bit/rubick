@@ -171,3 +171,33 @@ describe("a workload's row carries what its pods' rows say", () => {
     expect(itemsOfRow(items, "Deployment", null, "web")).toEqual([]);
   });
 });
+
+/**
+ * Under a pods refusal the row, the peek and the page fell back to green.
+ * Fails if a row whose every item is kept from an earlier answer stops
+ * saying when and why, or if one current item is drawn as not rechecked.
+ */
+describe("a row's problem whose read went unread since", () => {
+  const kept = failing("web-1", {
+    stale: true,
+    lastKnown: { at: 1000, refused: true },
+  });
+
+  it("is not rechecked, with when it was told and that the read was refused", () => {
+    const problems = rowProblems([kept], "Pod");
+    expect(problemOfRow(problems, "Pod", "shop", "web-1")?.stale).toEqual({
+      at: 1000,
+      refused: true,
+    });
+    expect(
+      problemOfRow(rowProblems([kept]), "Deployment", "shop", "web")?.stale
+    ).toEqual({ at: 1000, refused: true });
+  });
+
+  it("is current while anything behind it was read again", () => {
+    const problems = rowProblems([kept, failing("web-2")]);
+    const problem = problemOfRow(problems, "Deployment", "shop", "web");
+    expect(problem?.n).toBe(2);
+    expect(problem?.stale).toBeUndefined();
+  });
+});
