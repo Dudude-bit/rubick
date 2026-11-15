@@ -119,6 +119,47 @@ describe("Audit's summary of a scope", () => {
     expect(screen.getByText("Checked: Helm releases 3")).toBeInTheDocument();
   });
 
+  /**
+   * Requests not weighed against use, whether for want of a Prometheus or
+   * for an object the reading held no sample of, leave the scope not clean.
+   * Fails if "nothing to report" stood beside either.
+   */
+  it("does not call a scope clean while requests were not weighed against use", () => {
+    const { unmount } = render(
+      <AuditSummaryBlock
+        page={page({ usage: { says: "noSupplier" } })}
+        scope="shop"
+        system={false}
+      />
+    );
+    expect(screen.queryByText(/Nothing to report/)).toBeNull();
+    expect(screen.getByTestId("audit-usage-read")).toHaveTextContent(
+      /no Prometheus is connected/
+    );
+    unmount();
+    render(
+      <AuditSummaryBlock
+        page={page({
+          usage: { says: "read", window: "24h" },
+          rules: [
+            {
+              rule: "requests-above-usage",
+              objects: 0,
+              unchecked: 2,
+              system: 0,
+            },
+          ],
+        })}
+        scope="shop"
+        system={false}
+      />
+    );
+    expect(screen.queryByText(/Nothing to report/)).toBeNull();
+    expect(screen.getByTestId("audit-usage-read")).toHaveTextContent(
+      /weighed over the last 24h/
+    );
+  });
+
   /** A refusal across the whole cluster points at the namespace picker. */
   it("points at the namespace picker when a kind is refused across the cluster", () => {
     render(

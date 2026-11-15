@@ -105,6 +105,29 @@ describe("Audit in a shared file", () => {
     });
   });
 
+  /**
+   * Requests not weighed against use make the file partial, saying why.
+   * Fails if a file written without a Prometheus read as a whole answer.
+   */
+  it("keeps requests not weighed against use out of the total", () => {
+    const section = auditScreenSection(
+      {
+        ...page,
+        summary: {
+          ...page.summary,
+          notChecked: [],
+          usage: { says: "noSupplier" },
+        },
+      },
+      "rule",
+      t
+    );
+    expect(section.count).toBeNull();
+    expect(section.notRead).toEqual([
+      "Requests against use: not weighed, since no Prometheus is connected to this cluster",
+    ]);
+  });
+
   /** Fails if an object's unanswered rule reaches the file as a pass. */
   it("writes an object's unanswered rules as not read", () => {
     const section = auditObjectSection(
