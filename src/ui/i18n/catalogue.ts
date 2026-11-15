@@ -7297,6 +7297,7 @@ export const en = {
     noneWhereRead: "none where it could be read",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
+    nothingRunningShort: "nothing",
     usageMetricsNotRead:
       "Could not read CPU and memory from metrics-server, so what this uses is not known.",
     fullnessNotRead:
@@ -7310,6 +7311,8 @@ export const en = {
       "This pod has finished, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     usagePodNotRunningNote:
       "None of its containers is running now, so metrics-server has nothing to sample: there is no line rather than a line at zero.",
+    usageWorkloadNotRunningNote:
+      "None of its pods has a container running now, so metrics-server has nothing to sample: there is no line rather than a line at zero.",
     usageNoPodsNote:
       "Usage is summed from running pods, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",

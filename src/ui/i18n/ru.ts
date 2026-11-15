@@ -8026,6 +8026,7 @@ export const ru: Catalogue = {
     noneWhereRead: "нет там, где удалось прочитать",
     nothingBroken: "ничего не сломано",
     nothingRunning: "ничего не запущено",
+    nothingRunningShort: "ничего",
     usageMetricsNotRead:
       "Не удалось прочитать CPU и память из metrics-server, поэтому сколько это потребляет, неизвестно.",
     fullnessNotRead:
@@ -8039,6 +8040,8 @@ export const ru: Catalogue = {
       "Под завершился, а metrics-server ничего не хранит о завершённых подах, поэтому линии нет, а не линия на нуле.",
     usagePodNotRunningNote:
       "Ни один его контейнер сейчас не запущен, поэтому metrics-server нечего замерять: линии нет, а не линия на нуле.",
+    usageWorkloadNotRunningNote:
+      "Ни в одном из его подов сейчас не работает контейнер, поэтому metrics-server нечего измерять: линии нет, а не линия на нуле.",
     usageNoPodsNote:
       "Потребление суммируется по запущенным подам, поэтому линии нет вовсе, а не линия на нуле.",
     kindScaledToZero: "{kind} масштабирован до нуля.",

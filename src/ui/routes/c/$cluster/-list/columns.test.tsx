@@ -245,7 +245,7 @@ describe("a metric cell for something with nothing running", () => {
     ["CPU", createCpuColumn() as ColumnDef<never>],
     ["Memory", createMemoryColumn() as ColumnDef<never>],
   ])(
-    "says none in %s, apart from a zero and an unread reading",
+    "says nothing running in %s, apart from a zero and an unread reading",
     (_, column) => {
       const idle = renderWithProviders(
         <>
@@ -256,7 +256,11 @@ describe("a metric cell for something with nothing running", () => {
           })}
         </>
       );
-      expect(idle.container).toHaveTextContent(/^none$/);
+      expect(idle.container).toHaveTextContent("nothing running");
+      expect(idle.container.querySelector("[title]")).toHaveAttribute(
+        "title",
+        "nothing running"
+      );
       expect(idle.container.querySelector("[role=img]")).toBeNull();
       idle.unmount();
 
@@ -274,7 +278,7 @@ describe("a metric cell for something with nothing running", () => {
   );
 
   /** Fails if a shared report says "not measured" for a workload with nothing running. */
-  it("says none in a shared report too", () => {
+  it("says nothing running in a shared report too", () => {
     const share = (
       createCpuColumn().meta as {
         share: (row: never, t: Translate) => unknown;
@@ -282,7 +286,7 @@ describe("a metric cell for something with nothing running", () => {
     ).share;
     const t = ((_: string, key: string) => key) as Translate;
     expect(share({ cpuMillicores: null, idle: true } as never, t)).toEqual({
-      text: "noneLower",
+      text: "nothingRunning",
       quiet: true,
     });
   });

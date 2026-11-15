@@ -269,6 +269,8 @@ export const SECTIONS: readonly ShortcutSection[] = [
 export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/routes/c/$cluster/-shell/useShortcuts.ts":
     "the central handler: ?, g-chords, page keys, alt+left for Back",
+  "src/ui/components/ui/use-table-selection.ts":
+    "not a shortcut: mod+a outside a field selects nothing while a table is on screen",
   "src/ui/routes/c/$cluster/-shell/CommandPalette.tsx": "mod+k",
   "src/ui/components/settings/SettingsOverlay.tsx": "mod+,",
   "src/ui/routes/c/$cluster/-shell/useCopyLink.ts": "mod+shift+c",

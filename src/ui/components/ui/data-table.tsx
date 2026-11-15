@@ -69,6 +69,8 @@ import {
 } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
 import { holdTitles } from "@/lib/hold-titles";
+import { usePointerOnTable } from "@/lib/pointer-hold";
+import { useTableSelection } from "./use-table-selection";
 import { columnFloor, columnIdeal, columnLabel } from "@/lib/column-label";
 import { useMetricsAbsence } from "@/lib/metrics-absence";
 import type { RowGrouping } from "@/components/ui/row-grouping";
@@ -948,7 +950,7 @@ function DataTableInner<TData extends RowData>({
   // Per column, from every row the table holds rather than the ones a
   // search leaves, so typing does not move the columns.
   const absence = useMetricsAbsence();
-  const dataBounds = React.useMemo(() => {
+  const liveBounds = React.useMemo(() => {
     void fonts;
     return new Map(
       dataColumns.map((column) => [
@@ -960,6 +962,29 @@ function DataTableInner<TData extends RowData>({
       ])
     );
   }, [dataColumns, data, t, fonts, absence]);
+  const pointed = usePointerOnTable();
+  const columnIds = dataColumns.map(columnIdOf).join("\n");
+  const [lastLaidOut, setLastLaidOut] = React.useState({
+    columnIds,
+    bounds: liveBounds,
+    visibility: columnVisibility,
+  });
+  if (
+    !pointed &&
+    (lastLaidOut.bounds !== liveBounds ||
+      lastLaidOut.visibility !== columnVisibility)
+  ) {
+    setLastLaidOut({
+      columnIds,
+      bounds: liveBounds,
+      visibility: columnVisibility,
+    });
+  }
+  const columnsHeld = pointed && lastLaidOut.columnIds === columnIds;
+  const dataBounds = columnsHeld ? lastLaidOut.bounds : liveBounds;
+  const shownVisibility = columnsHeld
+    ? lastLaidOut.visibility
+    : columnVisibility;
 
   // A filled table's port draws its own scrollbar in a lane, so only a table
   // the page scrolls keeps the room the page's overlay scrollbar reaches over.
@@ -982,7 +1007,7 @@ function DataTableInner<TData extends RowData>({
       dataColumns
         .flatMap((column) => {
           const id = columnIdOf(column);
-          if (columnVisibility[id] === false) return [];
+          if (shownVisibility[id] === false) return [];
           const meta = column.meta as AppColumnMeta | undefined;
           const floor = dataBounds.get(id)?.floor ?? 0;
           return [{ id, floor, yields: meta?.yields }];
@@ -992,7 +1017,7 @@ function DataTableInner<TData extends RowData>({
             ? { ...column, floor: Math.min(column.floor, pinnedRoom) }
             : column
         ),
-    [dataColumns, columnVisibility, dataBounds, pinnedRoom]
+    [dataColumns, shownVisibility, dataBounds, pinnedRoom]
   );
   const pinnedId = dataYields[0]?.id;
   // The row's buttons fold into one that opens its menu, which offers them
@@ -1049,14 +1074,14 @@ function DataTableInner<TData extends RowData>({
   const visibility = React.useMemo<ColumnVisibilityState>(
     () =>
       yieldedKey === ""
-        ? columnVisibility
+        ? shownVisibility
         : {
-            ...columnVisibility,
+            ...shownVisibility,
             ...Object.fromEntries(
               yieldedKey.split("\n").map((id) => [id, false])
             ),
           },
-    [columnVisibility, yieldedKey]
+    [shownVisibility, yieldedKey]
   );
 
   const table = useTable({
@@ -1116,6 +1141,7 @@ function DataTableInner<TData extends RowData>({
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
   const containerRef = React.useRef<HTMLDivElement>(null);
   useRowControlsParked(containerRef, keyboardNavEnabled);
+  useTableSelection(containerRef);
   const filterRef = React.useRef<HTMLInputElement>(null);
 
   const matched = table.getFilteredRowModel().rows.length;

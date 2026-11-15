@@ -128,6 +128,45 @@ describe("WorkloadUsage with nothing running", () => {
   });
 });
 
+describe("WorkloadUsage whose pods all run no container", () => {
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+    vi.mocked(commands.getPodsMetrics).mockResolvedValue({
+      status: "ok",
+      data: { items: [], sampledAt: null },
+    } as never);
+  });
+
+  /**
+   * A Deployment whose only pod crash-loops counted that pod as running, summed
+   * nothing and said "not reporting", where the pod's own page says nothing
+   * runs. Fails if the page says "not reporting" for it, or loses the words the
+   * Pod page and the list use.
+   */
+  it("says nothing is running, in the words the pod uses, and not that it is not reporting", () => {
+    const looping = {
+      ...pod("api-1", "Running"),
+      containers: [
+        {
+          state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
+        },
+      ],
+    } as unknown as PodInfo;
+    view({
+      kind: "Deployment",
+      pods: [looping],
+      idle: "None of this Deployment's pods is running.",
+    });
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "nothing running"
+    );
+    expect(screen.queryByText(/not reporting/i)).toBeNull();
+    expect(screen.getByText(/has a container running now/)).toBeVisible();
+    expect(screen.queryByText(/None of this Deployment/)).toBeNull();
+  });
+});
+
 describe("WorkloadUsage whose pods were not read", () => {
   beforeEach(() => {
     useUsageHistoryStore.getState().clear();
@@ -330,9 +369,7 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
     );
     expect(screen.queryByText(/watching from now/i)).toBeNull();
-    expect(
-      screen.queryByText(/watched since you opened this page/i)
-    ).toBeNull();
+    expect(screen.queryByText(/watched since \d{1,2}:\d{2}/i)).toBeNull();
     expect(screen.queryByText(/so far/i)).toBeNull();
   });
 

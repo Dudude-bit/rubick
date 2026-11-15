@@ -28,7 +28,10 @@ export function JobStatusCell({
         </span>
       )}
       {job.failure?.reason && (
-        <span className="max-w-[24ch] flex-none truncate font-mono text-caption text-fg-mut">
+        <span
+          className="max-w-[24ch] flex-none truncate font-mono text-caption text-fg-mut"
+          title={job.failure.reason}
+        >
           {job.failure.reason}
         </span>
       )}

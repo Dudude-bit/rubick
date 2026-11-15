@@ -149,9 +149,14 @@ export function WorkloadUsage({
 
   // The one case metrics-server and a Prometheus disagree about. Both are
   // right that nothing is running; only one of them still holds what ran.
-  if (running.length === 0) {
+  const noneRuns =
+    withMetrics.length > 0 && withMetrics.every((pod) => pod.idle);
+  if (running.length === 0 || noneRuns) {
+    const note = noneRuns
+      ? t("empty", "usageWorkloadNotRunningNote")
+      : `${idle} ${t("empty", pods.length > 0 ? "usageIdleNote" : "usageNoPodsNote")}`;
     if (past.state !== "ready" || scope === undefined) {
-      return <IdleUsage says={idle} exited={pods.length > 0} />;
+      return <IdleUsage note={note} />;
     }
     return (
       <UsageBlock
@@ -171,7 +176,7 @@ export function WorkloadUsage({
         connections={connections}
         history={scope}
         live={false}
-        idleNote={idle}
+        idleNote={noneRuns ? note : idle}
       />
     );
   }
@@ -214,7 +219,7 @@ export function WorkloadUsage({
  * the difference is the whole point: a line along the floor invites someone
  * to ask why the workload is idle, when the answer is that it is not there.
  */
-function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
+function IdleUsage({ note }: { note: string }) {
   const t = useT();
   return (
     <Section>
@@ -223,7 +228,7 @@ function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
         count={t("empty", "nothingRunning")}
       />
       <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
-        {says} {t("empty", exited ? "usageIdleNote" : "usageNoPodsNote")}
+        {note}
       </p>
     </Section>
   );

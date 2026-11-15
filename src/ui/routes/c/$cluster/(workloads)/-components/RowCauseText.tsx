@@ -21,7 +21,11 @@ export function RowCauseText({
       <RefusedLine said={cause.said} className="min-w-0 truncate text-xs" />
     );
   if (cause.says !== "read" || !cause.shared)
-    return <span className="min-w-0 truncate text-xs text-fg-fnt">{text}</span>;
+    return (
+      <span className="min-w-0 truncate text-xs text-fg-fnt" title={text}>
+        {text}
+      </span>
+    );
   const { shared } = cause;
   return (
     <span

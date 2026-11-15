@@ -109,16 +109,9 @@ export function parseMemory(memStr: string | null | undefined): number {
   return parseQuantity(memStr) ?? 0;
 }
 
-/**
- * Millicores below a core, cores above it with one decimal so the unit is
- * unambiguous: "500m", "1.0", "2.5", in the reader's decimal mark.
- */
-export function formatCPU(
-  millicores: number,
-  locale: Locale = currentLocale()
-): string {
-  if (millicores < 1000) return `${Math.round(millicores)}m`;
-  return formatDecimal(millicores / 1000, 1, locale);
+/** Whole millicores, kubectl's own spelling: "500m", "1200m". A bare "1.2" has no unit to read it by. */
+export function formatCPU(millicores: number): string {
+  return `${Math.round(millicores)}m`;
 }
 
 /** Whole cores to the millicore, so 465m reads 0,465 beside a 1,2 instead of changing unit. */

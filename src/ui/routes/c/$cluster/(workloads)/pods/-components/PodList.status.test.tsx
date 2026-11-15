@@ -127,8 +127,11 @@ describe("a pod its controller replaced", () => {
     };
     render(<>{statusCell(evicted)}</>);
     const badge = screen.getByText("Evicted");
-    expect(badge.closest(".flex-none")).not.toBeNull();
-    expect(screen.getByText("already replaced")).toHaveClass("truncate");
+    expect(badge.closest(".flex-none")).toBeNull();
+    expect(screen.getByText("already replaced")).toHaveClass(
+      "truncate",
+      "shrink-[10]"
+    );
     expect(badge.closest("[title]")?.getAttribute("title")).toMatch(
       /Already replaced: its controller started another pod/
     );
@@ -492,5 +495,39 @@ describe("a pod Pending past the wait it is given", () => {
     );
     expect(podRole(pod, null)).toBe("warn");
     expect(podRole(neverPlaced(30), null)).toBe("pending");
+  });
+});
+
+describe("a status longer than the column gives it", () => {
+  /**
+   * "Init:CrashLoopBackOff" was cut mid-glyph and, with "not rechecked" beside
+   * it, ran into Restarts: the wrapper around the badge could not shrink, so
+   * the badge never reached its own ellipsis. Fails if any ancestor between
+   * the cell and the badge is flex-none.
+   */
+  it("lets the badge shrink to its own ellipsis", () => {
+    render(
+      <>
+        {statusCell({
+          status: { display: "Init:CrashLoopBackOff", phase: "Running" },
+          problem: {
+            tone: "err",
+            n: 1,
+            title: "x",
+            stale: { at: 1000, refused: true },
+          },
+        })}
+      </>
+    );
+    const word = screen.getByText("Init:CrashLoopBackOff");
+    for (
+      let el: HTMLElement | null = word;
+      el && !el.className.includes("@container");
+      el = el.parentElement
+    ) {
+      expect(el.className).not.toContain("flex-none");
+    }
+    expect(word.className).toContain("truncate");
+    expect(word.getAttribute("title")).toContain("Init:CrashLoopBackOff");
   });
 });

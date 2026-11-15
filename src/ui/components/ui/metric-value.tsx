@@ -99,6 +99,24 @@ export function UnreadMetric({
   );
 }
 
+/** What a metric cell says of an object nothing of which runs: the whole words where the cell has room, their first word where it has not. */
+export function NothingRunning({ className }: { className?: string }) {
+  const t = useT();
+  return (
+    <span
+      className={cn("@container block min-w-0 text-fg-fnt", className)}
+      title={t("empty", "nothingRunning")}
+    >
+      <span className="@max-[105px]:hidden">
+        {t("empty", "nothingRunning")}
+      </span>
+      <span className="hidden @max-[105px]:inline">
+        {t("empty", "nothingRunningShort")}
+      </span>
+    </span>
+  );
+}
+
 export interface MetricValueProps {
   /** Millicores for `cpu`, bytes for `memory`. */
   used: number | null | undefined;

@@ -12,7 +12,11 @@ import type { T as Translate } from "@/i18n/useT";
 import { CELL_PADS_PX } from "@/components/ui/column-shares";
 import { widestText, type TextFace } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { MetricValue, UnitValue } from "@/components/ui/metric-value";
+import {
+  MetricValue,
+  NothingRunning,
+  UnitValue,
+} from "@/components/ui/metric-value";
 import {
   Tooltip,
   TooltipContent,
@@ -31,7 +35,7 @@ interface WithCreatedAt {
   createdAt?: string | null;
 }
 
-/** `idle`: nothing of it runs, so there is nothing to measure, said in the none word rather than as a zero or an unread mark. */
+/** `idle`: nothing of it runs, so there is nothing to measure, said in the nothing-running word rather than as a zero or an unread mark. */
 interface WithCpuUsage {
   cpuMillicores?: number | null;
   idle?: boolean;
@@ -139,7 +143,7 @@ export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 /** The could-not-look glyph a metric cell draws in place of a figure. */
 const UNREAD_GLYPH_PX = 14;
 
-/** As wide as what its rows say: a figure where one has one, the none word where nothing runs, and the unread glyph the rest draw. */
+/** As wide as what its rows say: a figure where one has one, the nothing-running word where nothing runs, and the unread glyph the rest draw. */
 export const metricCellFloor =
   <Row,>(valueOf: (row: Row) => number | null | undefined) =>
   (t: Translate, rows: readonly Row[]) => {
@@ -152,7 +156,8 @@ export const metricCellFloor =
     return Math.max(
       figure ? METRIC_CELL_PX : 0,
       none
-        ? widestText([t("empty", "noneLower")], "sans", 7) + CELL_PADS_PX
+        ? widestText([t("empty", "nothingRunningShort")], "sans", 7) +
+            CELL_PADS_PX
         : 0,
       glyph ? UNREAD_GLYPH_PX + CELL_PADS_PX : 0
     );
@@ -166,7 +171,7 @@ const metricShare = (
   t: Translate
 ) =>
   idle
-    ? { text: t("empty", "noneLower"), quiet: true }
+    ? { text: t("empty", "nothingRunning"), quiet: true }
     : typeof value === "number"
       ? formatUsage(value, type)
       : notMeasured(t);
@@ -297,7 +302,7 @@ export function createCpuColumn<
         metricShare(row.cpuMillicores, row.idle, "cpu", t),
     },
     cell: ({ row }) => {
-      if (row.original.idle) return <None />;
+      if (row.original.idle) return <NothingRunning />;
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests
         ? parseCPU(row.original.cpuRequests)
@@ -330,7 +335,7 @@ export function createMemoryColumn<
         metricShare(row.memoryBytes, row.idle, "memory", t),
     },
     cell: ({ row }) => {
-      if (row.original.idle) return <None />;
+      if (row.original.idle) return <NothingRunning />;
       const used = row.original.memoryBytes ?? null;
       const request = row.original.memoryRequests
         ? parseMemory(row.original.memoryRequests)

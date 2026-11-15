@@ -202,7 +202,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // it". The phase rides along in the tooltip so it is not lost.
     cell: ({ row }) => (
       <span className="@container flex min-w-0 max-w-full items-baseline gap-1.5">
-        <span className="flex-none">
+        <span className="min-w-0">
           <WithProblem
             problem={row.original.problem ?? null}
             role={statusRole(row.original.status.display)}
@@ -214,7 +214,7 @@ export const columns: ColumnDef<PodRow>[] = [
           </WithProblem>
         </span>
         {row.original.status.gone === "replaced" && (
-          <span className="truncate text-caption text-fg-mut">
+          <span className="shrink-[10] truncate text-caption text-fg-mut">
             <T section="cluster" k="attentionReplacedPod" />
           </span>
         )}

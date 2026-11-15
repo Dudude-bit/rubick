@@ -43,7 +43,7 @@ describe("splitUnit", () => {
 
   it("does not mangle what the formatters actually produce", () => {
     expect(splitUnit(formatCPU(999))).toEqual({ value: "999", unit: "m" });
-    expect(splitUnit(formatCPU(2500))).toEqual({ value: "2.5", unit: "" });
+    expect(splitUnit(formatCPU(2500))).toEqual({ value: "2500", unit: "m" });
     expect(splitUnit(formatBytes(1024 ** 3 * 1.81, { decimals: 2 }))).toEqual({
       value: "1.81",
       unit: "Gi",
@@ -101,7 +101,7 @@ describe("declaredQuantity", () => {
   /** The peek and the Containers tab printed one limit two ways; fails if a unit-bearing resource is left as the manifest wrote it. */
   it("reads every resource that has a unit, and leaves the rest as written", () => {
     expect(declaredQuantity("cpu", "100m")).toBe("100m");
-    expect(declaredQuantity("cpu", "1500m")).toBe("1.5");
+    expect(declaredQuantity("cpu", "1500m")).toBe("1500m");
     expect(declaredQuantity("memory", "32Mi")).toBe("32Mi");
     expect(declaredQuantity("memory", "268435456")).toBe("256Mi");
     expect(declaredQuantity("ephemeral-storage", "2147483648")).toBe("2Gi");

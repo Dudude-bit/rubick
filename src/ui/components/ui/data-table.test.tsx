@@ -1870,6 +1870,65 @@ describe("column widths", () => {
     }
   });
 
+  /**
+   * With the pointer resting on Pods during a refusal the rows held and the
+   * columns still reflowed: Node vanished and the rest widened. Fails if a
+   * floor that grows while the pointer is on the table hides a column, or if
+   * the column stays hidden once the pointer leaves.
+   */
+  it("keeps its columns where they were while the pointer is on the table, and lets go after", async () => {
+    const grown = { px: 100 };
+    const columnsOf = (floor: number): ColumnDef<Item>[] => [
+      { ...columns[0], size: 300, meta: { floor: 100 } },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        size: 200,
+        meta: { floor, yields: 1 },
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 200,
+        meta: { floor: () => grown.px },
+        cell: () => "x",
+      },
+    ];
+    const port = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      const view = await wrapRerenderable(
+        <DataTable<Item> columns={columnsOf(100)} data={DATA} />
+      );
+      expect(
+        screen.getByRole("columnheader", { name: "Namespace" })
+      ).toBeInTheDocument();
+      fireEvent.pointerMove(screen.getByRole("table"), {
+        clientX: 10,
+        clientY: 10,
+      });
+      grown.px = 450;
+      view.rerender(
+        <DataTable<Item> columns={columnsOf(100)} data={[...DATA]} />
+      );
+      expect(
+        screen.getByRole("columnheader", { name: "Namespace" })
+      ).toBeInTheDocument();
+      fireEvent.pointerMove(document.body, { clientX: 900, clientY: 900 });
+      view.rerender(
+        <DataTable<Item> columns={columnsOf(100)} data={[...DATA]} />
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("columnheader", { name: "Namespace" })
+        ).toBeNull()
+      );
+    } finally {
+      port.mockRestore();
+    }
+  });
+
   /** Fails if a table that scrolls sideways lets its first column or group captions scroll away, which left no row saying which pod it was. */
   it("pins the first column and the group captions only while the table scrolls sideways", async () => {
     const columnsOf = [
