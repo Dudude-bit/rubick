@@ -2484,6 +2484,7 @@ export const en = {
     monthNote: "Projected: the hourly rate × 730 hours, not a bill.",
     idle: "Idle",
     idleCluster: "Idle in the cluster",
+    idleUnpriced: "Not known while no node carries a price.",
     idleNote: "Paid for and allocated to nobody.",
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",

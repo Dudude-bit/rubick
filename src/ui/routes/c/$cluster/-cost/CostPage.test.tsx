@@ -247,6 +247,27 @@ describe("the Cost page", () => {
     );
   });
 
+  /** No node priced: idle says it is not known, never 0. */
+  it("says idle is not known while no node carries a price", async () => {
+    const unpriced = readingPicture(
+      BASIS,
+      { ...READING, nodes: [], allocatedByNode: {} },
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({
+      state: "picture",
+      picture: unpriced,
+      trouble: null,
+    });
+    await open();
+    const idle = screen.getByTestId("cost-idle");
+    expect(idle).toHaveTextContent("Not known");
+    expect(idle.parentElement).toHaveTextContent(
+      "Not known while no node carries a price."
+    );
+  });
+
   /** An estimate beside a failed supplier says both: what failed, and what is shown. */
   it("says why it is an estimate when the supplier failed", async () => {
     cost.mockReturnValue({

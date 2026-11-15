@@ -141,8 +141,12 @@ export interface CostPicture {
   cluster: Amount | null;
   /** The scope: the cluster, or the namespaces in it. */
   total: Amount | null;
-  /** Paid for and allocated to nobody, the cluster's. */
-  idle: { perHour: number; reserved: number | null } | null;
+  /**
+   * Paid for and allocated to nobody, the cluster's. `null` where no node
+   * carries a price: the nodes' cost is what idle is taken from, and with
+   * none of it known there is no idle to state, not an idle of 0.
+   */
+  idle: { perHour: number; reserved: number | null; atLeast: boolean } | null;
   namespaces: NamespaceCost[];
   workloads: WorkloadCost[];
   /** Workloads past the cap, added up. */
@@ -353,7 +357,9 @@ export function estimatePicture(
     total: scopeTotal(basis, scope, cluster, namespaces, partial),
     // Idle needs what every priced node holds: one uncounted is no total.
     idle:
-      nodes && nodes.every((n) => n.perHour === null || n.idle !== null)
+      nodes &&
+      nodes.some((n) => n.perHour !== null) &&
+      nodes.every((n) => n.perHour === null || n.idle !== null)
         ? {
             perHour: sum(nodes.map((n) => n.idle)),
             reserved: nodes.some(
@@ -361,6 +367,7 @@ export function estimatePicture(
             )
               ? null
               : sum(nodes.map((n) => n.reserved)),
+            atLeast: unpriced.nodes.length > 0,
           }
         : null,
     namespaces,
@@ -485,9 +492,14 @@ export function readingPicture(
     source,
     cluster,
     total: scopeTotal(basis, scope, cluster, namespaces, cluster.atLeast),
-    idle: withNodes
-      ? { perHour: sum(nodes.map((n) => n.idle)), reserved: null }
-      : null,
+    idle:
+      withNodes && nodes.some((n) => n.perHour !== null)
+        ? {
+            perHour: sum(nodes.map((n) => n.idle)),
+            reserved: null,
+            atLeast: unpriced.nodes.length > 0,
+          }
+        : null,
     namespaces,
     workloads,
     rest,

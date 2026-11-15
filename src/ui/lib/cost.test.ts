@@ -317,6 +317,34 @@ describe("a picture from OpenCost's prices", () => {
     expect(picture.cluster!.perHour).toBeCloseTo(0.2);
   });
 
+  /**
+   * On a cluster OpenCost has no price list for, no node carries a price.
+   * Idle is the nodes' cost less what was allocated; with none of that
+   * known it is not known, and 0 was the lie the page told.
+   */
+  it("has no idle where OpenCost prices no node", () => {
+    const picture = readingPicture(
+      basis({ nodes: [node("node-a"), node("node-b")] }),
+      reading({ nodes: [], allocatedByNode: {} }),
+      opencost,
+      null
+    );
+    expect(picture.idle).toBeNull();
+    expect(picture.nodes!.every((n) => n.idle === null)).toBe(true);
+  });
+
+  /** Some nodes priced: their idle is a floor. */
+  it("calls idle at least where some nodes carry no price", () => {
+    const picture = readingPicture(
+      basis({ nodes: [node("node-a"), node("worker-7")] }),
+      reading(),
+      opencost,
+      null
+    );
+    expect(picture.idle?.atLeast).toBe(true);
+    expect(picture.idle?.perHour).toBeCloseTo(0.15);
+  });
+
   /** Idle is what the node costs less what OpenCost allocated on it. */
   it("reads idle per node as its price less what was allocated there", () => {
     const picture = readingPicture(basis(), reading(), opencost, null);

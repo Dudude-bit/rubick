@@ -59,8 +59,12 @@ function summarySection(
   }
   if (scoped && picture.cluster)
     add(t("cost", "theCluster"), amountWords(picture.cluster, currency, t));
-  if (picture.idle)
-    add(t("cost", "idle"), formatMoney(picture.idle.perHour, currency));
+  add(
+    t("cost", "idle"),
+    picture.idle
+      ? amountWords(picture.idle, currency, t)
+      : t("cost", idleUnknown(picture) ? "idleUnpriced" : "notKnown")
+  );
   if (picture.unclaimed !== null)
     add(t("cost", "unclaimed"), formatMoney(picture.unclaimed, currency));
   if (picture.fee !== null)
@@ -100,6 +104,12 @@ function Tile({
   );
 }
 
+/** Nodes were read and none of them carries a price: idle has nothing to be taken from. */
+const idleUnknown = (picture: CostPicture) =>
+  picture.nodes !== null &&
+  picture.nodes.length > 0 &&
+  picture.nodes.every((node) => node.perHour === null);
+
 function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
   const t = useT();
   const currency = currencyOf(picture);
@@ -135,16 +145,16 @@ function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
       />
       <Tile
         label={t("cost", scoped ? "idleCluster" : "idle")}
-        value={
-          idle ? formatMoney(idle.perHour, currency) : t("cost", "notKnown")
-        }
+        value={idle ? amountWords(idle, currency, t) : t("cost", "notKnown")}
         testId="cost-idle"
         note={
-          idle && idle.reserved !== null && idle.reserved > 0
-            ? t("cost", "reservedNote", {
-                amount: formatMoney(idle.reserved, currency),
-              })
-            : t("cost", "idleNote")
+          !idle && idleUnknown(picture)
+            ? t("cost", "idleUnpriced")
+            : idle && idle.reserved !== null && idle.reserved > 0
+              ? t("cost", "reservedNote", {
+                  amount: formatMoney(idle.reserved, currency),
+                })
+              : t("cost", "idleNote")
         }
       />
       {!scoped && picture.unclaimed !== null && picture.unclaimed > 0 && (
