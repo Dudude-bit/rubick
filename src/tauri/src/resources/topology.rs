@@ -87,9 +87,21 @@ pub enum NodeVerdict {
     },
     /// A `ConfigMap`, Secret or `ServiceAccount`: there, missing, or not read.
     Exists,
-    /// Named by an owner reference or holding pods nothing else claims, and
-    /// never read itself.
+    /// Named by an owner reference and never read itself.
     Owner,
+    /// The pods no controller claims, by the status the Pods list prints for
+    /// each, with how many of them are ready.
+    Ownerless {
+        statuses: Vec<PodStatusTally>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodStatusTally {
+    pub status: String,
+    pub total: usize,
+    pub ready: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,8 +9,8 @@ use k8s_openapi::api::networking::v1::NetworkPolicy;
 
 use super::*;
 use crate::resources::topology::{
-    app_of, node_id, verb_of, MapKindCount, NamespaceRead, NodeVerdict, PodTally, PolicyCover,
-    TopologyEdge, TopologyNode,
+    app_of, node_id, verb_of, MapKindCount, NamespaceRead, NodeVerdict, PodStatusTally, PodTally,
+    PolicyCover, TopologyEdge, TopologyNode,
 };
 
 /// A `ConfigMap`, Secret or `ServiceAccount`, as far as the map reads one:
@@ -594,6 +594,25 @@ fn tally(pods: &[&Pod]) -> PodTally {
     }
 }
 
+/// The pods counted by the status the Pods list prints for each.
+fn statuses_of(pods: &[&Pod]) -> Vec<PodStatusTally> {
+    let mut by: BTreeMap<String, PodTally> = BTreeMap::new();
+    for pod in pods {
+        let held = by
+            .entry(crate::resources::display_status(pod))
+            .or_insert(PodTally { total: 0, ready: 0 });
+        held.total += 1;
+        held.ready += usize::from(crate::resources::counts_ready(pod));
+    }
+    by.into_iter()
+        .map(|(status, held)| PodStatusTally {
+            status,
+            total: held.total,
+            ready: held.ready,
+        })
+        .collect()
+}
+
 fn policy_ref(policy: &NetworkPolicy, ns: &str) -> ObjectRef {
     ObjectRef::new(
         "NetworkPolicy",
@@ -733,7 +752,7 @@ fn folded_owners(
         }
         let owner = match controller_of(&pod.metadata) {
             Some(owner) => owner_ref(owner, ns),
-            None => ObjectRef::unchecked("Pod", OWNERLESS, Some(ns.to_string())),
+            None => ObjectRef::new("Pod", OWNERLESS, Some(ns.to_string()), Existence::Present),
         };
         let id = node_id(&owner);
         owners
@@ -751,13 +770,20 @@ fn folded_owners(
         for spec in pods.iter().filter_map(|pod| pod.spec.as_ref()) {
             uses_from_spec(ns, &owner, spec, &snapshot.claims, out);
         }
+        let verdict = if owner.name == OWNERLESS {
+            NodeVerdict::Ownerless {
+                statuses: statuses_of(&pods),
+            }
+        } else {
+            NodeVerdict::Owner
+        };
         nodes.insert(
             id.clone(),
             TopologyNode {
                 id,
                 object: owner,
                 home: Some(ns.to_string()),
-                verdict: NodeVerdict::Owner,
+                verdict,
                 app: None,
                 pods: Some(tally(&pods)),
                 cover: None,
@@ -1266,6 +1292,44 @@ mod tests {
         let ownerless = &slice.nodes[&format!("/Pod/shop/{OWNERLESS}")];
         assert_eq!(ownerless.pods, Some(PodTally { total: 2, ready: 2 }));
         assert_eq!(slice.nodes.len(), 2);
+    }
+
+    /// "Pods with no owner" read "not read" with the not-checked ring, on a
+    /// cluster whose pods were read. Fails if the node stops saying what the
+    /// Pods list says of each pod, or claims it was not read.
+    #[test]
+    fn pods_no_controller_claims_say_their_statuses_and_readiness() {
+        let slice = slice_of(
+            Held {
+                pods: Ok(vec![
+                    pod("debug", true, "", None),
+                    pod("shell", false, "CrashLoopBackOff", None),
+                    pod("tool", true, "", None),
+                ]),
+                ..held()
+            },
+            chrono::Utc::now(),
+        );
+        let ownerless = &slice.nodes[&format!("/Pod/shop/{OWNERLESS}")];
+        assert_eq!(ownerless.object.existence, Existence::Present);
+        let NodeVerdict::Ownerless { statuses } = &ownerless.verdict else {
+            panic!("{:?}", ownerless.verdict);
+        };
+        assert_eq!(
+            statuses,
+            &vec![
+                PodStatusTally {
+                    status: "CrashLoopBackOff".into(),
+                    total: 1,
+                    ready: 0
+                },
+                PodStatusTally {
+                    status: "Running".into(),
+                    total: 2,
+                    ready: 2
+                },
+            ]
+        );
     }
 
     /// The Service reaches `cart` by the labels its template gives its pods,

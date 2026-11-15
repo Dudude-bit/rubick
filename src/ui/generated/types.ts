@@ -111,907 +111,17 @@ export interface ServicePortInfo {
   protocol: string;
 }
 
-export interface LokiPage {
-  lines: LokiLine[];
-  streams: number;
-  truncated: boolean;
-  limit: number;
-}
-
-export interface LokiLine {
-  ts: string;
-  line: LogLine;
-}
-
-export interface LokiProbe {
-  ok: boolean;
-  at: number;
-  latencyMs: number;
-  reason?: string;
-  noAddress: boolean;
-  version?: string;
-  retention?: string;
-  labels: string[];
-}
-
-export interface LokiConnection {
-  url: string;
-  authType: string;
-  hasToken: boolean;
-  insecureTls: boolean;
-}
-
-export interface AlertRule {
-  group: string;
-  file: string;
+export interface MadePod {
   name: string;
-  state: string;
-  health: string;
-  lastError: string;
-  query: string;
-  durationSeconds: number;
-  lastEvaluation: string | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  alerts: AlertInstance[];
+  deleted: boolean;
 }
 
-export interface AlertInstance {
-  state: string;
-  activeAt: string | null;
-  value: string;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-}
-
-export interface ScrapeTarget {
-  scrapePool: string;
-  scrapeUrl: string;
-  health: string;
-  lastError: string;
-  lastScrape: string | null;
-  labels: Record<string, string>;
-}
-
-export interface PromSeries {
-  labels: Record<string, string>;
-  points: PromPoint[];
-}
-
-export interface PromPoint {
-  t: number;
-  v: number | null;
-}
-
-export interface PrometheusProbe {
-  ok: boolean;
-  at: number;
-  latencyMs: number;
-  reason?: string;
-  noAddress: boolean;
-  version?: string;
-}
-
-export interface PrometheusConnection {
-  url: string;
-  authType: string;
-  hasToken: boolean;
-  insecureTls: boolean;
-}
-
-export interface DetectedExtension {
-  id: string;
-  installed: boolean | null;
-  version: string | null;
-}
-
-export interface IssuanceStory {
-  certificate: string;
+export interface DebugResult {
+  podName: string;
+  containerName: string;
   namespace: string;
-  issuer: string;
-  issuerKind: string;
-  dnsNames: string[];
-  renewalTime: string | null;
-  inFlight: boolean;
-  failure: string | null;
-  stalled: Stalled | null;
-  since: string | null;
-  attempts: number | null;
-  steps: IssuanceStep[];
-}
-
-export interface IssuanceStep {
-  kind: string;
-  name: string;
-  state: string;
-  note: StepNote | null;
-  failed: boolean;
-}
-
-export interface ClusterPreferences {
-  lastContext?: string;
-  namespaces: Record<string, string>;
-  scopes: Record<string, string[]>;
-}
-
-export interface UpdaterConfig {
-  autoCheckEnabled: boolean;
-}
-
-export interface RecentItem {
-  name: string;
-  namespace?: string;
-  kind: string;
-  context?: string;
-  crd?: string;
-  timestamp: number;
-}
-
-export interface YamlHistoryEntryDto {
-  timestamp: number;
-  content: string;
-  label?: string;
-}
-
-export interface ThemeConfig {
-  theme: string;
-  accentColor: string;
-  fontSize: number;
-  compact: boolean;
-}
-
-export interface AppInfo {
-  version: string;
-  name: string;
-  tauriVersion: string;
-  os: string;
-}
-
-export interface CliPathsConfig {
-  helmPath?: string;
-  kubectlPath?: string;
-}
-
-export interface ContextBinding {
-  gcpProfile?: string;
-  azureProfile?: string;
-}
-
-export interface ContextBindingInfo {
-  contextName: string;
-  gcpProfile: string | null;
-  azureProfile: string | null;
-}
-
-export interface AzureProfile {
-  description?: string;
-  azPath?: string;
-  kubeloginPath?: string;
-  defaultSubscription?: string;
-  tenantId?: string;
-  useCliFallback: boolean;
-  preferNativeAuth: boolean;
-}
-
-export interface AzureProfileInfo {
-  name: string;
-  profile: AzureProfile;
-}
-
-export interface GcpProfile {
-  description?: string;
-  serviceAccountKeyPath?: string;
-  gcloudPath?: string;
-  defaultProject?: string;
-  preferNativeAuth: boolean;
-}
-
-export interface GcpProfileInfo {
-  name: string;
-  profile: GcpProfile;
-}
-
-export interface EndpointsInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  subsets: EndpointSubset[];
-  createdAt: string | null;
-  overCapacity: boolean;
-}
-
-export interface EndpointSubset {
-  addresses: EndpointAddress[];
-  notReadyAddresses: EndpointAddress[];
-  ports: EndpointPort[];
-}
-
-export interface EndpointPort {
-  name: string | null;
-  port: number;
-  protocol: string;
-}
-
-export interface EndpointAddress {
-  ip: string;
-  hostname: string | null;
-  nodeName: string | null;
-  targetRef: EndpointTargetRef | null;
-}
-
-export interface EndpointTargetRef {
-  kind: string;
-  name: string;
-  namespace: string;
-}
-
-export interface IngressClassBinding {
-  requested: string | null;
-  resolved: string | null;
-  controller: string | null;
-  viaDefault: boolean;
-  available: IngressClassSummary[];
-}
-
-export interface IngressClassSummary {
-  name: string;
-  controller: string | null;
-  isDefault: boolean;
-  parameters: IngressClassParameters | null;
-}
-
-export interface IngressClassParameters {
-  apiGroup: string | null;
-  kind: string;
-  name: string;
-  scope: string | null;
-  namespace: string | null;
-}
-
-export interface ServiceHealthInputs {
-  namespace: string;
-  groups: ServiceHealthGroup[];
-  networks: string[];
-}
-
-export interface ServiceHealthGroup {
-  names: string[];
-  type: string;
-  selectorless: boolean;
-  ready: number;
-  draining: number;
-  notReady: number;
-  unrouted: number;
-  stop?: ChainStop;
-  targets: number[];
-  door?: PolicyDoor;
-}
-
-export interface DoorAlone {
-  isolating: string[];
-  unsettled: string[];
-  ports: DoorPort[];
-}
-
-export interface DoorPort {
-  name: string | null;
-  servicePort: number | null;
-  port: number | null;
-  protocol: string;
-  rules: DoorRule[];
-}
-
-export interface DoorRule {
-  policy: string;
-  peers: PolicyPeer[];
-  byName: boolean;
-}
-
-export interface PolicyPeer {
-  pods: PolicySelects;
-  namespaces: PolicySelects;
-  ipBlock: PolicyIpBlock | null;
-}
-
-export interface PolicyIpBlock {
-  cidr: string;
-  except: string[];
-}
-
-export interface RefusedClient {
-  name: string;
-  namespaces: string[];
-}
-
-export interface SharedCause {
-  cause: PodCause;
-  pods: number;
-  of: number;
-}
-
-export interface EndedRun {
-  code: number;
-  signal: number | null;
-  reason: string | null;
-  started: string | null;
-  ended: string | null;
-  previous: boolean;
-  said: string | null;
-  log: Evidence;
-  limit: string | null;
-}
-
-export interface NearMiss {
-  pods: ObjectRef[];
-  carries: string;
-  lacks: string;
-}
-
-export interface ServiceBacking {
-  services: ServiceInfo[];
-  published: ServicePublished[];
-  readAt: string;
-}
-
-export interface ServicePublished {
-  service: ObjectRef;
-  source: EndpointSource;
-  slices: number;
-  ready: number;
-  draining: number;
-  notReady: number;
-  unrouted: number;
-  unroutedReady: number;
-  ports: PublishedPort[];
-  endpoints: PublishedEndpoint[];
-  whole: boolean;
-  unpublished: UnpublishedPod[];
-  stop: ChainStop | null;
-  door?: PolicyDoor;
-}
-
-export interface UnpublishedPod {
-  pod: ObjectRef;
-  unnamedPorts: string[];
-  inSlice: boolean;
-}
-
-export interface PublishedEndpoint {
-  address: string | null;
-  target: ObjectRef | null;
-  ready: boolean;
-  serving: boolean;
-  terminating: boolean;
-  nodeName: string | null;
-  zone: string | null;
-  hintZones: string[];
-  ports: number[];
-}
-
-export interface PublishedPort {
-  name: string | null;
-  port: number | null;
-  protocol: string;
-  exposed: boolean;
-}
-
-export interface OtherPolicyKinds {
-  namespace: string;
-  kinds: string[];
-}
-
-export interface NetworkPolicyInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  selects: PolicySelects;
-  selected: number | null;
-  nearly: NearLabel | null;
-  ingress: PolicyDirection;
-  egress: PolicyDirection;
-  labels: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface PolicyDirection {
-  governed: boolean;
-  rules: PolicyRule[];
-  opensToEverything: boolean;
-  deniesEverything: boolean;
-}
-
-export interface PolicyRule {
-  peers: PolicyPeer[];
-  ports: PolicyPort[];
-}
-
-export interface PolicyPort {
-  protocol: string;
-  port: string | null;
-  endPort: number | null;
-}
-
-export interface NearLabel {
-  asked: string;
-  carried: string;
-  pods: number;
-}
-
-export interface IngressInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  className: string | null;
-  classAnnotated?: boolean;
-  rules: IngressRule[];
-  defaultBackend: IngressDefaultBackend | null;
-  loadBalancerIps: string[];
-  tlsHosts: string[];
-  tlsConfigs: IngressTlsConfig[];
-  hasCatchAllTls: boolean;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface ServiceInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  type: string;
-  sessionAffinity: string;
-  clusterIp: string | null;
-  externalName: string | null;
-  externalIps: string[];
-  loadBalancerIps: string[];
-  ports: ServicePortInfo[];
-  selector: Record<string, string>;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export type ServiceFilters = {
-  serviceType: string | null;
-} & ResourceFilters;
-
-export interface DrainHandle {
-  drainId: string;
-}
-
-export interface DrainOptions {
-  ignoreDaemonsets: boolean;
-  evictUnmanagedPods: boolean;
-  evictPodsWithEmptydir: boolean;
-}
-
-export interface NodeInfo {
-  name: string;
-  uid: string;
-  status: NodeStatusInfo;
-  roles: string[];
-  version: string;
-  os: string;
-  arch: string;
-  containerRuntime: string;
-  labels: Record<string, string>;
-  taints: TaintInfo[];
-  unschedulable: boolean;
-  capacity: ResourceQuantities;
-  allocatable: ResourceQuantities;
-  providerId: string | null;
-  createdAt: string | null;
-}
-
-export interface ResourceQuantities {
-  cpu: string | null;
-  memory: string | null;
-  pods: string | null;
-  ephemeralStorage: string | null;
-}
-
-export interface TaintInfo {
-  key: string;
-  value: string | null;
-  effect: string;
-}
-
-export interface NodeStatusInfo {
-  ready: boolean;
-  conditions: ConditionInfo[];
-  addresses: NodeAddressInfo[];
-}
-
-export interface NodeAddressInfo {
-  type: string;
-  address: string;
-}
-
-export interface NodeFilters {
-  labelSelector: string | null;
-  fieldSelector: string | null;
-  limit: number | null;
-  readyOnly: boolean | null;
-}
-
-export interface NodeBudget {
-  pods: number | null;
-  known: boolean;
-  refused: string[];
-  error: string | null;
-  resources: ResourceBudget[];
-}
-
-export interface ResourceBudget {
-  name: string;
-  unit: BudgetUnit;
-  capacity: number | null;
-  allocatable: number | null;
-  requested: number | null;
-  limited: number | null;
-  extended: boolean;
-}
-
-export interface CostBasis {
-  nodes: NodeBasis[] | null;
-  nodesUnread: ReadFailure | null;
-  namespaces: NamespaceBasis[];
-  workloads: WorkloadBasis[];
-  rest: RestBasis | null;
-  waiting: number;
-  unread: UnreadNamespace[];
-  volumeBytes: number | null;
-  volumeCount: number | null;
-  unclaimed: UnclaimedVolume[] | null;
-  volumesUnread: ReadFailure | null;
-  claimsUnread: UnreadNamespace[];
-  servedFrom: OverviewSource;
-}
-
-export interface UnclaimedVolume {
-  name: string;
-  bytes: number;
-  phase: string | null;
-}
-
-export interface RestBasis {
-  workloads: number;
-  pods: number;
-  cpu: number;
-  memory: number;
-  gpus: number;
-  claimBytes: number;
-}
-
-export interface WorkloadBasis {
-  key: WorkloadKey;
-  pods: number;
-  cpu: number;
-  memory: number;
-  gpus: number;
-  claimBytes: number;
-}
-
-export interface NamespaceBasis {
-  namespace: string;
-  workloads: number;
-  pods: number;
-  cpu: number;
-  memory: number;
-  gpus: number;
-  storageBytes: number | null;
-}
-
-export interface ReadFailure {
-  code: string;
-  message: string;
-}
-
-export interface NodeBasis {
-  name: string;
-  instanceType: string | null;
-  cpuCapacity: number | null;
-  cpuAllocatable: number | null;
-  memoryCapacity: number | null;
-  memoryAllocatable: number | null;
-  gpus: number;
-  cpuRequested: number | null;
-  memoryRequested: number | null;
-  gpusRequested: number | null;
-}
-
-export interface PerfSnapshot {
-  recording: boolean;
-  eventsEmitted: number;
-  eventBytes: number;
-  maxEventBytes: number;
-  watchChanges: number;
-  commands: Record<string, CommandTimes>;
-}
-
-export interface CommandTimes {
-  count: number;
-  p50: number;
-  p95: number;
-  max: number;
-  maxApiCalls: number;
-}
-
-export interface NodeMetricsResponse {
-  status: MetricsStatus;
-  data: NodeMetrics[];
-}
-
-export interface NodeMetrics {
-  name: string;
-  cpuMillicores: number | null;
-  memoryBytes: number | null;
-}
-
-export interface MetricsStatus {
-  status: MetricsStatusKind;
-  message: string | null;
-}
-
-export interface PodMetricsResponse {
-  status: MetricsStatus;
-  data: PodMetrics[];
-  unread: UnreadNamespace[];
-}
-
-export interface UnreadNamespace {
-  namespace: string;
-  code: string;
-  message: string;
-}
-
-export interface PodMetrics {
-  name: string;
-  namespace: string;
-  cpuMillicores: number | null;
-  memoryBytes: number | null;
-}
-
-export interface PersistentVolumeClaimInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  status: string | null;
-  volume: string | null;
-  capacity: string | null;
-  accessModes: string[];
-  storageClass: string | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface StorageClassInfo {
-  name: string;
-  uid: string;
-  provisioner: string;
-  reclaimPolicy: string;
-  volumeBindingMode: string;
-  allowVolumeExpansion: boolean;
-  isDefault: boolean;
-  parameters: Record<string, string>;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface PersistentVolumeInfo {
-  name: string;
-  uid: string;
-  capacity: string | null;
-  accessModes: string[];
-  reclaimPolicy: string | null;
-  status: string | null;
-  claim: string | null;
-  storageClass: string;
-  reason: string | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface TcpProbe {
-  ms: number | null;
-  error: string | null;
-  reason: TcpProbeReason | null;
-}
-
-export interface ResolveProbe {
-  resolved: string[];
-  error: string | null;
-  matchesGateway: boolean | null;
-}
-
-export interface RouteInfo {
-  kind: string;
-  apiVersion: string;
-  name: string;
-  namespace: string;
-  uid: string;
-  hostnames: string[];
-  parentRefs: ParentRefInfo[];
-  rules: RouteRuleInfo[];
-  parents: RouteParentStatusInfo[];
-  generation: number | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface RouteParentStatusInfo {
-  parent: ParentRefInfo;
-  controllerName: string;
-  conditions: ConditionInfo[];
-}
-
-export interface RouteRuleInfo {
-  matches: RouteMatchInfo[];
-  backendRefs: BackendRefInfo[];
-  hasRedirect: boolean;
-  extensionRefs: ExtensionRefInfo[];
-}
-
-export interface ExtensionRefInfo {
-  group: string;
-  kind: string;
-  name: string;
-}
-
-export interface BackendRefInfo {
-  group: string;
-  kind: string;
-  name: string;
-  namespace: string | null;
-  port: number | null;
-  weight: number | null;
-}
-
-export interface RouteMatchInfo {
-  path: string | null;
-  pathType: string | null;
-  method: string | null;
-  grpcService: string | null;
-  grpcMethod: string | null;
-  headers: string[];
-  queryParams: string[];
-}
-
-export interface ParentRefInfo {
-  group: string;
-  kind: string;
-  name: string;
-  namespace: string | null;
-  sectionName: string | null;
-  port: number | null;
-}
-
-export interface GatewayInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  apiVersion: string;
-  className: string;
-  listeners: ListenerInfo[];
-  listenerSets: ObjectName[];
-  listenerSetsKnown: boolean;
-  addresses: string[];
-  conditions: ConditionInfo[];
-  generation: number | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface BackendTlsPolicyInfo {
-  name: string;
-  namespace: string;
-  targetRefs: PolicyTargetRef[];
-  hostname: string;
-  wellKnownCa: string | null;
-  caCertRefs: string[];
-  ancestors: PolicyAncestorInfo[];
-  ancestorsMaybeTruncated: boolean;
-  generation: number | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface PolicyAncestorInfo {
-  ancestor: ParentRefInfo;
-  controllerName: string;
-  conditions: ConditionInfo[];
-}
-
-export interface PolicyTargetRef {
-  group: string | null;
-  kind: string | null;
-  name: string;
-  sectionName: string | null;
-}
-
-export interface GatewayClassInfo {
-  name: string;
-  uid: string;
-  controllerName: string;
-  description: string | null;
-  accepted: boolean | null;
-  conditions: ConditionInfo[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface AggregationInfo {
-  role: string;
-  gathers: string[] | null;
-}
-
-export interface BindingInfo {
-  kind: string;
-  name: string;
-  namespace: string | null;
-  roleRef: RoleRefInfo;
-  subjects: SubjectInfo[];
-}
-
-export interface SubjectInfo {
-  kind: string;
-  name: string;
-  namespace: string | null;
-}
-
-export interface RoleRefInfo {
-  kind: string;
-  name: string;
-}
-
-export interface PortForwardSessionInfo {
-  id: string;
-  context: string;
-  pod: string;
-  namespace: string;
-  localPort: number;
-  remotePort: number;
-  autoReconnect: boolean;
-  createdAt: string;
-  via: ForwardVia;
-}
-
-export interface PortForwardRequest {
-  context: string;
-  localPort: number;
-  remotePort: number;
-  autoReconnect: boolean;
-}
-
-export interface PortForwardConfigPayload {
-  context: string;
-  name: string;
-  pod: string;
-  namespace: string;
-  localPort: number;
-  remotePort: number;
-  autoReconnect: boolean;
-  autoStart: boolean;
-}
-
-export interface PortForwardConfigInfo {
-  id: string;
-  context: string;
-  name: string;
-  pod: string;
-  namespace: string;
-  localPort: number;
-  remotePort: number;
-  autoReconnect: boolean;
-  autoStart: boolean;
-  createdAt: string;
+  isNewPod: boolean;
+  seesRootOf: string | null;
 }
 
 export interface DebugOperation {
@@ -1083,459 +193,244 @@ export interface NamespaceRead {
   notLookedAt: UnexploredKind[];
 }
 
-export interface MadePod {
-  name: string;
-  deleted: boolean;
+export interface UnexploredKind {
+  kind: string;
+  why: Unread;
 }
 
-export interface DebugResult {
-  podName: string;
-  containerName: string;
-  namespace: string;
-  isNewPod: boolean;
-  seesRootOf: string | null;
-}
-
-export interface OwnRules {
-  namespace: string;
-  rules: OwnRule[];
-  incomplete: boolean;
-  evaluationError: string | null;
-}
-
-export interface OwnRule {
-  apiGroups: string[];
-  resources: string[];
-  resourceNames: string[];
-  nonResourceUrls: string[];
-  verbs: string[];
-}
-
-export interface NamespaceAccess {
-  namespace: string;
-  allowed: boolean | null;
-  otherLists: boolean | null;
-}
-
-export interface ListAccess {
-  resource: string;
-  allowed: boolean | null;
-}
-
-export interface ListQuery {
-  group: string;
-  resource: string;
-  namespaced: boolean;
-}
-
-export interface AccessAnswer {
-  verb: string;
-  resource: string;
-  allowed: boolean | null;
-}
-
-export interface AccessQuery {
-  group: string;
-  resource: string;
-  verb: string;
-  namespace: string | null;
-  subresource?: string;
-  name?: string;
-}
-
-export interface SetupWarning {
-  reason: string;
-  said: string;
-  count: number;
-  at: string | null;
-  fault: SetupFault;
-}
-
-export interface EventInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  type: string;
-  reason: string | null;
-  message: string | null;
-  source: string | null;
-  involvedObject: InvolvedObjectInfo;
+export interface MapKindCount {
+  kind: string;
   count: number | null;
-  firstTimestamp: string | null;
-  lastTimestamp: string | null;
+  used: number | null;
 }
 
-export interface InvolvedObjectInfo {
-  apiVersion?: string;
-  kind: string;
+export interface TopologyEdge {
+  id: string;
+  from: string;
+  to: string;
+  relations: Relation[];
+}
+
+export interface TopologyNode {
+  id: string;
+  ref: ObjectRef;
+  home: string | null;
+  verdict: NodeVerdict;
+  app: string | null;
+  pods: PodTally | null;
+  cover: PolicyCover | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+export interface PodTally {
+  total: number;
+  ready: number;
+}
+
+export interface PodStatusTally {
+  status: string;
+  total: number;
+  ready: number;
+}
+
+export interface RefusedClient {
   name: string;
-  namespace: string | null;
-  uid: string | null;
+  namespaces: string[];
 }
 
-export interface LatestEvents {
-  events: EventInfo[];
-  short: boolean;
+export interface SharedCause {
+  cause: PodCause;
+  pods: number;
+  of: number;
 }
 
-export interface EventFilters {
-  namespace: string | null;
-  involved_object_name: string | null;
-  involved_object_kind: string | null;
-  event_type: string | null;
-  field_selector: string | null;
-  limit: number | null;
+export interface EndedRun {
+  code: number;
+  signal: number | null;
+  reason: string | null;
+  started: string | null;
+  ended: string | null;
+  previous: boolean;
+  said: string | null;
+  log: Evidence;
+  limit: string | null;
 }
 
-export interface BinaryLocation {
-  name: string;
-  path: string | null;
+export interface NearMiss {
+  pods: ObjectRef[];
+  carries: string;
+  lacks: string;
 }
 
-export interface Lineage {
-  uid: string | null;
-  ancestors: Ancestor[];
-  others: OtherOwner[];
-  stop: LineageStop | null;
-}
-
-export interface OtherOwner {
-  kind: string;
-  group: string;
-  name: string;
-}
-
-export interface Ancestor {
-  uid: string;
-  kind: string;
-  group: string;
-  plural: string;
-  name: string;
-  namespace: string | null;
-}
-
-export interface Cascade {
-  takes: KindCount[];
-  notRead: NotRead;
-  holds: Holds | null;
-}
-
-export interface NotRead {
-  kinds: KindReading[];
-  groups: UnreadGroup[];
-  watched: number;
-  listed?: ListedKinds;
-}
-
-export interface ListedKinds {
-  kinds: number;
-  since: string;
-}
-
-export interface UnreadGroup {
-  group: string;
+export interface UnreadNamespace {
+  namespace: string;
   code: string;
   message: string;
 }
 
-export interface KindReading {
-  kind: string;
-  group: string;
-  plural: string;
-  reading: Reading;
-}
-
-export interface KindCount {
-  kind: string;
-  group: string;
-  plural: string;
-  count: number;
-}
-
-export interface Dependents {
-  dependents: Dependent[];
-  page: number;
-  pageSize: number;
-  total: number;
-  notRead: NotRead;
-}
-
-export interface Dependent {
-  uid: string;
-  kind: string;
-  group: string;
-  version: string;
-  plural: string;
-  name: string;
-  namespace: string | null;
-  controlled: boolean;
-  dependents: number;
-}
-
-export interface CronJobDetailInfo {
+export interface PodRow {
   name: string;
   namespace: string;
   uid: string;
-  schedule: string;
-  timezone: string | null;
-  suspend: boolean;
-  concurrencyPolicy: string | null;
-  startingDeadlineSeconds: number | null;
-  successfulJobsHistoryLimit: number | null;
-  failedJobsHistoryLimit: number | null;
-  active: number;
-  lastSchedule: string | null;
-  lastSuccessfulTime: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  podResources: DeploymentContainerResources;
-  replica: ReplicaReservation;
+  status: PodRowStatus;
+  nodeName: string | null;
+  podIp: string | null;
+  containers: RowContainer[];
+  initContainers: RowContainer[];
   labels: Record<string, string>;
-  annotations: Record<string, string>;
-  ownerReferences: OwnerReference[];
   createdAt: string | null;
+  restartCount: number;
+  lastRestartAt: string | null;
+  cpuRequests: string | null;
+  cpuLimits: string | null;
+  memoryRequests: string | null;
+  memoryLimits: string | null;
+  start: PodStart;
+  workload: PodWorkload | null;
 }
 
-export interface OwnerReference {
-  api_version: string;
+export interface PodWorkload {
   kind: string;
   name: string;
-  uid: string;
-  controller?: boolean;
-  block_owner_deletion?: boolean;
 }
 
-export interface ReplicaReservation {
-  cpuRequests: number | null;
-  cpuLimits: number | null;
-  memoryRequests: number | null;
-  memoryLimits: number | null;
-  known: boolean;
-}
-
-export interface DeploymentContainerResources {
-  requests: Record<string, string>;
-  limits: Record<string, string>;
-}
-
-export interface DeploymentContainerInfo {
+export interface RowContainer {
   name: string;
-  image: string;
+  ready: boolean;
+  started: boolean;
   phase: ContainerPhase;
-  ports: number[];
-  resources: DeploymentContainerResources;
-  env: EnvVarInfo[];
-  envFrom: EnvFromInfo[];
-  command: string[];
-  args: string[];
-  probes: ContainerProbes;
+  state: ContainerState;
 }
 
-export interface ContainerProbes {
-  readiness: ProbeInfo | null;
-  liveness: ProbeInfo | null;
-  startup: ProbeInfo | null;
-}
-
-export interface ProbeInfo {
-  handler: ProbeHandler;
-  initialDelaySeconds: number;
-  periodSeconds: number;
-  timeoutSeconds: number;
-  successThreshold: number;
-  failureThreshold: number;
-}
-
-export interface EnvFromInfo {
-  prefix: string | null;
-  configMapRef: string | null;
-  secretRef: string | null;
-  optional: boolean | null;
-}
-
-export interface EnvVarInfo {
-  name: string;
-  value: string | null;
-  valueFrom: EnvVarSourceInfo | null;
-}
-
-export interface EnvVarSourceInfo {
-  sourceType: EnvVarSourceType;
-  name: string | null;
-  key: string | null;
-  fieldPath: string | null;
-  resource: string | null;
-  optional: boolean | null;
-}
-
-export interface JobDetailInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  completions: number | null;
-  parallelism: number | null;
-  backoffLimit: number | null;
-  activeDeadlineSeconds: number | null;
-  succeeded: number;
-  failed: number;
-  active: number;
-  status: string;
-  failure: JobFailure | null;
-  startTime: string | null;
-  completionTime: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  podResources: DeploymentContainerResources;
-  replica: ReplicaReservation;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  conditions: ConditionInfo[];
-  ownerReferences: OwnerReference[];
-  createdAt: string | null;
-}
-
-export interface JobFailure {
+export interface TerminationInfo {
+  exitCode: number;
+  signal: number | null;
   reason: string | null;
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface PodRowStatus {
+  phase: string;
+  display: string;
+  ready: boolean;
+  kubectlStatus?: string;
+  loopingUntil?: string;
+  exitUnreported: boolean;
+  restartingUntil?: string;
+  rejected?: string;
+  cause?: PodCause;
+  gone?: PodGone;
+}
+
+export interface FileEntry {
+  name: string;
+  kind: FileKind;
+  mode: string;
+  size: number;
+  modified: number | null;
+  owner: string;
+  group: string;
+  target: string | null;
+}
+
+export interface DrainReport {
+  evicted: number;
+  alreadyGone: number;
+  leaving: number;
+  daemonsetPodsLeft: number;
+  staticPodsLeft: number;
+  refused: RefusedPod[];
+}
+
+export interface RefusedPod {
+  namespace: string;
+  name: string;
+  refusal: DrainRefusal;
   message: string | null;
 }
 
-export interface JobInfo {
+export interface UnreadKind {
+  kind: string;
+  group: string;
+  plural: string;
+  reason: SearchFailureKind;
+  message: string;
+  namespaces: string[];
+}
+
+export interface SearchedKind {
+  kind: string;
+  group: string;
+  plural: string;
+}
+
+export interface SearchHit {
+  context: string;
+  kind: string;
+  group: string;
+  plural: string;
   name: string;
+  namespace: string | null;
+}
+
+export interface WatchChange {
+  op: WatchOp;
+  resource: RawJson | null;
+}
+
+export interface LogLineEvent {
+  message: string;
+  timestamp: string | null;
+  level: LogLevel | null;
+  format: LogFormat;
+  fields: Record<string, string> | null;
+  raw: string;
+  segments?: StyledSegment[];
+}
+
+export interface StyledSegment {
+  text: string;
+  style?: TextStyle;
+}
+
+export interface TextStyle {
+  fg?: AnsiColor;
+  bg?: AnsiColor;
+  bold: boolean;
+  dim: boolean;
+  italic: boolean;
+  underline: boolean;
+  inverse: boolean;
+  strike: boolean;
+}
+
+export interface LogLine {
+  timestamp: string | null;
+  message: string;
+  level: LogLevel | null;
+  format: LogFormat;
+  fields: Record<string, string> | null;
+  raw: string;
+  segments?: StyledSegment[];
+  pod: string;
+  container: string;
   namespace: string;
-  uid: string;
-  completions: number | null;
-  succeeded: number;
-  failed: number;
-  active: number;
-  status: string;
-  failure: JobFailure | null;
-  createdAt: string | null;
-  cronJob: string | null;
 }
 
-export interface DaemonSetDetailInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  desired: number;
-  current: number;
-  ready: number;
-  upToDate: number;
-  available: number;
-  rollout: Rollout;
-  rolloutPlan: RolloutPlan;
-  updateStrategy: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  podResources: DeploymentContainerResources;
-  replica: ReplicaReservation;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  selector: string;
-  conditions: ConditionInfo[];
-  ownerReferences: OwnerReference[];
-  generation: number | null;
-  observedGeneration: number | null;
-  createdAt: string | null;
-}
-
-export interface DaemonSetInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  desired: number;
-  current: number;
-  ready: number;
-  updated: number;
-  rollout: Rollout;
-  rolloutPlan: RolloutPlan;
-  containerImages: ContainerImage[];
-  templateAnnotations: Record<string, string>;
-  generation: number | null;
-  observedGeneration: number | null;
-  createdAt: string | null;
-}
-
-export interface ContainerImage {
-  name: string;
-  image: string | null;
-}
-
-export interface StatefulSetDetailInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  replicas: StatefulSetReplicaInfo;
-  rollout: Rollout;
-  rolloutPlan: RolloutPlan;
-  serviceName: string | null;
-  podManagementPolicy: string | null;
-  updateStrategy: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  podResources: DeploymentContainerResources;
-  replica: ReplicaReservation;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  conditions: ConditionInfo[];
-  ownerReferences: OwnerReference[];
-  generation: number | null;
-  observedGeneration: number | null;
-  createdAt: string | null;
-  claimTemplates: string[];
-  claimsWhenDeleted: string | null;
-}
-
-export interface StatefulSetReplicaInfo {
-  desired: number;
-  ready: number;
-  current: number;
-  updated: number;
-}
-
-export interface StatefulSetInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  replicas: StatefulSetReplicaInfo;
-  rollout: Rollout;
-  rolloutPlan: RolloutPlan;
-  containerImages: ContainerImage[];
-  templateAnnotations: Record<string, string>;
-  generation: number | null;
-  observedGeneration: number | null;
-  createdAt: string | null;
-}
-
-export interface ReplicaSetInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  replicas: ReplicaSetReplicaInfo;
-  revision: string | null;
-  currentRevision: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  templateAnnotations: Record<string, string>;
-  template: unknown | null;
-  conditions: ConditionInfo[];
-  podsRefused: string | null;
-  ownerReferences: OwnerReference[];
-  createdAt: string | null;
-}
-
-export interface ReplicaSetReplicaInfo {
-  desired: number;
-  current: number;
-  ready: number;
-  available: number;
+export interface StreamLogConfig {
+  podName: string;
+  namespace: string | null;
+  container: string | null;
+  follow: boolean;
+  tailLines: number | null;
+  sinceSeconds: number | null;
+  sinceTime: string | null;
+  timestamps: boolean;
+  previous: boolean;
+  intake: QueryTerm[];
 }
 
 export interface KubeconfigSource {
@@ -1585,570 +480,27 @@ export interface ContextInfo {
   auth: ContextAuth;
 }
 
-export interface NamespaceInfo {
-  name: string;
-  uid: string;
-  status: string;
-  labels: Record<string, string>;
-  createdAt: string | null;
-}
-
-export interface ServedObjects {
-  items: unknown[];
-  truncated: boolean;
-}
-
-export interface ResourceTable {
-  columns: TableColumn[];
-  rows: TableRow[];
-  cursor: string | null;
-  unread: UnreadNamespace[];
-}
-
-export interface TableRow {
-  name: string;
-  namespace: string | null;
-  uid: string | null;
-  createdAt: string | null;
-  cells: unknown[];
-}
-
-export interface TableColumn {
-  name: string;
-  columnType: string;
-  format: string;
-  description: string;
-  priority: number;
-}
-
-export interface ApiCatalog {
-  entries: CatalogEntry[];
-  unread: UnreadGroup[];
-}
-
-export interface CatalogEntry {
-  group: string;
-  version: string;
-  kind: string;
-  plural: string;
-  namespaced: boolean;
-  verbs: string[];
-  shortNames: string[];
-  hasStatus?: boolean;
-}
-
-export interface ResourceConnections {
-  subject: ObjectRef;
-  subjectUid?: string;
-  readAt?: string;
-  edges: ConnectionEdge[];
-  stops: ChainStop[];
-  published: ServicePublished[];
-  notLookedAt: UnexploredKind[];
-  nearlySelectedBy?: NearSelector[];
-}
-
-export interface NearSelector {
-  service: ObjectRef;
-  carries: string;
-  lacks: string;
-}
-
-export interface UnexploredKind {
-  kind: string;
-  why: Unread;
-}
-
-export interface MapKindCount {
-  kind: string;
-  count: number | null;
-  used: number | null;
-}
-
-export interface TopologyEdge {
-  id: string;
-  from: string;
-  to: string;
-  relations: Relation[];
-}
-
-export interface TopologyNode {
-  id: string;
-  ref: ObjectRef;
-  home: string | null;
-  verdict: NodeVerdict;
-  app: string | null;
-  pods: PodTally | null;
-  cover: PolicyCover | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-}
-
-export interface PodTally {
-  total: number;
-  ready: number;
-}
-
-export interface ConnectionEdge {
-  from: ObjectRef;
-  to: ObjectRef;
-  relation: Relation;
-}
-
-export interface GatewayApiDetection {
-  installed: boolean;
-  bundleVersion: string | null;
-  channel: string | null;
-  mixedBundle: boolean | null;
-  kinds: ServedGatewayKind[];
-}
-
-export interface ServedGatewayKind {
-  kind: string;
-  plural: string;
-  versions: string[];
-  readVersion: string;
-}
-
-export interface PodInfo {
-  name: string;
+export interface HelmInstallOptions {
+  releaseName: string;
+  chart: string;
   namespace: string;
-  uid: string;
-  status: PodStatusInfo;
-  nodeName: string | null;
-  podIp: string | null;
-  hostIp: string | null;
-  containers: ContainerInfo[];
-  initContainers: ContainerInfo[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-  restartCount: number;
-  lastRestartAt: string | null;
-  restartsBy?: ContainerRestarts[];
-  cpuRequests: string | null;
-  cpuLimits: string | null;
-  memoryRequests: string | null;
-  memoryLimits: string | null;
-  ownerReferences: OwnerReference[];
-  volumes: PodVolumeInfo[];
-  serviceAccountName: string | null;
-  start: PodStart;
-  workload: PodWorkload | null;
-}
-
-export interface PodWorkload {
-  kind: string;
-  name: string;
-}
-
-export interface PodVolumeInfo {
-  name: string;
-  source: string;
-  refs: VolumeObjectRef[];
-  mounts: VolumeMountInfo[];
-  projections: VolumeProjectionInfo[];
-}
-
-export interface VolumeProjectionInfo {
-  source: string;
-  object: VolumeObjectRef | null;
-  paths: string[];
-}
-
-export interface VolumeMountInfo {
-  container: string;
-  path: string;
-  readOnly: boolean;
-  subPath: string | null;
-}
-
-export interface VolumeObjectRef {
-  kind: string;
-  name: string;
-}
-
-export interface ContainerRestarts {
-  container: string;
-  n: number;
-}
-
-export interface ContainerInfo {
-  name: string;
-  image: string;
-  ready: boolean;
-  started: boolean;
-  phase: ContainerPhase;
-  state: ContainerState;
-  lastTerminated: TerminationInfo | null;
-  restartCount: number;
-  loopingUntil?: string;
-  restartingUntil?: string;
-  ports: ContainerPortInfo[];
-  resources: DeploymentContainerResources;
-  env: EnvVarInfo[];
-  envFrom: EnvFromInfo[];
-}
-
-export interface ContainerPortInfo {
-  name: string | null;
-  containerPort: number;
-  protocol: string;
-}
-
-export interface TerminationInfo {
-  exitCode: number;
-  signal: number | null;
-  reason: string | null;
-  message: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-}
-
-export interface PodStatusInfo {
-  phase: string;
-  display: string;
-  kubectlStatus?: string;
-  failedAt?: string;
-  ready: boolean;
-  conditions: ConditionInfo[];
-  message: string | null;
-  reason: string | null;
-  loopingUntil?: string;
-  exitUnreported: boolean;
-  restartingUntil?: string;
-  rejected?: string;
-  cause?: PodCause;
-  gone?: PodGone;
-}
-
-export type PodFilters = {
-  statusFilter: string | null;
-  selector: Record<string, string> | null;
-  nodeName: string | null;
-} & ResourceFilters;
-
-export interface PathIdentity {
-  roots: PathRoot[];
-  user: string | null;
-}
-
-export interface PathRoot {
-  root: string;
-  standIn: string;
-}
-
-export interface Diagnostics {
-  shell: ShellEnvReport;
-  searchPathIsReal: boolean;
-  searchPath: SearchPathEntry[];
-  tools: ToolStatus[];
-  plugins: PluginStatus[];
-  contexts: DiagnosticContext[];
-  kubeconfig: KubeconfigInfo | null;
-  app: InstallationInfo;
-  findings: Finding[];
-  connections: ConnectAttempt[];
-}
-
-export interface Finding {
-  severity: Severity;
-  title: string;
-  detail: string;
-  subject: string | null;
-  aboutShell: boolean;
-}
-
-export interface InstallationInfo {
-  version: string;
-  os: string;
-  configPath: string | null;
-  logDestination: string | null;
-}
-
-export interface KubeconfigInfo {
-  path: string;
-  parseError: string | null;
-  contextCount: number;
-}
-
-export interface DiagnosticContext {
-  context: string;
-  method: string;
-  command: string | null;
-  commandPath: string | null;
-}
-
-export interface PluginStatus {
-  name: string;
-  path: string | null;
-  requiredBy: string[];
-}
-
-export interface ToolStatus {
-  name: string;
-  path: string | null;
   version: string | null;
+  values: string | null;
+  createNamespace: boolean;
+  wait: boolean;
+  timeout: string | null;
 }
 
-export interface SearchPathEntry {
-  path: string;
-  exists: boolean;
-}
-
-export interface BatchLogResult {
-  processed: number;
-  failed: number;
-}
-
-export interface FrontendLogEntry {
-  level: string;
-  message: string;
-  context?: string;
-  data?: unknown;
-  timestamp?: number;
-}
-
-export interface SearchHandle {
-  searchId: string;
-  targets: SearchTarget[];
-}
-
-export interface SearchTarget {
-  context: string;
-  status: SearchContextStatus;
-  reason: SearchFailureKind | null;
-  message: string | null;
-}
-
-export interface SearchRequest {
-  query: string;
-  contexts: string[];
-  allContexts: boolean;
-  scope?: string[];
-  kinds?: string[];
-  session?: string;
-  everything: boolean;
-  connect: boolean;
-  limitPerContext?: number;
-}
-
-export interface Published {
-  url: string | null;
-  rawUrl: string | null;
-  draftId: string | null;
-  version: number | null;
-}
-
-export interface ShareIdentity {
-  accountName: string | null;
-  apiKeyName: string | null;
-}
-
-export interface ShareTargetInput {
-  id: string | null;
-  label: string;
-  apiUrl: string;
-  kind: string;
-  public: boolean;
-  apiKey: string | null;
-  importKey: boolean;
-}
-
-export interface ShareTargetInfo {
-  id: string;
-  label: string;
-  apiUrl: string;
-  kind: string;
-  public: boolean;
-  hasKey: boolean;
-  host: string;
-}
-
-export interface ObjectMetadata {
-  uid: string | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-}
-
-export interface DryRun {
-  documents: DryRunDocument[];
-}
-
-export interface DryRunDocument {
-  id: string;
-  outcome: DryRunOutcome;
-  live: string | null;
-  would: string | null;
-}
-
-export interface Applied {
-  documents: AppliedDocument[];
-}
-
-export interface AppliedDocument {
-  id: string;
-  outcome: ApplyOutcome;
-}
-
-export interface ManifestResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-}
-
-export interface LogLine {
-  timestamp: string | null;
-  message: string;
-  level: LogLevel | null;
-  format: LogFormat;
-  fields: Record<string, string> | null;
-  raw: string;
-  segments?: StyledSegment[];
-  pod: string;
-  container: string;
-  namespace: string;
-}
-
-export interface StyledSegment {
-  text: string;
-  style?: TextStyle;
-}
-
-export interface TextStyle {
-  fg?: AnsiColor;
-  bg?: AnsiColor;
-  bold: boolean;
-  dim: boolean;
-  italic: boolean;
-  underline: boolean;
-  inverse: boolean;
-  strike: boolean;
-}
-
-export interface StreamLogConfig {
-  podName: string;
-  namespace: string | null;
-  container: string | null;
-  follow: boolean;
-  tailLines: number | null;
-  sinceSeconds: number | null;
-  sinceTime: string | null;
-  timestamps: boolean;
-  previous: boolean;
-  intake: QueryTerm[];
-}
-
-export interface CrdDetailInfo {
+export interface HelmChartSearchResult {
   name: string;
-  uid: string;
-  group: string;
-  kind: string;
-  plural: string;
-  singular: string;
-  scope: string;
-  versions: CrdVersionInfo[];
-  shortNames: string[];
-  categories: string[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  conditions: CrdCondition[];
-  createdAt: string | null;
-  acceptedNames: CrdAcceptedNames;
-}
-
-export interface CrdAcceptedNames {
-  kind: string;
-  plural: string;
-  singular: string | null;
-  shortNames: string[];
-  categories: string[];
-  listKind: string | null;
-}
-
-export interface CrdCondition {
-  conditionType: string;
-  status: string;
-  reason: string | null;
-  message: string | null;
-  lastTransitionTime: string | null;
-}
-
-export interface CrdVersionInfo {
-  name: string;
-  served: boolean;
-  storage: boolean;
-  deprecated: boolean;
-  deprecationWarning: string | null;
-  schema: unknown | null;
-  additionalPrinterColumns: PrinterColumn[];
-}
-
-export interface PrinterColumn {
-  name: string;
-  columnType: string;
-  jsonPath: string;
-  description: string | null;
-  priority: number | null;
-}
-
-export interface CrdGroup {
-  group: string;
-  crds: CrdInfo[];
-}
-
-export interface CrdInfo {
-  name: string;
-  group: string;
-  kind: string;
-  plural: string;
-  scope: string;
   version: string;
-  shortNames: string[];
-  categories: string[];
-  createdAt: string | null;
+  appVersion: string;
+  description: string;
 }
 
-export interface CustomResourceDetailInfo {
+export interface HelmRepository {
   name: string;
-  namespace: string | null;
-  uid: string;
-  apiVersion: string;
-  kind: string;
-  spec: unknown;
-  status: unknown | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-  ownerReferences: OwnerReferenceInfo[];
-  finalizers: string[];
-  resourceVersion: string | null;
-  generation: number | null;
-  fields: Record<string, unknown>;
-}
-
-export interface OwnerReferenceInfo {
-  apiVersion: string;
-  kind: string;
-  name: string;
-  uid: string;
-  controller: boolean | null;
-}
-
-export interface CustomResourceInfo {
-  name: string;
-  namespace: string | null;
-  uid: string;
-  apiVersion: string;
-  kind: string;
-  spec: unknown;
-  status: unknown | null;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-  ownerReferences: OwnerReferenceInfo[];
-  generation: number | null;
+  url: string;
 }
 
 export interface HelmRevision {
@@ -2192,11 +544,6 @@ export interface WithheldDocument {
   what: WithheldPart;
 }
 
-export interface Scoped<T> {
-  rows: T[];
-  unread: UnreadNamespace[];
-}
-
 export interface HelmRelease {
   name: string;
   namespace: string;
@@ -2209,204 +556,6 @@ export interface HelmRelease {
   suspended: boolean | null;
   sourceRef: string | null;
   unreadable: string | null;
-}
-
-export interface HelmInstallOptions {
-  releaseName: string;
-  chart: string;
-  namespace: string;
-  version: string | null;
-  values: string | null;
-  createNamespace: boolean;
-  wait: boolean;
-  timeout: string | null;
-}
-
-export interface HelmChartSearchResult {
-  name: string;
-  version: string;
-  appVersion: string;
-  description: string;
-}
-
-export interface HelmRepository {
-  name: string;
-  url: string;
-}
-
-export interface CliAvailability {
-  available: boolean;
-  version: string | null;
-  error: string | null;
-  path: string | null;
-  searchedPaths: string[];
-}
-
-export interface TerminalSessionInfo {
-  id: string;
-  context: string;
-  namespace: string;
-  pod: string;
-  container: string;
-  state: TerminalState;
-  openedAt: string;
-}
-
-export interface ObjectAudit {
-  subject: Subject;
-  system: boolean;
-  findings: AuditFinding[];
-  unchecked: Unchecked[];
-  judgedOn: Subject | null;
-}
-
-export interface Unchecked {
-  rule: RuleId;
-  kind: string;
-  namespace: string | null;
-  why: Why;
-}
-
-export interface AuditFinding {
-  rule: RuleId;
-  severity: AuditSeverity;
-  what: What[];
-}
-
-export interface Removal {
-  removed: string;
-  replacement: string | null;
-  since: string | null;
-}
-
-export interface At {
-  list: ContainerList;
-  container: string;
-}
-
-export interface Subject {
-  kind: string;
-  namespace: string | null;
-  name: string;
-}
-
-export interface AuditPage {
-  revision: number;
-  summary: AuditSummary;
-  rows: AuditRow[];
-  total: number;
-  next: number | null;
-}
-
-export interface BySeverity {
-  high: number;
-  medium: number;
-  low: number;
-}
-
-export interface AuditSummary {
-  findings: number;
-  severities: BySeverity;
-  categories: ByCategory;
-  rules: RuleCount[];
-  checked: KindChecked[];
-  notChecked: NotChecked[];
-  late: Late[];
-  system: SystemPart;
-  reading: number;
-  unattributed: number;
-  enforced: Enforced[];
-  upgrade: UpgradeRead;
-  usage: UsageState | null;
-}
-
-export interface UpgradeRead {
-  read: string | null;
-  server: string | null;
-}
-
-export interface Enforced {
-  namespace: string;
-  level: string;
-}
-
-export interface SystemPart {
-  namespaces: string[];
-  objects: number;
-  findings: number;
-}
-
-export interface Late {
-  kind: string;
-  namespace: string | null;
-  since: string;
-}
-
-export interface NotChecked {
-  kind: string;
-  namespace: string | null;
-  why: Why;
-  rules: RuleId[];
-}
-
-export interface KindChecked {
-  kind: string;
-  objects: number;
-}
-
-export interface RuleCount {
-  rule: RuleId;
-  objects: number;
-  unchecked: number;
-  system: number;
-}
-
-export interface ByCategory {
-  security: number;
-  reliability: number;
-  efficiency: number;
-  upgrade: number;
-}
-
-export interface WorkloadUse {
-  namespace: string;
-  kind: string;
-  name: string;
-  verdict: UseVerdict;
-}
-
-export interface OverBy {
-  requested: number;
-  peak: number;
-}
-
-export interface UnreadPods {
-  namespace: string;
-  message: string;
-}
-
-export interface AuditQuery {
-  by: Grouping;
-  categories: Category[];
-  severities: AuditSeverity[];
-  rules: RuleId[];
-  rule?: RuleId;
-  system: boolean;
-  offset: number;
-  limit?: number;
-}
-
-export interface ControllerRevisionInfo {
-  name: string;
-  revision: number;
-  current: boolean;
-  changeCause: string | null;
-  templateRead: boolean;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  templateAnnotations: Record<string, string>;
-  template: unknown | null;
-  createdAt: string | null;
 }
 
 export interface ClusterOverview {
@@ -2564,6 +713,2050 @@ export interface ClusterProblem {
   workload?: PodWorkload;
 }
 
+export interface ContainerRestarts {
+  container: string;
+  n: number;
+}
+
+export interface SecretInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  type: string;
+  dataKeys: string[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface ConfigData {
+  values: Record<string, string>;
+  withheld: Record<string, Withheld>;
+  binary: Record<string, BinaryValue>;
+}
+
+export interface BinaryValue {
+  bytes: number;
+  base64: string;
+}
+
+export interface ConfigMapInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  dataKeys: string[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface EndpointsInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  subsets: EndpointSubset[];
+  createdAt: string | null;
+  overCapacity: boolean;
+}
+
+export interface EndpointSubset {
+  addresses: EndpointAddress[];
+  notReadyAddresses: EndpointAddress[];
+  ports: EndpointPort[];
+}
+
+export interface EndpointPort {
+  name: string | null;
+  port: number;
+  protocol: string;
+}
+
+export interface EndpointAddress {
+  ip: string;
+  hostname: string | null;
+  nodeName: string | null;
+  targetRef: EndpointTargetRef | null;
+}
+
+export interface EndpointTargetRef {
+  kind: string;
+  name: string;
+  namespace: string;
+}
+
+export interface IngressClassBinding {
+  requested: string | null;
+  resolved: string | null;
+  controller: string | null;
+  viaDefault: boolean;
+  available: IngressClassSummary[];
+}
+
+export interface IngressClassSummary {
+  name: string;
+  controller: string | null;
+  isDefault: boolean;
+  parameters: IngressClassParameters | null;
+}
+
+export interface IngressClassParameters {
+  apiGroup: string | null;
+  kind: string;
+  name: string;
+  scope: string | null;
+  namespace: string | null;
+}
+
+export interface ServiceHealthInputs {
+  namespace: string;
+  groups: ServiceHealthGroup[];
+  networks: string[];
+}
+
+export interface ServiceHealthGroup {
+  names: string[];
+  type: string;
+  selectorless: boolean;
+  ready: number;
+  draining: number;
+  notReady: number;
+  unrouted: number;
+  stop?: ChainStop;
+  targets: number[];
+  door?: PolicyDoor;
+}
+
+export interface DoorAlone {
+  isolating: string[];
+  unsettled: string[];
+  ports: DoorPort[];
+}
+
+export interface DoorPort {
+  name: string | null;
+  servicePort: number | null;
+  port: number | null;
+  protocol: string;
+  rules: DoorRule[];
+}
+
+export interface DoorRule {
+  policy: string;
+  peers: PolicyPeer[];
+  byName: boolean;
+}
+
+export interface PolicyPeer {
+  pods: PolicySelects;
+  namespaces: PolicySelects;
+  ipBlock: PolicyIpBlock | null;
+}
+
+export interface PolicyIpBlock {
+  cidr: string;
+  except: string[];
+}
+
+export interface ServiceBacking {
+  services: ServiceInfo[];
+  published: ServicePublished[];
+  readAt: string;
+}
+
+export interface ServicePublished {
+  service: ObjectRef;
+  source: EndpointSource;
+  slices: number;
+  ready: number;
+  draining: number;
+  notReady: number;
+  unrouted: number;
+  unroutedReady: number;
+  ports: PublishedPort[];
+  endpoints: PublishedEndpoint[];
+  whole: boolean;
+  unpublished: UnpublishedPod[];
+  stop: ChainStop | null;
+  door?: PolicyDoor;
+}
+
+export interface UnpublishedPod {
+  pod: ObjectRef;
+  unnamedPorts: string[];
+  inSlice: boolean;
+}
+
+export interface PublishedEndpoint {
+  address: string | null;
+  target: ObjectRef | null;
+  ready: boolean;
+  serving: boolean;
+  terminating: boolean;
+  nodeName: string | null;
+  zone: string | null;
+  hintZones: string[];
+  ports: number[];
+}
+
+export interface PublishedPort {
+  name: string | null;
+  port: number | null;
+  protocol: string;
+  exposed: boolean;
+}
+
+export interface NetworkPolicyInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  selects: PolicySelects;
+  selected: number | null;
+  nearly: NearLabel | null;
+  ingress: PolicyDirection;
+  egress: PolicyDirection;
+  labels: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyDirection {
+  governed: boolean;
+  rules: PolicyRule[];
+  opensToEverything: boolean;
+  deniesEverything: boolean;
+}
+
+export interface PolicyRule {
+  peers: PolicyPeer[];
+  ports: PolicyPort[];
+}
+
+export interface PolicyPort {
+  protocol: string;
+  port: string | null;
+  endPort: number | null;
+}
+
+export interface NearLabel {
+  asked: string;
+  carried: string;
+  pods: number;
+}
+
+export interface IngressInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  className: string | null;
+  classAnnotated?: boolean;
+  rules: IngressRule[];
+  defaultBackend: IngressDefaultBackend | null;
+  loadBalancerIps: string[];
+  tlsHosts: string[];
+  tlsConfigs: IngressTlsConfig[];
+  hasCatchAllTls: boolean;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface DeploymentPods {
+  uid: string;
+  pods: PodInfo[];
+}
+
+export interface DeploymentInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  replicas: ReplicaInfo;
+  rollout: Rollout;
+  rolloutPlan: RolloutPlan;
+  podsRefused: string | null;
+  strategy: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
+  createdAt: string | null;
+  conditions: ConditionInfo[];
+  ownerReferences: OwnerReference[];
+}
+
+export interface OwnerReference {
+  api_version: string;
+  kind: string;
+  name: string;
+  uid: string;
+  controller?: boolean;
+  block_owner_deletion?: boolean;
+}
+
+export interface ReplicaReservation {
+  cpuRequests: number | null;
+  cpuLimits: number | null;
+  memoryRequests: number | null;
+  memoryLimits: number | null;
+  known: boolean;
+}
+
+export interface DeploymentContainerResources {
+  requests: Record<string, string>;
+  limits: Record<string, string>;
+}
+
+export interface DeploymentContainerInfo {
+  name: string;
+  image: string;
+  phase: ContainerPhase;
+  ports: number[];
+  resources: DeploymentContainerResources;
+  env: EnvVarInfo[];
+  envFrom: EnvFromInfo[];
+  command: string[];
+  args: string[];
+  probes: ContainerProbes;
+}
+
+export interface ContainerProbes {
+  readiness: ProbeInfo | null;
+  liveness: ProbeInfo | null;
+  startup: ProbeInfo | null;
+}
+
+export interface ProbeInfo {
+  handler: ProbeHandler;
+  initialDelaySeconds: number;
+  periodSeconds: number;
+  timeoutSeconds: number;
+  successThreshold: number;
+  failureThreshold: number;
+}
+
+export interface EnvFromInfo {
+  prefix: string | null;
+  configMapRef: string | null;
+  secretRef: string | null;
+  optional: boolean | null;
+}
+
+export interface EnvVarInfo {
+  name: string;
+  value: string | null;
+  valueFrom: EnvVarSourceInfo | null;
+}
+
+export interface EnvVarSourceInfo {
+  sourceType: EnvVarSourceType;
+  name: string | null;
+  key: string | null;
+  fieldPath: string | null;
+  resource: string | null;
+  optional: boolean | null;
+}
+
+export interface ReplicaInfo {
+  desired: number;
+  ready: number;
+  available: number;
+  updated: number;
+}
+
+export interface SearchHandle {
+  searchId: string;
+  targets: SearchTarget[];
+}
+
+export interface SearchTarget {
+  context: string;
+  status: SearchContextStatus;
+  reason: SearchFailureKind | null;
+  message: string | null;
+}
+
+export interface SearchRequest {
+  query: string;
+  contexts: string[];
+  allContexts: boolean;
+  scope?: string[];
+  kinds?: string[];
+  session?: string;
+  everything: boolean;
+  connect: boolean;
+  limitPerContext?: number;
+}
+
+export interface PersistentVolumeClaimInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  status: string | null;
+  volume: string | null;
+  capacity: string | null;
+  accessModes: string[];
+  storageClass: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface StorageClassInfo {
+  name: string;
+  uid: string;
+  provisioner: string;
+  reclaimPolicy: string;
+  volumeBindingMode: string;
+  allowVolumeExpansion: boolean;
+  isDefault: boolean;
+  parameters: Record<string, string>;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PersistentVolumeInfo {
+  name: string;
+  uid: string;
+  capacity: string | null;
+  accessModes: string[];
+  reclaimPolicy: string | null;
+  status: string | null;
+  claim: string | null;
+  storageClass: string;
+  reason: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface NamespaceInfo {
+  name: string;
+  uid: string;
+  status: string;
+  labels: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface DrainHandle {
+  drainId: string;
+}
+
+export interface DrainOptions {
+  ignoreDaemonsets: boolean;
+  evictUnmanagedPods: boolean;
+  evictPodsWithEmptydir: boolean;
+}
+
+export interface NodeInfo {
+  name: string;
+  uid: string;
+  status: NodeStatusInfo;
+  roles: string[];
+  version: string;
+  os: string;
+  arch: string;
+  containerRuntime: string;
+  labels: Record<string, string>;
+  taints: TaintInfo[];
+  unschedulable: boolean;
+  capacity: ResourceQuantities;
+  allocatable: ResourceQuantities;
+  providerId: string | null;
+  createdAt: string | null;
+}
+
+export interface ResourceQuantities {
+  cpu: string | null;
+  memory: string | null;
+  pods: string | null;
+  ephemeralStorage: string | null;
+}
+
+export interface TaintInfo {
+  key: string;
+  value: string | null;
+  effect: string;
+}
+
+export interface NodeStatusInfo {
+  ready: boolean;
+  conditions: ConditionInfo[];
+  addresses: NodeAddressInfo[];
+}
+
+export interface NodeAddressInfo {
+  type: string;
+  address: string;
+}
+
+export interface NodeFilters {
+  labelSelector: string | null;
+  fieldSelector: string | null;
+  limit: number | null;
+  readyOnly: boolean | null;
+}
+
+export interface NodeBudget {
+  pods: number | null;
+  known: boolean;
+  refused: string[];
+  error: string | null;
+  resources: ResourceBudget[];
+}
+
+export interface ResourceBudget {
+  name: string;
+  unit: BudgetUnit;
+  capacity: number | null;
+  allocatable: number | null;
+  requested: number | null;
+  limited: number | null;
+  extended: boolean;
+}
+
+export interface CostBasis {
+  nodes: NodeBasis[] | null;
+  nodesUnread: ReadFailure | null;
+  namespaces: NamespaceBasis[];
+  workloads: WorkloadBasis[];
+  rest: RestBasis | null;
+  waiting: number;
+  unread: UnreadNamespace[];
+  volumeBytes: number | null;
+  volumeCount: number | null;
+  unclaimed: UnclaimedVolume[] | null;
+  volumesUnread: ReadFailure | null;
+  claimsUnread: UnreadNamespace[];
+  servedFrom: OverviewSource;
+}
+
+export interface UnclaimedVolume {
+  name: string;
+  bytes: number;
+  phase: string | null;
+}
+
+export interface RestBasis {
+  workloads: number;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  claimBytes: number;
+}
+
+export interface WorkloadBasis {
+  key: WorkloadKey;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  claimBytes: number;
+}
+
+export interface NamespaceBasis {
+  namespace: string;
+  workloads: number;
+  pods: number;
+  cpu: number;
+  memory: number;
+  gpus: number;
+  storageBytes: number | null;
+}
+
+export interface ReadFailure {
+  code: string;
+  message: string;
+}
+
+export interface NodeBasis {
+  name: string;
+  instanceType: string | null;
+  cpuCapacity: number | null;
+  cpuAllocatable: number | null;
+  memoryCapacity: number | null;
+  memoryAllocatable: number | null;
+  gpus: number;
+  cpuRequested: number | null;
+  memoryRequested: number | null;
+  gpusRequested: number | null;
+}
+
+export interface CliAvailability {
+  available: boolean;
+  version: string | null;
+  error: string | null;
+  path: string | null;
+  searchedPaths: string[];
+}
+
+export type PodFilters = {
+  statusFilter: string | null;
+  selector: Record<string, string> | null;
+  nodeName: string | null;
+} & ResourceFilters;
+
+export interface ResourceConnections {
+  subject: ObjectRef;
+  subjectUid?: string;
+  readAt?: string;
+  edges: ConnectionEdge[];
+  stops: ChainStop[];
+  published: ServicePublished[];
+  notLookedAt: UnexploredKind[];
+  nearlySelectedBy?: NearSelector[];
+}
+
+export interface NearSelector {
+  service: ObjectRef;
+  carries: string;
+  lacks: string;
+}
+
+export interface ConnectionEdge {
+  from: ObjectRef;
+  to: ObjectRef;
+  relation: Relation;
+}
+
+export interface NodeMetricsResponse {
+  status: MetricsStatus;
+  data: NodeMetrics[];
+}
+
+export interface NodeMetrics {
+  name: string;
+  cpuMillicores: number | null;
+  memoryBytes: number | null;
+}
+
+export interface MetricsStatus {
+  status: MetricsStatusKind;
+  message: string | null;
+}
+
+export interface PodMetricsResponse {
+  status: MetricsStatus;
+  data: PodMetrics[];
+  unread: UnreadNamespace[];
+}
+
+export interface PodMetrics {
+  name: string;
+  namespace: string;
+  cpuMillicores: number | null;
+  memoryBytes: number | null;
+}
+
+export interface Published {
+  url: string | null;
+  rawUrl: string | null;
+  draftId: string | null;
+  version: number | null;
+}
+
+export interface ShareIdentity {
+  accountName: string | null;
+  apiKeyName: string | null;
+}
+
+export interface ShareTargetInput {
+  id: string | null;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  apiKey: string | null;
+  importKey: boolean;
+}
+
+export interface ShareTargetInfo {
+  id: string;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  hasKey: boolean;
+  host: string;
+}
+
+export interface FilePreview {
+  bytesRead: number;
+  truncated: boolean;
+  binary: boolean;
+  nonTextShare: number;
+  lossy: boolean;
+  text: string | null;
+}
+
+export interface Via {
+  container: string;
+  root: string;
+}
+
+export interface TcpProbe {
+  ms: number | null;
+  error: string | null;
+  reason: TcpProbeReason | null;
+}
+
+export interface ResolveProbe {
+  resolved: string[];
+  error: string | null;
+  matchesGateway: boolean | null;
+}
+
+export interface RouteInfo {
+  kind: string;
+  apiVersion: string;
+  name: string;
+  namespace: string;
+  uid: string;
+  hostnames: string[];
+  parentRefs: ParentRefInfo[];
+  rules: RouteRuleInfo[];
+  parents: RouteParentStatusInfo[];
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface RouteParentStatusInfo {
+  parent: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface RouteRuleInfo {
+  matches: RouteMatchInfo[];
+  backendRefs: BackendRefInfo[];
+  hasRedirect: boolean;
+  extensionRefs: ExtensionRefInfo[];
+}
+
+export interface ExtensionRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+}
+
+export interface BackendRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  port: number | null;
+  weight: number | null;
+}
+
+export interface RouteMatchInfo {
+  path: string | null;
+  pathType: string | null;
+  method: string | null;
+  grpcService: string | null;
+  grpcMethod: string | null;
+  headers: string[];
+  queryParams: string[];
+}
+
+export interface ParentRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  sectionName: string | null;
+  port: number | null;
+}
+
+export interface GatewayInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  apiVersion: string;
+  className: string;
+  listeners: ListenerInfo[];
+  listenerSets: ObjectName[];
+  listenerSetsKnown: boolean;
+  addresses: string[];
+  conditions: ConditionInfo[];
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface BackendTlsPolicyInfo {
+  name: string;
+  namespace: string;
+  targetRefs: PolicyTargetRef[];
+  hostname: string;
+  wellKnownCa: string | null;
+  caCertRefs: string[];
+  ancestors: PolicyAncestorInfo[];
+  ancestorsMaybeTruncated: boolean;
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyAncestorInfo {
+  ancestor: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface PolicyTargetRef {
+  group: string | null;
+  kind: string | null;
+  name: string;
+  sectionName: string | null;
+}
+
+export interface GatewayClassInfo {
+  name: string;
+  uid: string;
+  controllerName: string;
+  description: string | null;
+  accepted: boolean | null;
+  conditions: ConditionInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface GatewayApiDetection {
+  installed: boolean;
+  bundleVersion: string | null;
+  channel: string | null;
+  mixedBundle: boolean | null;
+  kinds: ServedGatewayKind[];
+}
+
+export interface ServedGatewayKind {
+  kind: string;
+  plural: string;
+  versions: string[];
+  readVersion: string;
+}
+
+export interface PodInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  status: PodStatusInfo;
+  nodeName: string | null;
+  podIp: string | null;
+  hostIp: string | null;
+  containers: ContainerInfo[];
+  initContainers: ContainerInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+  restartCount: number;
+  lastRestartAt: string | null;
+  restartsBy?: ContainerRestarts[];
+  cpuRequests: string | null;
+  cpuLimits: string | null;
+  memoryRequests: string | null;
+  memoryLimits: string | null;
+  ownerReferences: OwnerReference[];
+  volumes: PodVolumeInfo[];
+  serviceAccountName: string | null;
+  start: PodStart;
+  workload: PodWorkload | null;
+}
+
+export interface PodVolumeInfo {
+  name: string;
+  source: string;
+  refs: VolumeObjectRef[];
+  mounts: VolumeMountInfo[];
+  projections: VolumeProjectionInfo[];
+}
+
+export interface VolumeProjectionInfo {
+  source: string;
+  object: VolumeObjectRef | null;
+  paths: string[];
+}
+
+export interface VolumeMountInfo {
+  container: string;
+  path: string;
+  readOnly: boolean;
+  subPath: string | null;
+}
+
+export interface VolumeObjectRef {
+  kind: string;
+  name: string;
+}
+
+export interface ContainerInfo {
+  name: string;
+  image: string;
+  ready: boolean;
+  started: boolean;
+  phase: ContainerPhase;
+  state: ContainerState;
+  lastTerminated: TerminationInfo | null;
+  restartCount: number;
+  loopingUntil?: string;
+  restartingUntil?: string;
+  ports: ContainerPortInfo[];
+  resources: DeploymentContainerResources;
+  env: EnvVarInfo[];
+  envFrom: EnvFromInfo[];
+}
+
+export interface ContainerPortInfo {
+  name: string | null;
+  containerPort: number;
+  protocol: string;
+}
+
+export interface PodStatusInfo {
+  phase: string;
+  display: string;
+  kubectlStatus?: string;
+  failedAt?: string;
+  ready: boolean;
+  conditions: ConditionInfo[];
+  message: string | null;
+  reason: string | null;
+  loopingUntil?: string;
+  exitUnreported: boolean;
+  restartingUntil?: string;
+  rejected?: string;
+  cause?: PodCause;
+  gone?: PodGone;
+}
+
+export interface ReplicaSetInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  replicas: ReplicaSetReplicaInfo;
+  revision: string | null;
+  currentRevision: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  templateAnnotations: Record<string, string>;
+  template: unknown | null;
+  conditions: ConditionInfo[];
+  podsRefused: string | null;
+  ownerReferences: OwnerReference[];
+  createdAt: string | null;
+}
+
+export interface ReplicaSetReplicaInfo {
+  desired: number;
+  current: number;
+  ready: number;
+  available: number;
+}
+
+export interface ServiceInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  type: string;
+  sessionAffinity: string;
+  clusterIp: string | null;
+  externalName: string | null;
+  externalIps: string[];
+  loadBalancerIps: string[];
+  ports: ServicePortInfo[];
+  selector: Record<string, string>;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export type ServiceFilters = {
+  serviceType: string | null;
+} & ResourceFilters;
+
+export interface Lineage {
+  uid: string | null;
+  ancestors: Ancestor[];
+  others: OtherOwner[];
+  stop: LineageStop | null;
+}
+
+export interface OtherOwner {
+  kind: string;
+  group: string;
+  name: string;
+}
+
+export interface Ancestor {
+  uid: string;
+  kind: string;
+  group: string;
+  plural: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface Cascade {
+  takes: KindCount[];
+  notRead: NotRead;
+  holds: Holds | null;
+}
+
+export interface NotRead {
+  kinds: KindReading[];
+  groups: UnreadGroup[];
+  watched: number;
+  listed?: ListedKinds;
+}
+
+export interface ListedKinds {
+  kinds: number;
+  since: string;
+}
+
+export interface UnreadGroup {
+  group: string;
+  code: string;
+  message: string;
+}
+
+export interface KindReading {
+  kind: string;
+  group: string;
+  plural: string;
+  reading: Reading;
+}
+
+export interface KindCount {
+  kind: string;
+  group: string;
+  plural: string;
+  count: number;
+}
+
+export interface Beside {
+  previous: Dependent | null;
+  next: Dependent | null;
+}
+
+export interface Dependent {
+  uid: string;
+  kind: string;
+  group: string;
+  version: string;
+  plural: string;
+  name: string;
+  namespace: string | null;
+  controlled: boolean;
+  dependents: number;
+}
+
+export interface Dependents {
+  dependents: Dependent[];
+  page: number;
+  pageSize: number;
+  total: number;
+  notRead: NotRead;
+}
+
+export interface PerfSnapshot {
+  recording: boolean;
+  eventsEmitted: number;
+  eventBytes: number;
+  maxEventBytes: number;
+  watchChanges: number;
+  commands: Record<string, CommandTimes>;
+}
+
+export interface CommandTimes {
+  count: number;
+  p50: number;
+  p95: number;
+  max: number;
+  maxApiCalls: number;
+}
+
+export interface BatchLogResult {
+  processed: number;
+  failed: number;
+}
+
+export interface FrontendLogEntry {
+  level: string;
+  message: string;
+  context?: string;
+  data?: unknown;
+  timestamp?: number;
+}
+
+export interface BinaryLocation {
+  name: string;
+  path: string | null;
+}
+
+export interface ObjectMetadata {
+  uid: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+export interface DryRun {
+  documents: DryRunDocument[];
+}
+
+export interface DryRunDocument {
+  id: string;
+  outcome: DryRunOutcome;
+  live: string | null;
+  would: string | null;
+}
+
+export interface Applied {
+  documents: AppliedDocument[];
+}
+
+export interface AppliedDocument {
+  id: string;
+  outcome: ApplyOutcome;
+}
+
+export interface ManifestResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+}
+
+export interface ServedObjects {
+  items: unknown[];
+  truncated: boolean;
+}
+
+export interface ResourceTable {
+  columns: TableColumn[];
+  rows: TableRow[];
+  cursor: string | null;
+  unread: UnreadNamespace[];
+}
+
+export interface TableRow {
+  name: string;
+  namespace: string | null;
+  uid: string | null;
+  createdAt: string | null;
+  cells: unknown[];
+}
+
+export interface TableColumn {
+  name: string;
+  columnType: string;
+  format: string;
+  description: string;
+  priority: number;
+}
+
+export interface ApiCatalog {
+  entries: CatalogEntry[];
+  unread: UnreadGroup[];
+}
+
+export interface CatalogEntry {
+  group: string;
+  version: string;
+  kind: string;
+  plural: string;
+  namespaced: boolean;
+  verbs: string[];
+  shortNames: string[];
+  hasStatus?: boolean;
+}
+
+export interface TerminalSessionInfo {
+  id: string;
+  context: string;
+  namespace: string;
+  pod: string;
+  container: string;
+  state: TerminalState;
+  openedAt: string;
+}
+
+export interface Kept {
+  keep: boolean;
+  bytes: number;
+  clusters: number;
+}
+
+export interface Following {
+  anotherCluster: boolean;
+}
+
+export interface TimelinePage {
+  rows: TimelineRow[];
+  more: boolean;
+  newest: number;
+  spans: SpanSets;
+  letGo: LetGoes;
+  keeping: Keeping;
+  unreadable: number;
+}
+
+export interface LetGoes {
+  changes: LetGo | null;
+  warnings: LetGo | null;
+  normal: LetGo | null;
+}
+
+export interface LetGo {
+  before: number;
+  cleared: boolean;
+}
+
+export interface SpanSets {
+  followed: ObservedSpan[];
+  meta: ObservedSpan[];
+}
+
+export interface ObservedSpan {
+  from: number;
+  seenAt: number;
+  to: number | null;
+  unwatched: string[];
+  unwatchedIn: string[];
+  scope: string[];
+  kinds: string[];
+}
+
+export interface TimelineRow {
+  id: string;
+  seq: number;
+  at: number;
+  kind: string;
+  group: string;
+  namespace: string | null;
+  name: string;
+  what: RowSays;
+  atRelist: boolean;
+}
+
+export interface TimelineQuery {
+  context: string;
+  subject: TimelineSubject | null;
+  scope: string[] | null;
+  from: number;
+  show: Show;
+  after: number | null;
+  before: Cursor | null;
+}
+
+export interface Cursor {
+  at: number;
+  seq: number;
+}
+
+export interface TimelineSubject {
+  kind: string;
+  group: string | null;
+  namespace: string | null;
+  name: string;
+}
+
+export interface ObjectAudit {
+  subject: Subject;
+  system: boolean;
+  findings: AuditFinding[];
+  unchecked: Unchecked[];
+  judgedOn: Subject | null;
+}
+
+export interface Unchecked {
+  rule: RuleId;
+  kind: string;
+  namespace: string | null;
+  why: Why;
+}
+
+export interface AuditFinding {
+  rule: RuleId;
+  severity: AuditSeverity;
+  what: What[];
+}
+
+export interface Removal {
+  removed: string;
+  replacement: string | null;
+  since: string | null;
+}
+
+export interface At {
+  list: ContainerList;
+  container: string;
+}
+
+export interface Subject {
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface AuditPage {
+  revision: number;
+  summary: AuditSummary;
+  rows: AuditRow[];
+  total: number;
+  next: number | null;
+}
+
+export interface BySeverity {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface AuditSummary {
+  findings: number;
+  severities: BySeverity;
+  categories: ByCategory;
+  rules: RuleCount[];
+  checked: KindChecked[];
+  notChecked: NotChecked[];
+  late: Late[];
+  system: SystemPart;
+  reading: number;
+  unattributed: number;
+  enforced: Enforced[];
+  upgrade: UpgradeRead;
+  usage: UsageState | null;
+}
+
+export interface UpgradeRead {
+  read: string | null;
+  server: string | null;
+}
+
+export interface Enforced {
+  namespace: string;
+  level: string;
+}
+
+export interface SystemPart {
+  namespaces: string[];
+  objects: number;
+  findings: number;
+}
+
+export interface Late {
+  kind: string;
+  namespace: string | null;
+  since: string;
+}
+
+export interface NotChecked {
+  kind: string;
+  namespace: string | null;
+  why: Why;
+  rules: RuleId[];
+}
+
+export interface KindChecked {
+  kind: string;
+  objects: number;
+}
+
+export interface RuleCount {
+  rule: RuleId;
+  objects: number;
+  unchecked: number;
+  system: number;
+}
+
+export interface ByCategory {
+  security: number;
+  reliability: number;
+  efficiency: number;
+  upgrade: number;
+}
+
+export interface WorkloadUse {
+  namespace: string;
+  kind: string;
+  name: string;
+  verdict: UseVerdict;
+}
+
+export interface OverBy {
+  requested: number;
+  peak: number;
+}
+
+export interface UnreadPods {
+  namespace: string;
+  message: string;
+}
+
+export interface AuditQuery {
+  by: Grouping;
+  categories: Category[];
+  severities: AuditSeverity[];
+  rules: RuleId[];
+  rule?: RuleId;
+  system: boolean;
+  offset: number;
+  limit?: number;
+}
+
+export interface CheckOutcome {
+  ranIn: string;
+  tried: string[];
+  answeredWith: string | null;
+  answer: CheckAnswer;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  elapsedMs: number;
+  copy: CopyReport | null;
+}
+
+export interface CopyReport {
+  pod: string;
+  image: string;
+  deleted: boolean;
+}
+
+export interface CopyWith {
+  image: string;
+}
+
+export interface ControllerRevisionInfo {
+  name: string;
+  revision: number;
+  current: boolean;
+  changeCause: string | null;
+  templateRead: boolean;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  templateAnnotations: Record<string, string>;
+  template: unknown | null;
+  createdAt: string | null;
+}
+
+export interface PortForwardConfigPayload {
+  context: string;
+  name: string;
+  pod: string;
+  namespace: string;
+  localPort: number;
+  remotePort: number;
+  autoReconnect: boolean;
+  autoStart: boolean;
+}
+
+export interface PortForwardConfigInfo {
+  id: string;
+  context: string;
+  name: string;
+  pod: string;
+  namespace: string;
+  localPort: number;
+  remotePort: number;
+  autoReconnect: boolean;
+  autoStart: boolean;
+  createdAt: string;
+}
+
+export interface PortForwardSessionInfo {
+  id: string;
+  context: string;
+  pod: string;
+  namespace: string;
+  localPort: number;
+  remotePort: number;
+  autoReconnect: boolean;
+  createdAt: string;
+  via: ForwardVia;
+}
+
+export interface PortForwardRequest {
+  context: string;
+  localPort: number;
+  remotePort: number;
+  autoReconnect: boolean;
+}
+
+export interface SetupWarning {
+  reason: string;
+  said: string;
+  count: number;
+  at: string | null;
+  fault: SetupFault;
+}
+
+export interface LatestEvents {
+  events: EventInfo[];
+  short: boolean;
+}
+
+export interface EventInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  type: string;
+  reason: string | null;
+  message: string | null;
+  source: string | null;
+  involvedObject: InvolvedObjectInfo;
+  count: number | null;
+  firstTimestamp: string | null;
+  lastTimestamp: string | null;
+}
+
+export interface InvolvedObjectInfo {
+  apiVersion?: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  uid: string | null;
+}
+
+export interface EventFilters {
+  namespace: string | null;
+  involved_object_name: string | null;
+  involved_object_kind: string | null;
+  event_type: string | null;
+  field_selector: string | null;
+  limit: number | null;
+}
+
+export interface PathIdentity {
+  roots: PathRoot[];
+  user: string | null;
+}
+
+export interface PathRoot {
+  root: string;
+  standIn: string;
+}
+
+export interface Diagnostics {
+  shell: ShellEnvReport;
+  searchPathIsReal: boolean;
+  searchPath: SearchPathEntry[];
+  tools: ToolStatus[];
+  plugins: PluginStatus[];
+  contexts: DiagnosticContext[];
+  kubeconfig: KubeconfigInfo | null;
+  app: InstallationInfo;
+  findings: Finding[];
+  connections: ConnectAttempt[];
+}
+
+export interface Finding {
+  severity: Severity;
+  title: string;
+  detail: string;
+  subject: string | null;
+  aboutShell: boolean;
+}
+
+export interface InstallationInfo {
+  version: string;
+  os: string;
+  configPath: string | null;
+  logDestination: string | null;
+}
+
+export interface KubeconfigInfo {
+  path: string;
+  parseError: string | null;
+  contextCount: number;
+}
+
+export interface DiagnosticContext {
+  context: string;
+  method: string;
+  command: string | null;
+  commandPath: string | null;
+}
+
+export interface PluginStatus {
+  name: string;
+  path: string | null;
+  requiredBy: string[];
+}
+
+export interface ToolStatus {
+  name: string;
+  path: string | null;
+  version: string | null;
+}
+
+export interface SearchPathEntry {
+  path: string;
+  exists: boolean;
+}
+
+export interface CronJobDetailInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  schedule: string;
+  timezone: string | null;
+  suspend: boolean;
+  concurrencyPolicy: string | null;
+  startingDeadlineSeconds: number | null;
+  successfulJobsHistoryLimit: number | null;
+  failedJobsHistoryLimit: number | null;
+  active: number;
+  lastSchedule: string | null;
+  lastSuccessfulTime: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  ownerReferences: OwnerReference[];
+  createdAt: string | null;
+}
+
+export interface JobDetailInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  completions: number | null;
+  parallelism: number | null;
+  backoffLimit: number | null;
+  activeDeadlineSeconds: number | null;
+  succeeded: number;
+  failed: number;
+  active: number;
+  status: string;
+  failure: JobFailure | null;
+  startTime: string | null;
+  completionTime: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  conditions: ConditionInfo[];
+  ownerReferences: OwnerReference[];
+  createdAt: string | null;
+}
+
+export interface JobFailure {
+  reason: string | null;
+  message: string | null;
+}
+
+export interface JobInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  completions: number | null;
+  succeeded: number;
+  failed: number;
+  active: number;
+  status: string;
+  failure: JobFailure | null;
+  createdAt: string | null;
+  cronJob: string | null;
+}
+
+export interface DaemonSetDetailInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  desired: number;
+  current: number;
+  ready: number;
+  upToDate: number;
+  available: number;
+  rollout: Rollout;
+  rolloutPlan: RolloutPlan;
+  updateStrategy: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  selector: string;
+  conditions: ConditionInfo[];
+  ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
+  createdAt: string | null;
+}
+
+export interface DaemonSetInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  desired: number;
+  current: number;
+  ready: number;
+  updated: number;
+  rollout: Rollout;
+  rolloutPlan: RolloutPlan;
+  containerImages: ContainerImage[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
+  createdAt: string | null;
+}
+
+export interface ContainerImage {
+  name: string;
+  image: string | null;
+}
+
+export interface StatefulSetDetailInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  replicas: StatefulSetReplicaInfo;
+  rollout: Rollout;
+  rolloutPlan: RolloutPlan;
+  serviceName: string | null;
+  podManagementPolicy: string | null;
+  updateStrategy: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
+  podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  conditions: ConditionInfo[];
+  ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
+  createdAt: string | null;
+  claimTemplates: string[];
+  claimsWhenDeleted: string | null;
+}
+
+export interface StatefulSetReplicaInfo {
+  desired: number;
+  ready: number;
+  current: number;
+  updated: number;
+}
+
+export interface StatefulSetInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  replicas: StatefulSetReplicaInfo;
+  rollout: Rollout;
+  rolloutPlan: RolloutPlan;
+  containerImages: ContainerImage[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
+  createdAt: string | null;
+}
+
+export interface ResourceFilters {
+  namespace: string | null;
+  labelSelector: string | null;
+  fieldSelector: string | null;
+  limit: number | null;
+}
+
+export interface CrdDetailInfo {
+  name: string;
+  uid: string;
+  group: string;
+  kind: string;
+  plural: string;
+  singular: string;
+  scope: string;
+  versions: CrdVersionInfo[];
+  shortNames: string[];
+  categories: string[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  conditions: CrdCondition[];
+  createdAt: string | null;
+  acceptedNames: CrdAcceptedNames;
+}
+
+export interface CrdAcceptedNames {
+  kind: string;
+  plural: string;
+  singular: string | null;
+  shortNames: string[];
+  categories: string[];
+  listKind: string | null;
+}
+
+export interface CrdCondition {
+  conditionType: string;
+  status: string;
+  reason: string | null;
+  message: string | null;
+  lastTransitionTime: string | null;
+}
+
+export interface CrdVersionInfo {
+  name: string;
+  served: boolean;
+  storage: boolean;
+  deprecated: boolean;
+  deprecationWarning: string | null;
+  schema: unknown | null;
+  additionalPrinterColumns: PrinterColumn[];
+}
+
+export interface PrinterColumn {
+  name: string;
+  columnType: string;
+  jsonPath: string;
+  description: string | null;
+  priority: number | null;
+}
+
+export interface CrdGroup {
+  group: string;
+  crds: CrdInfo[];
+}
+
+export interface CrdInfo {
+  name: string;
+  group: string;
+  kind: string;
+  plural: string;
+  scope: string;
+  version: string;
+  shortNames: string[];
+  categories: string[];
+  createdAt: string | null;
+}
+
+export interface CustomResourceDetailInfo {
+  name: string;
+  namespace: string | null;
+  uid: string;
+  apiVersion: string;
+  kind: string;
+  spec: unknown;
+  status: unknown | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+  ownerReferences: OwnerReferenceInfo[];
+  finalizers: string[];
+  resourceVersion: string | null;
+  generation: number | null;
+  fields: Record<string, unknown>;
+}
+
+export interface OwnerReferenceInfo {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  uid: string;
+  controller: boolean | null;
+}
+
+export interface Scoped<T> {
+  rows: T[];
+  unread: UnreadNamespace[];
+}
+
+export interface CustomResourceInfo {
+  name: string;
+  namespace: string | null;
+  uid: string;
+  apiVersion: string;
+  kind: string;
+  spec: unknown;
+  status: unknown | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+  ownerReferences: OwnerReferenceInfo[];
+  generation: number | null;
+}
+
+export interface OtherPolicyKinds {
+  namespace: string;
+  kinds: string[];
+}
+
+export interface ClusterPreferences {
+  lastContext?: string;
+  namespaces: Record<string, string>;
+  scopes: Record<string, string[]>;
+}
+
+export interface UpdaterConfig {
+  autoCheckEnabled: boolean;
+}
+
+export interface RecentItem {
+  name: string;
+  namespace?: string;
+  kind: string;
+  context?: string;
+  crd?: string;
+  timestamp: number;
+}
+
+export interface YamlHistoryEntryDto {
+  timestamp: number;
+  content: string;
+  label?: string;
+}
+
+export interface ThemeConfig {
+  theme: string;
+  accentColor: string;
+  fontSize: number;
+  compact: boolean;
+}
+
+export interface AppInfo {
+  version: string;
+  name: string;
+  tauriVersion: string;
+  os: string;
+}
+
+export interface CliPathsConfig {
+  helmPath?: string;
+  kubectlPath?: string;
+}
+
+export interface ContextBinding {
+  gcpProfile?: string;
+  azureProfile?: string;
+}
+
+export interface ContextBindingInfo {
+  contextName: string;
+  gcpProfile: string | null;
+  azureProfile: string | null;
+}
+
+export interface AzureProfile {
+  description?: string;
+  azPath?: string;
+  kubeloginPath?: string;
+  defaultSubscription?: string;
+  tenantId?: string;
+  useCliFallback: boolean;
+  preferNativeAuth: boolean;
+}
+
+export interface AzureProfileInfo {
+  name: string;
+  profile: AzureProfile;
+}
+
+export interface GcpProfile {
+  description?: string;
+  serviceAccountKeyPath?: string;
+  gcloudPath?: string;
+  defaultProject?: string;
+  preferNativeAuth: boolean;
+}
+
+export interface GcpProfileInfo {
+  name: string;
+  profile: GcpProfile;
+}
+
+export interface OwnRules {
+  namespace: string;
+  rules: OwnRule[];
+  incomplete: boolean;
+  evaluationError: string | null;
+}
+
+export interface OwnRule {
+  apiGroups: string[];
+  resources: string[];
+  resourceNames: string[];
+  nonResourceUrls: string[];
+  verbs: string[];
+}
+
+export interface NamespaceAccess {
+  namespace: string;
+  allowed: boolean | null;
+  otherLists: boolean | null;
+}
+
+export interface ListAccess {
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface ListQuery {
+  group: string;
+  resource: string;
+  namespaced: boolean;
+}
+
+export interface AccessAnswer {
+  verb: string;
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface AccessQuery {
+  group: string;
+  resource: string;
+  verb: string;
+  namespace: string | null;
+  subresource?: string;
+  name?: string;
+}
+
+export interface AggregationInfo {
+  role: string;
+  gathers: string[] | null;
+}
+
+export interface BindingInfo {
+  kind: string;
+  name: string;
+  namespace: string | null;
+  roleRef: RoleRefInfo;
+  subjects: SubjectInfo[];
+}
+
+export interface SubjectInfo {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface RoleRefInfo {
+  kind: string;
+  name: string;
+}
+
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
@@ -2688,223 +2881,121 @@ export interface WorkloadKey {
   name: string;
 }
 
-export interface PodRow {
-  name: string;
-  namespace: string;
-  uid: string;
-  status: PodRowStatus;
-  nodeName: string | null;
-  podIp: string | null;
-  containers: RowContainer[];
-  initContainers: RowContainer[];
-  labels: Record<string, string>;
-  createdAt: string | null;
-  restartCount: number;
-  lastRestartAt: string | null;
-  cpuRequests: string | null;
-  cpuLimits: string | null;
-  memoryRequests: string | null;
-  memoryLimits: string | null;
-  start: PodStart;
-  workload: PodWorkload | null;
-}
-
-export interface RowContainer {
-  name: string;
-  ready: boolean;
-  started: boolean;
-  phase: ContainerPhase;
-  state: ContainerState;
-}
-
-export interface PodRowStatus {
-  phase: string;
-  display: string;
-  ready: boolean;
-  kubectlStatus?: string;
-  loopingUntil?: string;
-  exitUnreported: boolean;
-  restartingUntil?: string;
-  rejected?: string;
-  cause?: PodCause;
-  gone?: PodGone;
-}
-
-export interface FileEntry {
-  name: string;
-  kind: FileKind;
-  mode: string;
-  size: number;
-  modified: number | null;
-  owner: string;
+export interface AlertRule {
   group: string;
-  target: string | null;
-}
-
-export interface DrainReport {
-  evicted: number;
-  alreadyGone: number;
-  leaving: number;
-  daemonsetPodsLeft: number;
-  staticPodsLeft: number;
-  refused: RefusedPod[];
-}
-
-export interface RefusedPod {
-  namespace: string;
+  file: string;
   name: string;
-  refusal: DrainRefusal;
-  message: string | null;
-}
-
-export interface UnreadKind {
-  kind: string;
-  group: string;
-  plural: string;
-  reason: SearchFailureKind;
-  message: string;
-  namespaces: string[];
-}
-
-export interface SearchedKind {
-  kind: string;
-  group: string;
-  plural: string;
-}
-
-export interface SearchHit {
-  context: string;
-  kind: string;
-  group: string;
-  plural: string;
-  name: string;
-  namespace: string | null;
-}
-
-export interface WatchChange {
-  op: WatchOp;
-  resource: RawJson | null;
-}
-
-export interface LogLineEvent {
-  message: string;
-  timestamp: string | null;
-  level: LogLevel | null;
-  format: LogFormat;
-  fields: Record<string, string> | null;
-  raw: string;
-  segments?: StyledSegment[];
-}
-
-export interface DeploymentPods {
-  uid: string;
-  pods: PodInfo[];
-}
-
-export interface DeploymentInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  replicas: ReplicaInfo;
-  rollout: Rollout;
-  rolloutPlan: RolloutPlan;
-  podsRefused: string | null;
-  strategy: string | null;
-  containers: DeploymentContainerInfo[];
-  initContainers: DeploymentContainerInfo[];
-  serviceAccountName: string | null;
-  podResources: DeploymentContainerResources;
-  replica: ReplicaReservation;
+  state: string;
+  health: string;
+  lastError: string;
+  query: string;
+  durationSeconds: number;
+  lastEvaluation: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  templateAnnotations: Record<string, string>;
-  generation: number | null;
-  observedGeneration: number | null;
-  createdAt: string | null;
-  conditions: ConditionInfo[];
-  ownerReferences: OwnerReference[];
+  alerts: AlertInstance[];
 }
 
-export interface ReplicaInfo {
-  desired: number;
-  ready: number;
-  available: number;
-  updated: number;
-}
-
-export interface ResourceFilters {
-  namespace: string | null;
-  labelSelector: string | null;
-  fieldSelector: string | null;
-  limit: number | null;
-}
-
-export interface CheckOutcome {
-  ranIn: string;
-  tried: string[];
-  answeredWith: string | null;
-  answer: CheckAnswer;
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  elapsedMs: number;
-  copy: CopyReport | null;
-}
-
-export interface CopyReport {
-  pod: string;
-  image: string;
-  deleted: boolean;
-}
-
-export interface CopyWith {
-  image: string;
-}
-
-export interface SecretInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  type: string;
-  dataKeys: string[];
+export interface AlertInstance {
+  state: string;
+  activeAt: string | null;
+  value: string;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  createdAt: string | null;
 }
 
-export interface ConfigData {
-  values: Record<string, string>;
-  withheld: Record<string, Withheld>;
-  binary: Record<string, BinaryValue>;
-}
-
-export interface BinaryValue {
-  bytes: number;
-  base64: string;
-}
-
-export interface ConfigMapInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  dataKeys: string[];
+export interface ScrapeTarget {
+  scrapePool: string;
+  scrapeUrl: string;
+  health: string;
+  lastError: string;
+  lastScrape: string | null;
   labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
 }
 
-export interface FilePreview {
-  bytesRead: number;
+export interface PromSeries {
+  labels: Record<string, string>;
+  points: PromPoint[];
+}
+
+export interface PromPoint {
+  t: number;
+  v: number | null;
+}
+
+export interface PrometheusProbe {
+  ok: boolean;
+  at: number;
+  latencyMs: number;
+  reason?: string;
+  noAddress: boolean;
+  version?: string;
+}
+
+export interface PrometheusConnection {
+  url: string;
+  authType: string;
+  hasToken: boolean;
+  insecureTls: boolean;
+}
+
+export interface DetectedExtension {
+  id: string;
+  installed: boolean | null;
+  version: string | null;
+}
+
+export interface IssuanceStory {
+  certificate: string;
+  namespace: string;
+  issuer: string;
+  issuerKind: string;
+  dnsNames: string[];
+  renewalTime: string | null;
+  inFlight: boolean;
+  failure: string | null;
+  stalled: Stalled | null;
+  since: string | null;
+  attempts: number | null;
+  steps: IssuanceStep[];
+}
+
+export interface IssuanceStep {
+  kind: string;
+  name: string;
+  state: string;
+  note: StepNote | null;
+  failed: boolean;
+}
+
+export interface LokiPage {
+  lines: LokiLine[];
+  streams: number;
   truncated: boolean;
-  binary: boolean;
-  nonTextShare: number;
-  lossy: boolean;
-  text: string | null;
+  limit: number;
 }
 
-export interface Via {
-  container: string;
-  root: string;
+export interface LokiLine {
+  ts: string;
+  line: LogLine;
+}
+
+export interface LokiProbe {
+  ok: boolean;
+  at: number;
+  latencyMs: number;
+  reason?: string;
+  noAddress: boolean;
+  version?: string;
+  retention?: string;
+  labels: string[];
+}
+
+export interface LokiConnection {
+  url: string;
+  authType: string;
+  hasToken: boolean;
+  insecureTls: boolean;
 }
 
 export type ObjectFacts =
@@ -2991,803 +3082,13 @@ export type Rollout =
 
 export type Existence = "present" | "missing" | "notChecked";
 
-export type StepNote =
-  | { says: "said"; text: string }
-  | { says: "attempt"; revision: number }
-  | { says: "challengeOn"; kind: string; domain: string };
-
-export type Stalled =
-  | { says: "notRequested" }
-  | { says: "requestNotIssued" }
-  | { says: "challengePending"; kind: string; domain: string }
-  | { says: "orderNotCompleted" };
-
-export type PolicyDoor =
-  | { state: "open" }
-  | {
-      state: "guarded";
-      isolating: string[];
-      unsettled: string[];
-      ports: DoorPort[];
-    }
-  | { state: "unread"; reason: string; code: string }
-  | { state: "overlaid"; alone: DoorAlone; kinds: string[]; shut: boolean };
-
-export type PolicySelects =
-  | { kind: "everything" }
-  | { kind: "written"; query: string }
-  | { kind: "notSaid" };
-
-export type ChainStop =
-  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
-  | {
-      reason: "routeNotAccepted";
-      route: ObjectRef;
-      gateway: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | {
-      reason: "routeRefsUnresolved";
-      route: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
-  | {
-      reason: "gatewayNotProgrammed";
-      route: ObjectRef;
-      gateway: ObjectRef;
-      conditionType: string;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | {
-      reason: "selectsNothing";
-      service: ObjectRef;
-      selector: string;
-      near: NearMiss | null;
-      makersRead: boolean;
-    }
-  | {
-      reason: "scaledToZero";
-      service: ObjectRef;
-      selector: string;
-      workloads: ObjectRef[];
-    }
-  | {
-      reason: "podsBeingMade";
-      service: ObjectRef;
-      selector: string;
-      workloads: ObjectRef[];
-    }
-  | {
-      reason: "podsRefused";
-      service: ObjectRef;
-      selector: string;
-      workloads: ObjectRef[];
-      said: string;
-    }
-  | {
-      reason: "publishesNothingYet";
-      service: ObjectRef;
-      selector: string;
-      podsUnread: boolean;
-    }
-  | {
-      reason: "noneReady";
-      service: ObjectRef;
-      selector: string;
-      pods: number;
-      why: NotServing;
-      cause: SharedCause | null;
-    }
-  | {
-      reason: "publishesNothing";
-      service: ObjectRef;
-      selector: string;
-      pods: number;
-      readyPods: number;
-      unnamedPorts: string[];
-    }
-  | {
-      reason: "policyRefuses";
-      service: ObjectRef;
-      policies: string[];
-      ports: number[];
-      noRules: boolean;
-      client: RefusedClient | null;
-    }
-  | {
-      reason: "policyHoldsBack";
-      service: ObjectRef;
-      client: RefusedClient;
-      policies: ObjectRef[];
-      ports: number[];
-    };
-
-export type PodCause =
-  | {
-      says: "exits";
-      container: string;
-      restarts: number;
-      run: EndedRun | null;
-      until: string | null;
-      later: PodCause | null;
-    }
-  | {
-      says: "unplaced";
-      said: string | null;
-      since: string | null;
-      nodes: number | null;
-      why: Unfit[];
-    }
-  | {
-      says: "blocked";
-      container: string;
-      reason: string;
-      said: string | null;
-      image: string;
-      pull: PullFailure | null;
-      secrets: string[];
-    }
-  | {
-      says: "notReady";
-      containers: string[];
-      since: string | null;
-      countsFrom: string | null;
-      probe: ProbeCheck | null;
-    }
-  | {
-      says: "creating";
-      uid: string;
-      since: string | null;
-      sandbox: boolean | null;
-      kubelet: Warned;
-    };
-
-export type Warned =
-  | { says: "notRead" }
-  | { says: "reading" }
-  | { says: "read"; warnings: SetupWarning[] }
-  | { says: "refused" }
-  | { says: "failed"; said: string };
-
-export type ProbeCheck =
-  | { says: "http"; scheme: string; path: string; port: string }
-  | { says: "tcp"; port: string }
-  | { says: "grpc"; port: number }
-  | { says: "exec"; command: string[] };
-
-export type PullFailure =
-  | "notFound"
-  | "denied"
-  | "rateLimited"
-  | "unreachable"
-  | "backingOff"
-  | "other";
-
-export type Unfit =
-  | { says: "short"; resource: string; nodes: number }
-  | { says: "taint"; taint: string; nodes: number }
-  | { says: "selector"; nodes: number }
-  | { says: "podAffinity"; nodes: number }
-  | { says: "cordoned"; nodes: number }
-  | { says: "tooManyPods"; nodes: number }
-  | { says: "volumeZone"; nodes: number }
-  | { says: "topology"; nodes: number }
-  | { says: "topologyUnlabelled"; nodes: number; keys: string[] }
-  | { says: "claimsUnbound" }
-  | { says: "other"; text: string; nodes: number | null };
-
-export type Evidence =
-  | { says: "line"; text: string; last: boolean }
-  | { says: "notRead" }
-  | { says: "reading" }
-  | { says: "nothing" }
-  | { says: "gone" }
-  | { says: "refused" }
-  | { says: "failed"; said: string };
-
-export type NotServing =
-  | "unscheduled"
-  | "starting"
-  | "crashLooping"
-  | "terminating"
-  | "failingReadiness"
-  | "finished"
-  | "mixed"
-  | "other"
-  | "inSlices"
-  | "comingUp"
-  | "podsUnread";
-
-export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
-
-export type BudgetUnit = "cpu" | "memory" | "count";
-
-export type MetricsStatusKind =
-  | "available"
-  | "notInstalled"
-  | "forbidden"
-  | "error";
-
-export type TcpProbeReason = "refused" | "timedOut";
-
-export type ForwardVia =
-  | { kind: "pod" }
-  | { kind: "owner"; ownerKind: string; name: string }
-  | { kind: "service"; name: string; port: number };
-
-export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
-
 export type DebugStatus =
   | { type: "pending"; reason: string }
   | { type: "ready"; result: DebugResult }
   | { type: "failed"; error: string; pod: MadePod | null }
   | { type: "timeout" };
 
-export type SetupFault =
-  | { says: "missing"; volume: string | null; kind: string; name: string }
-  | { says: "volume"; volume: string | null }
-  | { says: "sandbox" }
-  | { says: "other" };
-
-export type LineageStop =
-  | { says: "ownerGone"; kind: string; name: string }
-  | {
-      says: "ownerUnread";
-      kind: string;
-      name: string;
-      code: string;
-      message: string;
-    }
-  | { says: "kindNotServed"; kind: string; group: string }
-  | { says: "several" }
-  | { says: "tooDeep" };
-
-export type Holds =
-  | {
-      says: "objects";
-      kind: string | null;
-      group: string;
-      plural: string;
-      count: number;
-      reading: Reading | null;
-    }
-  | { says: "namespace" };
-
-export type Reading =
-  | { says: "syncing" }
-  | { says: "queued" }
-  | { says: "stale"; since: string }
-  | { says: "refused"; message: string }
-  | { says: "partial"; namespaces: string[] }
-  | { says: "failed"; message: string }
-  | { says: "unlistable" }
-  | { says: "unwatchable" }
-  | { says: "skipped" };
-
-export type ProbeHandler =
-  | {
-      type: "httpGet";
-      path: string;
-      port: string;
-      scheme: string;
-      host: string | null;
-    }
-  | { type: "tcpSocket"; port: string }
-  | { type: "exec"; command: string[] }
-  | { type: "grpc"; port: number; service: string | null }
-  | { type: "unknown" };
-
-export type EnvVarSourceType =
-  | "configMapKeyRef"
-  | "secretKeyRef"
-  | "fieldRef"
-  | "resourceFieldRef";
-
-export type ContainerPhase = "app" | "init" | "sidecar";
-
-export type RolloutPlan =
-  | {
-      strategy: "rolling";
-      replicas: number;
-      surge: number;
-      unavailable: number;
-    }
-  | { strategy: "recreate"; replicas: number }
-  | { strategy: "paused" }
-  | {
-      strategy: "ordered";
-      replicas: number;
-      start: number;
-      partition: number;
-      unavailable: number;
-    }
-  | { strategy: "onDelete"; replicas: number }
-  | { strategy: "nodes"; nodes: number; surge: number; unavailable: number };
-
-export type Renewal =
-  | "scheduled"
-  | "noDeadline"
-  | "passed"
-  | "needsYou"
-  | "failed"
-  | "ranOut"
-  | "lastChance"
-  | "delegated"
-  | "unknown";
-
-export type ProxyOutcome =
-  | { state: "notTried" }
-  | { state: "noKubectl" }
-  | {
-      state: "failed";
-      error: string;
-      stdout: string;
-      stderr: string;
-      kubectl: string;
-    }
-  | { state: "ok"; port: number; kubectl: string };
-
-export type PathOutcome =
-  | { state: "ok" }
-  | { state: "failed"; error: string; failure: ConnectFailure };
-
-export type ConnectFailure =
-  | "dns"
-  | "refused"
-  | "timeout"
-  | "tls"
-  | "credentials"
-  | "signIn"
-  | "unknown";
-
-export type ConnectionPath = "direct" | "kubectl_proxy";
-
-export type ContextAuth =
-  | { kind: "exec" }
-  | { kind: "clientCertificate"; source: string | null }
-  | { kind: "token"; source: string | null }
-  | { kind: "basic"; username: string | null }
-  | { kind: "authProvider"; name: string }
-  | { kind: "unrecognised" };
-
-export type Unread =
-  | { says: "unanswered"; version: string; said: string }
-  | { says: "namespaceOnly"; version: string; namespace: string; said: string }
-  | { says: "nodeClaimsNotRead" }
-  | { says: "volumeMountsNotRead" }
-  | { says: "policiesOnTheirTab" }
-  | { says: "policiesOnPodTabs" };
-
-export type Relation =
-  | { verb: "owns"; controller: boolean }
-  | { verb: "selects"; selector: string }
-  | { verb: "uses"; usages: Usage[] }
-  | {
-      verb: "routes";
-      host: string | null;
-      path: string;
-      pathType: string;
-      port: string | null;
-      tls: boolean;
-    }
-  | {
-      verb: "ruleRoutes";
-      hostnames: string[];
-      port: string | null;
-      weight: number | null;
-      paths: string[];
-    }
-  | {
-      verb: "attachesTo";
-      sectionName: string | null;
-      port: number | null;
-      listenerSet: ObjectName | null;
-    }
-  | { verb: "runsOn" }
-  | { verb: "binds" }
-  | { verb: "governs"; selector: string | null };
-
-export type Usage =
-  | {
-      how: "mount";
-      container: string;
-      path: string;
-      readOnly: boolean;
-      subPath: string | null;
-      volume: string;
-      projected: boolean;
-    }
-  | { how: "unmounted"; volume: string; projected: boolean }
-  | {
-      how: "env";
-      container: string;
-      name: string;
-      key: string;
-      optional: boolean;
-      keyPresent: boolean | null;
-    }
-  | { how: "envFrom"; container: string }
-  | { how: "imagePullSecret" }
-  | { how: "identity" }
-  | { how: "ingressTls"; hosts: string[] };
-
-export type PolicyCover =
-  | { says: "covered"; policies: string[] }
-  | { says: "none" }
-  | { says: "unknown"; kinds: string[]; unreadable: string[] }
-  | { says: "unread"; said: string };
-
-export type NodeVerdict =
-  | { says: "rollout"; rollout: Rollout }
-  | { says: "job"; status: string }
-  | { says: "cronJob"; suspend: boolean }
-  | { says: "replicas"; ready: number; desired: number }
-  | {
-      says: "service";
-      published: ServicePublished | null;
-      unread: string | null;
-    }
-  | { says: "ingress"; row: IngressInfo }
-  | { says: "route"; stops: ChainStop[]; accepted: boolean | null }
-  | { says: "gateway"; row: GatewayInfo }
-  | { says: "claim"; phase: string | null }
-  | { says: "autoscaler" }
-  | { says: "budget" }
-  | { says: "policy"; selected: number | null }
-  | { says: "exists" }
-  | { says: "owner" };
-
-export type PodStart =
-  | { state: "settled" }
-  | { state: "up"; until: string }
-  | { state: "starting"; until: string }
-  | { state: "failing" };
-
-export type ContainerState =
-  | { type: "running" }
-  | { type: "waiting"; reason: string | null; message: string | null }
-  | { type: "terminated"; termination: TerminationInfo }
-  | { type: "unknown" };
-
-export type PodGone = "replaced" | "deleting";
-
-export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
-
-export type ShellEnvReport =
-  | { outcome: "imported"; shell: string; adopted: number; removed: number }
-  | { outcome: "timedOut"; shell: string; seconds: number }
-  | { outcome: "couldNotStart"; shell: string; error: string }
-  | { outcome: "noAnswer"; shell: string; exit: number | null }
-  | { outcome: "notAsked" }
-  | { outcome: "notRecorded" };
-
-export type SearchFailureKind =
-  | "not-connected"
-  | "unknown-context"
-  | "unreachable"
-  | "timeout"
-  | "forbidden"
-  | "other";
-
-export type SearchContextStatus =
-  | "connecting"
-  | "searching"
-  | "done"
-  | "failed"
-  | "skipped";
-
-export type ApplyOutcome =
-  | { says: "applied" }
-  | { says: "refused"; code: string; said: string }
-  | { says: "unanswered"; said: string }
-  | { says: "notSent" };
-
-export type DryRunOutcome =
-  | { says: "created" }
-  | { says: "configured" }
-  | { says: "unchanged" }
-  | { says: "liveUnread"; said: string }
-  | { says: "refused"; said: string }
-  | { says: "unanswered"; said: string };
-
-export type AnsiColor =
-  | { kind: "named"; index: number }
-  | { kind: "indexed"; index: number }
-  | { kind: "rgb"; r: number; g: number; b: number };
-
-export type LogFormat = "plain" | "json" | "logfmt" | "klog" | "logback";
-
-export type LogLevel =
-  | "debug"
-  | "info"
-  | "warn"
-  | "error"
-  | "fatal"
-  | "unknown";
-
-export type QueryTerm =
-  | { kind: "text"; value: string }
-  | { kind: "level"; op: LevelOp; value: LogLevel }
-  | { kind: "field"; key: string; op: FieldOp; value: string }
-  | { kind: "time"; from: number; to: number };
-
-export type FieldOp = "=" | "≠";
-
-export type LevelOp = "=" | "≥";
-
-export type TerminalState =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "closing"
-  | "disconnected"
-  | "error";
-
-export type Why =
-  | { says: "reading" }
-  | { says: "queued" }
-  | { says: "refused"; message: string }
-  | { says: "failed"; message: string }
-  | { says: "notAudited" }
-  | { says: "unserved" }
-  | { says: "noPrometheus" }
-  | { says: "notScraped" }
-  | { says: "noUsage" }
-  | { says: "noSamples" }
-  | { says: "folded" };
-
-export type RuleId =
-  | "pss-host-process"
-  | "pss-host-namespaces"
-  | "pss-privileged"
-  | "pss-capabilities"
-  | "pss-host-path"
-  | "pss-host-ports"
-  | "pss-host-probes"
-  | "pss-apparmor"
-  | "pss-selinux"
-  | "pss-proc-mount"
-  | "pss-seccomp-unconfined"
-  | "pss-sysctls"
-  | "pss-volume-types"
-  | "pss-privilege-escalation"
-  | "pss-run-as-non-root"
-  | "pss-run-as-user-root"
-  | "pss-seccomp-required"
-  | "pss-drop-capabilities"
-  | "runtime-socket"
-  | "config-map-private-key"
-  | "env-secret-literal"
-  | "writable-root-filesystem"
-  | "cluster-admin-binding"
-  | "wildcard-role"
-  | "default-service-account-token"
-  | "namespace-without-network-policy"
-  | "no-readiness-probe"
-  | "no-liveness-probe"
-  | "image-tag-latest"
-  | "single-replica"
-  | "no-disruption-budget"
-  | "budget-blocks-disruption"
-  | "no-spread"
-  | "no-memory-limit"
-  | "autoscaler-pinned"
-  | "autoscaler-target-missing"
-  | "no-cpu-request"
-  | "no-memory-request"
-  | "removed-api-in-helm-release"
-  | "deprecated-api-writer"
-  | "crd-version-deprecated"
-  | "deprecated-api-requested"
-  | "requests-above-usage";
-
-export type What =
-  | { says: "set"; at: At | null; field: string; value: string }
-  | { says: "unset"; at: At | null; field: string }
-  | { says: "volume"; volume: string; source: string; path: string | null }
-  | { says: "socket"; volume: string; path: string; socket: string }
-  | { says: "envLiteral"; at: At; variable: string }
-  | { says: "key"; key: string; net: Withheld }
-  | { says: "image"; at: At; image: string }
-  | { says: "replicas"; replicas: number; autoscaler: string | null }
-  | { says: "budget"; required: number; selected: number }
-  | { says: "token"; by: TokenBy }
-  | {
-      says: "subject";
-      kind: string;
-      name: string;
-      namespace: string | null;
-      role: string;
-    }
-  | { says: "wildcard"; groups: string[] }
-  | { says: "range"; min: number; max: number }
-  | { says: "target"; kind: string; name: string }
-  | { says: "pods"; pods: number }
-  | { says: "traffic"; by: TrafficBy }
-  | { says: "revision"; revision: number; status: string }
-  | {
-      says: "stored";
-      kind: string;
-      name: string;
-      api: string;
-      served: boolean;
-      removal: Removal | null;
-    }
-  | {
-      says: "written";
-      manager: string;
-      operation: string;
-      time: string | null;
-      api: string;
-      removal: Removal;
-    }
-  | {
-      says: "deprecated";
-      version: string;
-      warning: string | null;
-      stored: boolean;
-      storage: boolean;
-    }
-  | {
-      says: "storedAs";
-      group: string;
-      kind: string;
-      storage: string | null;
-      stored: string[];
-      current: string[];
-    }
-  | {
-      says: "requested";
-      kind: string | null;
-      removed: string | null;
-      replacement: string | null;
-    }
-  | { says: "requestedToday"; requests: number }
-  | {
-      says: "overRequested";
-      resource: string;
-      requested: number;
-      peak: number;
-    };
-
-export type TrafficBy =
-  | { says: "service"; name: string }
-  | { says: "noService" }
-  | { says: "notRead"; why: Why };
-
-export type TokenBy = "pod" | "account" | "default";
-
-export type ContainerList =
-  | "containers"
-  | "initContainers"
-  | "ephemeralContainers";
-
-export type AuditSeverity = "high" | "medium" | "low";
-
-export type AuditRow =
-  | {
-      row: "rule";
-      rule: RuleId;
-      worst: AuditSeverity;
-      objects: number;
-      unchecked: number;
-    }
-  | {
-      row: "object";
-      subject: Subject;
-      worst: AuditSeverity | null;
-      severities: BySeverity;
-      rules: RuleId[];
-      unchecked: number;
-    }
-  | { row: "found"; subject: Subject; finding: AuditFinding }
-  | { row: "blind"; subject: Subject; unchecked: Unchecked };
-
-export type UsageState =
-  | { says: "noSupplier" }
-  | { says: "reading" }
-  | { says: "failed"; said: string }
-  | { says: "read"; window: string };
-
-export type UsageRead =
-  | { state: "noSupplier" }
-  | { state: "reading" }
-  | { state: "failed"; said: string }
-  | {
-      state: "read";
-      window: string;
-      workloads: WorkloadUse[];
-      unread: UnreadPods[];
-      folded: number;
-    };
-
-export type UseVerdict =
-  | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
-  | { says: "within" }
-  | { says: "noSamples" };
-
-export type Category = "security" | "reliability" | "efficiency" | "upgrade";
-
-export type Grouping = "rule" | "object";
-
-export type RollbackOutcome =
-  | { outcome: "rolledBack" }
-  | { outcome: "alreadyThere" };
-
-export type CountKind =
-  | "pods"
-  | "deployments"
-  | "statefulSets"
-  | "daemonSets"
-  | "jobs"
-  | "cronJobs"
-  | "services"
-  | "ingresses"
-  | "configMaps"
-  | "secrets"
-  | "endpoints"
-  | "persistentVolumeClaims"
-  | "serviceAccounts"
-  | "networkPolicies"
-  | "events";
-
-export type OverviewSource = "watch" | "list";
-
-export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
-
-export type ProblemDetail =
-  | { says: "said"; text: string }
-  | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
-  | { says: "replicasReady"; ready: number; desired: number }
-  | { says: "unschedulable" }
-  | {
-      says: "podsCause";
-      cause: PodCause;
-      pods: number;
-      of: number;
-      said: string | null;
-    }
-  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null }
-  | { says: "podsRefused"; said: string };
-
-export type ProblemSeverity = "critical" | "warning";
-
-export type EventsShort =
-  | { why: "capped"; namespace: string | null }
-  | { why: "failed"; namespace: string | null; code: string; message: string };
-
-export type Holder =
-  | { held: "by"; uid: string }
-  | { held: "nobody" }
-  | { held: "notRead" };
-
-export type CertificateProblem =
-  | { says: "noSecret" }
-  | { says: "secretUnreadable"; said: string }
-  | { says: "noTlsCrt" }
-  | { says: "noPemCertificate" }
-  | { says: "unparseable"; said: string };
-
-export type QueryState =
-  | { says: "read"; series: number }
-  | { says: "noSeries" }
-  | { says: "failed"; code: string; message: string };
-
-export type Measure =
-  | "requests"
-  | "errors"
-  | "p50"
-  | "p95"
-  | "p99"
-  | "bytes"
-  | "events"
-  | "drops";
-
-export type EndIs = "pod" | "node" | "service" | "address";
+export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
 
 export type AppEvent =
   | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }
@@ -3994,6 +3295,294 @@ export type MapKindReading =
   | { says: "notServed" }
   | { says: "unserved" };
 
+export type Unread =
+  | { says: "unanswered"; version: string; said: string }
+  | { says: "namespaceOnly"; version: string; namespace: string; said: string }
+  | { says: "nodeClaimsNotRead" }
+  | { says: "volumeMountsNotRead" }
+  | { says: "policiesOnTheirTab" }
+  | { says: "policiesOnPodTabs" };
+
+export type Relation =
+  | { verb: "owns"; controller: boolean }
+  | { verb: "selects"; selector: string }
+  | { verb: "uses"; usages: Usage[] }
+  | {
+      verb: "routes";
+      host: string | null;
+      path: string;
+      pathType: string;
+      port: string | null;
+      tls: boolean;
+    }
+  | {
+      verb: "ruleRoutes";
+      hostnames: string[];
+      port: string | null;
+      weight: number | null;
+      paths: string[];
+    }
+  | {
+      verb: "attachesTo";
+      sectionName: string | null;
+      port: number | null;
+      listenerSet: ObjectName | null;
+    }
+  | { verb: "runsOn" }
+  | { verb: "binds" }
+  | { verb: "governs"; selector: string | null };
+
+export type Usage =
+  | {
+      how: "mount";
+      container: string;
+      path: string;
+      readOnly: boolean;
+      subPath: string | null;
+      volume: string;
+      projected: boolean;
+    }
+  | { how: "unmounted"; volume: string; projected: boolean }
+  | {
+      how: "env";
+      container: string;
+      name: string;
+      key: string;
+      optional: boolean;
+      keyPresent: boolean | null;
+    }
+  | { how: "envFrom"; container: string }
+  | { how: "imagePullSecret" }
+  | { how: "identity" }
+  | { how: "ingressTls"; hosts: string[] };
+
+export type PolicyCover =
+  | { says: "covered"; policies: string[] }
+  | { says: "none" }
+  | { says: "unknown"; kinds: string[]; unreadable: string[] }
+  | { says: "unread"; said: string };
+
+export type NodeVerdict =
+  | { says: "rollout"; rollout: Rollout }
+  | { says: "job"; status: string }
+  | { says: "cronJob"; suspend: boolean }
+  | { says: "replicas"; ready: number; desired: number }
+  | {
+      says: "service";
+      published: ServicePublished | null;
+      unread: string | null;
+    }
+  | { says: "ingress"; row: IngressInfo }
+  | { says: "route"; stops: ChainStop[]; accepted: boolean | null }
+  | { says: "gateway"; row: GatewayInfo }
+  | { says: "claim"; phase: string | null }
+  | { says: "autoscaler" }
+  | { says: "budget" }
+  | { says: "policy"; selected: number | null }
+  | { says: "exists" }
+  | { says: "owner" }
+  | { says: "ownerless"; statuses: PodStatusTally[] };
+
+export type ChainStop =
+  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | {
+      reason: "routeNotAccepted";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "routeRefsUnresolved";
+      route: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
+  | {
+      reason: "gatewayNotProgrammed";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionType: string;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "selectsNothing";
+      service: ObjectRef;
+      selector: string;
+      near: NearMiss | null;
+      makersRead: boolean;
+    }
+  | {
+      reason: "scaledToZero";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+    }
+  | {
+      reason: "podsBeingMade";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+    }
+  | {
+      reason: "podsRefused";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+      said: string;
+    }
+  | {
+      reason: "publishesNothingYet";
+      service: ObjectRef;
+      selector: string;
+      podsUnread: boolean;
+    }
+  | {
+      reason: "noneReady";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      why: NotServing;
+      cause: SharedCause | null;
+    }
+  | {
+      reason: "publishesNothing";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      readyPods: number;
+      unnamedPorts: string[];
+    }
+  | {
+      reason: "policyRefuses";
+      service: ObjectRef;
+      policies: string[];
+      ports: number[];
+      noRules: boolean;
+      client: RefusedClient | null;
+    }
+  | {
+      reason: "policyHoldsBack";
+      service: ObjectRef;
+      client: RefusedClient;
+      policies: ObjectRef[];
+      ports: number[];
+    };
+
+export type PodCause =
+  | {
+      says: "exits";
+      container: string;
+      restarts: number;
+      run: EndedRun | null;
+      until: string | null;
+      later: PodCause | null;
+    }
+  | {
+      says: "unplaced";
+      said: string | null;
+      since: string | null;
+      nodes: number | null;
+      why: Unfit[];
+    }
+  | {
+      says: "blocked";
+      container: string;
+      reason: string;
+      said: string | null;
+      image: string;
+      pull: PullFailure | null;
+      secrets: string[];
+    }
+  | {
+      says: "notReady";
+      containers: string[];
+      since: string | null;
+      countsFrom: string | null;
+      probe: ProbeCheck | null;
+    }
+  | {
+      says: "creating";
+      uid: string;
+      since: string | null;
+      sandbox: boolean | null;
+      kubelet: Warned;
+    };
+
+export type Warned =
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "read"; warnings: SetupWarning[] }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
+
+export type ProbeCheck =
+  | { says: "http"; scheme: string; path: string; port: string }
+  | { says: "tcp"; port: string }
+  | { says: "grpc"; port: number }
+  | { says: "exec"; command: string[] };
+
+export type PullFailure =
+  | "notFound"
+  | "denied"
+  | "rateLimited"
+  | "unreachable"
+  | "backingOff"
+  | "other";
+
+export type Unfit =
+  | { says: "short"; resource: string; nodes: number }
+  | { says: "taint"; taint: string; nodes: number }
+  | { says: "selector"; nodes: number }
+  | { says: "podAffinity"; nodes: number }
+  | { says: "cordoned"; nodes: number }
+  | { says: "tooManyPods"; nodes: number }
+  | { says: "volumeZone"; nodes: number }
+  | { says: "topology"; nodes: number }
+  | { says: "topologyUnlabelled"; nodes: number; keys: string[] }
+  | { says: "claimsUnbound" }
+  | { says: "other"; text: string; nodes: number | null };
+
+export type Evidence =
+  | { says: "line"; text: string; last: boolean }
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "nothing" }
+  | { says: "gone" }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
+
+export type NotServing =
+  | "unscheduled"
+  | "starting"
+  | "crashLooping"
+  | "terminating"
+  | "failingReadiness"
+  | "finished"
+  | "mixed"
+  | "other"
+  | "inSlices"
+  | "comingUp"
+  | "podsUnread";
+
+export type PodStart =
+  | { state: "settled" }
+  | { state: "up"; until: string }
+  | { state: "starting"; until: string }
+  | { state: "failing" };
+
+export type ContainerState =
+  | { type: "running" }
+  | { type: "waiting"; reason: string | null; message: string | null }
+  | { type: "terminated"; termination: TerminationInfo }
+  | { type: "unknown" };
+
+export type ContainerPhase = "app" | "init" | "sidecar";
+
+export type PodGone = "replaced" | "deleting";
+
 export type ListingFailure =
   | "noTools"
   | "unopenable"
@@ -4034,6 +3623,21 @@ export type ForwardNote =
   | { says: "noStream" }
   | { says: "listenerFailed"; text: string };
 
+export type SearchFailureKind =
+  | "not-connected"
+  | "unknown-context"
+  | "unreachable"
+  | "timeout"
+  | "forbidden"
+  | "other";
+
+export type SearchContextStatus =
+  | "connecting"
+  | "searching"
+  | "done"
+  | "failed"
+  | "skipped";
+
 export type StreamFailureKind =
   | "gone"
   | "broken"
@@ -4043,11 +3647,128 @@ export type StreamFailureKind =
 
 export type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
 
-export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
+export type AnsiColor =
+  | { kind: "named"; index: number }
+  | { kind: "indexed"; index: number }
+  | { kind: "rgb"; r: number; g: number; b: number };
 
-export type Check =
-  | { kind: "dns"; name: string }
-  | { kind: "tcp"; host: string; port: number };
+export type LogFormat = "plain" | "json" | "logfmt" | "klog" | "logback";
+
+export type LogLevel =
+  | "debug"
+  | "info"
+  | "warn"
+  | "error"
+  | "fatal"
+  | "unknown";
+
+export type QueryTerm =
+  | { kind: "text"; value: string }
+  | { kind: "level"; op: LevelOp; value: LogLevel }
+  | { kind: "field"; key: string; op: FieldOp; value: string }
+  | { kind: "time"; from: number; to: number };
+
+export type FieldOp = "=" | "≠";
+
+export type LevelOp = "=" | "≥";
+
+export type Renewal =
+  | "scheduled"
+  | "noDeadline"
+  | "passed"
+  | "needsYou"
+  | "failed"
+  | "ranOut"
+  | "lastChance"
+  | "delegated"
+  | "unknown";
+
+export type ProxyOutcome =
+  | { state: "notTried" }
+  | { state: "noKubectl" }
+  | {
+      state: "failed";
+      error: string;
+      stdout: string;
+      stderr: string;
+      kubectl: string;
+    }
+  | { state: "ok"; port: number; kubectl: string };
+
+export type PathOutcome =
+  | { state: "ok" }
+  | { state: "failed"; error: string; failure: ConnectFailure };
+
+export type ConnectFailure =
+  | "dns"
+  | "refused"
+  | "timeout"
+  | "tls"
+  | "credentials"
+  | "signIn"
+  | "unknown";
+
+export type ConnectionPath = "direct" | "kubectl_proxy";
+
+export type ContextAuth =
+  | { kind: "exec" }
+  | { kind: "clientCertificate"; source: string | null }
+  | { kind: "token"; source: string | null }
+  | { kind: "basic"; username: string | null }
+  | { kind: "authProvider"; name: string }
+  | { kind: "unrecognised" };
+
+export type WithheldPart =
+  | { says: "keys"; keys: string[] }
+  | { says: "rewritten"; keys: string[] }
+  | { says: "unread" };
+
+export type Holder =
+  | { held: "by"; uid: string }
+  | { held: "nobody" }
+  | { held: "notRead" };
+
+export type CountKind =
+  | "pods"
+  | "deployments"
+  | "statefulSets"
+  | "daemonSets"
+  | "jobs"
+  | "cronJobs"
+  | "services"
+  | "ingresses"
+  | "configMaps"
+  | "secrets"
+  | "endpoints"
+  | "persistentVolumeClaims"
+  | "serviceAccounts"
+  | "networkPolicies"
+  | "events";
+
+export type OverviewSource = "watch" | "list";
+
+export type EventsShort =
+  | { why: "capped"; namespace: string | null }
+  | { why: "failed"; namespace: string | null; code: string; message: string };
+
+export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
+
+export type ProblemDetail =
+  | { says: "said"; text: string }
+  | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
+  | { says: "replicasReady"; ready: number; desired: number }
+  | { says: "unschedulable" }
+  | {
+      says: "podsCause";
+      cause: PodCause;
+      pods: number;
+      of: number;
+      said: string | null;
+    }
+  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null }
+  | { says: "podsRefused"; said: string };
+
+export type ProblemSeverity = "critical" | "warning";
 
 export type Withheld =
   | { says: "privateKey" }
@@ -4055,10 +3776,69 @@ export type Withheld =
   | { says: "keyName" }
   | { says: "helmRelease" };
 
-export type WithheldPart =
-  | { says: "keys"; keys: string[] }
-  | { says: "rewritten"; keys: string[] }
-  | { says: "unread" };
+export type PolicyDoor =
+  | { state: "open" }
+  | {
+      state: "guarded";
+      isolating: string[];
+      unsettled: string[];
+      ports: DoorPort[];
+    }
+  | { state: "unread"; reason: string; code: string }
+  | { state: "overlaid"; alone: DoorAlone; kinds: string[]; shut: boolean };
+
+export type PolicySelects =
+  | { kind: "everything" }
+  | { kind: "written"; query: string }
+  | { kind: "notSaid" };
+
+export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
+
+export type ProbeHandler =
+  | {
+      type: "httpGet";
+      path: string;
+      port: string;
+      scheme: string;
+      host: string | null;
+    }
+  | { type: "tcpSocket"; port: string }
+  | { type: "exec"; command: string[] }
+  | { type: "grpc"; port: number; service: string | null }
+  | { type: "unknown" };
+
+export type EnvVarSourceType =
+  | "configMapKeyRef"
+  | "secretKeyRef"
+  | "fieldRef"
+  | "resourceFieldRef";
+
+export type RolloutPlan =
+  | {
+      strategy: "rolling";
+      replicas: number;
+      surge: number;
+      unavailable: number;
+    }
+  | { strategy: "recreate"; replicas: number }
+  | { strategy: "paused" }
+  | {
+      strategy: "ordered";
+      replicas: number;
+      start: number;
+      partition: number;
+      unavailable: number;
+    }
+  | { strategy: "onDelete"; replicas: number }
+  | { strategy: "nodes"; nodes: number; surge: number; unavailable: number };
+
+export type BudgetUnit = "cpu" | "memory" | "count";
+
+export type MetricsStatusKind =
+  | "available"
+  | "notInstalled"
+  | "forbidden"
+  | "error";
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
@@ -4067,90 +3847,64 @@ export type FileRead =
   | { state: "noTools" }
   | { state: "failed"; exit_code: number | null; message: string };
 
-export type RawJson = RawValue;
+export type TcpProbeReason = "refused" | "timedOut";
 
-export type Values = (number | null)[];
+export type LineageStop =
+  | { says: "ownerGone"; kind: string; name: string }
+  | {
+      says: "ownerUnread";
+      kind: string;
+      name: string;
+      code: string;
+      message: string;
+    }
+  | { says: "kindNotServed"; kind: string; group: string }
+  | { says: "several" }
+  | { says: "tooDeep" };
 
-export interface Beside {
-  previous: Dependent | null;
-  next: Dependent | null;
-}
+export type Holds =
+  | {
+      says: "objects";
+      kind: string | null;
+      group: string;
+      plural: string;
+      count: number;
+      reading: Reading | null;
+    }
+  | { says: "namespace" };
 
-export interface Kept {
-  keep: boolean;
-  bytes: number;
-  clusters: number;
-}
+export type Reading =
+  | { says: "syncing" }
+  | { says: "queued" }
+  | { says: "stale"; since: string }
+  | { says: "refused"; message: string }
+  | { says: "partial"; namespaces: string[] }
+  | { says: "failed"; message: string }
+  | { says: "unlistable" }
+  | { says: "unwatchable" }
+  | { says: "skipped" };
 
-export interface TimelinePage {
-  rows: TimelineRow[];
-  more: boolean;
-  newest: number;
-  spans: SpanSets;
-  letGo: LetGoes;
-  keeping: Keeping;
-  unreadable: number;
-}
+export type DryRunOutcome =
+  | { says: "created" }
+  | { says: "configured" }
+  | { says: "unchanged" }
+  | { says: "liveUnread"; said: string }
+  | { says: "refused"; said: string }
+  | { says: "unanswered"; said: string };
 
-export interface LetGoes {
-  changes: LetGo | null;
-  warnings: LetGo | null;
-  normal: LetGo | null;
-}
+export type ApplyOutcome =
+  | { says: "applied" }
+  | { says: "refused"; code: string; said: string }
+  | { says: "unanswered"; said: string }
+  | { says: "notSent" };
 
-export interface LetGo {
-  before: number;
-  cleared: boolean;
-}
-
-export interface SpanSets {
-  followed: ObservedSpan[];
-  meta: ObservedSpan[];
-}
-
-export interface ObservedSpan {
-  from: number;
-  seenAt: number;
-  to: number | null;
-  unwatched: string[];
-  unwatchedIn: string[];
-  scope: string[];
-  kinds: string[];
-}
-
-export interface TimelineRow {
-  id: string;
-  seq: number;
-  at: number;
-  kind: string;
-  group: string;
-  namespace: string | null;
-  name: string;
-  what: RowSays;
-  atRelist: boolean;
-}
-
-export interface TimelineQuery {
-  context: string;
-  subject: TimelineSubject | null;
-  scope: string[] | null;
-  from: number;
-  show: Show;
-  after: number | null;
-  before: Cursor | null;
-}
-
-export interface Cursor {
-  at: number;
-  seq: number;
-}
-
-export interface TimelineSubject {
-  kind: string;
-  group: string | null;
-  namespace: string | null;
-  name: string;
-}
+export type TerminalState =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "closing"
+  | "disconnected"
+  | "error";
 
 export type Keeping =
   | { says: "kept" }
@@ -4175,6 +3929,259 @@ export type FieldMove =
 
 export type Show = "all" | "changes" | "warnings";
 
-export interface Following {
-  anotherCluster: boolean;
-}
+export type Why =
+  | { says: "reading" }
+  | { says: "queued" }
+  | { says: "refused"; message: string }
+  | { says: "failed"; message: string }
+  | { says: "notAudited" }
+  | { says: "unserved" }
+  | { says: "noPrometheus" }
+  | { says: "notScraped" }
+  | { says: "noUsage" }
+  | { says: "noSamples" }
+  | { says: "folded" };
+
+export type RuleId =
+  | "pss-host-process"
+  | "pss-host-namespaces"
+  | "pss-privileged"
+  | "pss-capabilities"
+  | "pss-host-path"
+  | "pss-host-ports"
+  | "pss-host-probes"
+  | "pss-apparmor"
+  | "pss-selinux"
+  | "pss-proc-mount"
+  | "pss-seccomp-unconfined"
+  | "pss-sysctls"
+  | "pss-volume-types"
+  | "pss-privilege-escalation"
+  | "pss-run-as-non-root"
+  | "pss-run-as-user-root"
+  | "pss-seccomp-required"
+  | "pss-drop-capabilities"
+  | "runtime-socket"
+  | "config-map-private-key"
+  | "env-secret-literal"
+  | "writable-root-filesystem"
+  | "cluster-admin-binding"
+  | "wildcard-role"
+  | "default-service-account-token"
+  | "namespace-without-network-policy"
+  | "no-readiness-probe"
+  | "no-liveness-probe"
+  | "image-tag-latest"
+  | "single-replica"
+  | "no-disruption-budget"
+  | "budget-blocks-disruption"
+  | "no-spread"
+  | "no-memory-limit"
+  | "autoscaler-pinned"
+  | "autoscaler-target-missing"
+  | "no-cpu-request"
+  | "no-memory-request"
+  | "removed-api-in-helm-release"
+  | "deprecated-api-writer"
+  | "crd-version-deprecated"
+  | "deprecated-api-requested"
+  | "requests-above-usage";
+
+export type What =
+  | { says: "set"; at: At | null; field: string; value: string }
+  | { says: "unset"; at: At | null; field: string }
+  | { says: "volume"; volume: string; source: string; path: string | null }
+  | { says: "socket"; volume: string; path: string; socket: string }
+  | { says: "envLiteral"; at: At; variable: string }
+  | { says: "key"; key: string; net: Withheld }
+  | { says: "image"; at: At; image: string }
+  | { says: "replicas"; replicas: number; autoscaler: string | null }
+  | { says: "budget"; required: number; selected: number }
+  | { says: "token"; by: TokenBy }
+  | {
+      says: "subject";
+      kind: string;
+      name: string;
+      namespace: string | null;
+      role: string;
+    }
+  | { says: "wildcard"; groups: string[] }
+  | { says: "range"; min: number; max: number }
+  | { says: "target"; kind: string; name: string }
+  | { says: "pods"; pods: number }
+  | { says: "traffic"; by: TrafficBy }
+  | { says: "revision"; revision: number; status: string }
+  | {
+      says: "stored";
+      kind: string;
+      name: string;
+      api: string;
+      served: boolean;
+      removal: Removal | null;
+    }
+  | {
+      says: "written";
+      manager: string;
+      operation: string;
+      time: string | null;
+      api: string;
+      removal: Removal;
+    }
+  | {
+      says: "deprecated";
+      version: string;
+      warning: string | null;
+      stored: boolean;
+      storage: boolean;
+    }
+  | {
+      says: "storedAs";
+      group: string;
+      kind: string;
+      storage: string | null;
+      stored: string[];
+      current: string[];
+    }
+  | {
+      says: "requested";
+      kind: string | null;
+      removed: string | null;
+      replacement: string | null;
+    }
+  | { says: "requestedToday"; requests: number }
+  | {
+      says: "overRequested";
+      resource: string;
+      requested: number;
+      peak: number;
+    };
+
+export type TrafficBy =
+  | { says: "service"; name: string }
+  | { says: "noService" }
+  | { says: "notRead"; why: Why };
+
+export type TokenBy = "pod" | "account" | "default";
+
+export type ContainerList =
+  | "containers"
+  | "initContainers"
+  | "ephemeralContainers";
+
+export type AuditSeverity = "high" | "medium" | "low";
+
+export type AuditRow =
+  | {
+      row: "rule";
+      rule: RuleId;
+      worst: AuditSeverity;
+      objects: number;
+      unchecked: number;
+    }
+  | {
+      row: "object";
+      subject: Subject;
+      worst: AuditSeverity | null;
+      severities: BySeverity;
+      rules: RuleId[];
+      unchecked: number;
+    }
+  | { row: "found"; subject: Subject; finding: AuditFinding }
+  | { row: "blind"; subject: Subject; unchecked: Unchecked };
+
+export type UsageState =
+  | { says: "noSupplier" }
+  | { says: "reading" }
+  | { says: "failed"; said: string }
+  | { says: "read"; window: string };
+
+export type UsageRead =
+  | { state: "noSupplier" }
+  | { state: "reading" }
+  | { state: "failed"; said: string }
+  | {
+      state: "read";
+      window: string;
+      workloads: WorkloadUse[];
+      unread: UnreadPods[];
+      folded: number;
+    };
+
+export type UseVerdict =
+  | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
+  | { says: "within" }
+  | { says: "noSamples" };
+
+export type Category = "security" | "reliability" | "efficiency" | "upgrade";
+
+export type Grouping = "rule" | "object";
+
+export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
+
+export type Check =
+  | { kind: "dns"; name: string }
+  | { kind: "tcp"; host: string; port: number };
+
+export type RollbackOutcome =
+  | { outcome: "rolledBack" }
+  | { outcome: "alreadyThere" };
+
+export type ForwardVia =
+  | { kind: "pod" }
+  | { kind: "owner"; ownerKind: string; name: string }
+  | { kind: "service"; name: string; port: number };
+
+export type SetupFault =
+  | { says: "missing"; volume: string | null; kind: string; name: string }
+  | { says: "volume"; volume: string | null }
+  | { says: "sandbox" }
+  | { says: "other" };
+
+export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
+
+export type ShellEnvReport =
+  | { outcome: "imported"; shell: string; adopted: number; removed: number }
+  | { outcome: "timedOut"; shell: string; seconds: number }
+  | { outcome: "couldNotStart"; shell: string; error: string }
+  | { outcome: "noAnswer"; shell: string; exit: number | null }
+  | { outcome: "notAsked" }
+  | { outcome: "notRecorded" };
+
+export type CertificateProblem =
+  | { says: "noSecret" }
+  | { says: "secretUnreadable"; said: string }
+  | { says: "noTlsCrt" }
+  | { says: "noPemCertificate" }
+  | { says: "unparseable"; said: string };
+
+export type QueryState =
+  | { says: "read"; series: number }
+  | { says: "noSeries" }
+  | { says: "failed"; code: string; message: string };
+
+export type Measure =
+  | "requests"
+  | "errors"
+  | "p50"
+  | "p95"
+  | "p99"
+  | "bytes"
+  | "events"
+  | "drops";
+
+export type EndIs = "pod" | "node" | "service" | "address";
+
+export type StepNote =
+  | { says: "said"; text: string }
+  | { says: "attempt"; revision: number }
+  | { says: "challengeOn"; kind: string; domain: string };
+
+export type Stalled =
+  | { says: "notRequested" }
+  | { says: "requestNotIssued" }
+  | { says: "challengePending"; kind: string; domain: string }
+  | { says: "orderNotCompleted" };
+
+export type RawJson = RawValue;
+
+export type Values = (number | null)[];

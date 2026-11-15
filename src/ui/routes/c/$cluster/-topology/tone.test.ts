@@ -73,6 +73,25 @@ const ROLLOUTS: Rollout[] = [
 ];
 
 describe("a map node's colour", () => {
+  /**
+   * "Pods with no owner" was ringed not checked on a cluster whose pods were
+   * read. Fails if their node stops taking the colour the Pods list gives
+   * their statuses, or a running pod that is not ready reads green.
+   */
+  it("colours pods with no owner by their statuses, and a running pod not ready as a warning", () => {
+    const ownerless = (
+      statuses: { status: string; total: number; ready: number }[]
+    ) => toneOf(node(ref("Pod"), { says: "ownerless", statuses }), inputs);
+    expect(ownerless([{ status: "Running", total: 2, ready: 2 }])).toBe("ok");
+    expect(ownerless([{ status: "Running", total: 2, ready: 1 }])).toBe("warn");
+    expect(
+      ownerless([
+        { status: "CrashLoopBackOff", total: 1, ready: 0 },
+        { status: "Running", total: 1, ready: 1 },
+      ])
+    ).toBe(ROLE_TONE[statusRole("CrashLoopBackOff")]);
+  });
+
   /** The workload's badge on its list, its page and its peek is `rolloutBadge`; a map that coloured the same verdict otherwise would disagree with all three. */
   it("is a workload's own badge for every verdict its page can give", () => {
     for (const rollout of ROLLOUTS)

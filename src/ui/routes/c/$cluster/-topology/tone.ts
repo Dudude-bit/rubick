@@ -130,6 +130,16 @@ const TONE_OF: Toner = {
     selected === null ? "unknown" : selected === 0 ? "warn" : "mute",
   exists: () => "mute",
   owner: () => "unknown",
+  // As the Pods list paints each, and a running pod that is not ready is not
+  // the green its status alone would earn.
+  ownerless: ({ statuses }) =>
+    loudest(
+      statuses.map(({ status, total, ready }) =>
+        status === "Running" && ready < total
+          ? "warn"
+          : ROLE_TONE[statusRole(status)]
+      )
+    ),
 };
 
 /**

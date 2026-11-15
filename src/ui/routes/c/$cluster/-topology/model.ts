@@ -168,6 +168,13 @@ export function subOf(node: TopologyNode, t: T): string | undefined {
     case "owner":
       words.push(t("topology", "notRead"));
       break;
+    case "ownerless":
+      words.push(
+        verdict.statuses
+          .map(({ status, total }) => `${status} ${total}`)
+          .join(", ")
+      );
+      break;
     case "exists":
     case "ingress":
     case "route":
@@ -179,9 +186,10 @@ export function subOf(node: TopologyNode, t: T): string | undefined {
   if (node.ref.existence === "missing") words.push(t("topology", "missing"));
   if (node.ref.existence === "notChecked" && verdict.says !== "owner")
     words.push(t("topology", "notRead"));
-  if (node.pods && verdict.says !== "rollout")
+  const readiness = verdict.says === "rollout" || verdict.says === "ownerless";
+  if (node.pods && !readiness)
     words.push(t("count", "pods", { n: node.pods.total }));
-  if (node.pods && verdict.says === "rollout")
+  if (node.pods && readiness)
     words.push(
       t("count", "readyOfTotal", {
         ready: node.pods.ready,

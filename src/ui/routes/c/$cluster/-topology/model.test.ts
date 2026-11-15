@@ -109,6 +109,28 @@ describe("the cluster map's model", () => {
     expect(drawn.find((each) => each.label === "canary")!.crd).toBeNull();
   });
 
+  /**
+   * "Pods with no owner" read "not read · 1 pod" on a cluster whose pods were
+   * read. Fails if the node stops saying their statuses and readiness, or
+   * says it was not read.
+   */
+  it("says what the Pods list says of pods with no owner", () => {
+    const pods: TopologyNode = {
+      ...node("Pod", OWNERLESS),
+      verdict: {
+        says: "ownerless",
+        statuses: [
+          { status: "CrashLoopBackOff", total: 1, ready: 0 },
+          { status: "Running", total: 2, ready: 2 },
+        ],
+      },
+      pods: { total: 3, ready: 2 },
+    };
+    const [drawn] = of([pods], [read("shop")]).nodes;
+    expect(drawn.label).toBe("Pods with no owner");
+    expect(drawn.sub).toBe("CrashLoopBackOff 1, Running 2 · 2 of 3 ready");
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [
