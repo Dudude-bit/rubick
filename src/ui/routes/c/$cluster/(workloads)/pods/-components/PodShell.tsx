@@ -455,7 +455,7 @@ export function PodShell({
 
       {target && denied.shell ? (
         <Hollow headline={t("empty", "shellNotPermitted")}>
-          <p className="flex items-start gap-1.5 text-xs text-err">
+          <p className="flex items-start gap-1.5 text-xs text-warn">
             <Lock className="mt-px h-3.5 w-3.5 flex-none" aria-hidden="true" />
             {denied.shell}
           </p>

@@ -242,6 +242,8 @@ impl TerminalManager {
                             StreamFailureKind::Gone => {
                                 format!("There is no container left to attach to: {cause}.")
                             }
+                            // The frontend says the refusal; this is the cluster's own words.
+                            StreamFailureKind::Refused => cause,
                             // An exec has no previous run and no log to drop;
                             // either kind here still means the shell did not open.
                             StreamFailureKind::Broken

@@ -23,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     openPodShell: vi.fn(async () => "term-1"),
     closeTerminal: vi.fn(async () => undefined),
+    forgetDiscovery: vi.fn(async () => undefined),
     getPod: vi.fn(async () => ({
       containers: [{ name: "app", state: { type: "running" } }],
       status: { phase: "Running" },
@@ -91,7 +92,7 @@ const props = {
   claim: () => true,
 };
 
-function fireFailure(kind: "gone" | "broken", message: string) {
+function fireFailure(kind: "gone" | "broken" | "refused", message: string) {
   listeners["stream-failed"]!({
     payload: { stream_id: "term-1", kind, message },
   });
@@ -165,6 +166,40 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
       screen.queryByRole("button", { name: /Reconnect/ }),
       "a container that is gone cannot be reconnected to"
     ).not.toBeInTheDocument();
+  });
+
+  /** A refused exec was headlined "No shell" with Reconnect and the error twice. Fails if a refusal reads as a broken connection. */
+  it("leads with the refusal, once, and asks again only when told to", async () => {
+    await renderConnected();
+
+    act(() =>
+      fireFailure(
+        "refused",
+        "failed to upgrade to a WebSocket connection: failed to switch protocol: 403 Forbidden"
+      )
+    );
+
+    expect(
+      await screen.findByText(
+        "The cluster refused a shell in log-demo-7f9/app: pods/exec is forbidden to this user."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/403 Forbidden/)).toHaveLength(1);
+    expect(screen.queryByText(/No shell on/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Reconnect/ })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("terminal-stub")).not.toBeInTheDocument();
+    expect(commands.openPodShell).toHaveBeenCalledTimes(1);
+
+    act(() =>
+      screen.getByRole("button", { name: /Try the read again/ }).click()
+    );
+    await waitFor(() => expect(commands.openPodShell).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId("terminal-stub")).toHaveAttribute(
+      "data-session-id",
+      "term-1"
+    );
   });
 
   it("ignores a failure belonging to another session", async () => {

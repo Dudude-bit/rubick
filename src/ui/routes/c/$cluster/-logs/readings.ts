@@ -18,10 +18,12 @@ export type StreamReading =
   | "notStarted"
   | "lost"
   | "notKept"
+  | "refused"
   | "absent";
 
 const WORST_FIRST: readonly StreamReading[] = [
   "lost",
+  "refused",
   "notKept",
   "notFollowed",
   "restarting",
@@ -41,6 +43,7 @@ export const CHIP_WORD: Record<StreamReading, keyof typeof en.empty | null> = {
   notStarted: "chipNotStarted",
   lost: "chipLost",
   notKept: "chipLogNotKept",
+  refused: "chipRefused",
   absent: "chipNoEarlierRun",
 };
 
@@ -96,6 +99,8 @@ export function readingOf(
       return "notKept";
     case "follow-stopped":
       return "notFollowed";
+    case "refused":
+      return "refused";
   }
 }
 
@@ -196,6 +201,7 @@ export function followsAgain(
   switch (kind) {
     case "no-previous-run":
     case "log-not-kept":
+    case "refused":
       return false;
     case "gone":
       return reading === "restarting" && info?.state.type === "running";

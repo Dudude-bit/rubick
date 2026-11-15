@@ -7855,6 +7855,8 @@ export const ru: Catalogue = {
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
+    shellRefused:
+      "Кластер не дал открыть оболочку в {target}: этому пользователю pods/exec запрещён.",
     shellExited: "Оболочка в {target} завершилась.",
     noLongerAvailable: "{target} больше недоступен.",
     nothingLeftToAttachTo: "Подключаться уже не к чему",
@@ -7868,6 +7870,8 @@ export const ru: Catalogue = {
     streamEndedRestarting:
       "Поток закончился: {pod}/{container} перезапускается, новый запуск не отслеживается.",
     streamLost: "Поток логов от {pod}/{container} потерян.",
+    streamRefused:
+      "Кластер не дал прочитать лог {pod}/{container}: этому пользователю pods/log запрещён.",
     kubeletHoldingAt: "kubelet удерживает его в состоянии",
     itExited: "Завершился",
     intakeStillSet:
@@ -7920,6 +7924,7 @@ export const ru: Catalogue = {
     chipEnded: "закончился",
     chipNotStarted: "не стартовал",
     chipLost: "потерян",
+    chipRefused: "отказано",
     chipNotFollowed: "не отслеживается",
     chipRestarting: "перезапускается",
     noneHasRestarted:

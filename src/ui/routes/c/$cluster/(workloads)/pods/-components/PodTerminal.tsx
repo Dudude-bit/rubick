@@ -3,9 +3,15 @@ import { Terminal, TerminalMetadata } from "@/components/terminal/Terminal";
 import { Button } from "@/components/ui/button";
 import { Play, RefreshCw } from "lucide-react";
 import { StreamFailure } from "@/components/terminal/StreamFailure";
+import { Unknown } from "@/components/ui/unknown";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
-import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import {
+  normalizeTauriError,
+  ERROR_CODES,
+  errorCode,
+  isRefusal,
+} from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { listenEvent } from "@/lib/events";
@@ -60,6 +66,8 @@ export function PodTerminal({
   });
   const [sessionId, setSessionId] = useState<string | null>(kept);
   const [error, setError] = useState<string | null>(null);
+  // The cluster's no, which no reconnect answers: only a change of access does.
+  const [refused, setRefused] = useState<unknown>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null
   );
@@ -92,6 +100,7 @@ export function PodTerminal({
 
     setIsConnecting(true);
     setError(null);
+    setRefused(null);
     setUnavailableReason(null);
 
     try {
@@ -126,7 +135,8 @@ export function PodTerminal({
     } catch (err) {
       console.error("Failed to open shell:", err);
       if (connectAttemptRef.current === attemptId) {
-        setError(normalizeTauriError(err));
+        if (isRefusal(err)) setRefused(err);
+        else setError(normalizeTauriError(err));
         setIsConnecting(false);
       }
     }
@@ -172,7 +182,12 @@ export function PodTerminal({
         // Two banners, one component: `unavailableReason` is the
         // no-way-back copy the pod-status poll already writes, `error`
         // is the retryable one.
-        if (failure.kind === "gone") {
+        if (failure.kind === "refused") {
+          setRefused({
+            code: ERROR_CODES.PERMISSION,
+            message: failure.message,
+          });
+        } else if (failure.kind === "gone") {
           setUnavailableReason(failure.message);
         } else {
           setError(failure.message);
@@ -283,6 +298,19 @@ export function PodTerminal({
   // container itself is gone — reconnecting attaches to nothing, and
   // offering it reads as "we do not know what happened".
   const canReconnect = !!error;
+
+  if (refused && !isConnecting && !sessionId)
+    return (
+      <div className="h-full overflow-auto bg-canvas p-3">
+        <Unknown
+          question={t("empty", "shellRefused", {
+            target: `${podName}/${containerName}`,
+          })}
+          error={refused}
+          onRetry={connect}
+        />
+      </div>
+    );
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-canvas">

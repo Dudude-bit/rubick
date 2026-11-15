@@ -7125,6 +7125,8 @@ export const en = {
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
+    shellRefused:
+      "The cluster refused a shell in {target}: pods/exec is forbidden to this user.",
     shellExited: "The shell on {target} ended.",
     noLongerAvailable: "{target} is no longer available.",
     nothingLeftToAttachTo: "Nothing left to attach to",
@@ -7137,6 +7139,8 @@ export const en = {
     streamEndedRestarting:
       "Stream ended: {pod}/{container} is restarting, and its new run is not followed.",
     streamLost: "Lost the log stream from {pod}/{container}.",
+    streamRefused:
+      "The cluster refused the log of {pod}/{container}: pods/log is forbidden to this user.",
     kubeletHoldingAt: "The kubelet is holding it at",
     itExited: "It exited",
     intakeStillSet:
@@ -7196,6 +7200,7 @@ export const en = {
     chipEnded: "ended",
     chipNotStarted: "not started",
     chipLost: "lost",
+    chipRefused: "refused",
     chipNotFollowed: "not followed",
     chipRestarting: "restarting",
     noneHasRestarted:

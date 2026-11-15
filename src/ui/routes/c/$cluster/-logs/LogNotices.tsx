@@ -28,6 +28,7 @@ const FAILURE_TONE: Record<StreamFailureKind, "warn" | "err"> = {
   "no-previous-run": "warn",
   "log-not-kept": "warn",
   "follow-stopped": "warn",
+  refused: "warn",
 };
 
 /**
@@ -107,6 +108,7 @@ export function StreamFailureNotice({
     "log-not-kept": () => t("empty", "logNotKept", { container }),
     "follow-stopped": () =>
       t("empty", "nodeStoppedFollowing", { pod: podName, container }),
+    refused: () => t("empty", "streamRefused", { pod: podName, container }),
   };
   const action =
     absent || offerCurrent ? (

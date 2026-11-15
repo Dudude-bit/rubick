@@ -454,9 +454,7 @@ impl TerminalAdapter for PodExecAdapter {
         let mut attached = api
             .exec(&self.target.pod, &self.command, &attach_params)
             .await
-            .map_err(|e| {
-                crate::error::Error::Terminal(format!("Failed to exec: {}", e.display_clean()))
-            })?;
+            .map_err(|e| exec_error(&e))?;
 
         // Extract stdin and stdout writers/readers once and store them
         // This is critical - kube-rs AttachedProcess.stdin()/stdout() consume the values via .take()
@@ -611,9 +609,40 @@ impl TerminalAdapter for PodExecAdapter {
     }
 }
 
+/// A 403 on the upgrade is the cluster's no to pods/exec, and stays a refusal:
+/// a rejected handshake has no `Status` body, only the code.
+fn exec_error(error: &kube::Error) -> crate::error::Error {
+    let refused = match error {
+        kube::Error::Api(response) => response.code == 403,
+        kube::Error::UpgradeConnection(kube::client::UpgradeConnectionError::ProtocolSwitch(
+            code,
+        )) => *code == http::StatusCode::FORBIDDEN,
+        _ => false,
+    };
+    let said = format!("Failed to exec: {}", error.display_clean());
+    if refused {
+        crate::error::Error::PermissionDenied(said)
+    } else {
+        crate::error::Error::Terminal(said)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A refused exec was headlined "No shell" with Reconnect beside it. Fails
+    /// if a 403 on the upgrade stops being a refusal, or a 500 becomes one.
+    #[test]
+    fn a_forbidden_upgrade_is_a_refusal_and_a_failed_one_is_not() {
+        let switch = |code| {
+            exec_error(&kube::Error::UpgradeConnection(
+                kube::client::UpgradeConnectionError::ProtocolSwitch(code),
+            ))
+        };
+        assert!(switch(http::StatusCode::FORBIDDEN).is_refusal());
+        assert!(!switch(http::StatusCode::INTERNAL_SERVER_ERROR).is_refusal());
+    }
 
     /// Without the mark there is no pid, and without the pid closing the
     /// pane leaves the shell running in the container.

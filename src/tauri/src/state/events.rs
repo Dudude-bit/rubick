@@ -101,6 +101,9 @@ pub enum StreamFailureKind {
     /// message carries. The container did not end, so following again is
     /// worth offering.
     FollowStopped,
+    /// The cluster said no to this user: a 403. Nothing broke and nothing
+    /// is gone, so the panel leads with the refusal rather than a retry.
+    Refused,
 }
 
 /// The kubelet's answer, with a 200 and `text/plain`, when the node no longer
@@ -150,6 +153,9 @@ impl StreamFailureKind {
     /// which is the failure mode this whole event exists to kill.
     #[must_use]
     pub fn classify(error: &crate::error::Error) -> Self {
+        if error.is_refusal() {
+            return Self::Refused;
+        }
         if matches!(error, crate::error::Error::NoPreviousRun { .. }) {
             return Self::NoPreviousRun;
         }
@@ -187,7 +193,8 @@ impl StreamFailureKind {
 /// anything; the prefixes are bookkeeping from layers they never see.
 #[must_use]
 pub fn readable_cause(error: &crate::error::Error) -> String {
-    const WRAPPERS: [&str; 8] = [
+    const WRAPPERS: [&str; 9] = [
+        "Permission denied: ",
         "Terminal error: ",
         "Log streaming error: ",
         "Kubernetes API error: ",
@@ -1049,6 +1056,27 @@ mod tests {
                 "Failed to exec: failed to upgrade to a WebSocket connection: 500".into()
             )),
             StreamFailureKind::Broken,
+        );
+    }
+
+    /// A refused exec was offered Reconnect under "No shell on", a could-not-look
+    /// drawn as no. Fails if a 403 is classified as a broken connection.
+    #[test]
+    fn classify_tells_a_refusal_apart_from_a_broken_connection() {
+        use crate::error::Error;
+
+        let refused = Error::PermissionDenied(
+            "Failed to exec: failed to upgrade to a WebSocket connection: \
+             failed to switch protocol: 403 Forbidden"
+                .into(),
+        );
+        assert_eq!(
+            StreamFailureKind::classify(&refused),
+            StreamFailureKind::Refused
+        );
+        assert_eq!(
+            readable_cause(&refused),
+            "failed to upgrade to a WebSocket connection: failed to switch protocol: 403 Forbidden"
         );
     }
 

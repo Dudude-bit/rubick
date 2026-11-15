@@ -175,7 +175,9 @@ impl LogStreamer {
                         }
                         // `classify` never answers the second: only a body
                         // that closed is read for it.
-                        StreamFailureKind::Broken | StreamFailureKind::FollowStopped => {
+                        StreamFailureKind::Broken
+                        | StreamFailureKind::FollowStopped
+                        | StreamFailureKind::Refused => {
                             format!("Could not attach to the logs of {target}: {cause}.")
                         }
                         StreamFailureKind::NoPreviousRun => format!(
