@@ -7308,6 +7308,8 @@ export const en = {
       "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     usagePodEndedNote:
       "This pod has finished, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
+    usagePodNotRunningNote:
+      "None of its containers is running now, so metrics-server has nothing to sample: there is no line rather than a line at zero.",
     usageNoPodsNote:
       "Usage is summed from running pods, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",

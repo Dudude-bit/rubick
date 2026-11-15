@@ -812,6 +812,7 @@ export function PodDetail() {
 
   const podEnded =
     pod?.status.phase === "Succeeded" || pod?.status.phase === "Failed";
+  const podIdle = podEnded || podWithMetrics?.idle === true;
   const placement: KeyValue[] = [
     {
       label: t("columns", "node"),
@@ -1094,11 +1095,14 @@ export function PodDetail() {
                     <UsageBlock
                       kind={ResourceType.Pod}
                       uid={pod?.uid}
-                      live={!podEnded}
-                      scope={
-                        podEnded ? t("empty", "nothingRunning") : undefined
-                      }
-                      idleNote={t("empty", "usagePodEndedNote")}
+                      live={!podIdle}
+                      scope={podIdle ? t("empty", "nothingRunning") : undefined}
+                      idleNote={t(
+                        "empty",
+                        podEnded
+                          ? "usagePodEndedNote"
+                          : "usagePodNotRunningNote"
+                      )}
                       cpu={podWithMetrics?.cpuMillicores}
                       memory={podWithMetrics?.memoryBytes}
                       cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}

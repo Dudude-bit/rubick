@@ -2180,3 +2180,46 @@ describe("what a pod page's Restart and a debug pod's Delete Now call", () => {
     });
   });
 });
+
+describe("the Usage of a pod with no container running", () => {
+  const waiting = {
+    ...RUNNING,
+    ready: false,
+    started: false,
+    state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
+    restartCount: 70,
+  };
+  const open = async (container: typeof RUNNING) => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return { ...POD, containers: [container] };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+  };
+
+  /**
+   * A pod crash-looping between runs said "not reporting" under Usage, the
+   * words for a read that failed, while its row in the list said nothing
+   * runs. Fails if the page and the list disagree, or a running pod is
+   * told it runs nothing.
+   */
+  it("says nothing is running, as its row does, and why there is no line", async () => {
+    await open(waiting as unknown as typeof RUNNING);
+    expect(screen.getAllByText("nothing running").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/None of its containers is running now/)
+    ).toBeVisible();
+  });
+
+  /** Fails if a pod whose container runs loses its live line to "nothing running". */
+  it("does not say so of a pod whose container runs", async () => {
+    await open(RUNNING);
+    expect(screen.queryByText("nothing running")).toBeNull();
+  });
+});
