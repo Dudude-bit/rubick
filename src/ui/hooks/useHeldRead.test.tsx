@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { queryKeys } from "@/lib/query-keys";
-import { useHeldNotFound, useReadBehind } from "@/hooks/useHeldRead";
+import {
+  useHeldNotFound,
+  useHeldOwner,
+  useReadBehind,
+} from "@/hooks/useHeldRead";
 
 const KIND = "Deployment";
 
@@ -117,5 +121,26 @@ describe("useHeldNotFound", () => {
     view.rerender({ at: 4_000 });
     view.rerender({ at: 5_000 });
     expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useHeldOwner", () => {
+  const otherWith = (answeredFor: string | undefined) => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.detail(KIND, "lab", "api"), { uid: "u" });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    return renderHook(
+      () => useHeldOwner(KIND, "lab", "api", { answeredFor, at: 1 }, ["pods"]),
+      { wrapper }
+    ).result.current;
+  };
+
+  /** The pods read while the Deployment could not be read named no uid, and the peek dropped them as another's. Fails if an unnamed answer is held as another object's. */
+  it("takes pods read by name, holds another uid's", () => {
+    expect(otherWith("")).toBe(false);
+    expect(otherWith("u")).toBe(false);
+    expect(otherWith("someone-else")).toBe(true);
   });
 });

@@ -171,41 +171,49 @@ async fn deployment_pods(
 ) -> Result<DeploymentPods> {
     let ctx = ResourceContext::for_command(state, namespace)?;
 
-    // Get the deployment to find its label selector
+    // Its pods are readable when it is not: a deployments fault left the peek
+    // without the cause its row told. Matched then by their ReplicaSets' name.
     let deploy_api: kube::Api<Deployment> = ctx.namespaced_api();
-    let deployment = deploy_api.get(&name).await?;
+    let deployment = match deploy_api.get(&name).await {
+        Ok(deployment) => Some(deployment),
+        Err(kube::Error::Api(status)) if status.code == 404 => {
+            return Err(kube::Error::Api(status).into());
+        }
+        Err(_) => None,
+    };
 
     // The whole selector, so a Deployment claiming its pods by a set-based
     // requirement returns the pods the controller returns rather than none.
-    let label_selector =
-        crate::resources::Selector::Query(deployment.spec.as_ref().map(|s| &s.selector))
-            .query_text()
-            .ok_or_else(|| {
-                crate::error::Error::InvalidInput("Deployment has no selector".to_string())
-            })?;
-
+    let params = match &deployment {
+        Some(deployment) => kube::api::ListParams::default().labels(
+            &crate::resources::Selector::Query(deployment.spec.as_ref().map(|s| &s.selector))
+                .query_text()
+                .ok_or_else(|| {
+                    crate::error::Error::InvalidInput("Deployment has no selector".to_string())
+                })?,
+        ),
+        None => kube::api::ListParams::default(),
+    };
     // The pods its ReplicaSets control, by uid: the old pods of a Deployment
     // deleted and made again under its name carry the same labels.
-    let params = kube::api::ListParams::default().labels(&label_selector);
     let (pods_api, sets_api) = (
         ctx.namespaced_api::<Pod>(),
         ctx.namespaced_api::<ReplicaSet>(),
     );
     let (pods, sets) = tokio::join!(pods_api.list(&params), sets_api.list(&params));
     let sets = sets.ok();
-    let owners = Owners::of_deployment(
-        &name,
-        deployment.metadata.uid.as_deref(),
-        sets.as_ref().map(|sets| sets.items.as_slice()),
-    );
+    let uid = deployment.as_ref().and_then(|d| d.metadata.uid.as_deref());
+    let owners = Owners::of_deployment(&name, uid, sets.as_ref().map(|sets| sets.items.as_slice()));
     let listed = pods?;
     let owned: Vec<&Pod> = listed
         .items
         .iter()
-        .filter(|pod| matches!(owners, Owners::Named(_)) || runs_for(pod, &owners))
+        .filter(|pod| {
+            (deployment.is_some() && matches!(owners, Owners::Named(_))) || runs_for(pod, &owners)
+        })
         .collect();
     Ok(DeploymentPods {
-        uid: deployment.metadata.uid.clone().unwrap_or_default(),
+        uid: uid.unwrap_or_default().to_string(),
         pods: owned.into_iter().map(PodInfo::from).collect(),
     })
 }
@@ -371,6 +379,40 @@ mod detail_tests {
             ["cart-9df89489c-a1"]
         );
         assert_eq!(listed.uid, "cart");
+    }
+
+    /// lab/api peeked during a deployments 500 lost "1 of 1 pod: migrate
+    /// exited" while its row told it from pods that were readable. Fails if a
+    /// failed Deployment read takes its pods with it, or lets a namesake's in.
+    #[tokio::test]
+    async fn a_deployment_that_cannot_be_read_still_lists_its_pods_by_name() {
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "PodList", "metadata": {},
+            "items": [
+                pod("cart-9df89489c-a1", "cart-9df89489c", false, "CrashLoopBackOff"),
+                pod("cart-legacy-7f9c4-e5", "cart-legacy-7f9c4", false, "CrashLoopBackOff"),
+            ],
+        })
+        .to_string();
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/deployments/cart" => failure(500, "InternalError"),
+            "/api/v1/namespaces/shop/pods" => (200, pods.clone()),
+            _ => (404, "{}".into()),
+        })
+        .await;
+
+        let listed = deployment_pods(&state, "cart".into(), Some("shop".into()))
+            .await
+            .expect("the pods, though the Deployment was not read");
+        assert_eq!(
+            listed
+                .pods
+                .iter()
+                .map(|pod| pod.name.as_str())
+                .collect::<Vec<_>>(),
+            ["cart-9df89489c-a1"]
+        );
+        assert_eq!(listed.uid, "", "nobody read which Deployment this is");
     }
 
     /// The page fell back on the counts in silence when the pod list was

@@ -5,6 +5,20 @@ import { problemOfItems, type Problem } from "./problem";
 export const ownerKey = (kind: string, namespace: string, name: string) =>
   `${kind}\0${namespace}\0${name}`;
 
+/**
+ * The lists whose status word is already their own item's: a workload's
+ * rollout, a Job's failure. Every other kind (an autoscaler, a node, a
+ * Service, a claim, a Gateway) says its finding only through its row's items.
+ */
+const BADGED: ReadonlySet<string> = new Set([
+  ResourceType.Deployment,
+  ResourceType.StatefulSet,
+  ResourceType.DaemonSet,
+  ResourceType.Job,
+  ResourceType.CronJob,
+  ResourceType.Pod,
+]);
+
 const podsOwnerKey = (item: AttentionItem) =>
   item.workload &&
   ownerKey(item.workload.kind, item.namespace ?? "", item.workload.name);
@@ -13,8 +27,9 @@ const podsOwnerKey = (item: AttentionItem) =>
  * The shell's problems a row carries, by the row's key. A workload's own
  * rollout is already its badge's word, so: what opens it from elsewhere (an
  * autoscaler that cannot scale it), and its pods' rows, less those whose
- * cause its own row tells as Needs attention folds them. These are a view
- * of items the shell counts once, never more of them.
+ * cause its own row tells as Needs attention folds them. Any other kind
+ * carries its own items. These are a view of items the shell counts once,
+ * never more of them.
  */
 export function rowItems(
   items: readonly AttentionItem[],
@@ -35,7 +50,10 @@ export function rowItems(
         ? ownItem
           ? head && causeTold(head, item)
             ? undefined
-            : pods
+            : (pods ??
+              (BADGED.has(item.kind)
+                ? undefined
+                : ownerKey(item.kind, item.namespace ?? "", item.name)))
           : ownerKey(
               item.opens.kind,
               item.opens.namespace ?? "",

@@ -57,6 +57,51 @@ describe("the problems a workload's row carries", () => {
 });
 
 /**
+ * The api autoscaler was FailedGetScale on the Overview and in the status
+ * bar, and its peek, page and row said nothing: the backend's item opens the
+ * autoscaler itself. Fails if a kind with no status word of its own drops
+ * its own item, or a workload's row starts counting its rollout twice.
+ */
+describe("the problems an object's own row carries", () => {
+  const own = (kind: string, name: string, namespace: string | null) =>
+    item({
+      key: `${kind}/${name}`,
+      tone: "err",
+      kind,
+      name,
+      namespace,
+      reason: "FailedGetScale",
+      detail: null,
+      opens: { kind, name, namespace },
+    });
+
+  it("gives an autoscaler, a node and a Service their own items", () => {
+    const items = [
+      own("HorizontalPodAutoscaler", "api", "shop"),
+      own("Node", "n1", null),
+      own("Service", "db", "shop"),
+    ];
+    expect(
+      itemsOfRow(items, "HorizontalPodAutoscaler", "shop", "api").map(
+        ({ key }) => key
+      )
+    ).toEqual(["HorizontalPodAutoscaler/api"]);
+    expect(itemsOfRow(items, "Node", null, "n1")).toHaveLength(1);
+    expect(itemsOfRow(items, "Service", "shop", "db")).toHaveLength(1);
+    expect(itemsOfRow(items, "Deployment", "shop", "api")).toEqual([]);
+  });
+
+  it("leaves a workload's and a Job's own rollout to their badges", () => {
+    const items = [
+      own("Deployment", "web", "shop"),
+      own("Job", "migrate", "shop"),
+    ];
+    expect(itemsOfRow(items, "Deployment", "shop", "web")).toEqual([]);
+    expect(itemsOfRow(items, "Job", "shop", "migrate")).toEqual([]);
+  });
+});
+
+/**
  * A pod's page led with its failing liveness probe while its list row was a
  * plain green Running. Fails if a pod's own item does not reach its row, or
  * if a workload's list starts counting its own rollout.

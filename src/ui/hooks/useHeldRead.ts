@@ -71,7 +71,8 @@ export function useHeldOwner(
   const client = useQueryClient();
   const uid = useReadUid(kind, namespace, name);
   const held = useReadThereAt(kind, namespace, name);
-  const other = read.answeredFor !== undefined && read.answeredFor !== uid;
+  // An empty uid answered without reading the object: its name chose the pods.
+  const other = !!read.answeredFor && read.answeredFor !== uid;
   const asked = useRef<string | null>(null);
   const seen = `${read.at}/${held}`;
   const again = read.at < held ? key : queryKeys.detail(kind, namespace, name);
