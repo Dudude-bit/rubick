@@ -7,6 +7,7 @@ import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { KindAbout } from "@/components/object/KindAbout";
 import { NodeUtilisation } from "./NodeUtilisation";
 import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
@@ -187,6 +188,7 @@ export const columns = (
         <MetricValue
           used={metrics?.cpuMillicores ?? null}
           limit={capacity ? parseCPU(capacity) : null}
+          of="capacity"
           type="cpu"
         />
       );
@@ -218,6 +220,7 @@ export const columns = (
         <MetricValue
           used={metrics?.memoryBytes ?? null}
           limit={capacity ? parseMemory(capacity) : null}
+          of="capacity"
           type="memory"
         />
       );
@@ -392,6 +395,7 @@ export function NodeList() {
         <div className="flex h-full min-h-0 flex-col gap-4">
           <ResourceListHeader
             title={NODES_TITLE}
+            description={<KindAbout kind={ResourceType.Node} />}
             count={
               nodesForTrends.isError
                 ? undefined

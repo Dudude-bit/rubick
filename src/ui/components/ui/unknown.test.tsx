@@ -62,6 +62,47 @@ describe("Unknown", () => {
     expect(question).not.toHaveAttribute("title");
   });
 
+  /**
+   * In a narrow peek the lock sat alone on a line above its sentence. Fails
+   * if the glyph is not in the same box as the question, so it can wrap
+   * away from it.
+   */
+  it("keeps the glyph with the first words of the question", () => {
+    const { container } = render(
+      <Unknown
+        compact
+        question="Could not read Deployment api just now."
+        error={new Error("etcdserver: request timed out")}
+        onRetry={() => undefined}
+      />
+    );
+    const glyph = container.querySelector("svg") as SVGElement;
+    expect(glyph.parentElement).toHaveTextContent(
+      "Could not read Deployment api just now."
+    );
+    expect(glyph.parentElement).not.toHaveTextContent("etcdserver");
+  });
+
+  /** A LIST_UNREAD that holds a 403 was worded "The read failed" under a triangle. Fails if it is not worded as a refusal. */
+  it("words a refusal inside an unread-list error as a refusal", () => {
+    const { container } = render(
+      <Unknown
+        question="Could not read what connects to this."
+        error={Object.assign(
+          new Error(
+            `Could not read the Pod list, so whether web is there is unknown: ${REFUSED}`
+          ),
+          { code: "LIST_UNREAD" }
+        )}
+      />
+    );
+    expect(container.querySelector("[data-read]")).toHaveAttribute(
+      "data-read",
+      "refused"
+    );
+    expect(screen.getByText(/^The cluster refused:/)).toBeInTheDocument();
+  });
+
   /** Fails if the line over rows still on screen grows into a block, which pushed the table down by 170 px. */
   it("says it in one line over content that stays, with the whole message on hover", () => {
     const { container } = render(

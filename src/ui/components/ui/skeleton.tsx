@@ -40,13 +40,16 @@ interface TableSkeletonProps {
   grouped?: boolean;
 }
 
+/** What a list nobody has counted draws: most lists a skeleton stands in for are short, and a short one that lands under eight bars jumps. */
+const UNKNOWN_ROWS = 5;
+
 /** How full a cell's bar draws, cycled so columns read organically. */
 const BAR_FRACTIONS = [0.72, 0.45, 0.6, 0.38, 0.52];
 
 function TableSkeleton({
   widths,
   columns = widths?.length || 4,
-  rows = 8,
+  rows = UNKNOWN_ROWS,
   showSearch = true,
   compact = false,
   grouped = false,

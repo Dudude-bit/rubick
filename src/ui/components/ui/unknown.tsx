@@ -76,8 +76,13 @@ export function Unknown({
           className
         )}
       >
-        <Glyph className="h-3.5 w-3.5 flex-none text-warn" aria-hidden="true" />
-        <span className="min-w-0 text-fg">{question}</span>
+        <span className="flex min-w-0 items-start gap-2 text-fg">
+          <Glyph
+            className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
+            aria-hidden="true"
+          />
+          <span className="min-w-0">{question}</span>
+        </span>
         <span
           className="min-w-0 flex-1 basis-40 truncate text-fg-mut"
           title={said}

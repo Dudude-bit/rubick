@@ -16,6 +16,7 @@ import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import { queryKeys } from "@/lib/query-keys";
+import { formatWhen } from "@/lib/utils";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
 import { ListUnread } from "../-list/list-unread";
 
@@ -128,6 +129,31 @@ describe("MetricsStatusBanner", () => {
       "Metrics are not readable with this access, so CPU and memory are not shown"
     );
     expect(banner.className).not.toMatch(/max-w-/);
+  });
+
+  /**
+   * The notice said "Refused since 17:17" when the first refused answer came
+   * a minute later: the time was the banner's mount. Fails if the time is not
+   * the arrival of the first refused answer.
+   */
+  it("dates a refusal by when its first answer arrived, not by when the notice mounted", async () => {
+    useClusterStore.setState({ currentContext: "acme-dated" });
+    const client = new QueryClient();
+    const arrived = new Date(2026, 10, 15, 9, 41, 7).getTime();
+    client.setQueryData(
+      queryKeys.metrics.pods("ns"),
+      { status: { status: "forbidden", message: null }, data: [], unread: [] },
+      { updatedAt: arrived }
+    );
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />,
+      { client }
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        formatWhen(arrived, "clock")
+      )
+    );
   });
 
   /** Fails if a refusal with no parseable rule invents a copy action. */

@@ -29,6 +29,7 @@ import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
 import {
   isReadDeadline,
   LIST_DEADLINE_SECONDS,
+  NOTICE_READ_MS,
   openNamespacePicker,
   SLOW_READ_MS,
 } from "@/lib/read-deadline";
@@ -74,6 +75,7 @@ import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { ListUnread } from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
+import { Reading } from "@/components/ui/states";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { useRecheckRefusal } from "./useRecheckRefusal";
@@ -558,6 +560,7 @@ export function ResourceList<
   const waitedMs =
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
   const slow = waitedMs >= SLOW_READ_MS;
+  const noticed = waitedMs >= NOTICE_READ_MS;
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
@@ -730,6 +733,18 @@ export function ResourceList<
           onChange={setDeliveryFilter}
           deliveries={resources.map(deliveriesOf)}
         />
+      )}
+      {showSkeleton && !slow && (
+        <div data-testid="reading-list" className="mb-2 min-h-4 px-1">
+          {noticed && (
+            <Reading>
+              {t("empty", "stillReading", {
+                label: emptyStateLabel.toLowerCase(),
+                scope: scope.inWords,
+              })}
+            </Reading>
+          )}
+        </div>
       )}
       {slow && (
         <Alert

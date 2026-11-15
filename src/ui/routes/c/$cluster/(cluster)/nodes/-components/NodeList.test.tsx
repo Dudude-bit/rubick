@@ -118,6 +118,22 @@ describe("NodeList", () => {
     }
   });
 
+  /** The Utilisation tab dropped the page's description that the table view carries. Fails if either view lacks it. */
+  it("carries the kind's description under the title in both views", async () => {
+    for (const search of ["", "?view=utilisation"]) {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+      });
+      client.setQueryData(queryKeys.resources(ResourceType.Node, null), {
+        rows: [],
+        unread: [],
+      });
+      const view = await open(client, search);
+      expect(await screen.findByText(/^A Node is /)).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
   /**
    * The view lives in the address so a deep link can open it and a reload
    * keeps it. A toggle that only set state would leave the address saying

@@ -683,7 +683,13 @@ export function TrafficChain({
       <p className="text-xs text-fg-fnt">{t("empty", "followingPathIn")}</p>
     );
   }
-  if (error && unreadObject) return <WaitsOnObject unread={unreadObject} />;
+  if (error && unreadObject)
+    return (
+      <Section>
+        <SectionHeader title={t("nav", "howTrafficGetsHere")} />
+        <WaitsOnObject unread={unreadObject} />
+      </Section>
+    );
   if (error || !data) {
     // The same read the Connections tab escapes: this chain reads the one
     // `useConnections` query too, so a refusal offers the rule here as well,

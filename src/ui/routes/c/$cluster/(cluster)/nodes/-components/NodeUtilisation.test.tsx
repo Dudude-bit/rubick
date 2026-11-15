@@ -281,6 +281,17 @@ describe("NodeUtilisation", () => {
     expect(screen.getByText(/needs a Prometheus/)).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
   });
+
+  /** The offer was a bare sentence on an empty canvas. Fails if it leaves the canon's empty state. */
+  it("draws the missing Prometheus as the shared empty state", async () => {
+    capability.mockReturnValue({ state: "absent" });
+    const { container } = await wrap(
+      <NodeUtilisation nodes={[node("calm")]} range="6h" onRange={() => {}} />
+    );
+    expect(container.querySelector("[data-empty-state]")).toHaveTextContent(
+      /needs a Prometheus/
+    );
+  });
 });
 
 describe("what the view offers Share", () => {

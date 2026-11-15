@@ -46,7 +46,11 @@ import { commands, wrapCommand } from "@/lib/commands";
 import { currentConnection, forgetRefusals, noteRefusal } from "@/lib/refusals";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
-import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
+import {
+  NOTICE_READ_MS,
+  SCOPE_PICKER_OPEN,
+  SLOW_READ_MS,
+} from "@/lib/read-deadline";
 import { renderWithRouter } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
@@ -816,6 +820,35 @@ describe("a read on a large cluster", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+  });
+
+  /**
+   * A slow first load said nothing until eight seconds. Fails if a skeleton
+   * past three seconds does not say it is still reading, or says it at once.
+   */
+  it("says in a quiet line that it is still reading after three seconds, not before", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "slow"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByTestId("reading-list")).toBeEmptyDOMElement();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
     expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
   });
 

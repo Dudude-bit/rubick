@@ -107,6 +107,8 @@ export interface MetricValueProps {
   /** Shown in the title when there is no limit; never drives the bar. */
   request?: number | null | undefined;
   type: "cpu" | "memory";
+  /** What `limit` is: a node's figure is its capacity, never a limit. */
+  of?: "limit" | "capacity";
   className?: string;
 }
 
@@ -120,6 +122,7 @@ export function MetricValue({
   limit,
   request,
   type,
+  of = "limit",
   className,
 }: MetricValueProps) {
   const t = useT();
@@ -134,7 +137,7 @@ export function MetricValue({
   const display = formatUsage(usedNum, type);
   const title =
     ratio !== null
-      ? t("empty", "metricOfLimit", {
+      ? t("empty", of === "capacity" ? "metricOfCapacity" : "metricOfLimit", {
           used: display,
           limit: formatUsage(limitNum!, type),
           percent: Math.round(ratio * 100),
@@ -144,7 +147,9 @@ export function MetricValue({
             used: display,
             requested: formatUsage(requestNum, type),
           })
-        : t("empty", "metricNoLimit", { used: display });
+        : t("empty", of === "capacity" ? "metricNoCapacity" : "metricNoLimit", {
+            used: display,
+          });
 
   return (
     <span

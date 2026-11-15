@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { Activity, TriangleAlert } from "lucide-react";
 
 import {
   Table,
@@ -35,7 +35,7 @@ import { sayWords } from "@/i18n/say";
 import type { en } from "@/i18n/catalogue";
 import { None } from "@/components/ui/none";
 import { Alert } from "@/components/ui/alert";
-import { Reading, SegmentedControl } from "@/components/ui/states";
+import { EmptyState, Reading, SegmentedControl } from "@/components/ui/states";
 import { TextSkeleton } from "@/components/ui/skeleton";
 import { Unknown } from "@/components/ui/unknown";
 
@@ -154,7 +154,7 @@ export function NodeUtilisation({
 
   if (power.state === "absent") {
     return (
-      <p className="px-1 py-6 text-xs text-fg-mut">
+      <EmptyState icon={Activity}>
         {parts(t("empty", "trendsNeedPrometheus"), {
           link: (
             <Link
@@ -165,7 +165,7 @@ export function NodeUtilisation({
             </Link>
           ),
         })}
-      </p>
+      </EmptyState>
     );
   }
 

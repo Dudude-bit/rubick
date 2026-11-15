@@ -75,21 +75,41 @@ const NONE_HIDDEN: readonly MetricsAbsence[] = [];
 
 const firstSeen = new Map<string, number>();
 
+function firstAnswered(queryClient: QueryClient, absence: MetricsAbsence) {
+  const times = queryClient
+    .getQueryCache()
+    .findAll({ queryKey: queryKeys.metrics.all() })
+    .filter(
+      (query) =>
+        absenceOf(
+          (query.state.data as { status?: MetricsStatus } | undefined)?.status
+        ) === absence
+    )
+    .map((query) => query.state.dataUpdatedAt);
+  return times.length ? Math.min(...times) : null;
+}
+
 /**
- * When this screen first saw the refusal or the failure, kept across visits
- * and not moved by a cached answer repeating it; let go once metrics answer.
+ * When the first refused or failed answer arrived, taken from the query that
+ * got it rather than from this banner's mount; kept across visits and not
+ * moved by a cached answer repeating it; let go once metrics answer.
  */
 function useFirstSeen(
   context: string | null,
   absence: MetricsAbsence | null,
   known: boolean
 ): number | null {
+  const queryClient = useQueryClient();
   const key =
     context && (absence === "forbidden" || absence === "error")
       ? `${context}:${absence}`
       : null;
   const [now] = useState(Date.now);
-  const kept = key ? (firstSeen.get(key) ?? now) : null;
+  const kept = key
+    ? (firstSeen.get(key) ??
+      (absence && firstAnswered(queryClient, absence)) ??
+      now)
+    : null;
   useEffect(() => {
     if (key && kept !== null && !firstSeen.has(key)) firstSeen.set(key, kept);
     if (!key && context && known)

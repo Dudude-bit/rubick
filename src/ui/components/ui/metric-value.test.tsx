@@ -34,3 +34,28 @@ describe("a metric cell with no sample", () => {
     expect(screen.queryByText("no sample")).toBeNull();
   });
 });
+
+describe("a metric cell against a node's figure", () => {
+  /** A node's tooltip said "limit" for what is its capacity. Fails if it says limit again. */
+  it("names a node's figure capacity, not a limit", () => {
+    render(
+      <MetricValue
+        used={5.9 * 2 ** 30}
+        limit={7.8 * 2 ** 30}
+        of="capacity"
+        type="memory"
+      />
+    );
+    const title = document.querySelector("[title]")!.getAttribute("title")!;
+    expect(title).toContain("capacity");
+    expect(title).not.toContain("limit");
+  });
+
+  /** Fails if a node with no capacity figure is told it has no limit. */
+  it("says a node's missing capacity is not known, not that it has no limit", () => {
+    render(<MetricValue used={1024} of="capacity" type="memory" />);
+    const title = document.querySelector("[title]")!.getAttribute("title")!;
+    expect(title).toContain("capacity not known");
+    expect(title).not.toContain("limit");
+  });
+});
