@@ -672,7 +672,13 @@ impl Fold {
             ip.map_or("", |i| i.destination.as_str()),
             &one.destination_names,
         );
-        let key = (from, to);
+        // Cilium logs an L7 response from the server to the client
+        // (pkg/envoy/accesslog_server.go swaps the addresses); the pair is the caller's.
+        let key = if response.is_some() {
+            (to, from)
+        } else {
+            (from, to)
+        };
         if !self.pairs.contains_key(&key) && self.pairs.len() >= MAX_LIVE_PAIRS {
             self.untracked += 1;
             return;
@@ -837,7 +843,9 @@ mod tests {
                     ..Default::default()
                 })),
             }),
-            ..event(Verdict::Forwarded, "web", "api")
+            is_reply: Some(true),
+            // As Cilium writes a response: from the server to the client.
+            ..event(Verdict::Forwarded, "api", "web")
         }
     }
 
@@ -913,10 +921,17 @@ mod tests {
         );
         fold.add(100, &event(Verdict::Forwarded, "web", "db"));
         let (pairs, _) = fold.tick(101);
-        let api = pairs
-            .iter()
-            .find(|p| p.requests.is_some())
-            .expect("an HTTP pair");
+        let named = |end: &FlowEnd| match end {
+            FlowEnd::Workload { key } => key.name.clone(),
+            _ => String::new(),
+        };
+        let http: Vec<_> = pairs.iter().filter(|p| p.requests.is_some()).collect();
+        assert_eq!(http.len(), 1, "one pair, the caller's");
+        let api = http[0];
+        assert_eq!(
+            (named(&api.from), named(&api.to)),
+            ("web".into(), "api".into())
+        );
         assert_eq!(api.requests, Some(4.0));
         assert_eq!(api.errors, Some(1.0));
         assert_eq!(api.p50, Some(30.0));
