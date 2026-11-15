@@ -5,6 +5,8 @@
 import type { T } from "@/i18n/useT";
 import {
   costOf,
+  type CostPart,
+  type Parts,
   currencyOf,
   formatMoney,
   formatShare,
@@ -194,4 +196,53 @@ export function efficiencyWords(e: Efficiency, t: T): string {
         ? t("cost", "notMeasured")
         : formatShare(e.peakRatio),
   });
+}
+
+/**
+ * What a money cell says: an amount, an amount that is a floor, no price
+ * for what is there, or nothing there to price.
+ */
+export type Said = number | { atLeast: number } | "notPriced" | "none";
+
+export function money(
+  value: Said | null | undefined,
+  currency: string,
+  t: T
+): string {
+  if (value === null || value === undefined || value === "notPriced")
+    return t("cost", "notPriced");
+  if (value === "none") return t("empty", "noneLower");
+  if (typeof value === "number") return formatMoney(value, currency);
+  return t("cost", "atLeast", { amount: formatMoney(value.atLeast, currency) });
+}
+
+/** A row's total: a floor where some of what it holds carries no price. */
+export const totalOf = (
+  row: { perHour: number | null; atLeast: boolean },
+  scale = 1
+): Said =>
+  row.perHour === null
+    ? "notPriced"
+    : row.atLeast
+      ? { atLeast: row.perHour * scale }
+      : row.perHour * scale;
+
+/** One part: its price, no price for what is there, or nothing there. */
+export const partOf = (
+  row: { parts: Parts; unpriced: readonly CostPart[] },
+  part: CostPart
+): Said =>
+  row.parts[part] ?? (row.unpriced.includes(part) ? "notPriced" : "none");
+
+export const sortable = (said: Said): number =>
+  typeof said === "number"
+    ? said
+    : typeof said === "object"
+      ? said.atLeast
+      : said === "none"
+        ? 0
+        : -1;
+
+export function share(value: number | null, t: T): string {
+  return value === null ? t("cost", "notPriced") : formatShare(value);
 }

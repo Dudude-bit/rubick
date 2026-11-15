@@ -286,6 +286,23 @@ describe("the Cost page", () => {
     expect(within(why).queryByRole("button")).toBeNull();
   });
 
+  /**
+   * The namespace's icon sat on a line of its own above its name. The
+   * reference is drawn inline, in the shell the app's lists draw one in.
+   */
+  it("draws each namespace as an inline reference, as the lists do", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    await open();
+    const shop = screen
+      .getAllByRole("link")
+      .find((link) => link.textContent === "Namespace shop")!;
+    expect(shop.className).toContain("inline-flex");
+  });
+
   /** No node priced: idle says it is not known, never 0. */
   it("says idle is not known while no node carries a price", async () => {
     const unpriced = readingPicture(
