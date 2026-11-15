@@ -69,10 +69,9 @@ describe("useReadBehind", () => {
 });
 
 describe("useHeldNotFound", () => {
-  const NOT_FOUND = {
+  const NOT_FOUND = Object.assign(new Error('pods "netd-xx2b5" not found'), {
     code: "NOT_FOUND",
-    message: 'pods "netd-xx2b5" not found',
-  };
+  });
   const mount = (rows: unknown[]) => {
     const client = new QueryClient();
     client.setQueryData(
