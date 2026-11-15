@@ -126,6 +126,38 @@ describe("causeWords", () => {
     expect(gone.note).toBeTruthy();
   });
 
+  /** A database password printed by the app was the top line of the pod's peek and page, beside Copy. Fails if a quote of the container's own words is drawn or copied raw. */
+  it.each([
+    [
+      "a DSN",
+      'error: failed to open database "postgres://app:hunter2pw@db-0.db:5432/shop?sslmode=disable": no schema',
+      "hunter2pw",
+      "postgres://…@db-0.db:5432/shop",
+    ],
+    [
+      "password=",
+      "fatal: login failed host=db user=app password=hunter3pw",
+      "hunter3pw",
+      "login failed host=db user=app",
+    ],
+    [
+      "a bearer token",
+      "upstream said 401 to Authorization: Bearer abcdefghijklmnop123456",
+      "abcdefghijklmnop123456",
+      "upstream said 401",
+    ],
+  ])("never quotes %s from a container", (_, line, secret, kept) => {
+    for (const ended of [
+      run({ log: { says: "line", text: line, last: true } }),
+      run({ said: `starting\n${line}` }),
+    ]) {
+      const words = causeWords(exits(ended), t);
+      expect(words.quote?.text).toContain(kept);
+      expect(words.quote?.text).not.toContain(secret);
+      expect(causeText(exits(ended), t)).not.toContain(secret);
+    }
+  });
+
   /** The kubelet reported no exit: the sentence says so instead of inventing one. */
   it("says the exit was not reported where there is no run", () => {
     expect(causeWords(exits(null), t).sentence).toContain(

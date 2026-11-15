@@ -12,6 +12,7 @@ import type {
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { listWords } from "@/i18n/say";
+import { redact } from "@/lib/redact";
 import { formatAge, formatDuration } from "@/lib/utils";
 
 /**
@@ -148,13 +149,15 @@ function logNote(log: Evidence, t: T): string | null {
   }
 }
 
+/** What the container itself wrote, which is drawn, copied and searched: never with a secret in it. */
 function quoteOf(run: EndedRun, t: T): CauseWords["quote"] {
   const said = run.said ? tellingLine(run.said) : null;
-  if (said) return { label: t("cause", "exitMessage"), text: said.text };
+  if (said)
+    return { label: t("cause", "exitMessage"), text: redact(said.text) };
   if (run.log.says !== "line") return null;
   return {
     label: t("cause", run.log.last ? "lastLine" : "loggedLine"),
-    text: run.log.text,
+    text: redact(run.log.text),
   };
 }
 
