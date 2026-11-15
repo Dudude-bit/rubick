@@ -131,6 +131,64 @@ describe("the cluster map's model", () => {
     expect(drawn.sub).toBe("CrashLoopBackOff 1, Running 2 · 2 of 3 ready");
   });
 
+  /**
+   * Argo CD's optional Secrets were drawn red, "missing", while the pods ran
+   * without them. Fails if a missing Secret every use of which is optional
+   * is not a warning that says so, or one a workload needs loses its red.
+   */
+  it("draws a missing object every use of which is optional as a warning", () => {
+    const missing = (name: string): TopologyNode => ({
+      ...node("Secret", name),
+      ref: { ...node("Secret", name).ref, existence: "missing" },
+    });
+    const dex = node("Deployment", "dex");
+    const uses = (to: TopologyNode, optional: boolean): TopologyEdge => ({
+      id: `${dex.id}>${to.id}`,
+      from: dex.id,
+      to: to.id,
+      relations: [
+        {
+          verb: "uses",
+          usages: [{ how: "envFrom", container: "dex", optional }],
+        },
+      ],
+    });
+    const tls = missing("dex-tls");
+    const password = missing("db-password");
+    const memo = newMemo();
+    const drawWith = (edges: TopologyEdge[]) =>
+      modelOf(
+        new Map([dex, tls, password].map((each) => [each.id, each])),
+        new Map(edges.map((each) => [each.id, each])),
+        new Map([["shop", read("shop")]]),
+        settings(),
+        (each) => (each.ref.existence === "missing" ? "err" : "mute"),
+        t,
+        memo
+      );
+    const model = drawWith([uses(tls, true), uses(password, false)]);
+    const drawn = (name: string) =>
+      model.nodes.find((each) => each.label === name)!;
+    expect(drawn("dex-tls").tone).toBe("warn");
+    expect(drawn("dex-tls").sub).toContain(
+      "optional, so the pod starts without it"
+    );
+    expect(drawn("db-password").tone).toBe("err");
+    expect(model.edges.map((edge) => [edge.to, edge.tone])).toEqual([
+      [tls.id, "warn"],
+      [password.id, "err"],
+    ]);
+    // A workload that needs it arrives, and the same Secret turns red.
+    const api = node("Deployment", "api");
+    const needed = drawWith([
+      uses(tls, true),
+      { ...uses(tls, false), id: `${api.id}>${tls.id}`, from: api.id },
+    ]);
+    expect(needed.nodes.find((each) => each.label === "dex-tls")!.tone).toBe(
+      "err"
+    );
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

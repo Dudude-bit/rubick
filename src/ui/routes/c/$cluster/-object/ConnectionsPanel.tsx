@@ -146,10 +146,19 @@ function Row({ row }: { row: ConnRow }) {
             <span
               className={cn(
                 "text-[11px]",
-                row.object?.existence === "missing" ? "text-err" : "text-fg-fnt"
+                row.object?.existence !== "missing"
+                  ? "text-fg-fnt"
+                  : row.optional
+                    ? "text-warn"
+                    : "text-err"
               )}
             >
               {existence}
+            </span>
+          )}
+          {row.object?.existence === "missing" && row.optional && (
+            <span className="text-[11px] text-fg-mut">
+              {t("readings", "envRefOptional")}
             </span>
           )}
         </span>

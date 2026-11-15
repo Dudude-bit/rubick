@@ -331,6 +331,7 @@ describe("what the graph says about objects it could not check", () => {
       subPath: null,
       volume: "cfg",
       projected: false,
+      optional: false,
     };
     const { sections } = graphSections(
       {
@@ -370,6 +371,49 @@ describe("what the graph says about objects it could not check", () => {
       missing: true,
     });
     expect(byName("unread")).toMatchObject({ existence: "nav.notChecked" });
+  });
+
+  /**
+   * The Connections tab says a missing object the pod may start without is
+   * optional, in the warning tone. Fails if the file tags it red as broken,
+   * or drops the words.
+   */
+  it("tags a missing connection every use of which is optional as optional", () => {
+    const deployment = object("Deployment", "web");
+    const { sections } = graphSections(
+      {
+        data: {
+          subject: deployment,
+          edges: [
+            {
+              from: deployment,
+              to: object("Secret", "dex-tls", "missing"),
+              relation: {
+                verb: "uses",
+                usages: [{ how: "envFrom", container: "app", optional: true }],
+              },
+            },
+          ],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        } as unknown as ResourceConnections,
+        error: null,
+        isPending: false,
+      },
+      t,
+      true
+    );
+    const connections = sections.find((s) => s.id === "connections")!;
+    const [row] =
+      connections.body.type === "connections"
+        ? connections.body.groups.flatMap((group) => group.rows)
+        : [];
+    expect(row).toMatchObject({
+      existence: "nav.notInThisNamespace · readings.envRefOptional",
+      missing: true,
+      optional: true,
+    });
   });
 
   /**

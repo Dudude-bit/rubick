@@ -120,6 +120,7 @@ describe("ConnectionsPanel", () => {
                       subPath: null,
                       volume: "config",
                       projected: false,
+                      optional: false,
                     },
                   ],
                 },
@@ -132,6 +133,60 @@ describe("ConnectionsPanel", () => {
 
     expect(screen.getByText("mounted at /etc/app")).toBeInTheDocument();
     expect(screen.getByText("not checked")).toBeInTheDocument();
+  });
+
+  /**
+   * Argo CD's optional Secrets read "not in this namespace" in red here and
+   * on the map, while the pod ran without them and the Environment section
+   * said so. Fails if an object every use of which is optional is drawn
+   * red, or one that is not loses its red.
+   */
+  it("says a missing object the pod may start without is optional, in the warning tone", async () => {
+    const secret = (name: string) => ({
+      kind: "Secret",
+      name,
+      namespace: "k8s-gui-test",
+      existence: "missing" as const,
+      facts: null,
+    });
+    const mount = (volume: string, optional: boolean) => ({
+      how: "mount" as const,
+      container: "app",
+      path: `/etc/${volume}`,
+      readOnly: true,
+      subPath: null,
+      volume,
+      projected: false,
+      optional,
+    });
+    await wrap(
+      <ConnectionsPanel
+        query={query({
+          data: answered({
+            edges: [
+              {
+                from: subject,
+                to: secret("dex-tls"),
+                relation: { verb: "uses", usages: [mount("tls", true)] },
+              },
+              {
+                from: subject,
+                to: secret("db-password"),
+                relation: { verb: "uses", usages: [mount("db", false)] },
+              },
+            ],
+          }),
+        })}
+      />
+    );
+    const [optional, required] = screen.getAllByText(
+      "does not exist in this namespace"
+    );
+    expect(optional).toHaveClass("text-warn");
+    expect(required).toHaveClass("text-err");
+    expect(
+      screen.getAllByText("optional, so the pod starts without it")
+    ).toHaveLength(1);
   });
 
   it("tells an answered nothing apart from a question never asked", async () => {

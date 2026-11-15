@@ -13,7 +13,7 @@ import type {
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { MapTone } from "@/integrations";
-import { describeUsages } from "@/lib/connections";
+import { describeUsages, onlyOptional } from "@/lib/connections";
 import { drawnCrd } from "@/lib/links";
 import { reachWords } from "@/lib/network-policy";
 import { serviceHealthWords } from "@/lib/service-health";
@@ -252,7 +252,7 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
  * one when any of them changes.
  */
 export interface ModelMemo {
-  nodes: WeakMap<TopologyNode, GraphNode>;
+  nodes: WeakMap<TopologyNode, { graph: GraphNode; optional: boolean }>;
   edges: WeakMap<TopologyEdge, { graph: GraphEdge; ends: string }>;
 }
 
@@ -272,6 +272,12 @@ export function modelOf(
   t: T,
   memo: ModelMemo = newMemo()
 ): Model {
+  // A missing object every use of which says `optional: true` is drawn as
+  // the Connections tab says it: a warning, since the pods start without it.
+  const softly = new Set<string>();
+  const firmly = new Set<string>();
+  for (const edge of edges.values())
+    (softEdge(edge) ? softly : firmly).add(edge.to);
   const drawn: GraphNode[] = [];
   const tones = new Map<string, MapTone>();
   const groupOf = new Map<string, string | null>();
@@ -280,8 +286,13 @@ export function modelOf(
     const kind = node.ref.kind;
     if (settings.hidden.has(kind)) continue;
     if (kind === "NetworkPolicy" && !settings.policies) continue;
-    let graph = memo.nodes.get(node);
-    if (!graph) {
+    const optional =
+      node.ref.existence === "missing" &&
+      softly.has(node.id) &&
+      !firmly.has(node.id);
+    let graph = memo.nodes.get(node)?.graph;
+    if (!graph || memo.nodes.get(node)?.optional !== optional) {
+      const sub = subOf(node, t);
       graph = {
         id: node.id,
         group: groupIdOf(node, settings.grouping),
@@ -291,12 +302,14 @@ export function modelOf(
           node.ref.name === OWNERLESS && kind === "Pod"
             ? t("topology", "ownerlessPods")
             : node.ref.name,
-        sub: subOf(node, t),
-        tone: toneOf(node),
+        sub: optional
+          ? [sub, t("readings", "envRefOptional")].filter(Boolean).join(" · ")
+          : sub,
+        tone: optional ? "warn" : toneOf(node),
         badge: settings.policies ? coverBadge(node, t) : undefined,
         rank: RANK[kind] ?? WORKLOAD_RANK,
       };
-      memo.nodes.set(node, graph);
+      memo.nodes.set(node, { graph, optional });
     }
     tones.set(node.id, graph.tone);
     groupOf.set(node.id, graph.group);
@@ -389,11 +402,16 @@ export function modelOf(
       id: edge.id,
       from: edge.from,
       to: edge.to,
-      tone: existence.includes("missing")
-        ? "err"
-        : existence.includes("notChecked")
-          ? "unknown"
-          : "ok",
+      tone:
+        from.ref.existence === "missing"
+          ? "err"
+          : to.ref.existence === "missing"
+            ? softEdge(edge)
+              ? "warn"
+              : "err"
+            : existence.includes("notChecked")
+              ? "unknown"
+              : "ok",
       label: edge.relations.map((relation) => relationWords(relation, t))[0],
       sub:
         edge.relations.length > 1
@@ -406,6 +424,13 @@ export function modelOf(
   }
   return { groups, nodes: drawn, edges: graphEdges, groupOf, summaries };
 }
+
+/** Whether an edge is only uses that say `optional: true`. */
+const softEdge = (edge: TopologyEdge): boolean =>
+  edge.relations.length > 0 &&
+  edge.relations.every(
+    (relation) => relation.verb === "uses" && onlyOptional(relation.usages)
+  );
 
 /** How a kind was read, across the scope, for the rail. */
 export function readingOf(

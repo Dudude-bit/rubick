@@ -1750,6 +1750,8 @@ export interface ConnRow {
   unasked?: boolean;
   /** Keys this row reads that the subject was read and found not to hold. */
   missingKeys?: { key: string; optional: boolean; from: string }[];
+  /** Every use says `optional: true`: missing, the pod starts without it. */
+  optional?: boolean;
 }
 
 export interface ConnGroup {
@@ -2041,6 +2043,18 @@ function rowFor(
   };
 }
 
+/**
+ * Whether every use says `optional: true`, so the pods start without the
+ * object: the one place a missing reference is told apart from a broken one,
+ * for the Connections tab, its report and the map alike.
+ */
+export function onlyOptional(usages: readonly Usage[]): boolean {
+  return (
+    usages.length > 0 &&
+    usages.every((use) => "optional" in use && use.optional)
+  );
+}
+
 function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
   const rows = verb(conns.edges, "uses")
     .filter((edge) => sameObject(edge.from, conns.subject))
@@ -2048,6 +2062,7 @@ function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
       ...rowFor(needLabel(edge, t), edge.to, t),
       ways: describeUsages(edge.relation.usages, t),
       missingKeys: missingKeysOf(edge.relation.usages, edge.to.kind),
+      optional: onlyOptional(edge.relation.usages),
       verifiable: true,
       rank: needRank(edge),
     }));

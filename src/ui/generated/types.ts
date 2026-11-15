@@ -3341,8 +3341,9 @@ export type Usage =
       subPath: string | null;
       volume: string;
       projected: boolean;
+      optional: boolean;
     }
-  | { how: "unmounted"; volume: string; projected: boolean }
+  | { how: "unmounted"; volume: string; projected: boolean; optional: boolean }
   | {
       how: "env";
       container: string;
@@ -3351,7 +3352,7 @@ export type Usage =
       optional: boolean;
       keyPresent: boolean | null;
     }
-  | { how: "envFrom"; container: string }
+  | { how: "envFrom"; container: string; optional: boolean }
   | { how: "imagePullSecret" }
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };

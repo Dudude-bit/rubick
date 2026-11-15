@@ -17,6 +17,7 @@ import {
   describeExistence,
   describeStop,
   describeUsages,
+  onlyOptional,
   referencesUnread,
   hopTone,
   stopCause,
@@ -2260,6 +2261,7 @@ describe("the groups", () => {
     subPath: null,
     volume: "config",
     projected: false,
+    optional: false,
   };
   const env: Usage = {
     how: "env",
@@ -2269,6 +2271,24 @@ describe("the groups", () => {
     optional: false,
     keyPresent: null,
   };
+
+  /**
+   * The pod starts without an object only when every use of it says so: one
+   * required mount beside an optional env source still stops it. Fails if a
+   * required use, or a use that cannot be optional, is read as optional.
+   */
+  it("calls a reference optional only when every use of it is", () => {
+    expect(onlyOptional([{ ...mount, optional: true }])).toBe(true);
+    expect(
+      onlyOptional([
+        { ...env, optional: true },
+        { how: "envFrom", container: "app", optional: true },
+      ])
+    ).toBe(true);
+    expect(onlyOptional([{ ...mount, optional: true }, mount])).toBe(false);
+    expect(onlyOptional([{ how: "identity" }])).toBe(false);
+    expect(onlyOptional([])).toBe(false);
+  });
 
   it("phrases a usage from what the backend sent, not from the pod spec", () => {
     /** `Usage` carries the path and the key. Rebuilding "mounted at /etc/app"
@@ -2302,7 +2322,7 @@ describe("the groups", () => {
           mount,
           { ...mount, container: "seed" },
           env,
-          { how: "envFrom", container: "app" },
+          { how: "envFrom", container: "app", optional: false },
         ],
         t
       )
@@ -3541,7 +3561,7 @@ describe("what a delete leaves pointing at the object", () => {
           to: config,
           relation: {
             verb: "uses",
-            usages: [{ how: "envFrom", container: "app" }],
+            usages: [{ how: "envFrom", container: "app", optional: false }],
           },
         },
       ]),
@@ -3676,6 +3696,7 @@ describe("a Links tab in Russian", () => {
                   subPath: null,
                   volume: "data",
                   projected: false,
+                  optional: false,
                 },
               ],
             },
