@@ -59,9 +59,11 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { Finding } from "@/lib/governance";
 import type { StatusRole } from "@/lib/status-role";
 import { FindingsBlock, WithProblem } from "./ProblemTone";
+import { itemFinding } from "./item-finding";
 import {
   listedKindOf,
   problemOf,
+  useListedItems,
   useListedProblem,
   type Problem,
 } from "./problem";
@@ -378,6 +380,21 @@ export function ResourceDetailLayout({
     title,
     !found && !!resource
   );
+  // What the shell holds against this very object, said on its page when its
+  // own reads found nothing to say: an autoscaler the shell counted for
+  // TooManyReplicas had a header and a page that said nothing of it.
+  const subjectOf = useListedItems(
+    listedKindOf({ kind: resourceKind, crd }),
+    namespace ?? null,
+    title,
+    findings.length === 0 && !!resource
+  );
+  const shown =
+    findings.length > 0
+      ? findings
+      : (subjectOf ?? [])
+          .filter((item) => item.kind === resourceKind && item.name === title)
+          .map((item) => itemFinding(item, t));
   // A page names its object from what it read, which an unread one has not.
   const route = useParams({ strict: false });
   const bare = (
@@ -520,7 +537,7 @@ export function ResourceDetailLayout({
             />
           )}
           {summary}
-          <FindingsBlock findings={findings} />
+          <FindingsBlock findings={shown} />
 
           <DetailTabs
             tabs={tabs}

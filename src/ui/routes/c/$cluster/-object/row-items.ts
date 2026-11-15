@@ -45,6 +45,12 @@ export function rowItems(
           ? ownerKey(item.kind, item.opens.namespace ?? "", item.opens.name)
           : undefined;
     if (key) byRow.set(key, [...(byRow.get(key) ?? []), item]);
+    // An autoscaler's finding opens what it scales, and is its own row's too:
+    // its page said nothing while the shell counted it.
+    if (own === undefined && !ownItem) {
+      const subject = ownerKey(item.kind, item.namespace ?? "", item.name);
+      byRow.set(subject, [...(byRow.get(subject) ?? []), item]);
+    }
   }
   return byRow;
 }

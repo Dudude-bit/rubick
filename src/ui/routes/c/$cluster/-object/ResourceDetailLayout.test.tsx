@@ -849,6 +849,48 @@ describe("DetailError says a read it could not do the way every unread is said",
    * a list row saying "1 problem". Fails if the chip over a stale object
    * does not carry the row's problem.
    */
+  /**
+   * The Overview and the status bar counted the node autoscaler's
+   * TooManyReplicas; the autoscaler's own page said only "219d old" with one
+   * amber condition row. Fails if an object's own page does not lead with a
+   * finding the shell holds against it, in its chip and its findings.
+   */
+  it("leads an autoscaler's page with the finding the shell counts against it", async () => {
+    shellItems.items = [
+      {
+        key: "hpa",
+        tone: "warn",
+        kind: "HorizontalPodAutoscaler",
+        name: "node",
+        namespace: "realtime-gateway",
+        reason: "TooManyReplicas",
+        detail: null,
+        opens: { kind: "Rollout", name: "node", namespace: "realtime-gateway" },
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "node" }}
+          title="node"
+          namespace="realtime-gateway"
+          resourceKind="HorizontalPodAutoscaler"
+          statusBadge={<span>Active</span>}
+          activeTab="overview"
+          tabs={overview}
+        />
+      );
+      const chip = document.querySelector('[data-problem="warn"]');
+      expect(chip).toHaveAttribute("title", "TooManyReplicas");
+      expect(screen.getByTestId("findings-block")).toHaveTextContent(
+        "TooManyReplicas"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
   it("carries the list row's problem over an object its own read could not answer for", async () => {
     shellItems.items = [
       {
