@@ -2533,12 +2533,15 @@ export const ru: Catalogue = {
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
     nothingInWindow: "{sources}: потоков в {scope} за {window} нет.",
+    notReadInWindow:
+      "{sources}: потоки прочитать не удалось, поэтому неизвестно, были ли они.",
     cut: "Показаны {kept} с наибольшим трафиком; ещё {cut} потише не показаны.",
     podsFailed:
       "Не удалось прочитать поды ({said}), поэтому имена, которые написали источники, не сопоставлены с рабочими нагрузками.",
     podsLabel: "поды",
     sourceFailed: "Не удалось проверить {source}: {said}",
-    sourcePartly: "Часть чисел {source} прочитать не удалось.",
+    sourcePartly: "Часть чисел {source} прочитать не удалось: {said}",
+    sourceUnread: "Потоки {source} прочитать не удалось: {said}",
     groupNotOnMap: "Нет на карте: только названо потоком",
     endAmbiguous: "это имя носят {kinds}",
     endNotListed: "названо потоком; в {namespace} такого нет",
@@ -2585,6 +2588,10 @@ export const ru: Catalogue = {
     quiet: "{source} не видит потоков к этой нагрузке или от неё за {window}.",
     quietNodeAgent:
       "{source} не видит потоков к этой нагрузке или от неё за {window}; видны только узлы, где работает его агент.",
+    quietNotRead:
+      "Видит ли {source} потоки к этой нагрузке или от неё, неизвестно: их не удалось прочитать ({said}).",
+    quietUnmatched:
+      "{source} называет нагрузки по их подам, а поды в пространстве имён {namespace} прочитать не удалось, поэтому потоки этой нагрузки в {source} не найдены.",
     shareWay: "Направление",
     sharePeer: "Рабочая нагрузка",
     shareNumbers: "Числа",

@@ -17,6 +17,7 @@ import {
   MEASURES,
   pairRows,
   RowMemo,
+  silenceOf,
   weights,
   type FlowSource,
   type TrafficReading,
@@ -31,6 +32,7 @@ const source = (name: string, measures: readonly Measure[]): FlowSource => ({
   need: "needIstio",
   marks: false,
   nodeAgent: false,
+  needsPods: false,
 });
 
 const ISTIO = source("Istio", [
@@ -139,6 +141,41 @@ describe("the rows the page and the block draw", () => {
       reading([ISTIO], [flow(0, { requests: 0, errors: 0 })])
     ).rows;
     expect(idle.p95).toEqual({ value: null, source: null, state: "measured" });
+  });
+
+  /**
+   * A source whose query failed has no flow on any pair, so a pair only
+   * another source saw would otherwise call its requests none, or not measured.
+   */
+  it("says not read where the source measuring it failed and so has no flow on the pair", () => {
+    const hubbleHttp = source("Hubble", ["events", "requests"]);
+    for (const other of [hubbleHttp, HUBBLE]) {
+      const [row] = pairRows(
+        reading(
+          [ISTIO, other],
+          [flow(1, { events: 3 })],
+          [failed(0, "requests")]
+        )
+      ).rows;
+      expect(row.requests).toEqual({
+        value: null,
+        source: "Istio",
+        state: "notRead",
+      });
+      expect(row.errorShare.state).toBe("notRead");
+    }
+  });
+
+  /** A read that fails with the pair's flows unchanged must not hand back the row that said "none". */
+  it("draws a row again when a read failed though its flows did not change", () => {
+    const memo = new RowMemo();
+    const flows = [flow(1, { events: 3 })];
+    const [before] = memo.rows(reading([ISTIO, HUBBLE], flows));
+    const [after] = memo.rows(
+      reading([ISTIO, HUBBLE], flows, [failed(0, "requests")])
+    );
+    expect(before.requests.state).toBe("notMeasured");
+    expect(after.requests.state).toBe("notRead");
   });
 
   /** The share of errors is over the same source's requests, and unknown where its errors were not read. */
@@ -282,5 +319,77 @@ describe("a live pair as a row", () => {
     const [first] = rows.rows([one]);
     expect(rows.rows([one])[0]).toBe(first);
     expect(rows.rows([pair()])[0]).not.toBe(first);
+  });
+});
+
+describe("what a source with no flow allows saying", () => {
+  const withPods = (
+    sources: FlowSource[],
+    pods: Pick<TrafficReading["answer"], "podsUnread" | "podsFailed">
+  ): TrafficReading => {
+    const read = reading(sources, []);
+    return { ...read, answer: { ...read.answer, ...pods } };
+  };
+  const unreadShop = {
+    podsUnread: [
+      { namespace: "shop", code: "FORBIDDEN", message: "forbidden" },
+    ],
+    podsFailed: null,
+  };
+
+  /** Only a source every query of which answered saw nothing; a failed read is "could not look". */
+  it("is quiet only where every query answered", () => {
+    expect(silenceOf(reading([ISTIO], []), 0, null)).toEqual({ says: "quiet" });
+    expect(
+      silenceOf(
+        reading(
+          [ISTIO],
+          [],
+          [
+            { source: 0, measure: "requests", state: { says: "noSeries" } },
+            failed(0, "p95"),
+          ]
+        ),
+        0,
+        "shop"
+      )
+    ).toEqual({ says: "notRead", said: "timed out after 20s", all: false });
+    expect(
+      silenceOf(
+        reading([ISTIO], [], [failed(0, "requests"), failed(0, "bytes")]),
+        0,
+        null
+      )
+    ).toMatchObject({ says: "notRead", all: true });
+  });
+
+  /**
+   * A source whose names only the pods resolve cannot find a subject whose
+   * namespace's pods were not read; one that writes the kind can.
+   */
+  it("is unmatched for a source that needs the pods the subject's namespace hid", () => {
+    const istio = { ...ISTIO, needsPods: true };
+    expect(silenceOf(withPods([istio], unreadShop), 0, "shop")).toEqual({
+      says: "unmatched",
+    });
+    expect(
+      silenceOf(
+        withPods([istio], {
+          podsUnread: [],
+          podsFailed: { code: "FORBIDDEN", message: "forbidden" },
+        }),
+        0,
+        "shop"
+      )
+    ).toEqual({ says: "unmatched" });
+    expect(silenceOf(withPods([istio], unreadShop), 0, "web")).toEqual({
+      says: "quiet",
+    });
+    expect(silenceOf(withPods([CARETTA], unreadShop), 0, "shop")).toEqual({
+      says: "quiet",
+    });
+    expect(silenceOf(withPods([istio], unreadShop), 0, null)).toEqual({
+      says: "quiet",
+    });
   });
 });

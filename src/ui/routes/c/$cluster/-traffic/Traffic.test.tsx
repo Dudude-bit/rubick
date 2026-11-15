@@ -81,6 +81,7 @@ const ISTIO: FlowSource = {
   need: "needIstio",
   marks: true,
   nodeAgent: false,
+  needsPods: false,
 };
 const HUBBLE: FlowSource = {
   ...ISTIO,
@@ -97,7 +98,10 @@ const workload = (name: string): FlowEnd => ({
   key: { namespace: "shop", group: "apps", kind: "Deployment", name },
 });
 
-function read(set: Partial<Record<Measure, number>> | null): TrafficState {
+function read(
+  set: Partial<Record<Measure, number>> | null,
+  reads: TrafficReading["answer"]["reads"] = []
+): TrafficState {
   const reading: TrafficReading = {
     sources: [ISTIO],
     window: "5m",
@@ -115,7 +119,7 @@ function read(set: Partial<Record<Measure, number>> | null): TrafficState {
             },
           ]
         : [],
-      reads: [],
+      reads,
       observed: null,
       coverage: [],
       podsUnread: [],
@@ -254,6 +258,33 @@ describe("the Traffic page", () => {
         /Istio saw no flows in any namespace in the last 5 minutes/
       ).length
     ).toBeGreaterThan(0);
+  });
+
+  /**
+   * Every flow query refused by Prometheus is an answer of nothing, and the
+   * sentence over the map must say it could not be read, not that it was quiet.
+   */
+  it("says a source whose flow queries failed could not be read, never that it saw no flows", async () => {
+    const refused = {
+      says: "failed" as const,
+      code: "PROMETHEUS",
+      message: "query processing would load too many samples into memory",
+    };
+    traffic.mockReturnValue(
+      read(null, [
+        { source: 0, measure: "requests", state: refused },
+        { source: 0, measure: "errors", state: refused },
+      ])
+    );
+    await open();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/saw no flows/);
+    expect(text).toContain(
+      "Istio: flows could not be read, so whether there were any is not known."
+    );
+    expect(text).toContain(
+      "Istio's flows could not be read: query processing would load too many samples into memory"
+    );
   });
 });
 

@@ -96,7 +96,7 @@ interface Definition {
   /** From what the presence queries found, its state and what it measures. */
   judge: (
     found: readonly string[][]
-  ) => Pick<FlowSource, "state" | "measures" | "found">;
+  ) => Pick<FlowSource, "state" | "measures" | "found" | "needsPods">;
   queries: (source: number, found: readonly string[], ask: Ask) => FlowQuery[];
   marker?: Omit<PodMarker, "source">;
 }
@@ -488,6 +488,8 @@ export const DEFINITIONS: readonly Definition[] = [
         state: { says: http || tcp ? "present" : "absent" },
         measures,
         found: names,
+        // Its workload label is a pod label, matched through the pods.
+        needsPods: true,
       };
     },
     queries: istioQueries,
@@ -530,6 +532,7 @@ export const DEFINITIONS: readonly Definition[] = [
               ? ["source_pod"]
               : []),
         ],
+        needsPods: byWorkload.length === 0,
       };
     },
     queries: hubbleQueries,
@@ -545,6 +548,7 @@ export const DEFINITIONS: readonly Definition[] = [
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
+      needsPods: false,
     }),
     queries: beylaQueries,
   },
@@ -559,6 +563,7 @@ export const DEFINITIONS: readonly Definition[] = [
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
+      needsPods: false,
     }),
     queries: carettaQueries,
   },
@@ -591,6 +596,7 @@ export async function flowSources(): Promise<FlowSource[]> {
           state: { says: "failed", said: errorToShow(error) },
           measures: [],
           found: [],
+          needsPods: false,
         } satisfies FlowSource;
       }
     })

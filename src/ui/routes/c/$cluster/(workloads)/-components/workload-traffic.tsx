@@ -13,6 +13,7 @@ import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink } from "@/lib/links";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { isEnd, type FlowRow } from "@/lib/traffic";
+import { cn } from "@/lib/utils";
 import { AskAgain } from "../../-supplier/AskAgain";
 import { WINDOW_WORD } from "../../-traffic/traffic-words";
 import {
@@ -89,14 +90,7 @@ export function Block({
   const callees = read
     ? read.rows.filter((row) => isEnd(row.from, subject))
     : [];
-  const notes = read
-    ? subjectNotes(
-        read.reading,
-        callers.length + callees.length === 0,
-        window,
-        t
-      )
-    : [];
+  const notes = read ? subjectNotes(read.reading, subject, window, t) : [];
   useShareSection(read ? "traffic" : null, () =>
     trafficSection(callers, callees, notes, t)
   );
@@ -158,8 +152,14 @@ export function Block({
             </p>
           )}
           {notes.map((note) => (
-            <p key={note} className="px-1.5 text-[11.5px] text-fg-mut">
-              {note}
+            <p
+              key={note.text}
+              className={cn(
+                "px-1.5 text-[11.5px]",
+                note.tone === "warn" ? "text-warn" : "text-fg-mut"
+              )}
+            >
+              {note.text}
             </p>
           ))}
           {callers.length > 0 && (

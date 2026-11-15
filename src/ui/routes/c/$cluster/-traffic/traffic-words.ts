@@ -13,9 +13,10 @@ import type {
   FlowSourceState,
   FlowWindow,
   SourceLine,
+  TrafficReading,
   TrafficWord,
 } from "@/lib/traffic";
-import { MEASURES } from "@/lib/traffic";
+import { MEASURES, silenceOf } from "@/lib/traffic";
 import { formatRate } from "@/lib/utils";
 
 export const WINDOW_WORD = {
@@ -208,3 +209,48 @@ export const policyWords = (policies: readonly PolicyRef[]) =>
   policies
     .map((p) => `${p.kind} ${p.namespace ? `${p.namespace}/` : ""}${p.name}`)
     .join(", ");
+
+/** Each source's failed reads, whole or in part, as lines above the map. */
+export function unreadNotes(reading: TrafficReading, t: T): string[] {
+  return reading.sources.flatMap((source, index) => {
+    const silence = silenceOf(reading, index, null);
+    return silence.says === "notRead"
+      ? [
+          t("traffic", silence.all ? "sourceUnread" : "sourcePartly", {
+            source: source.name,
+            said: silence.said,
+          }),
+        ]
+      : [];
+  });
+}
+
+/** What a reading with no flow says: who saw none, and who could not be read. */
+export function nothingWords(
+  reading: TrafficReading,
+  scope: string,
+  window: string,
+  t: T
+): string {
+  const quiet: string[] = [];
+  const unread: string[] = [];
+  reading.sources.forEach((source, index) =>
+    (silenceOf(reading, index, null).says === "notRead" ? unread : quiet).push(
+      source.name
+    )
+  );
+  return [
+    quiet.length > 0
+      ? t("traffic", "nothingInWindow", {
+          sources: quiet.join(", "),
+          scope,
+          window,
+        })
+      : "",
+    unread.length > 0
+      ? t("traffic", "notReadInWindow", { sources: unread.join(", ") })
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

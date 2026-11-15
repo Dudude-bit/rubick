@@ -166,6 +166,37 @@ describe("which sources a Prometheus holds", () => {
     });
   });
 
+  /**
+   * A source whose ends only the pods resolve must say so, or a subject in a
+   * namespace whose pods were not read is called quiet: Istio always (a pod
+   * label), Hubble by pod, never one that writes the workload's kind.
+   */
+  it("says which sources name workloads only through their pods", async () => {
+    const hubbleBy = async (label: "workload" | "pod") => {
+      prometheusQuery.mockImplementation(async (query) => {
+        if (query.includes("istio_requests_total"))
+          return named("istio_requests_total");
+        if (query.includes("hubble") && query.startsWith("count by"))
+          return named("hubble_flows_processed_total");
+        if (query.includes(`destination_${label}!=""`))
+          return [{ labels: {}, points: [{ t: 0, v: 3 }] }];
+        if (query.includes("beyla"))
+          return named("beyla_network_flow_bytes_total");
+        if (query.includes("caretta")) return named("caretta_links_observed");
+        return [];
+      });
+      const sources = await flowSources();
+      return Object.fromEntries(sources.map((s) => [s.id, s.needsPods]));
+    };
+    expect(await hubbleBy("workload")).toEqual({
+      istio: true,
+      hubble: false,
+      beyla: false,
+      caretta: false,
+    });
+    expect((await hubbleBy("pod")).hubble).toBe(true);
+  });
+
   /** Only the present sources are asked, positionally, and only Istio marks pods. */
   it("asks only present sources and numbers them as it hands them back", async () => {
     prometheusFlows.mockResolvedValue({ ends: [], flows: [] });
@@ -178,6 +209,7 @@ describe("which sources a Prometheus holds", () => {
       need: "needIstio",
       marks: id === "istio",
       nodeAgent: false,
+      needsPods: false,
     });
     const absent = {
       ...present("hubble", []),

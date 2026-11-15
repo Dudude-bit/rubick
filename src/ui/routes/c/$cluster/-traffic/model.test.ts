@@ -50,6 +50,7 @@ function model(
         need: "needIstio",
         marks: true,
         nodeAgent: false,
+        needsPods: false,
       },
     ],
     window: "5m",

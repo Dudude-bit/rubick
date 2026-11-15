@@ -27,6 +27,7 @@ const ISTIO: FlowSource = {
   need: "needIstio",
   marks: true,
   nodeAgent: false,
+  needsPods: true,
 };
 const BEYLA: FlowSource = {
   ...ISTIO,
@@ -35,6 +36,7 @@ const BEYLA: FlowSource = {
   measures: ["bytes"],
   marks: false,
   nodeAgent: true,
+  needsPods: false,
 };
 
 const key = (name: string): WorkloadKey => ({
@@ -49,7 +51,8 @@ const CART = key("cart");
 function read(
   sources: FlowSource[],
   pairs: [string, string, Partial<Record<Measure, number>>][],
-  observed: Observed[] | null
+  observed: Observed[] | null,
+  more: Partial<TrafficReading["answer"]> = {}
 ): TrafficState {
   const names = [...new Set(pairs.flatMap(([from, to]) => [from, to]))];
   const reading: TrafficReading = {
@@ -71,6 +74,7 @@ function read(
       podsUnread: [],
       podsFailed: null,
       cut: 0,
+      ...more,
     },
   };
   return {
@@ -173,6 +177,76 @@ describe("a workload's Traffic block", () => {
       screen.getByText(
         /Beyla saw no flows .* it sees only the nodes its agent runs on/
       )
+    ).toBeTruthy();
+  });
+
+  /**
+   * A refused or timed-out query returns no rows for the subject, which is
+   * not the source seeing none: the block says it could not be read.
+   */
+  it("says a source's flows could not be read where its queries failed, never that it saw none", async () => {
+    const refused = {
+      says: "failed" as const,
+      code: "PROMETHEUS",
+      message: "timed out after 20s",
+    };
+    await draw(
+      read([ISTIO], [], [{ source: 0, pods: 2, marked: 2 }], {
+        reads: [{ source: 0, measure: "requests", state: refused }],
+      })
+    );
+    expect(screen.queryByText(/saw no flows/)).toBeNull();
+    expect(
+      screen.getByText(
+        "Whether Istio saw flows to or from it is not known: they could not be read (timed out after 20s)."
+      )
+    ).toBeTruthy();
+  });
+
+  /**
+   * Istio names a workload by a pod label, so with the pods of its namespace
+   * unread every flow of it stays unmatched and none is its.
+   */
+  it("says the flows could not be found where the pods of its namespace could not be read", async () => {
+    await draw(
+      read([ISTIO], [], null, {
+        podsUnread: [
+          {
+            namespace: "shop",
+            code: "FORBIDDEN",
+            message: "pods is forbidden",
+          },
+        ],
+      })
+    );
+    expect(screen.queryByText(/saw no flows/)).toBeNull();
+    expect(
+      screen.getByText(
+        /the pods in shop could not be read, so its flows to or from it could not be found/
+      )
+    ).toBeTruthy();
+  });
+
+  /** Rows from a source with one failed query are partial, and say so beside them. */
+  it("says some numbers could not be read beside the rows of a source with a failed query", async () => {
+    await draw(
+      read([ISTIO], [["web", "cart", { requests: 4 }]], null, {
+        reads: [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "read", series: 1 },
+          },
+          {
+            source: 0,
+            measure: "p95",
+            state: { says: "failed", code: "PROMETHEUS", message: "timed out" },
+          },
+        ],
+      })
+    );
+    expect(
+      screen.getByText("Some of Istio's numbers could not be read: timed out")
     ).toBeTruthy();
   });
 });

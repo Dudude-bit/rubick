@@ -2420,12 +2420,15 @@ export const en = {
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
+    notReadInWindow:
+      "{sources}: flows could not be read, so whether there were any is not known.",
     cut: "Showing the busiest {kept}; the quietest {cut} are left out.",
     podsFailed:
       "Pods could not be read ({said}), so names the sources wrote are not matched to workloads.",
     podsLabel: "pods",
     sourceFailed: "{source} could not be looked for: {said}",
-    sourcePartly: "Some of {source}'s numbers could not be read.",
+    sourcePartly: "Some of {source}'s numbers could not be read: {said}",
+    sourceUnread: "{source}'s flows could not be read: {said}",
     groupNotOnMap: "Not on the map: only named by a flow",
     endAmbiguous: "a name shared by {kinds}",
     endNotListed: "named by a flow; not listed in {namespace}",
@@ -2473,6 +2476,10 @@ export const en = {
     quiet: "{source} saw no flows to or from it in the {window}.",
     quietNodeAgent:
       "{source} saw no flows to or from it in the {window}; it sees only the nodes its agent runs on.",
+    quietNotRead:
+      "Whether {source} saw flows to or from it is not known: they could not be read ({said}).",
+    quietUnmatched:
+      "{source} names workloads through their pods, and the pods in {namespace} could not be read, so its flows to or from it could not be found.",
     shareWay: "Way",
     sharePeer: "Workload",
     shareNumbers: "Numbers",
