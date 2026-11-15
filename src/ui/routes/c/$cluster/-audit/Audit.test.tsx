@@ -116,6 +116,33 @@ describe("the Audit page", () => {
     );
   });
 
+  /**
+   * A rule opened from a table of forty is drawn under the table, below the
+   * fold: it is brought into view and takes the focus, by click and by
+   * Enter alike. Fails if opening a rule changes nothing in sight, which
+   * reads as a dead click.
+   */
+  it("brings an opened rule into view and gives it the focus", async () => {
+    const scrolled: Element[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    try {
+      await renderWithRouter(<Audit />, {
+        at: "/c/prod/audit",
+        route: "/c/$cluster/audit",
+      });
+      const row = await screen.findByText("No PodDisruptionBudget");
+      await userEvent.setup().click(row);
+      const opened = screen.getByTestId("audit-opened-rule");
+      await waitFor(() => expect(scrolled).toContain(opened));
+      expect(document.activeElement).toBe(opened);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
   /** The system's own findings are folded under one line with their count, never hidden. */
   it("folds the system's findings under one line that opens them", async () => {
     await renderWithRouter(<Audit />, {

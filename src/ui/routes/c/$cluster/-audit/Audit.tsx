@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, EyeOff, ShieldCheck } from "lucide-react";
 
 import type {
@@ -348,6 +348,22 @@ function Filter<V extends string>({
   );
 }
 
+/**
+ * Brings what a row opened to where the reader is, and the focus with it:
+ * drawn under a table of forty rules, an opened panel is below the fold,
+ * and a click that changes nothing in sight reads as a dead one.
+ */
+function useBroughtIntoView(opened: string | undefined) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!opened) return;
+    const node = ref.current;
+    node?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    node?.focus({ preventScroll: true });
+  }, [opened]);
+  return ref;
+}
+
 /** What is deployed in a way that will hurt later, across the window's namespaces. */
 export function Audit() {
   const t = useT();
@@ -364,6 +380,10 @@ export function Audit() {
   const category = isCategory(categoryParam) ? categoryParam : undefined;
   const rule = isRule(ruleParam) ? ruleParam : undefined;
   const [offset, setOffset] = useState(0);
+  const openedRule = useBroughtIntoView(view === "rule" ? rule : undefined);
+  const openedObject = useBroughtIntoView(
+    view === "object" && open ? subjectKey(open) : undefined
+  );
 
   const base: AuditQuery = useMemo(
     () => ({
@@ -593,8 +613,22 @@ export function Audit() {
               )}
             </SectionBody>
           </Section>
-          {view === "rule" && rule && <RulePanel rule={rule} base={base} />}
-          {view === "object" && open && <ObjectPanel subject={open} />}
+          <div
+            ref={openedRule}
+            tabIndex={-1}
+            className="scroll-mt-2 outline-none"
+            data-testid="audit-opened-rule"
+          >
+            {view === "rule" && rule && <RulePanel rule={rule} base={base} />}
+          </div>
+          <div
+            ref={openedObject}
+            tabIndex={-1}
+            className="scroll-mt-2 outline-none"
+            data-testid="audit-opened-object"
+          >
+            {view === "object" && open && <ObjectPanel subject={open} />}
+          </div>
           {view === "rule" && !rule && page && page.total > 0 && (
             <p className="px-1.5 text-xs text-fg-fnt">
               {t("audit", "noneOpen")}
