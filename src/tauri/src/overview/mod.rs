@@ -460,8 +460,11 @@ impl OverviewCache {
 
     /// A listing of the whole overview answered for `context`: what is left
     /// of a pause after the watches gave up is cut to [`EASED`], so they
-    /// start again soon rather than five minutes after the cluster is back.
+    /// start again soon rather than five minutes after the cluster is back,
+    /// and a watch refusal is asked again, since every kind it watches just
+    /// listed (a pods 403 kept the Overview polling until a reconnect).
     pub fn listed_whole(&self, context: &str) {
+        self.refused.remove(context);
         self.ease_cooldown(context, Instant::now());
     }
 
@@ -1095,6 +1098,20 @@ mod tests {
         );
         cache.ease_cooldown("stage", now);
         assert!(cache.cooldown.get("stage").is_none());
+    }
+
+    /// A pods 403 for a few seconds kept the Overview polling for the rest of
+    /// the connection. Fails if a whole listing does not ask a refused watch
+    /// again, or clears another cluster's refusal.
+    #[test]
+    fn a_whole_listing_asks_a_refused_watch_again() {
+        let cache = OverviewCache::default();
+        cache.refused.insert("prod".to_string());
+        cache.refused.insert("stage".to_string());
+        assert!(cache.cooling_down("prod"));
+        cache.listed_whole("prod");
+        assert!(!cache.cooling_down("prod"));
+        assert!(cache.cooling_down("stage"));
     }
 
     #[test]
