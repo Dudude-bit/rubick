@@ -55,9 +55,11 @@ spec:
               value: not-a-real-one
             - name: TOKEN_FILE
               value: /var/run/token
+          # With hostNetwork the API server requires hostPort to equal
+          # containerPort; any hostPort at all trips the host-port control.
           ports:
             - containerPort: 8080
-              hostPort: 18080
+              hostPort: 8080
           securityContext:
             privileged: true
             capabilities: { add: ["SYS_ADMIN"] }

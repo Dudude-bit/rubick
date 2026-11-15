@@ -1149,15 +1149,35 @@ pub(super) mod tests {
             .collect()
     }
 
-    /// A template the kubelet rejects for an unsafe sysctl makes no pods,
-    /// since its controller makes another for every rejected one, and the
-    /// fixture still breaks what it was written to break. Fails if the
-    /// fixture floods the cluster, or stops showing the rules.
+    fn pod_spec(kind: &str, object: &DynamicObject) -> Value {
+        match kind {
+            "Pod" => object.data["spec"].clone(),
+            "CronJob" => object.data["spec"]["jobTemplate"]["spec"]["template"]["spec"].clone(),
+            _ => object.data["spec"]["template"]["spec"].clone(),
+        }
+    }
+
+    /// The fixture is what a real API server takes and a real kubelet does
+    /// not loop on: with `hostNetwork` each host port equals its container
+    /// port, and a template the kubelet rejects for an unsafe sysctl makes
+    /// no pods, since its controller makes another for every rejected one.
+    /// It still breaks what it was written to break. Fails if the fixture
+    /// is refused on apply, floods the cluster, or stops showing the rules.
     #[test]
     fn the_audit_fixture_applies_runs_no_rejected_pods_and_still_breaks_its_rules() {
         let mut tripped: Vec<(String, RuleId)> = Vec::new();
         for (kind, object) in fixture_templates() {
             let name = object.metadata.name.clone().unwrap_or_default();
+            let spec = pod_spec(&kind, &object);
+            if spec["hostNetwork"] == json!(true) {
+                for container in spec["containers"].as_array().into_iter().flatten() {
+                    for port in container["ports"].as_array().into_iter().flatten() {
+                        if let Some(host) = port.get("hostPort") {
+                            assert_eq!(Some(host), port.get("containerPort"), "{name}");
+                        }
+                    }
+                }
+            }
             let own = if kind == "Pod" {
                 let pod: Pod = object.clone().try_parse().expect("a pod");
                 pod_judged(&pod, Some(37)).expect("judged").own
