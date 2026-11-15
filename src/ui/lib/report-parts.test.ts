@@ -544,9 +544,14 @@ describe("changesSection", () => {
     atRelist: false,
     ...over,
   });
-  const read = (rows: TimelineRow[], followed = WATCHED) => ({
+  // The name-only reading ran beside the followed watches unless a case says otherwise.
+  const read = (
+    rows: TimelineRow[],
+    followed = WATCHED,
+    meta = followed.map((span) => ({ ...span, kinds: [] }))
+  ) => ({
     rows,
-    spans: { followed, meta: [] },
+    spans: { followed, meta },
     letGo: undefined,
   });
   const payments = [
@@ -621,6 +626,31 @@ describe("changesSection", () => {
     const changes =
       section?.body.type === "changes" ? section.body.changes : [];
     expect(changes[0].parts[0].text).toMatch(/^changes\.outsideScopeStill\(/);
+  });
+
+  /**
+   * A CronJob's schedule edited at 03:00 while no timeline was open: no row,
+   * since only the name-only reading records it, and it was not running. Its
+   * Changes tab drew the gap. Fails if Share takes the followed watches,
+   * which ran all night, as having watched it.
+   */
+  it("takes a kind read by name only as watched only where that reading ran", () => {
+    const end = Date.parse(AT);
+    const night = { from: end - 6 * 60 * 60_000, to: end - 60 * 60_000 };
+    const section = changesSection(
+      read([], WATCHED, [
+        { ...WATCHED[0], kinds: [], seenAt: night.from, to: night.from },
+        { ...WATCHED[0], kinds: [], from: night.to },
+      ]),
+      [{ kind: "CronJob", name: "nightly", namespace: "shop" }],
+      AT,
+      t
+    );
+    const changes =
+      section?.body.type === "changes" ? section.body.changes : [];
+    expect(changes.map((change) => change.parts[0].text)).toContainEqual(
+      expect.stringMatching(/^changes\.notObserved\(/)
+    );
   });
 
   /**
