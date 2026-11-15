@@ -729,6 +729,7 @@ describe("the header actions", () => {
   /** Fails if a refused cordon, sent with no dialog, lives only in a toast and leaves nothing in Activity. */
   it("keeps a refused cordon with the writes that did not go through", async () => {
     useWriteLog.setState({ records: [] });
+    vi.mocked(commands.checkAccess).mockResolvedValue([]);
     vi.mocked(commands.cordonNode).mockRejectedValueOnce(
       Object.assign(new Error("nodes is forbidden"), {
         code: "PERMISSION_DENIED",
@@ -744,6 +745,7 @@ describe("the header actions", () => {
         { title: "Could not cordon test-node-1" },
       ])
     );
+    vi.mocked(commands.checkAccess).mockReset();
   });
 
   /**
