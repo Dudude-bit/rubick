@@ -41,7 +41,9 @@ export function useHeldNotFound(
   const back = isResourceNotFoundError(read.error) && held > 0;
   const created = read.errorUpdatedAt < held;
   const asked = useRef<string | null>(null);
-  const seen = `${created}/${read.errorUpdatedAt}`;
+  // The object is asked again once per sighting that says it is there, not
+  // once per NotFound of this read: each re-read put the page back to loading.
+  const seen = created ? `read/${read.errorUpdatedAt}` : `object/${held}`;
   const again = created ? key : queryKeys.detail(kind, namespace, name);
   useEffect(() => {
     if (!follow || !back || asked.current === seen) return;

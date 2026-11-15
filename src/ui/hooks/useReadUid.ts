@@ -143,10 +143,19 @@ export function useReadThereAt(
   const read = useReadOf(kind, namespace, name, thereAt);
   const watched = useReadAt(
     queryKeys.objectWatch(kind, namespace, name ?? undefined),
-    thereAt
+    listedAt
   );
   return Math.max(read, watched);
 }
 
 const thereAt = (state: QueryState | undefined) =>
   state?.status === "success" && state.data != null ? state.dataUpdatedAt : 0;
+
+// The watch answers with rows: none under the name is "not there", not an
+// answer that it was, which kept a deleted pod's page asking for it forever.
+const listedAt = (state: QueryState | undefined) => {
+  const rows = (state?.data as { rows?: readonly unknown[] } | undefined)?.rows;
+  return state?.status === "success" && rows !== undefined && rows.length > 0
+    ? state.dataUpdatedAt
+    : 0;
+};
