@@ -179,7 +179,14 @@ function TopologyMap() {
       grouping === "namespace" && groupIds.has(namespace) ? namespace : null,
     [grouping, groupIds]
   );
-  const vendor = useVendorLayers(map.nodes, openServices, vendorGroup, t);
+  const whole = map.phase === "ready" || map.phase === "ended";
+  const vendor = useVendorLayers(
+    map.nodes,
+    openServices,
+    vendorGroup,
+    t,
+    whole
+  );
   const shownVendor = vendor.nodes.filter(
     (each) => !hidden.has(each.node.kind)
   );
@@ -267,17 +274,22 @@ function TopologyMap() {
   const vendorKinds = [
     ...new Set(vendor.nodes.map((each) => each.node.kind)),
   ].filter((kind) => !(MAP_KINDS as readonly string[]).includes(kind));
+  const mapRail = useMemo(
+    () =>
+      MAP_KINDS.map((kind) => {
+        const { count, used } = countOf(kind, map.reads, map.nodes);
+        return {
+          kind,
+          count,
+          used,
+          reading: readingOf(kind, map.kinds),
+          hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
+        };
+      }),
+    [map.reads, map.nodes, map.kinds, hidden, policies]
+  );
   const rail: RailRow[] = [
-    ...MAP_KINDS.map((kind) => {
-      const { count, used } = countOf(kind, map.reads, map.nodes);
-      return {
-        kind,
-        count,
-        used,
-        reading: readingOf(kind, map.kinds),
-        hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
-      };
-    }),
+    ...mapRail,
     ...vendorKinds.map((kind) => ({
       kind,
       count: vendor.nodes.filter((each) => each.node.kind === kind).length,
@@ -337,8 +349,6 @@ function TopologyMap() {
   };
 
   const drawnNamespaces = map.reads.size;
-  // Fitted to what the first batches drew, then once more to the whole map.
-  const whole = map.phase === "ready" || map.phase === "ended";
   const nothing =
     map.phase === "ready" &&
     model.nodes.length === 0 &&

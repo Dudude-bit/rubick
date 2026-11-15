@@ -136,11 +136,15 @@ function Canvas({
   );
   const placement = useLayout(groups, drawn.nodes, drawn.edges);
   const [active, setActive] = useState<string | null>(null);
-  // A node's data object lives as long as the node handed in does, so a
-  // memoised node is drawn again only when what it shows changed.
-  const [dataOf] = useState(
-    () => new WeakMap<GraphNode, { node: GraphNode }>()
-  );
+  // What React Flow is handed for each node, group and edge lives as long as
+  // the object handed in does and stays where it was: React Flow compares by
+  // identity, and a new object for each of them on every render redrew the
+  // whole map for one batch or one answer.
+  const [held] = useState(() => ({
+    nodes: new WeakMap<GraphNode, Node>(),
+    groups: new WeakMap<GraphGroup, Node>(),
+    edges: new WeakMap<GraphEdge, Edge>(),
+  }));
 
   const neighbours = useMemo(() => {
     if (active === null) return null;
@@ -252,16 +256,22 @@ function Canvas({
   );
 
   const flowNodes = useMemo(() => {
-    const held = (node: GraphNode) => {
-      const data = dataOf.get(node) ?? { node };
-      dataOf.set(node, data);
-      return data;
-    };
     const out: Node[] = [];
     for (const group of groups) {
       const box = placement.groups.get(group.id);
       if (!box) continue;
-      out.push({
+      const was = held.groups.get(group);
+      if (
+        was &&
+        was.position.x === box.x &&
+        was.position.y === box.y &&
+        was.width === box.width &&
+        was.height === box.height
+      ) {
+        out.push(was);
+        continue;
+      }
+      const flow: Node = {
         id: cardId(group.id),
         type: group.collapsed ? "card" : "frame",
         position: { x: box.x, y: box.y },
@@ -273,43 +283,63 @@ function Canvas({
         selectable: false,
         focusable: false,
         zIndex: 0,
-      });
+      };
+      held.groups.set(group, flow);
+      out.push(flow);
     }
     for (const node of drawn.nodes) {
       const at = placement.nodes.get(node.id);
       const box = placement.groups.get(node.group ?? OUTSIDE);
       if (!at || !box) continue;
-      out.push({
+      const position =
+        node.group === null ? { x: box.x + at.x, y: box.y + at.y } : at;
+      const was = held.nodes.get(node);
+      if (
+        was &&
+        was.position.x === position.x &&
+        was.position.y === position.y
+      ) {
+        out.push(was);
+        continue;
+      }
+      const flow: Node = {
         id: node.id,
         type: "object",
-        position:
-          node.group === null ? { x: box.x + at.x, y: box.y + at.y } : at,
+        position,
         parentId: node.group === null ? undefined : cardId(node.group),
-        data: held(node),
+        data: was?.data ?? { node },
         width: NODE_W,
         height: NODE_H,
         draggable: false,
         selectable: false,
         focusable: false,
         zIndex: 1,
-      });
+      };
+      held.nodes.set(node, flow);
+      out.push(flow);
     }
     return out;
-  }, [groups, drawn.nodes, placement, dataOf]);
+  }, [groups, drawn.nodes, placement, held]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>
-      drawn.edges.map((edge) => ({
-        id: edge.id,
-        source: edge.from,
-        target: edge.to,
-        type: "map",
-        data: { edge },
-        selectable: false,
-        focusable: false,
-        zIndex: 2,
-      })),
-    [drawn.edges]
+      drawn.edges.map((edge) => {
+        const was = held.edges.get(edge);
+        if (was) return was;
+        const flow: Edge = {
+          id: edge.id,
+          source: edge.from,
+          target: edge.to,
+          type: "map",
+          data: { edge },
+          selectable: false,
+          focusable: false,
+          zIndex: 2,
+        };
+        held.edges.set(edge, flow);
+        return flow;
+      }),
+    [drawn.edges, held]
   );
 
   useImperativeHandle(
