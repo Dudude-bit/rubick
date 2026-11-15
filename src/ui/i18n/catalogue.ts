@@ -1994,6 +1994,10 @@ export const en = {
       one: "{n} rule",
       other: "{n} rules",
     },
+    findingsOf: {
+      one: "{n} finding",
+      other: "{n} findings",
+    },
     uncheckedOf: {
       one: "{n} not checked",
       other: "{n} not checked",

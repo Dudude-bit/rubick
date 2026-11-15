@@ -2057,6 +2057,12 @@ export const ru: Catalogue = {
       many: "{n} правил",
       other: "{n} правила",
     },
+    findingsOf: {
+      one: "{n} находка",
+      few: "{n} находки",
+      many: "{n} находок",
+      other: "{n} находки",
+    },
     uncheckedOf: {
       one: "{n} не проверен",
       few: "{n} не проверены",
