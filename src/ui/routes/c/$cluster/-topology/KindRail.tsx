@@ -63,7 +63,7 @@ export function KindRail({
               ) : (
                 <span className="h-3.5 w-3.5 flex-none" />
               )}
-              <KindIcon kind={row.kind} crd={null} className="h-3 w-3" />
+              <KindIcon kind={row.kind} crd={undefined} className="h-3 w-3" />
               <label
                 htmlFor={id}
                 className="min-w-0 flex-1 truncate text-fg-mid"

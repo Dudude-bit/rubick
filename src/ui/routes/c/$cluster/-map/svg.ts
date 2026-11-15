@@ -1,5 +1,11 @@
 import type { Point } from "@/lib/map-layout";
-import type { GraphEdge, GraphGroup, GraphNode, MapTone } from "./types";
+import {
+  subLine,
+  type GraphEdge,
+  type GraphGroup,
+  type GraphNode,
+  type MapTone,
+} from "./types";
 import type { Box } from "./useLayout";
 
 /** The theme's colours, as CSS colour strings. */
@@ -85,7 +91,7 @@ export function mapSvg({ groups, nodes, edges, colours }: SvgInput): string {
     parts.push(
       `<rect x="${at.x}" y="${at.y}" width="${width}" height="${height}" rx="5" fill="${colours.raise}" stroke="${colours.tones[node.tone]}"${node.tone === "unknown" ? ' stroke-dasharray="3 3"' : ""}/>`,
       `<text x="${at.x + 8}" y="${at.y + 19}" font-size="11.5" font-family="monospace" fill="${colours.fg}">${escape(node.label)}</text>`,
-      `<text x="${at.x + 8}" y="${at.y + 34}" font-size="10" fill="${colours.faint}">${escape([node.kind, node.sub].filter(Boolean).join(" · "))}</text>`
+      `<text x="${at.x + 8}" y="${at.y + 34}" font-size="10" fill="${colours.faint}">${escape(subLine(node))}</text>`
     );
   }
   return [

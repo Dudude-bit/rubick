@@ -24,6 +24,10 @@ export interface GraphNode {
   rank?: number;
 }
 
+/** The quieter line under a node's name: its kind, then what is known of it. */
+export const subLine = (node: GraphNode): string =>
+  [node.kind, node.sub].filter(Boolean).join(" · ");
+
 /** One line between two nodes. */
 export interface GraphEdge {
   id: string;

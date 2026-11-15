@@ -14,6 +14,7 @@ import type {
 import type { T } from "@/i18n/useT";
 import type { MapTone } from "@/integrations";
 import { describeUsages } from "@/lib/connections";
+import { drawnCrd } from "@/lib/links";
 import { reachWords } from "@/lib/network-policy";
 import { serviceHealthWords } from "@/lib/service-health";
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
@@ -277,6 +278,7 @@ export function modelOf(
         id: node.id,
         group: groupIdOf(node, settings.grouping),
         kind,
+        crd: drawnCrd({ kind, group: node.ref.group }),
         label:
           node.ref.name === OWNERLESS && kind === "Pod"
             ? t("topology", "ownerlessPods")

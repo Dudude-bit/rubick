@@ -90,6 +90,25 @@ describe("the cluster map's model", () => {
     );
   });
 
+  /**
+   * Every node wore the dashed circle of a kind the app does not know, so a
+   * Deployment and a PDB looked alike. Fails if a built-in is drawn as a kind
+   * of its own, or a namesake in another group as the built-in.
+   */
+  it("marks a built-in by its kind and a namesake in another group as a kind of its own", () => {
+    const deployment = {
+      ...node("Deployment", "cart"),
+      ref: { ...node("Deployment", "cart").ref, group: "apps" },
+    };
+    const rollout = {
+      ...node("Deployment", "canary"),
+      ref: { ...node("Deployment", "canary").ref, group: "example.com" },
+    };
+    const drawn = of([deployment, rollout], [read("shop")]).nodes;
+    expect(drawn.find((each) => each.label === "cart")!.crd).toBeUndefined();
+    expect(drawn.find((each) => each.label === "canary")!.crd).toBeNull();
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [
