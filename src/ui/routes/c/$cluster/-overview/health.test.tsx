@@ -3352,6 +3352,44 @@ describe("a read that failed or was refused", () => {
     const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
     expect(row).toHaveAttribute("data-stale");
     expect(row).toHaveClass("opacity-60");
+    expect(within(row as HTMLElement).getByText(/not rechecked/)).toBeVisible();
+  });
+
+  /**
+   * Under a Deployments 500 the Deployment's row quoted its controller in
+   * red with no mark, while the tile above said "not read". Fails if a kept
+   * row does not say it was not rechecked and when it was last known, or
+   * keeps the red of a current finding.
+   */
+  it("says a kept row was not rechecked, since when, in amber", async () => {
+    const at = new Date(2026, 0, 1, 20, 57, 44).getTime();
+    const kept = {
+      ...attentionFrom([problem]).items[0]!,
+      tone: "err" as const,
+      stale: true,
+      lastKnown: { at, refused: false },
+    };
+    await panelOf(
+      attentionFrom([], {
+        kept: [kept],
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsShort: [],
+          unconfirmed: [],
+          unread: [{ kind: "Deployment", ...deploymentsFailed }],
+        } as unknown as ClusterOverview,
+      })
+    );
+    const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
+    expect(
+      within(row as HTMLElement).getByTestId("attention-not-rechecked")
+    ).toHaveTextContent("not rechecked · last known at 20:57:44");
+    expect(
+      within(row as HTMLElement)
+        .getByText("ScalingReplicaSet")
+        .closest('[data-col="2"]')
+    ).toHaveClass("text-warn");
   });
 
   /**

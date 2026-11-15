@@ -9,6 +9,7 @@ import { load, loadAll } from "js-yaml";
 
 import type { DryRunDocument } from "@/generated/types";
 import type { DeliveryQuery } from "@/integrations";
+import { deliveryOf } from "@/lib/delivery";
 import {
   WITHHELD_MARKER,
   withheldCopyIn,
@@ -45,15 +46,30 @@ export function deliveryOfManifest(text: string): DeliveryQuery | null {
   if (typeof name !== "string" || name === "") return null;
 
   const slash = apiVersion.indexOf("/");
-  return {
-    group: slash === -1 ? "" : apiVersion.slice(0, slash),
-    kind,
+  return deliveryOf(slash === -1 ? "" : apiVersion.slice(0, slash), kind, {
     name,
     namespace:
       typeof metadata.namespace === "string" ? metadata.namespace : null,
     labels: stringsOf(metadata.labels),
     annotations: stringsOf(metadata.annotations),
-  };
+    ownerReferences: Array.isArray(metadata.ownerReferences)
+      ? metadata.ownerReferences.flatMap((ref: unknown) =>
+          isRecord(ref) &&
+          typeof ref.kind === "string" &&
+          typeof ref.name === "string"
+            ? [
+                {
+                  kind: ref.kind,
+                  name: ref.name,
+                  controller: ref.controller === true,
+                  apiVersion:
+                    typeof ref.apiVersion === "string" ? ref.apiVersion : "",
+                },
+              ]
+            : []
+        )
+      : null,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

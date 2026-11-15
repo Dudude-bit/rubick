@@ -4073,6 +4073,38 @@ describe("a pod's peek beside the Pods list", () => {
     await open();
     expect(await screen.findByText("live")).toBeVisible();
   });
+
+  /**
+   * Under a pods 403 the peek said green "live" beside the list's "refused".
+   * Fails if a peek whose list is refused, and whose own read has not
+   * answered since, says anything but refused, or still claims live once
+   * its own read has answered after the refusal.
+   */
+  it("says refused while the list it was opened from is refused, and never live", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.live.add(JSON.stringify(ROWS_KEY));
+    const { client } = await open();
+    expect(await screen.findByText("live")).toBeVisible();
+
+    const rows = client.getQueryCache().find({ queryKey: ROWS_KEY })!;
+    const refused = Object.assign(new Error("pods is forbidden: RBAC"), {
+      code: "PERMISSION_DENIED",
+    });
+    act(() =>
+      rows.setState({
+        status: "error",
+        error: refused,
+        errorUpdatedAt: Date.now() + 60_000,
+      })
+    );
+    expect(await screen.findByText("refused")).toBeVisible();
+    expect(screen.queryByText("live")).toBeNull();
+
+    act(() => rows.setState({ errorUpdatedAt: 1 }));
+    await waitFor(() => expect(screen.queryByText("refused")).toBeNull());
+    expect(screen.queryByText("live")).toBeNull();
+  });
 });
 
 describe("the peek of a custom resource that runs pods", () => {

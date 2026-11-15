@@ -14,6 +14,7 @@ import {
   deliveryIntercept,
   deliveryLine,
   deliveryMarks,
+  deliveryOf,
   deliveryScopeOf,
   matchesDeliveryFilter,
 } from "./delivery";
@@ -196,6 +197,60 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
       text: "labelled, not listed",
       tone: "warn",
     });
+  });
+});
+
+describe("an object a controller makes", () => {
+  const replicaSet = {
+    name: "api-794978b95b",
+    namespace: "lab",
+    labels: { app: "api" },
+    annotations: {
+      "argocd.argoproj.io/tracking-id": "shop:apps/Deployment:lab/api",
+    },
+    ownerReferences: [
+      {
+        api_version: "apps/v1",
+        kind: "Deployment",
+        name: "api",
+        uid: "u",
+        controller: true,
+      },
+    ],
+  };
+  const through = { kind: "Deployment", name: "api" };
+
+  /** A ReplicaSet asked as itself is in no inventory. Fails if it is not asked about as the Deployment that makes it. */
+  it("is asked about as the controller that makes it", () => {
+    expect(deliveryOf("apps", "ReplicaSet", replicaSet)).toEqual({
+      group: "apps",
+      kind: "Deployment",
+      name: "api",
+      namespace: "lab",
+      labels: replicaSet.labels,
+      annotations: replicaSet.annotations,
+      through,
+    });
+  });
+
+  /**
+   * RS api-794978b95b said "nothing will put it back if it is deleted" while
+   * its Deployment would. Fails if an inherited label nothing confirms earns
+   * a line, or a line about a delivered one does not name what remakes it.
+   */
+  it("never says nothing puts it back, and names the controller that does", () => {
+    expect(deliveryLine([{ ...claimed(), through }], t)).toBe(null);
+    expect(deliveryApplyIntercept([{ ...claimed(), through }], t)).toBe(null);
+    const line = deliveryLine(
+      [{ ...delivered({ drift: "reverted" }), through }],
+      t
+    );
+    expect(line?.detail).toContain(
+      "Deployment api makes this object, and makes it again if it is deleted."
+    );
+    expect(deliveryMarks([{ ...delivered(), through }], t)[0]?.text).toBe(
+      "Argo CD · shop · via Deployment api"
+    );
   });
 });
 

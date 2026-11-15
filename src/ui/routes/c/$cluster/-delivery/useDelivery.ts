@@ -124,9 +124,14 @@ export function useDelivery(object: DeliveryQuery | null): {
 } {
   const objects = useMemo(() => (object ? [object] : []), [object]);
   const { available, of, isPending, error } = useDeliveries(objects);
+  const through = object?.through;
   return {
     available,
-    deliveries: object ? of(object) : NONE,
+    deliveries: !object
+      ? NONE
+      : through
+        ? of(object).map((delivery) => ({ ...delivery, through }))
+        : of(object),
     isPending,
     error,
   };

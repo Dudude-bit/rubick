@@ -76,7 +76,7 @@ export function refusalOf(read: string): unknown {
 }
 
 /** "Pods", "pod" and "pods" are one resource; "ingresses" and "Ingress" too. */
-function stemOf(word: string): string {
+export function stemOf(word: string): string {
   const lower = word.toLowerCase();
   if (lower.endsWith("sses")) return lower.slice(0, -2);
   if (lower.endsWith("ies")) return `${lower.slice(0, -3)}y`;
@@ -98,7 +98,7 @@ function wordsOf(error: unknown): string {
 }
 
 /** The resource a refusal names in the cluster's own words: `cannot list resource "pods"`, or `deployments.apps is forbidden`. */
-function refusedResource(error: unknown): string | null {
+export function refusedResource(error: unknown): string | null {
   const said = wordsOf(error);
   const named =
     /cannot \w+ resource "([^"]+)"/.exec(said) ??
@@ -160,6 +160,11 @@ export function noteAnswer(
       about.has(refused.of)
   );
   for (const read of healed) healedAt.set(read, { connection, at: Date.now() });
+}
+
+/** Drops the kept refusal `error` carries, so whoever shows it asks the cluster again. */
+export function letGoOf(error: unknown): void {
+  letGo((read, refused) => !isAction(read) && carries(error, refused.error));
 }
 
 /** Asks `client` again for every query showing a refusal let go of here; returns the unsubscribe. */

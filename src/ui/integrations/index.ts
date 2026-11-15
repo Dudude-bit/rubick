@@ -167,6 +167,7 @@ export type {
   DeliveryQuery,
   DeliveryRevision,
   DeliverySource,
+  DeliveryThrough,
   GitLink,
 } from "./gitops";
 

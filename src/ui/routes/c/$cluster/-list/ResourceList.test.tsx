@@ -433,12 +433,11 @@ describe("a live list while the overview cannot list its kind", () => {
 
 describe("a list whose re-read is refused", () => {
   /**
-   * Marco after his grant was revoked: 18 namespaces under a warning
-   * triangle and "read failing", though the words said refused. A refusal
-   * now is the page a first refusal draws. Fails if the old rows stay, the
-   * header keeps "live" or "read failing", or the lock state is not drawn.
+   * Nodes under a 403 dropped every row its watch still streamed, while Pods
+   * kept theirs under the refusal. Fails if the rows go, the header keeps
+   * "live" or "read failing", or the notice stops saying the watch holds them.
    */
-  it("draws the refused page instead of the rows an earlier read showed", async () => {
+  it("keeps the rows its watch holds under the refusal, and says refused", async () => {
     const onRetry = vi.fn();
     store.state.namespaceScope = ["shop"];
     await list({
@@ -450,17 +449,30 @@ describe("a list whose re-read is refused", () => {
     });
     store.state.namespaceScope = [];
 
-    expect(screen.queryByText("api-7bcd")).not.toBeInTheDocument();
+    expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(
-      screen.getByText(/do not have permission to list these/)
+      screen.getByText(/rows come from the open watch, which is still live/)
     ).toBeVisible();
-    expect(screen.queryByText(/just now/)).not.toBeInTheDocument();
+    expect(screen.getByText("refused")).toBeVisible();
     expect(screen.queryByText("read failing")).not.toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Try the read again" })
     );
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  /** Marco's revoked grant with no watch: fails if the rows go, or are not said to be from the last read that answered. */
+  it("keeps the rows of the last read that answered, said to be from then", async () => {
+    await list({
+      data: [{ name: "api-7bcd", namespace: "shop" }],
+      error: new Error("pods is forbidden: RBAC"),
+      dataUpdatedAt: new Date(2026, 0, 1, 20, 57, 44).getTime(),
+    });
+
+    expect(screen.getByText("api-7bcd")).toBeVisible();
+    expect(screen.getByText(/The rows below are from 20:57:44/)).toBeVisible();
+    expect(screen.getByText("refused")).toBeVisible();
   });
 
   /**

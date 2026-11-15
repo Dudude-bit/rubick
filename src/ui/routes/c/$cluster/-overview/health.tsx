@@ -73,7 +73,7 @@ import {
 } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { HOLD_ATTRIBUTE, usePointerOnTable } from "@/lib/pointer-hold";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
@@ -337,8 +337,10 @@ function AttentionRow({
   sameCause?: boolean;
 }) {
   const t = useT();
-  const tone = ROLE_TEXT[item.tone];
-  const SeverityIcon = ROLE_ICON[item.tone];
+  // Last known is a read we could not do again: amber, whatever it was then.
+  const shownTone = stale ? "warn" : item.tone;
+  const tone = ROLE_TEXT[shownTone];
+  const SeverityIcon = ROLE_ICON[shownTone];
   const link = objectLink(item.opens);
   const restarts = item.restarts ?? 0;
   const { Icon: ReasonIcon } = eventReasonMark(item.reason);
@@ -424,6 +426,19 @@ function AttentionRow({
             ) : (
               <AttentionDetailText item={{ ...item, detail }} />
             )}
+          </span>
+        )}
+        {stale && (
+          <span
+            className="whitespace-nowrap text-warn"
+            data-testid="attention-not-rechecked"
+          >
+            {" · "}
+            {item.lastKnown
+              ? t("cluster", "problemNotRecheckedAt", {
+                  time: formatWhen(item.lastKnown.at, "clock"),
+                })
+              : t("cluster", "problemNotRechecked")}
           </span>
         )}
       </span>

@@ -18,6 +18,7 @@ export function StaleRows({
   onRetry,
   object = false,
   shared = true,
+  compact = true,
   className = "mb-2",
 }: {
   /** What the rows are, or which object, as it reads inside a sentence. */
@@ -27,6 +28,7 @@ export function StaleRows({
   onRetry?: () => unknown;
   object?: boolean;
   shared?: boolean;
+  compact?: boolean;
   className?: string;
 }) {
   const t = useT();
@@ -37,7 +39,7 @@ export function StaleRows({
   );
   return (
     <Unknown
-      compact
+      compact={compact}
       className={className}
       question={t("empty", object ? "staleObject" : "staleRows", {
         label,

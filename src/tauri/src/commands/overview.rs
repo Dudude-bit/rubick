@@ -3074,7 +3074,8 @@ pub async fn cluster_overview(
     Ok(followed(&snapshot, scope, &beside, &looked))
 }
 
-/// The watched kinds that no longer list where `scope` reaches. An open watch
+/// The watched kinds that no longer list where `scope` reaches, and the
+/// nodes, which list across the cluster whatever the scope. An open watch
 /// streams on after its kind's reads start failing, until it reconnects into
 /// the failure, minutes later; the stores alone would answer for a read the
 /// reader can no longer make, and the scope's lists say why instead.
@@ -3101,12 +3102,16 @@ async fn unlistable(client: &Client, scope: Option<&[String]>) -> Vec<OverviewUn
         );
         [pods, deployments, sets, daemons, jobs, events]
     });
-    join_all(reads)
-        .await
-        .into_iter()
-        .flatten()
-        .flatten()
-        .collect()
+    let nodes = async {
+        let probe = ListParams::default().limit(1);
+        Api::<Node>::all(client.clone())
+            .list_metadata(&probe)
+            .await
+            .err()
+            .map(|error| OverviewUnread::of("Node", None, &Error::from(error)))
+    };
+    let (lost, nodes) = tokio::join!(join_all(reads), nodes);
+    lost.into_iter().flatten().flatten().chain(nodes).collect()
 }
 
 /// See [`follow_cluster_overview`]. The stores announce up to a change a
@@ -8150,6 +8155,23 @@ mod across_namespaces {
                 .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
                 .collect::<Vec<_>>(),
             [("Event", Some(PROD)), ("Deployment", Some(STAGING))],
+            "{lost:?}"
+        );
+    }
+
+    /// Nodes refused under a node watch still streaming read "4 of 4 nodes
+    /// ready" on the Overview beside a Nodes page that said refused. Fails if
+    /// a node list that no longer answers goes unnamed.
+    #[tokio::test]
+    async fn a_node_list_that_no_longer_answers_is_named() {
+        let scope = [PROD.to_string(), STAGING.to_string()];
+        let (client, _) = server(Cluster::new().refuse("/api/v1/nodes").0).await;
+        let lost = unlistable(&client, Some(&scope)).await;
+        assert_eq!(
+            lost.iter()
+                .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
+                .collect::<Vec<_>>(),
+            [("Node", None)],
             "{lost:?}"
         );
     }

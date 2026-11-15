@@ -3,13 +3,14 @@ import {
   isCancelledError,
   QueryClientContext,
   type Query,
-  type QueryCache,
+  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 
 import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
 import { EVERY_NAMESPACE } from "@/lib/query-keys";
+import { KEPT_FOR, letGoOf, refusedResource, stemOf } from "@/lib/refusals";
 import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
 
 type Code = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -75,20 +76,122 @@ interface Store {
 }
 
 const NONE: readonly UnreadRead[] = [];
-const stores = new WeakMap<QueryCache, Store>();
+const stores = new WeakMap<QueryClient, Store>();
+
+const KINDS: ReadonlySet<string> = new Set(
+  RESOURCE_REGISTRY.map(({ kind }) => stemOf(kind))
+);
+
+/** The kinds a key names: `["pod-rows", "lab"]` is about pods, `["resources", "Node", null]` about nodes. */
+export function kindsOfKey(key: QueryKey): Set<string> {
+  const kinds = new Set<string>();
+  for (const part of key)
+    if (typeof part === "string")
+      for (const word of [part, ...part.split("-")])
+        if (KINDS.has(stemOf(word))) kinds.add(stemOf(word));
+  return kinds;
+}
+
+type Entry = { kind?: unknown };
+const entriesOf = (list: unknown): Entry[] =>
+  Array.isArray(list) ? (list as Entry[]) : [];
+
+/** What an answer holds back, by kind: its own `unread`, or its rows' (a Service's verdict inputs). */
+function heldBack(query: Query): Set<string> {
+  const data = query.state.data as
+    | { unread?: unknown; rows?: Array<{ unread?: unknown }> }
+    | undefined;
+  if (data === null || typeof data !== "object") return new Set();
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const entries = [
+    ...entriesOf(data.unread),
+    ...(Array.isArray(rows[0]?.unread)
+      ? rows.flatMap((row) => entriesOf(row.unread))
+      : []),
+  ];
+  if (entries.length === 0) return new Set();
+  const named = entries.flatMap((entry) =>
+    typeof entry.kind === "string" ? [stemOf(entry.kind)] : []
+  );
+  return named.length > 0 ? new Set(named) : kindsOfKey(query.queryKey);
+}
+
+/** What `query` on screen left unread, by kind, and as of when: a failure, or an answer holding a kind back. */
+function waitingOn(
+  query: Query
+): { kinds: Set<string>; at: number; refused: unknown } | null {
+  if (leftUnread(query)) {
+    const { error } = query.state;
+    const kinds = kindsOfKey(query.queryKey);
+    const named = isRefusal(error) ? refusedResource(error) : null;
+    if (named && KINDS.has(named)) kinds.add(named);
+    return {
+      kinds,
+      at: query.state.errorUpdatedAt,
+      refused: isRefusal(error) ? error : null,
+    };
+  }
+  if (query.state.status !== "success" || !query.isActive()) return null;
+  const kinds = heldBack(query);
+  return kinds.size > 0
+    ? { kinds, at: query.state.dataUpdatedAt, refused: null }
+    : null;
+}
 
 /**
  * One cache's unread reads, kept by its own events: each event looks at the
  * one query it is about, so a busy cache costs a status check per change and
  * nothing polls.
+ *
+ * A read of a kind that answers lets go of what an earlier read of it left
+ * unread on screen: those are asked again at once, whatever answered (a list
+ * page, a watch's re-list), rather than on their own slower rate. Once per
+ * {@link KEPT_FOR} each until they answer, or a kind refused in one namespace
+ * and read in another would be asked on every poll of the other.
  */
-function storeOf(cache: QueryCache): Store {
-  const known = stores.get(cache);
+function storeOf(client: QueryClient): Store {
+  const known = stores.get(client);
   if (known) return known;
+  const cache = client.getQueryCache();
   const unread = new Map<string, { read: UnreadRead; query: Query }>();
+  const waiting = new Map<
+    string,
+    { kinds: Set<string>; at: number; refused: unknown; query: Query }
+  >();
+  const tried = new Map<string, number>();
   const listeners = new Set<() => void>();
   let shown = NONE;
   let off: (() => void) | null = null;
+  const wait = (query: Query) => {
+    const hash = query.queryHash;
+    const now = cache.get(hash) === query ? waitingOn(query) : null;
+    if (now) waiting.set(hash, { ...now, query });
+    else {
+      waiting.delete(hash);
+      tried.delete(hash);
+    }
+  };
+  const release = (answered: Query) => {
+    if (waiting.size === 0 || heldBack(answered).size > 0) return;
+    const kinds = kindsOfKey(answered.queryKey);
+    if (kinds.size === 0) return;
+    const now = Date.now();
+    for (const [hash, held] of waiting) {
+      if (
+        hash === answered.queryHash ||
+        held.at > answered.state.dataUpdatedAt ||
+        ![...held.kinds].some((kind) => kinds.has(kind)) ||
+        now - (tried.get(hash) ?? -Infinity) < KEPT_FOR
+      )
+        continue;
+      tried.set(hash, now);
+      if (held.refused) letGoOf(held.refused);
+      void client.invalidateQueries(
+        { queryKey: held.query.queryKey, exact: true },
+        { cancelRefetch: false }
+      );
+    }
+  };
   const see = (query: Query): boolean => {
     const hash = query.queryHash;
     const was = unread.get(hash);
@@ -119,9 +222,21 @@ function storeOf(cache: QueryCache): Store {
     subscribe: (listener) => {
       listeners.add(listener);
       if (!off) {
-        cache.getAll().forEach(see);
-        off = cache.subscribe(({ query }) => {
-          if (see(query)) publish();
+        cache.getAll().forEach((query) => {
+          see(query);
+          wait(query);
+        });
+        off = cache.subscribe((event) => {
+          const { query } = event;
+          const changed = see(query);
+          wait(query);
+          if (
+            event.type === "updated" &&
+            event.action.type === "success" &&
+            !event.action.manual
+          )
+            release(query);
+          if (changed) publish();
         });
         publish();
       }
@@ -131,12 +246,14 @@ function storeOf(cache: QueryCache): Store {
         off();
         off = null;
         unread.clear();
+        waiting.clear();
+        tried.clear();
         shown = NONE;
       };
     },
     get: () => shown,
   };
-  stores.set(cache, store);
+  stores.set(client, store);
   return store;
 }
 
@@ -146,7 +263,7 @@ const none = () => NONE;
 /** The reads on screen whose latest answer was a refusal or a failure (not a NotFound, not a cancelled read). */
 export function useUnreadOnScreen(): readonly UnreadRead[] {
   const client = useContext(QueryClientContext);
-  const store = client ? storeOf(client.getQueryCache()) : null;
+  const store = client ? storeOf(client) : null;
   return useSyncExternalStore(store?.subscribe ?? nothing, store?.get ?? none);
 }
 

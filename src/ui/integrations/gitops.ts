@@ -45,6 +45,14 @@ export interface DeliveryQuery {
   namespace: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  /** The controller that makes the object, whose identity this asks about in its place. */
+  through?: DeliveryThrough;
+}
+
+/** A controller owner: a ReplicaSet's Deployment, a Job's CronJob. */
+export interface DeliveryThrough {
+  kind: string;
+  name: string;
 }
 
 /**
@@ -144,22 +152,27 @@ export interface DeliveryRevision {
 
 export type Delivery =
   /** The owner names the object back in its own inventory. */
-  | { state: "delivered"; source: DeliverySource }
-  /**
-   * The object carries the label and the owner it names does not list it —
-   * or does not exist. `owner` is `null` for the second case, which is a
-   * different sentence: a name nobody answers to, rather than an owner that
-   * disowns it.
-   */
-  | {
-      state: "claimed";
-      vendor: string;
-      vendorId: string;
-      /** The owner's name as the object itself spells it. */
-      claim: string;
-      ownerKind: string;
-      owner: DeliveryOwner | null;
-    };
+  (
+    | { state: "delivered"; source: DeliverySource }
+    /**
+     * The object carries the label and the owner it names does not list it —
+     * or does not exist. `owner` is `null` for the second case, which is a
+     * different sentence: a name nobody answers to, rather than an owner that
+     * disowns it.
+     */
+    | {
+        state: "claimed";
+        vendor: string;
+        vendorId: string;
+        /** The owner's name as the object itself spells it. */
+        claim: string;
+        ownerKind: string;
+        owner: DeliveryOwner | null;
+      }
+  ) & {
+    /** Judged through the controller that makes the object, not the object itself. */
+    through?: DeliveryThrough;
+  };
 
 /** The key both the batch call and its callers index an object by. */
 export function deliveryKey(object: {

@@ -4045,6 +4045,9 @@ export const en = {
     },
     acrossTheService: "across the Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
+    delThroughMark: "via {kind} {name}",
+    delThroughRemade:
+      "{kind} {name} makes this object, and makes it again if it is deleted.",
     delEditWhatApplies: "To change it for good, change what {name} applies.",
     delEditManifests: "To change it for good, edit the manifests under {path}.",
     argoOutOfSync: "out of sync",
@@ -4964,6 +4967,7 @@ export const en = {
     },
     problemsNoneNotAllChecked: "no problems found · not all checked",
     problemNotRechecked: "not rechecked",
+    problemNotRecheckedAt: "not rechecked · last known at {time}",
     problemNotRecheckedRefused:
       "Not rechecked: the cluster refused the read that would check this again. Last known at {time}.",
     problemNotRecheckedFailed:

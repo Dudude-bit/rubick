@@ -12,7 +12,7 @@ import { Unknown } from "@/components/ui/unknown";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import type { ListRefusal } from "./useListRefusal";
 
-function AskedAgain({ since }: { since: number }) {
+export function AskedAgain({ since }: { since: number }) {
   const t = useT();
   const age = useRealtimeAge(new Date(since).toISOString());
   return (

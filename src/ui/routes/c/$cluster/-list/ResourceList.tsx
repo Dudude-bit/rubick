@@ -73,11 +73,18 @@ import { useSetSearch } from "@/hooks/useSearchParam";
 import { rowName } from "@/lib/links";
 import { StaleRows } from "@/components/ui/stale-rows";
 import { HeldWhilePointed } from "@/components/ui/held-while-pointed";
-import { RefusalWayOut, UnreadList } from "./UnreadList";
-import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "./list-unread";
+import { AskedAgain, RefusalWayOut, UnreadList } from "./UnreadList";
+import { metricsAbsent, recheckMetrics } from "../-metrics";
+import {
+  LIST_NOTICE_WIDTH,
+  ListEmpty,
+  ListNoticeRetries,
+  ListUnread,
+} from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
 import { Reading } from "@/components/ui/states";
+import { HeldLines } from "./HeldLines";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { useRecheckRefusal } from "./useRecheckRefusal";
@@ -396,7 +403,6 @@ export function ResourceList<
     countedAt !== null &&
     countedAt > refusalAt;
   const failed = outlived ? null : lastFailed;
-  // A refusal is about who asks now, so rows an earlier read showed go with it.
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = refused ? refusalAt : null;
   useRecheckRefusal(refused ? keptAt : null, () =>
@@ -416,14 +422,15 @@ export function ResourceList<
   const placeholder = shouldUseQuery
     ? queryResult.isPlaceholderData
     : externalPlaceholder;
+  // A refused re-read keeps the rows it had, said below to be from before it.
   const resources = useMemo(() => {
-    if (refused || outlived) return NO_ROWS;
+    if (outlived) return NO_ROWS;
     const rows = data ?? queryResult.data?.rows ?? [];
     // A row the last scope read stands in only where this scope reaches it.
     return placeholder
       ? rows.filter((row) => scope.matches(row.namespace))
       : scope.narrow(rows);
-  }, [refused, outlived, data, queryResult.data, scope, placeholder]);
+  }, [outlived, data, queryResult.data, scope, placeholder]);
   const unread = placeholder
     ? NOTHING_UNREAD
     : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
@@ -434,6 +441,8 @@ export function ResourceList<
     : (externalDataUpdatedAt ?? queryResult.dataUpdatedAt);
   // Every list, whatever feeds it: rows a failed read kept are said to be old.
   const stale = failed !== null && resources.length > 0;
+  // Refused while its watch still streams: the rows are the watch's, as Pods keep them.
+  const watchHolds = stale && refused && !!live && !resyncing;
   const freshList = useOverviewUnreadOf(listKind);
   const warm =
     !!live && !resyncing && !refused && failed === null && !!freshList.unread;
@@ -578,6 +587,21 @@ export function ResourceList<
   const showSkeleton = waiting && !unreadError;
   const retry =
     onRetry ?? (data === undefined ? () => queryResult.refetch() : undefined);
+  const retryWithMetrics = (read: () => unknown) =>
+    Promise.all([
+      read(),
+      metricsAbsent(queryClient) ? recheckMetrics(queryClient) : null,
+    ]);
+  const watchNotice = watchHolds
+    ? { error: failed, retry: retry && (() => retryWithMetrics(retry)) }
+    : warm && freshList.unread
+      ? {
+          error: Object.assign(new Error(freshList.unread.message), {
+            code: freshList.unread.code,
+          }),
+          retry: () => retryWithMetrics(freshList.retry),
+        }
+      : null;
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
@@ -688,6 +712,15 @@ export function ResourceList<
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
+  const about = description ?? (listKind && <KindAbout kind={listKind} />);
+  const wholeUnread =
+    !!unreadError && resources.length === 0 && !(failed && ranOutOfTime);
+  const aboutAfterNotice = wholeUnread || stale || (warm && !!freshList.unread);
+  const aboutLine = about && (
+    <p className="mb-2 text-xs text-fg-mut">
+      <HeldLines>{about}</HeldLines>
+    </p>
+  );
   const content = (
     <>
       {!embedded && (
@@ -713,9 +746,7 @@ export function ResourceList<
                   : resources.length
           }
           countPending={showSkeleton}
-          description={
-            description ?? (listKind && <KindAbout kind={listKind} />)
-          }
+          description={aboutAfterNotice ? undefined : about}
           actions={
             <>
               {headerActions}
@@ -746,32 +777,39 @@ export function ResourceList<
         signature={noticesSignature}
         onWaiting={setNoticesWaiting}
       >
-        <ListUnread.Provider value={!!unreadError && resources.length === 0}>
-          <ListEmpty.Provider value={resources.length === 0 && !nothingRead}>
-            {headerContent}
-          </ListEmpty.Provider>
-        </ListUnread.Provider>
-        {stale && (
+        <ListNoticeRetries.Provider
+          value={(stale && !!retry) || (warm && !!freshList.unread)}
+        >
+          <ListUnread.Provider value={!!unreadError && resources.length === 0}>
+            <ListEmpty.Provider value={resources.length === 0 && !nothingRead}>
+              {headerContent}
+            </ListEmpty.Provider>
+          </ListUnread.Provider>
+        </ListNoticeRetries.Provider>
+        {stale && !watchHolds && (
           <StaleRows
+            compact={false}
             className={cn("mb-2", LIST_NOTICE_WIDTH)}
             label={emptyStateLabel.toLowerCase()}
             since={dataUpdatedAt}
             error={failed}
-            onRetry={retry}
+            onRetry={retry && (() => retryWithMetrics(retry))}
           />
         )}
-        {warm && freshList.unread && (
+        {watchNotice && (
           <Unknown
-            compact
             className={cn("mb-2", LIST_NOTICE_WIDTH)}
             question={t("empty", "watchLiveListFailing", {
               label: emptyStateLabel.toLowerCase(),
             })}
-            error={Object.assign(new Error(freshList.unread.message), {
-              code: freshList.unread.code,
-            })}
-            onRetry={freshList.retry}
+            error={watchNotice.error}
+            onRetry={watchNotice.retry}
           />
+        )}
+        {stale && refused && askingAgain && refusedAt !== null && (
+          <div className={cn("-mt-1 mb-2", LIST_NOTICE_WIDTH)}>
+            <AskedAgain since={refusedAt} />
+          </div>
         )}
         <UnreadNamespaces
           unread={unread}
@@ -781,6 +819,7 @@ export function ResourceList<
           onRetry={retry}
         />
       </HeldWhilePointed>
+      {!embedded && !wholeUnread && aboutAfterNotice && aboutLine}
       {showDelivery && !showSkeleton && deliveryKnown && (
         <DeliveryFilterControl
           value={deliveryFilter}
@@ -864,16 +903,21 @@ export function ResourceList<
           </div>
         </Alert>
       ) : unreadError && resources.length === 0 ? (
-        <UnreadList
-          error={unreadError}
-          // A refusal is not a failure, and saying "could not read" about
-          // one invites a retry that will be refused the same way.
-          words={isRefusal(unreadError) ? refusalWords : readWords.couldNotRead}
-          onRetry={retry}
-          askedAgainAfter={refused && askingAgain ? refusedAt : null}
-        >
-          <RefusalWayOut refusal={refusal} />
-        </UnreadList>
+        <>
+          <UnreadList
+            error={unreadError}
+            // A refusal is not a failure, and saying "could not read" about
+            // one invites a retry that will be refused the same way.
+            words={
+              isRefusal(unreadError) ? refusalWords : readWords.couldNotRead
+            }
+            onRetry={retry}
+            askedAgainAfter={refused && askingAgain ? refusedAt : null}
+          >
+            <RefusalWayOut refusal={refusal} />
+          </UnreadList>
+          {!embedded && aboutLine}
+        </>
       ) : (
         <DataTable
           columns={resolvedColumns}

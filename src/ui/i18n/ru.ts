@@ -4541,6 +4541,9 @@ export const ru: Catalogue = {
     },
     acrossTheService: "по всему Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
+    delThroughMark: "через {kind} {name}",
+    delThroughRemade:
+      "Этот объект создаёт {kind} {name} и создаст снова, если его удалить.",
     delEditWhatApplies:
       "Чтобы изменить насовсем, поменяйте то, что применяет {name}.",
     delEditManifests: "Чтобы изменить насовсем, правьте манифесты в {path}.",
@@ -5563,6 +5566,7 @@ export const ru: Catalogue = {
     },
     problemsNoneNotAllChecked: "проблем не найдено · проверено не всё",
     problemNotRechecked: "не перепроверено",
+    problemNotRecheckedAt: "не перепроверено · известно на {time}",
     problemNotRecheckedRefused:
       "Не перепроверено: кластер отклонил чтение, которое проверило бы это снова. Последние известные данные на {time}.",
     problemNotRecheckedFailed:

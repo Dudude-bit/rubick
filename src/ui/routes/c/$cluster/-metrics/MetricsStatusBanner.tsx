@@ -13,10 +13,15 @@ import { parseRefusal } from "@/lib/refusal";
 import { formatWhen } from "@/lib/utils";
 import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
-import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "../-list/list-unread";
+import {
+  LIST_NOTICE_WIDTH,
+  ListEmpty,
+  ListNoticeRetries,
+  ListUnread,
+} from "../-list/list-unread";
 import { cn } from "@/lib/utils";
-import { commands } from "@/lib/commands";
 import { ERROR_CODES } from "@/lib/error-utils";
+import { recheck } from "./recheck";
 import { useT } from "@/i18n/useT";
 import { absenceOf, type MetricsAbsence } from "@/lib/metrics-absence";
 import { queryKeys } from "@/lib/query-keys";
@@ -139,15 +144,6 @@ function useFirstSeen(
   return kept;
 }
 
-function recheck(queryClient: QueryClient) {
-  return commands
-    .recheckMetrics()
-    .finally(
-      () =>
-        void queryClient.refetchQueries({ queryKey: queryKeys.metrics.all() })
-    );
-}
-
 const answeredSomewhere = (queryClient: QueryClient) =>
   queryClient
     .getQueryCache()
@@ -192,6 +188,7 @@ export function MetricsStatusBanner({
   const queryClient = useQueryClient();
   const listUnread = useContext(ListUnread);
   const listEmpty = useContext(ListEmpty);
+  const retriedAbove = useContext(ListNoticeRetries);
   const checking = useIsFetching({ queryKey: queryKeys.metrics.all() }) > 0;
   const context = useClusterStore((s) => s.currentContext);
   const hidden =
@@ -274,7 +271,7 @@ export function MetricsStatusBanner({
           )}
         </div>
         <div className="flex flex-wrap items-start gap-1.5">
-          {said && (
+          {said && !retriedAbove && (
             <ReadAgain error={said} onRetry={() => recheck(queryClient)} />
           )}
           {rule && <CopyRule refusal={rule} />}

@@ -89,8 +89,8 @@ export function Crds() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "slow",
   });
-  // A refusal is about who asks now: rows an earlier read showed go with it,
-  // and the header says when it was refused, as every other list does.
+  // A refused re-read keeps its rows under the notice, and the header says
+  // when it was refused, as every other list does.
   const refused = !!crdsError && isRefusal(crdsError);
   const refusedAt = useRefusedAt(refused ? crdsError : null);
 
@@ -261,7 +261,7 @@ export function Crds() {
         stale={!!crdsError && !refused}
         refusedAt={refused ? refusedAt : undefined}
       />
-      {crdsError && !refused && crds.length > 0 && (
+      {crdsError && crds.length > 0 && (
         <StaleRows
           label="CRDs"
           since={dataUpdatedAt}
@@ -273,7 +273,7 @@ export function Crds() {
           DataTable — search, density toggle, pagination — inside every
           collapsible API group, so the same chrome appeared a dozen times
           over. The group is a caption row instead. */}
-      {crdsError && (refused || crds.length === 0) ? (
+      {crdsError && crds.length === 0 ? (
         <UnreadList
           error={crdsError}
           words={

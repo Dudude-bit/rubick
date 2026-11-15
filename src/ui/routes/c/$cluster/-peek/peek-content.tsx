@@ -101,6 +101,7 @@ import {
   type KnownOwners,
 } from "@/hooks/useLastOwners";
 import { useStaleNotFound } from "@/hooks/useStaleNotFound";
+import { useListFailure } from "./peek-list-failure";
 
 export function PeekContent({
   target,
@@ -197,14 +198,20 @@ export function PeekContent({
   const shownAt = data === undefined && held ? held.at : dataUpdatedAt;
   // A live watch on a list holding this object reads it again at every
   // change it sees, as `rowDetail` asks of every list of these kinds.
-  const followed = useListLive(
-    useHoldingList(
-      builtIn,
-      namespace,
-      target.name,
-      data !== undefined || held !== null
-    )
+  const holding = useHoldingList(
+    builtIn,
+    namespace,
+    target.name,
+    data !== undefined || held !== null
   );
+  const listFailure = useListFailure(
+    holding,
+    builtIn,
+    namespace,
+    dataUpdatedAt
+  );
+  const listDown = listFailure !== null && !listFailure.answeredSince;
+  const followed = useListLive(holding) && listFailure === null;
   const summary = useMemo(() => {
     const shown = data ?? held?.row;
     return shown === undefined
@@ -347,8 +354,14 @@ export function PeekContent({
               dataUpdatedAt={shownAt}
               live={followed}
               slowed={read.freshness.slowed}
-              stale={error !== null || read.freshness.stale}
-              refusedAt={isRefusal(error) ? refusedAt : undefined}
+              stale={error !== null || read.freshness.stale || listDown}
+              refusedAt={
+                isRefusal(error)
+                  ? refusedAt
+                  : listDown && isRefusal(listFailure.error)
+                    ? listFailure.at
+                    : undefined
+              }
               slowRead={read.freshness.slowRead}
               reserve={false}
             />

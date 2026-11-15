@@ -61,12 +61,13 @@ export function deliveryOf(
         namespace?: string | null;
         labels?: Record<string, string> | null;
         annotations?: Record<string, string> | null;
+        ownerReferences?: readonly ControllerRef[] | null;
       }
     | null
     | undefined
 ): DeliveryQuery | null {
   if (!object) return null;
-  return {
+  const query = {
     group,
     kind,
     name: object.name,
@@ -74,6 +75,28 @@ export function deliveryOf(
     labels: object.labels ?? {},
     annotations: object.annotations ?? {},
   };
+  // A ReplicaSet wears its Deployment's tracking label and is in no
+  // inventory itself: asked as itself, it read "nothing will put it back".
+  const maker = object.ownerReferences?.find((ref) => ref.controller);
+  if (!maker) return query;
+  const version = maker.apiVersion ?? maker.api_version ?? "";
+  const slash = version.indexOf("/");
+  return {
+    ...query,
+    group: slash === -1 ? "" : version.slice(0, slash),
+    kind: maker.kind,
+    name: maker.name,
+    through: { kind: maker.kind, name: maker.name },
+  };
+}
+
+/** An owner reference as either wire spelling carries it. */
+interface ControllerRef {
+  kind: string;
+  name: string;
+  controller?: boolean | null;
+  apiVersion?: string;
+  api_version?: string;
 }
 
 /**
@@ -153,13 +176,20 @@ export interface DeliveryMark {
  */
 export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
   return deliveries.map((entry) => {
+    const via =
+      entry.through && t("readings", "delThroughMark", { ...entry.through });
     if (entry.state === "claimed") {
       return {
         vendorId: entry.vendorId,
-        text: t("readings", "delUnconfirmedMark", {
-          vendor: entry.vendor,
-          claim: entry.claim,
-        }),
+        text: [
+          t("readings", "delUnconfirmedMark", {
+            vendor: entry.vendor,
+            claim: entry.claim,
+          }),
+          via,
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join(" · "),
         to: entry.owner?.to ?? null,
         tone: "warn" as const,
       };
@@ -170,6 +200,7 @@ export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
       text: [
         source.vendor,
         source.owner.name,
+        via,
         source.warning && sayWords(source.warning, t),
       ]
         .filter((part): part is string => Boolean(part))
@@ -212,6 +243,21 @@ export function deliveryLine(
   deliveries: Delivery[],
   t: T
 ): DeliveryLine | null {
+  const line = lineOf(deliveries, t);
+  const through = deliveries.find((entry) => entry.through)?.through;
+  if (!line || !through) return line;
+  // A label a controller's object inherited says nothing of the object, and
+  // what happens on a delete is that controller's to say.
+  if (delivered(deliveries).length === 0) return null;
+  return {
+    ...line,
+    detail: [line.detail, t("readings", "delThroughRemade", { ...through })]
+      .filter(Boolean)
+      .join(" "),
+  };
+}
+
+function lineOf(deliveries: Delivery[], t: T): DeliveryLine | null {
   const sources = delivered(deliveries);
   const unconfirmed = claimedOnly(deliveries);
 
@@ -468,7 +514,7 @@ export function deliveryApplyIntercept(
   if (reverting) return reverting;
 
   const claim = claimedOnly(deliveries)[0];
-  if (!claim || delivered(deliveries).length > 0) return null;
+  if (!claim || claim.through || delivered(deliveries).length > 0) return null;
 
   const disowned = claim.owner !== null;
   return {

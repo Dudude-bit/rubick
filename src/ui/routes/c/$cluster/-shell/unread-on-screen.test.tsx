@@ -108,6 +108,68 @@ describe("the reads on screen the problem count cannot vouch for", () => {
     );
   });
 
+  /**
+   * A Deployments 500 lifted and the list re-read "live", yet the strip kept
+   * "not all checked" for 80 s, until Overview mounted and asked again.
+   * Fails if a read of the kind answering leaves an earlier failure of it
+   * on screen until its own slower rate comes round.
+   */
+  it("lets go of a failed read when a read of its kind answers after it", async () => {
+    const { client, wrapper, onScreen } = setup();
+    let answer: () => Promise<unknown> = () => Promise.reject(timeout);
+    onScreen(["deployment", "lab", "api"], () => answer());
+
+    const { result } = renderHook(() => useUnreadOnScreen(), { wrapper });
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    answer = () => Promise.resolve({ name: "api" });
+    await act(() =>
+      client.fetchQuery({
+        queryKey: ["deployments", "lab"],
+        queryFn: () => Promise.resolve({ rows: [], unread: [] }),
+      })
+    );
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+
+  /**
+   * After a pods 403 the Services' verdict inputs kept "pods unread" for a
+   * minute beside a Pods list that had answered. Fails if an answer holding
+   * a kind back is not asked again when that kind answers, or is asked again
+   * on every answer while it still holds it back.
+   */
+  it("asks an answer holding a kind back again once that kind answers, and not on every answer", async () => {
+    const { client, wrapper, onScreen } = setup();
+    let asked = 0;
+    const heldBack = {
+      rows: [
+        {
+          namespace: "lab",
+          unread: [{ kind: "Pod", namespace: "lab", ...refusal }],
+        },
+      ],
+      unread: [],
+    };
+    onScreen(["service-health-inputs", "lab"], () => {
+      asked++;
+      return Promise.resolve(heldBack);
+    });
+    renderHook(() => useUnreadOnScreen(), { wrapper });
+    await waitFor(() => expect(asked).toBe(1));
+
+    const podsAnswer = () =>
+      client.fetchQuery({
+        queryKey: ["pod-rows", "lab"],
+        queryFn: () => Promise.resolve({ rows: [], unread: [] }),
+        staleTime: 0,
+      });
+    await act(podsAnswer);
+    await waitFor(() => expect(asked).toBe(2));
+    await act(podsAnswer);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(asked).toBe(2);
+  });
+
   /** Fails if the strip cannot render where no query client is above it. */
   it("is empty with no query client above it", () => {
     const { result } = renderHook(() => useUnreadOnScreen());

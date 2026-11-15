@@ -1924,6 +1924,35 @@ describe("a problem whose read went unread since it was told", () => {
     expect(problemsKept(key, refused, 6000)[0]?.lastKnown?.at).toBe(5000);
   });
 
+  /**
+   * Under a Deployments 500 the Overview quoted the Deployment's status as
+   * current while its tile said "not read". Fails if a problem the answer
+   * still tells beside its unread kind is not kept, dated by the last answer
+   * that read it, or is counted twice.
+   */
+  it("keeps a problem still told beside its unread kind, dated by the last read of it", () => {
+    const key = "still-told-while-unread";
+    problemsKept(key, told, 1000);
+    const stillTold = overview({
+      problems: [probing],
+      unread: [
+        { kind: "Pod", namespace: "chat", code: "KUBE_API_ERROR", message: "" },
+      ],
+    });
+    const kept = problemsKept(key, stillTold, 2000);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.lastKnown).toEqual({ at: 1000, refused: false });
+    expect(problemsKept(key, { ...stillTold }, 3000)[0]?.lastKnown?.at).toBe(
+      1000
+    );
+
+    const listed = attention({ overview: stillTold, kept });
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]?.stale).toBe(true);
+    expect(listed.total).toBe(1);
+    expect(listed.byNamespace.get("chat")).toBe(1);
+  });
+
   /** Fails if a refusal invents a problem nobody ever saw. */
   it("keeps nothing where nothing was told", () => {
     expect(problemsKept("nothing-told", refused, 1000)).toEqual([]);

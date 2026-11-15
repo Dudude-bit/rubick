@@ -21,6 +21,19 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+const shell = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => ({
+    items: shell.items,
+    total: shell.items.length,
+    checks: [],
+    complete: true,
+    worst: null,
+    byNamespace: new Map(),
+    unconfirmed: [],
+  }),
+}));
+
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
@@ -112,6 +125,84 @@ describe("ReplicaSetDetail", () => {
    * under a mark saying they could not be read. Fails if a pod list that
    * did not answer reads as a revision with no pods.
    */
+  /**
+   * RS api-794978b95b drew a green "current revision" over its one failing
+   * pod, where its Deployment's header said "1 problem". Fails if a
+   * revision does not carry the problems of the pods it runs.
+   */
+  it("carries the problems of the pods it runs in its header", async () => {
+    const pod = {
+      name: "web-6d67bcbdbc-x7k2p",
+      namespace: "shop",
+      uid: "pod-uid",
+      status: {
+        phase: "Pending",
+        display: "Init:CrashLoopBackOff",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      nodeName: null,
+      podIp: null,
+      hostIp: null,
+      containers: [
+        {
+          name: "api",
+          image: "api:1",
+          ready: false,
+          state: { running: null, waiting: null, terminated: null },
+          lastTerminated: null,
+          restartCount: 0,
+          ports: [],
+          env: [],
+          envFrom: [],
+        },
+      ],
+      labels: {},
+      annotations: {},
+      createdAt: "2026-01-01T00:00:00Z",
+      restartCount: 74,
+      lastRestartAt: null,
+      ownerReferences: [],
+      start: { state: "failing" },
+    };
+    vi.mocked(commands.getReplicasetPods).mockResolvedValue([pod] as never);
+    shell.items = [
+      {
+        key: "pod/shop/web-6d67bcbdbc-x7k2p",
+        tone: "err",
+        kind: "Pod",
+        name: pod.name,
+        namespace: "shop",
+        reason: "Init:CrashLoopBackOff",
+        detail: null,
+        since: null,
+        restarts: 74,
+        foldedPods: null,
+        replaced: false,
+        opens: { kind: "Pod", name: pod.name, namespace: "shop" },
+      },
+    ];
+    try {
+      mockDetail(
+        buildReplicaSet({
+          replicas: { desired: 1, current: 1, ready: 0, available: 0 },
+        })
+      );
+      await renderPage();
+      await waitFor(() =>
+        expect(document.querySelector('[data-problem="err"]')).not.toBeNull()
+      );
+      expect(document.querySelector('[data-problem="err"]')).toHaveTextContent(
+        /1 problem/
+      );
+    } finally {
+      shell.items = [];
+      vi.mocked(commands.getReplicasetPods).mockResolvedValue([]);
+    }
+  });
+
   it("says its pods could not be listed, not that the revision has none", async () => {
     vi.mocked(commands.getReplicasetPods).mockRejectedValue({
       code: "PERMISSION_DENIED",
