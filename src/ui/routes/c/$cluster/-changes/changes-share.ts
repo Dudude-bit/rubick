@@ -200,6 +200,8 @@ export function watchedSection(
   spans: readonly SpanLike[],
   items: readonly ChangeItem[],
   t: T,
+  /** The rows the screen read: under warnings only, no change was. */
+  show: Show,
   read?: Pick<
     TimelineRead,
     "keeping" | "unreadable" | "error" | "letGo" | "readFrom"
@@ -212,7 +214,7 @@ export function watchedSection(
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");
-  const quiet = quietSince(watching, items, changesKnownFrom(read));
+  const quiet = quietSince(watching, items, changesKnownFrom(read), show);
   const nothing =
     quiet !== null &&
     t("changes", "nothingRecordedSince", {

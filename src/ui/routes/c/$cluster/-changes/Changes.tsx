@@ -106,8 +106,7 @@ export function Changes() {
     ...open,
     from: watchedSince(covering, end) ?? open.from,
   };
-  const quiet =
-    show === "warnings" ? null : quietSince(watching, items, knownFrom);
+  const quiet = quietSince(watching, items, knownFrom, show);
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
     watching && earlierRowsWords(ours, items, watching.from, t, moment);
@@ -118,7 +117,7 @@ export function Changes() {
 
   useShareSection("changes", () => [
     changesScreenSection(items, t, windowWords, show),
-    watchedSection(watching, ours, items, t, read),
+    watchedSection(watching, ours, items, t, show, read),
   ]);
 
   if (!isConnected) {

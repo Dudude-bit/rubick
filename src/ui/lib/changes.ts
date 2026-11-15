@@ -713,13 +713,19 @@ export function watchedStretches(
     });
 }
 
-/** When the running watch began, if it has recorded no change since; `null` otherwise, or where changes since were let go or not read yet. */
+/**
+ * When the running watch began, if it has recorded no change since; `null`
+ * otherwise, where changes since were let go or not read yet, or where the
+ * rows read were warnings only and no change was read at all.
+ */
 export function quietSince(
   watching: Pick<ObservedSpan, "from"> | undefined,
   items: readonly ChangeItem[],
-  knownFrom = Number.NEGATIVE_INFINITY
+  knownFrom: number,
+  show: Show
 ): number | null {
-  if (!watching || knownFrom > watching.from) return null;
+  if (!watching || show === "warnings" || knownFrom > watching.from)
+    return null;
   return items.some(
     (item) =>
       item.kind !== "gap" &&
