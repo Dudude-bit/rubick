@@ -73,7 +73,22 @@ export function WithProblem({
           TONE_TEXT[tone]
         )}
       >
-        <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
+        <span className="relative inline-flex">
+          <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
+          {/* Where the words give way, an amber dot still says the count is
+           *  old; it sits on the glyph, so the floors need no more room. */}
+          {problem.stale && (
+            <span
+              data-problem-stale-glyph=""
+              role="img"
+              aria-label={t("cluster", "problemNotRechecked")}
+              className={cn(
+                "absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-warn ring-1 ring-canvas",
+                noun.count
+              )}
+            />
+          )}
+        </span>
         {/* In a narrow cell (an `@container`) the count alone; whole on hover. */}
         <span className={noun.whole}>
           {t("cluster", "problemCount", { n: problem.n })}

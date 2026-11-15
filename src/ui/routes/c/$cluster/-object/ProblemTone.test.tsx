@@ -54,10 +54,12 @@ describe("a problem nobody could check again", () => {
 
   /**
    * The status floor of a row stopped reserving room for "not rechecked", so
-   * a cell narrower than the whole mark has to drop it. Fails if the words
-   * are not hidden in the same container width the noun gives way in.
+   * a cell narrower than the whole mark has to drop it, and the Pods row
+   * then read as current beside a peek that said not rechecked. Fails if the
+   * words are not hidden in the same container width the noun gives way in,
+   * or nothing amber is left there to say the count is old.
    */
-  it("gives the not-rechecked words up in the width the noun gives way", () => {
+  it("gives the not-rechecked words up in the width the noun gives way, and keeps an amber dot there", () => {
     const mark = chip({
       tone: "err",
       n: 1,
@@ -67,6 +69,9 @@ describe("a problem nobody could check again", () => {
     const words = screen.getByText("not rechecked").parentElement!;
     expect(words.className).toContain("@max-[264px]:hidden");
     expect(mark.querySelector('[class*="@max-[264px]:inline"]')).not.toBeNull();
+    const dot = screen.getByRole("img", { name: "not rechecked" });
+    expect(dot).toHaveClass("bg-warn", "absolute");
+    expect(dot.getAttribute("class")).toContain("@max-[264px]:inline");
   });
 
   /** Fails if a failed read is called a refusal, or a mark with no date does not say why it has none. */
@@ -95,6 +100,7 @@ describe("a problem nobody could check again", () => {
     expect(mark.dataset.problem).toBe("err");
     expect(mark).not.toHaveAttribute("data-problem-stale");
     expect(mark).not.toHaveTextContent("not rechecked");
+    expect(mark.querySelector("[data-problem-stale-glyph]")).toBeNull();
     expect(mark.title).toBe("CrashLoopBackOff");
   });
 });
