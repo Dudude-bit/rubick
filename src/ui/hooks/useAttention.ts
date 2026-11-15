@@ -12,6 +12,7 @@ import { useT } from "@/i18n/useT";
 import {
   attentionOf,
   problemsKept,
+  regainedUnder,
   servicesKept,
   type Attention,
 } from "@/lib/attention";
@@ -111,6 +112,8 @@ export function useAttention({
   // draw only when a problem goes unseen or is seen again.
   const kept =
     answered && problemsKept(keptKey, answered, overview.dataUpdatedAt);
+  const regained = regainedUnder(keptKey);
+  const overviewAt = overview.dataUpdatedAt;
   // A clock that moves in steps, so the cached answer holds between them.
   const now = useNow();
   const detection = useGatewayApi();
@@ -120,6 +123,7 @@ export function useAttention({
   const routesData = routing.routes.data;
   const routesError = routing.routes.error;
   const routesLate = late(routing.routes.freshness, now);
+  const routesAt = routing.routes.freshness.dataUpdatedAt;
   // A lock is a new object on every render; the count every screen keeps is
   // written to a store on change, so depending on one looped the shell.
   const gatewaysRefused = routing.gatewaysLock !== undefined;
@@ -142,6 +146,7 @@ export function useAttention({
         error: routesError,
         overdue: routesLate,
         refused: routesRefused,
+        at: routesAt,
       },
       backingError: routing.backingError,
       board: routing.board,
@@ -160,12 +165,17 @@ export function useAttention({
       routesData,
       routesError,
       routesLate,
+      routesAt,
       routing.backingError,
       routing.board,
       routing.scopedPulse,
     ]
   );
   const ingressData = ingresses.data;
+  const ingressAt = ingresses.freshness.dataUpdatedAt;
+  const autoscalerAt = autoscalers.freshness.dataUpdatedAt;
+  const claimAt = claims.freshness.dataUpdatedAt;
+  const servicesAt = services.freshness.dataUpdatedAt;
   const ingressError = ingresses.error;
   const ingressLate = late(ingresses.freshness, now);
   const autoscalerData = autoscalers.data;
@@ -182,26 +192,36 @@ export function useAttention({
       attentionOf(
         {
           overview: answered,
+          overviewAt,
+          regained,
           scope: wire,
           kept: kept || undefined,
           services: {
             answered: services.answered,
             unread: services.unread,
             overdue: servicesLate,
-            kept: servicesKept(keptKey, services.answered),
+            at: servicesAt,
+            kept: servicesKept(keptKey, services.answered, servicesAt),
           },
           ingresses: {
             data: ingressData,
             error: ingressError,
             overdue: ingressLate,
+            at: ingressAt,
           },
           ingressHealth,
           autoscalers: {
             data: autoscalerData,
             error: autoscalerError,
             overdue: autoscalerLate,
+            at: autoscalerAt,
           },
-          claims: { data: claimData, error: claimError, overdue: claimLate },
+          claims: {
+            data: claimData,
+            error: claimError,
+            overdue: claimLate,
+            at: claimAt,
+          },
           claimReads,
           gatewayApi,
           now,
@@ -210,21 +230,27 @@ export function useAttention({
       ),
     [
       answered,
+      overviewAt,
+      regained,
       kept,
       wire,
       keptKey,
       services,
       servicesLate,
+      servicesAt,
       ingressData,
       ingressError,
       ingressLate,
+      ingressAt,
       ingressHealth,
       autoscalerData,
       autoscalerError,
       autoscalerLate,
+      autoscalerAt,
       claimData,
       claimError,
       claimLate,
+      claimAt,
       claimReads,
       gatewayApi,
       now,

@@ -25,6 +25,7 @@ import {
   problemsKept,
   ranked,
   reasonWord,
+  regainedUnder,
   servicesKept,
   LONG_STANDING_HOURS,
   type AttentionInputs,
@@ -710,9 +711,14 @@ describe("what Needs attention lists beyond pods", () => {
       ...told,
       groups: [{ ...told.groups[0], ready: 1, stop: undefined }],
     };
+    let at = 0;
     const listedWith = (answered: ServiceHealthInputs[]) =>
       attention({
-        services: { answered, unread: [], kept: servicesKept(key, answered) },
+        services: {
+          answered,
+          unread: [],
+          kept: servicesKept(key, answered, (at += 1000)),
+        },
       });
 
     expect(
@@ -725,6 +731,97 @@ describe("what Needs attention lists beyond pods", () => {
     expect(kept.complete).toBe(false);
     expect(listedWith([serving]).items).toEqual([]);
     expect(listedWith([untold]).items).toEqual([]);
+  });
+
+  /**
+   * "none ready · not rechecked" stood with no time under a pod row that
+   * had one. Fails if a kept Service row loses when the answer that last
+   * told it came, or whether the reads since were refused.
+   */
+  it("dates a kept Service row by the answer that last told it", () => {
+    const key = "dates-a-kept-service";
+    const told = nothingPublished(false);
+    const untold = { ...nothingPublished(true), unread: [refusedInShop] };
+    servicesKept(key, [told], 1000);
+    const kept = attention({
+      services: {
+        answered: [untold],
+        unread: [],
+        kept: servicesKept(key, [untold], 2000),
+      },
+    });
+    expect(
+      kept.items.find((item) => item.name === "ledger")?.lastKnown
+    ).toEqual({ at: 1000, refused: true });
+  });
+
+  /**
+   * A crash-looping pod's row said "not rechecked" with no time when a
+   * Service's answer named its pods refused. Fails if a row marked by a lost
+   * reach of its kind is not stale, or not dated by the answer it came from.
+   */
+  it("dates a row its kind's lost reach marks by the answer it came from", () => {
+    const crashing: ClusterProblem = {
+      severity: "critical",
+      kind: "Pod",
+      name: "api-1",
+      namespace: "shop",
+      reason: "CrashLoopBackOff",
+      detail: null,
+      since: null,
+      restarts: 3,
+      foldedPods: null,
+      replaced: false,
+    };
+    const listed = attention({
+      overview: overview({ problems: [crashing] }),
+      overviewAt: 5000,
+      services: {
+        answered: [{ ...nothingPublished(true), unread: [refusedInShop] }],
+        unread: [],
+        at: 6000,
+      },
+    });
+    expect(listed.items.find((item) => item.kind === "Pod")).toMatchObject({
+      tone: "err",
+      stale: true,
+      lastKnown: { at: 5000, refused: true },
+    });
+  });
+
+  /**
+   * For fifteen seconds after a pods 403 lifted, Not checked said "Pods list
+   * is forbidden" and pod rows "not rechecked" under a Pods tile that had
+   * answered. Fails if a Services answer older than the overview that read
+   * the pods again still draws them unread, or if a newer one that still
+   * names them refused stops doing so.
+   */
+  it("asks the Services again rather than draw pods unread that the overview read again since", () => {
+    const key = "pods-read-again";
+    problemsKept(key, overview({ unread: LOST_PODS }), 1000);
+    problemsKept(key, overview(), 3000);
+    const heldBack = { ...nothingPublished(true), unread: [refusedInShop] };
+    const at = (servicesAt: number) =>
+      attention({
+        overview: overview(),
+        overviewAt: 3000,
+        regained: regainedUnder(key),
+        services: { answered: [heldBack], unread: [], at: servicesAt },
+      });
+
+    const asking = at(2000);
+    expect(asking.checks.find((each) => each.kind === "Pod")?.state).toBe(
+      "read"
+    );
+    expect(asking.checks.find((each) => each.kind === "Service")?.state).toBe(
+      "reading"
+    );
+    expect(asking.complete).toBe(false);
+
+    const still = at(4000);
+    expect(still.checks.find((each) => each.kind === "Pod")?.state).toBe(
+      "unread"
+    );
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */

@@ -4973,6 +4973,9 @@ export const en = {
       "Not rechecked: the cluster refused the read that would check this again. Last known at {time}.",
     problemNotRecheckedFailed:
       "Not rechecked: the read that would check this again failed. Last known at {time}.",
+    problemNotRecheckedUnseen: "not rechecked · no answer seen this session",
+    problemNotRecheckedUnseenTitle:
+      "Not rechecked: no read of it has answered in this session, so there is no time it is known at.",
     unreadOnScreen:
       "Some reads this window rests on did not answer, so the count may leave something out:",
     unreadOnScreenRefused: "{name}: refused {ago}, asked again by {time}",

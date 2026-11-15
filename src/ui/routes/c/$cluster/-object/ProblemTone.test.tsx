@@ -24,18 +24,25 @@ const chip = (problem: Problem) =>
 
 describe("a problem nobody could check again", () => {
   /**
-   * Pods refused, and the row and the peek drew green "Running"
-   * as if the probe had recovered. Fails if a kept problem is drawn in its
-   * old tone, without "not rechecked", or without why and since when.
+   * Pods refused, and the row and the peek drew green "Running" as if the
+   * probe had recovered; then a red crash loop turned amber because a read
+   * failed. Fails if a kept problem loses its severity's mark and colour,
+   * or does not say "not rechecked" in amber, and why and since when.
    */
-  it("says not rechecked in amber, and why and since when on hover", () => {
+  it("keeps the severity's mark and colour and says not rechecked in amber, and why and since when on hover", () => {
     const mark = chip({
       tone: "err",
       n: 1,
       title: "Unhealthy: Readiness probe failed",
       stale: { at: AT, refused: true },
     });
-    expect(mark.dataset.problem).toBe("warn");
+    expect(mark.dataset.problem).toBe("err");
+    const severity = mark.querySelector("[data-problem-mark]")!;
+    expect(severity).toHaveClass("text-err");
+    expect(severity.querySelector("svg.lucide-x")).not.toBeNull();
+    expect(mark.querySelector("[data-problem-not-rechecked]")).toHaveClass(
+      "text-warn"
+    );
     expect(mark).toHaveAttribute("data-problem-stale");
     expect(mark.querySelector("[data-problem-mark]")).toHaveTextContent(
       /^1 problem1·not rechecked·$/
@@ -45,8 +52,25 @@ describe("a problem nobody could check again", () => {
     );
   });
 
-  /** Fails if a failed read is called a refusal, or a kept Service row with no date loses its hover. */
-  it("says the read failed where it failed, and last known where it has no date", () => {
+  /**
+   * The status floor of a row stopped reserving room for "not rechecked", so
+   * a cell narrower than the whole mark has to drop it. Fails if the words
+   * are not hidden in the same container width the noun gives way in.
+   */
+  it("gives the not-rechecked words up in the width the noun gives way", () => {
+    const mark = chip({
+      tone: "err",
+      n: 1,
+      title: "x",
+      stale: { at: AT, refused: true },
+    });
+    const words = screen.getByText("not rechecked").parentElement!;
+    expect(words.className).toContain("@max-[264px]:hidden");
+    expect(mark.querySelector('[class*="@max-[264px]:inline"]')).not.toBeNull();
+  });
+
+  /** Fails if a failed read is called a refusal, or a mark with no date does not say why it has none. */
+  it("says the read failed where it failed, and why there is no time where it has none", () => {
     expect(
       chip({
         tone: "warn",
@@ -62,7 +86,7 @@ describe("a problem nobody could check again", () => {
         title: "x",
         stale: { at: null, refused: false },
       }).title
-    ).toMatch(/^Last known: a read behind this row failed/);
+    ).toMatch(/^Not rechecked: no read of it has answered in this session/);
   });
 
   /** Fails if a current problem starts saying it was not rechecked. */

@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter, testQueryClient } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
+import { formatWhen } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { unreadLines } from "@/lib/report-parts";
 import {
@@ -624,21 +625,27 @@ describe("a Service row whose pods share a cause", () => {
 });
 
 describe("a problem kept over a read that no longer answers", () => {
-  /** Fails if Share hands on a last-known problem as a current one, in its old tone, while the screen says "not rechecked". */
-  it("is shared as last known, amber", () => {
+  const AT_LAST = new Date(2026, 0, 1, 21, 4, 5).getTime();
+  /** Fails if Share hands on a last-known problem as a current one, without its time, or in another tone than the screen keeps for it. */
+  it("is shared as last known, since when, in its own severity", () => {
     const read = attentionFrom([problem]);
     const kept = {
       ...read,
       items: read.items.map((item) => ({
         ...item,
+        tone: "err" as const,
         stale: true,
-        lastKnown: { at: 0, refused: true },
+        lastKnown: { at: AT_LAST, refused: true },
       })),
     };
     const share = attentionShare(kept, t);
     const items = share.body.type === "findings" ? share.body.items : [];
-    expect(items[0]?.title).toMatch(/· not rechecked$/);
-    expect(items[0]?.role).toBe("warn");
+    expect(items[0]?.title).toMatch(
+      new RegExp(
+        `· not rechecked · last known at ${formatWhen(AT_LAST, "clock")}$`
+      )
+    );
+    expect(items[0]?.role).toBe("err");
   });
 });
 
@@ -1478,8 +1485,9 @@ describe("a scope one namespace of which refused its pods", () => {
   /**
    * Marco's team-blind Overview said "nothing found in what could be
    * checked" while ledger's controller had said Unavailable for hours, its
-   * pods refused. Fails if that verdict vanishes from Needs attention, or is
-   * counted as a problem nobody could confirm.
+   * pods refused. Fails if that verdict vanishes from Needs attention, is
+   * counted as a problem nobody could confirm, or draws its kind's mark
+   * twice ("≋≋ api").
    */
   it("names a workload its controller calls Unavailable under Not checked, uncounted", async () => {
     const said = {
@@ -1522,6 +1530,7 @@ describe("a scope one namespace of which refused its pods", () => {
       "its controller has said Unavailable for 3h; its pods were not read"
     );
     expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
+    expect(row.querySelectorAll("svg:not(.lucide-eye-off)")).toHaveLength(1);
   });
 
   /**
@@ -3351,17 +3360,18 @@ describe("a read that failed or was refused", () => {
     await panelOf(stalled());
     const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
     expect(row).toHaveAttribute("data-stale");
-    expect(row).toHaveClass("opacity-60");
+    expect(row).not.toHaveClass("opacity-60");
     expect(within(row as HTMLElement).getByText(/not rechecked/)).toBeVisible();
   });
 
   /**
-   * Under a Deployments 500 the Deployment's row quoted its controller in
-   * red with no mark, while the tile above said "not read". Fails if a kept
-   * row does not say it was not rechecked and when it was last known, or
-   * keeps the red of a current finding.
+   * Under a Deployments 500 the Deployment's row quoted its controller with
+   * no mark while the tile above said "not read"; then the mark repainted
+   * the red "Unavailable" amber, as if a failed read made it milder. Fails
+   * if a kept row does not say in amber that it was not rechecked and when
+   * it was last known, or loses its severity's mark and colour.
    */
-  it("says a kept row was not rechecked, since when, in amber", async () => {
+  it("says a kept row was not rechecked, since when, in amber, and keeps its severity", async () => {
     const at = new Date(2026, 0, 1, 20, 57, 44).getTime();
     const kept = {
       ...attentionFrom([problem]).items[0]!,
@@ -3386,10 +3396,57 @@ describe("a read that failed or was refused", () => {
       within(row as HTMLElement).getByTestId("attention-not-rechecked")
     ).toHaveTextContent("not rechecked · last known at 20:57:44");
     expect(
+      within(row as HTMLElement).getByTestId("attention-not-rechecked")
+    ).toHaveClass("text-warn");
+    expect(
       within(row as HTMLElement)
         .getByText("ScalingReplicaSet")
         .closest('[data-col="2"]')
-    ).toHaveClass("text-warn");
+    ).toHaveClass("text-err");
+    expect(row.querySelector("svg.lucide-x.text-err")).not.toBeNull();
+  });
+
+  /**
+   * "none ready · not rechecked" stood with no time under a row that said
+   * "last known at 22:13:52". Fails if a row kept by a failing overview read
+   * does not say when the overview last answered.
+   */
+  it("dates a row kept by a failing overview read by its last answer", async () => {
+    const at = new Date(2026, 0, 1, 22, 13, 52).getTime();
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+        refreshFailing={true}
+        answeredAt={at}
+      />
+    );
+    expect(screen.getByTestId("attention-not-rechecked")).toHaveTextContent(
+      "not rechecked · last known at 22:13:52"
+    );
+  });
+
+  /** Fails if a row with no time it is known at says only "not rechecked", with nothing on why. */
+  it("says why a row not rechecked has no time", async () => {
+    const unseen = { ...attentionFrom([problem]).items[0]!, stale: true };
+    await panelOf(
+      attentionFrom([], {
+        kept: [unseen],
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsShort: [],
+          unconfirmed: [],
+          unread: [{ kind: "Deployment", ...deploymentsFailed }],
+        } as unknown as ClusterOverview,
+      })
+    );
+    expect(screen.getByTestId("attention-not-rechecked")).toHaveTextContent(
+      "not rechecked · no answer seen this session"
+    );
   });
 
   /**

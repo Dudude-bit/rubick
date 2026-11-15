@@ -76,6 +76,7 @@ interface Store {
 }
 
 const NONE: readonly UnreadRead[] = [];
+const NO_KINDS: ReadonlySet<string> = new Set();
 const stores = new WeakMap<QueryClient, Store>();
 
 const KINDS: ReadonlySet<string> = new Set(
@@ -116,6 +117,29 @@ function heldBack(query: Query): Set<string> {
   return named.length > 0 ? new Set(named) : kindsOfKey(query.queryKey);
 }
 
+/** The kinds a read lists beyond the words of its key: the overview reads the backend's six. */
+const READS: Record<string, readonly string[]> = {
+  "cluster-overview": [
+    "pod",
+    "deployment",
+    "statefulset",
+    "daemonset",
+    "job",
+    "node",
+  ],
+};
+
+/** The kinds `answered` read and did not hold back. */
+function readBy(answered: Query): Set<string> {
+  const held = heldBack(answered);
+  return new Set(
+    [
+      ...kindsOfKey(answered.queryKey),
+      ...(READS[String(answered.queryKey[0])] ?? []),
+    ].filter((kind) => !held.has(kind))
+  );
+}
+
 /** What `query` on screen left unread, by kind, and as of when: a failure, or an answer holding a kind back. */
 function waitingOn(
   query: Query
@@ -147,7 +171,10 @@ function waitingOn(
  * unread on screen: those are asked again at once, whatever answered (a list
  * page, a watch's re-list), rather than on their own slower rate. Once per
  * {@link KEPT_FOR} each until they answer, or a kind refused in one namespace
- * and read in another would be asked on every poll of the other.
+ * and read in another would be asked on every poll of the other; but a read
+ * that had lost a kind and reads it again is a recovery, and what waits on
+ * that kind is asked at once. A probe asked once during a pods 403 held "not
+ * all checked" for 80 s after the Pods list read again.
  */
 function storeOf(client: QueryClient): Store {
   const known = stores.get(client);
@@ -159,29 +186,38 @@ function storeOf(client: QueryClient): Store {
     { kinds: Set<string>; at: number; refused: unknown; query: Query }
   >();
   const tried = new Map<string, number>();
+  // What a read left waiting on, kept past its answer: an observer sees the
+  // answer before the cache's success event does.
+  const left = new Map<string, Set<string>>();
   const listeners = new Set<() => void>();
   let shown = NONE;
   let off: (() => void) | null = null;
   const wait = (query: Query) => {
     const hash = query.queryHash;
     const now = cache.get(hash) === query ? waitingOn(query) : null;
-    if (now) waiting.set(hash, { ...now, query });
-    else {
+    const was = waiting.get(hash);
+    if (now) {
+      waiting.set(hash, { ...now, query });
+      left.delete(hash);
+    } else {
+      if (was) left.set(hash, was.kinds);
       waiting.delete(hash);
       tried.delete(hash);
     }
   };
-  const release = (answered: Query) => {
-    if (waiting.size === 0 || heldBack(answered).size > 0) return;
-    const kinds = kindsOfKey(answered.queryKey);
+  const release = (answered: Query, lost: ReadonlySet<string>) => {
+    if (waiting.size === 0) return;
+    const kinds = readBy(answered);
     if (kinds.size === 0) return;
     const now = Date.now();
     for (const [hash, held] of waiting) {
+      const about = [...held.kinds].filter((kind) => kinds.has(kind));
       if (
         hash === answered.queryHash ||
         held.at > answered.state.dataUpdatedAt ||
-        ![...held.kinds].some((kind) => kinds.has(kind)) ||
-        now - (tried.get(hash) ?? -Infinity) < KEPT_FOR
+        about.length === 0 ||
+        (!about.some((kind) => lost.has(kind)) &&
+          now - (tried.get(hash) ?? -Infinity) < KEPT_FOR)
       )
         continue;
       tried.set(hash, now);
@@ -234,8 +270,10 @@ function storeOf(client: QueryClient): Store {
             event.type === "updated" &&
             event.action.type === "success" &&
             !event.action.manual
-          )
-            release(query);
+          ) {
+            release(query, left.get(query.queryHash) ?? NO_KINDS);
+            left.delete(query.queryHash);
+          }
           if (changed) publish();
         });
         publish();
@@ -248,6 +286,7 @@ function storeOf(client: QueryClient): Store {
         unread.clear();
         waiting.clear();
         tried.clear();
+        left.clear();
         shown = NONE;
       };
     },

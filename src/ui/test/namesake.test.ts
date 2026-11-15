@@ -28,7 +28,6 @@ describe("a kind read from the cluster", () => {
     expect(said).toEqual([
       "src/ui/routes/c/$cluster/-overview/health.tsx",
       "src/ui/routes/c/$cluster/-overview/health.tsx",
-      "src/ui/routes/c/$cluster/-overview/health.tsx",
     ]);
   });
 

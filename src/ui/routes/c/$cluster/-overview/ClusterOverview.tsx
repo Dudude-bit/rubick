@@ -240,6 +240,7 @@ export function ClusterOverview() {
           nodes={overview.nodes}
           nodesKnown={overview.nodesKnown}
           refreshFailing={refreshFailing}
+          answeredAt={freshness.dataUpdatedAt}
         />
       ) : (
         <AttentionPending />

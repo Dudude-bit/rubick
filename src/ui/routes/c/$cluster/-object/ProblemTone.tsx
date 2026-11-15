@@ -23,7 +23,7 @@ function staleTitle({ title, stale }: Problem, t: T): string {
   if (!stale) return title;
   const why =
     stale.at === null
-      ? t("cluster", "attentionRowStale")
+      ? t("cluster", "problemNotRecheckedUnseenTitle")
       : t(
           "cluster",
           stale.refused
@@ -54,9 +54,9 @@ export function WithProblem({
   const t = useT();
   if (!problem) return <>{children}</>;
   const quiet = role !== null && role !== "warn" && role !== "err";
-  // A problem nobody could look at again is a read we could not do, amber
-  // whatever it was when it was seen.
-  const tone = problem.stale ? "warn" : problem.tone;
+  // A crash loop nobody could look at again is still a crash loop: the mark
+  // keeps its severity, and only the amber "not rechecked" says it is old.
+  const { tone } = problem;
   const Glyph = TONE_GLYPH[tone];
   const noun = NOUN[problem.stale ? "stale" : "fresh"];
   return (
@@ -80,10 +80,13 @@ export function WithProblem({
         </span>
         <span className={noun.count}>{problem.n}</span>
         {problem.stale && (
-          <>
+          <span
+            data-problem-not-rechecked=""
+            className={cn("inline-flex gap-1 text-warn", noun.whole)}
+          >
             <span aria-hidden="true">·</span>
             <span>{t("cluster", "problemNotRechecked")}</span>
-          </>
+          </span>
         )}
         {children != null && <span aria-hidden="true">·</span>}
       </span>

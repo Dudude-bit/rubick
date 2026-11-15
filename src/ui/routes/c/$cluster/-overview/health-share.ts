@@ -35,6 +35,7 @@ import {
   checkSaid,
   eventsChecks,
   foldedWords,
+  notRecheckedWords,
   reasonWord,
   shuttingPolicy,
   unreadWhere,
@@ -229,7 +230,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
     return {
       // Kept over a read that no longer answers: last known, as the screen says.
       title: item.stale
-        ? `${said} · ${t("cluster", "problemNotRechecked")}`
+        ? `${said} · ${notRecheckedWords(t, item.lastKnown?.at)}`
         : said,
       detail:
         [
@@ -242,7 +243,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         ]
           .filter((part) => part !== null)
           .join(" · ") || null,
-      role: item.stale ? "warn" : item.tone,
+      role: item.tone,
       ref: refOf({
         kind: item.kind,
         name: item.name,

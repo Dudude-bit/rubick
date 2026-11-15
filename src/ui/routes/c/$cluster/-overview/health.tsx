@@ -53,6 +53,7 @@ import {
   checkRefused,
   foldedWords,
   itemIsStale,
+  notRecheckedWords,
   reasonWord,
   shuttingPolicy,
   refusedVerb,
@@ -73,7 +74,7 @@ import {
 } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { HOLD_ATTRIBUTE, usePointerOnTable } from "@/lib/pointer-hold";
-import { cn, formatWhen } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
@@ -147,7 +148,6 @@ function useMeasuredColumns(ref: RefObject<HTMLElement | null>) {
 // Baselines, not centres: a detail that wraps keeps the marks on its first line.
 const ROW =
   "col-span-full grid grid-cols-subgrid items-baseline rounded-[5px] px-1.5 py-[5px] text-xs";
-const STALE = "opacity-60";
 const MARK = "mt-0.5 h-3 w-3 self-start justify-self-center";
 const SAID = "line-clamp-4 min-w-0 wrap-break-word text-fg-mid";
 
@@ -328,19 +328,22 @@ function AttentionRow({
   under = null,
   sameCause = false,
   stale = false,
+  answeredAt,
 }: {
   item: AttentionItem;
   /** Last known: the read this row rests on failed, so it may have changed. */
   stale?: boolean;
+  /** When the answer this row came from arrived, where the item does not say. */
+  answeredAt?: number;
   under?: Extract<AttentionLine, { at: "item" }>["under"];
   /** Under its workload's row, which already tells this cause. */
   sameCause?: boolean;
 }) {
   const t = useT();
-  // Last known is a read we could not do again: amber, whatever it was then.
-  const shownTone = stale ? "warn" : item.tone;
-  const tone = ROLE_TEXT[shownTone];
-  const SeverityIcon = ROLE_ICON[shownTone];
+  // A crash loop not rechecked is still a crash loop: the severity keeps its
+  // mark and colour, and only the amber suffix says the read is old.
+  const tone = ROLE_TEXT[item.tone];
+  const SeverityIcon = ROLE_ICON[item.tone];
   const link = objectLink(item.opens);
   const restarts = item.restarts ?? 0;
   const { Icon: ReasonIcon } = eventReasonMark(item.reason);
@@ -434,11 +437,7 @@ function AttentionRow({
             data-testid="attention-not-rechecked"
           >
             {" · "}
-            {item.lastKnown
-              ? t("cluster", "problemNotRecheckedAt", {
-                  time: formatWhen(item.lastKnown.at, "clock"),
-                })
-              : t("cluster", "problemNotRechecked")}
+            {notRecheckedWords(t, item.lastKnown?.at ?? answeredAt)}
           </span>
         )}
       </span>
@@ -508,7 +507,7 @@ function OpensRow({
     : {};
   if (link === null)
     return (
-      <div className={cn(ROW, stale && STALE)} data-testid={testId} {...mark}>
+      <div className={ROW} data-testid={testId} {...mark}>
         {children}
       </div>
     );
@@ -536,8 +535,7 @@ function OpensRow({
       }}
       className={cn(
         ROW,
-        "cursor-pointer hover:bg-hover focus-visible:bg-hover",
-        stale && STALE
+        "cursor-pointer hover:bg-hover focus-visible:bg-hover"
       )}
     >
       {children}
@@ -681,12 +679,8 @@ function UnconfirmedRow({ item }: { item: AttentionItem }) {
       data-testid="attention-unconfirmed"
     >
       <EyeOff className={cn(MARK, "text-fg-mut")} aria-hidden="true" />
-      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
-        <KindIcon
-          kind={item.kind}
-          crd={undefined}
-          className="h-2.5 w-2.5 flex-none self-center"
-        />
+      {/* The ref draws the kind's mark itself. */}
+      <span className="inline-flex min-w-0 items-baseline font-mono text-fg-mid">
         <ResourceRef
           kind={item.kind}
           name={item.name}
@@ -804,10 +798,13 @@ export function AttentionPanel({
   nodes,
   nodesKnown,
   refreshFailing = false,
+  answeredAt,
 }: {
   attention: Attention;
   /** The overview's own read is failing: every row is the last one that answered. */
   refreshFailing?: boolean;
+  /** When the overview last answered: the time a row kept by `refreshFailing` is last known at. */
+  answeredAt?: number;
   /** `null` when no pod list in scope answered: no count to state. */
   pods: Census<PodComposition> | null;
   /** The pods `pods` counts short of serving that no row names. */
@@ -936,6 +933,7 @@ export function AttentionPanel({
               under={line.under}
               sameCause={line.under === "workload" && line.sameCause}
               stale={refreshFailing || itemIsStale(attention, line.item)}
+              answeredAt={refreshFailing ? answeredAt : undefined}
             />
           ) : line.at === "shut" ? (
             <ShutRow
