@@ -225,6 +225,36 @@ describe("an estimate from entered prices", () => {
     expect(picture.cluster!.perHour).toBeCloseTo(2 * 0.04 + 8 * 0.005);
   });
 
+  /**
+   * A row's total from parts some of which carry no price is a floor, and
+   * one with none priced has no total: the rows printed 0 while their parts
+   * read "not priced".
+   */
+  it("makes a row a floor where a part it holds has no price", () => {
+    const picture = estimatePicture(
+      basis({
+        namespaces: [
+          {
+            namespace: "shop",
+            workloads: 1,
+            pods: 2,
+            cpu: 500,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 10 * GIB,
+          },
+        ],
+      }),
+      { ...prices, storage: null },
+      ["shop"]
+    );
+    expect(picture.namespaces[0]).toMatchObject({
+      atLeast: true,
+      unpriced: ["storage"],
+    });
+    expect(picture.total!.atLeast).toBe(true);
+  });
+
   /** Some namespaces of the scope unread: what was read is a floor. */
   it("calls a scope's total at least when some of its namespaces could not be read", () => {
     const picture = estimatePicture(
@@ -291,6 +321,45 @@ describe("a picture from OpenCost's prices", () => {
     );
     expect(picture.unpriced.storage).toEqual({ volumes: 4, bytes: 50 * GIB });
     expect(picture.cluster!.atLeast).toBe(true);
+  });
+
+  /**
+   * OpenCost with no node prices prices no CPU or memory: a namespace that
+   * runs pods has no total, and one OpenCost never named is still a row.
+   */
+  it("has no total for a namespace whose CPU and memory carry no price", () => {
+    const picture = readingPicture(
+      basis({
+        namespaces: [
+          {
+            namespace: "shop",
+            workloads: 1,
+            pods: 2,
+            cpu: 500,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 0,
+          },
+          {
+            namespace: "bank",
+            workloads: 1,
+            pods: 1,
+            cpu: 100,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 0,
+          },
+        ],
+      }),
+      reading({ namespaces: { shop: { storage: 0 } } }),
+      opencost,
+      null
+    );
+    const shop = picture.namespaces.find((n) => n.namespace === "shop")!;
+    expect(shop).toMatchObject({ perHour: 0, atLeast: true });
+    expect(shop.unpriced).toEqual(["cpu", "memory"]);
+    const bank = picture.namespaces.find((n) => n.namespace === "bank")!;
+    expect(bank.perHour).toBeNull();
   });
 
   /** No series for any of a workload's pods is "not priced", never 0/h. */

@@ -97,20 +97,53 @@ export interface Amount {
   atLeast: boolean;
 }
 
-export interface NamespaceCost {
-  namespace: string;
-  /** `null` where nothing of it could be priced. */
+/** A row's total, from the parts it has a price for. */
+export interface Priced {
+  /** `null` where none of what it holds carries a price. */
   perHour: number | null;
+  /** Some of what it holds carries no price: the total is a floor. */
+  atLeast: boolean;
   parts: Parts;
+  /** What it holds that carries no price, by part. */
+  unpriced: CostPart[];
 }
 
-export interface WorkloadCost {
+export interface NamespaceCost extends Priced {
+  namespace: string;
+}
+
+export interface WorkloadCost extends Priced {
   key: WorkloadKey;
   pods: number;
-  /** `null` where no series priced any of its pods. */
-  perHour: number | null;
-  parts: Parts;
   requests: { cpu: number; memory: number };
+}
+
+/** The parts a row holds something of, which a price must cover. */
+function heldParts(held: {
+  pods: number;
+  gpus: number;
+  storageBytes: number | null;
+}): CostPart[] {
+  return [
+    ...(held.pods > 0 ? (["cpu", "memory"] as const) : []),
+    ...(held.gpus > 0 ? (["gpu"] as const) : []),
+    ...((held.storageBytes ?? 0) > 0 ? (["storage"] as const) : []),
+  ];
+}
+
+/**
+ * A row out of what it holds and the parts priced: unpriced parts make it a
+ * floor, and a row priced in none of them has no total, never 0.
+ */
+function pricedRow(parts: Parts, held: readonly CostPart[]): Priced {
+  const unpriced = held.filter((part) => parts[part] === undefined);
+  const any = Object.keys(parts).length > 0;
+  return {
+    perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
+    atLeast: any && unpriced.length > 0,
+    parts,
+    unpriced,
+  };
 }
 
 export interface NodeCost {
@@ -230,7 +263,7 @@ function scopeTotal(
     atLeast:
       partial ||
       basis.unread.length > 0 ||
-      namespaces.some((n) => n.perHour === null),
+      namespaces.some((n) => n.perHour === null || n.atLeast),
   };
 }
 
@@ -335,7 +368,7 @@ export function estimatePicture(
       });
       if (n.storageBytes !== null && prices.storage !== null)
         parts.storage = storagePerHour(n.storageBytes, prices.storage);
-      return { namespace: n.namespace, perHour: partsTotal(parts), parts };
+      return { namespace: n.namespace, ...pricedRow(parts, heldParts(n)) };
     });
 
   const workloads = basis.workloads.map((w): WorkloadCost =>
@@ -385,12 +418,13 @@ export function estimatePicture(
 }
 
 function estimateWorkload(w: WorkloadBasis, prices: Prices): WorkloadCost {
-  const parts = priceOf(prices, w);
   return {
     key: w.key,
     pods: w.pods,
-    perHour: partsTotal(parts),
-    parts,
+    ...pricedRow(
+      priceOf(prices, w),
+      heldParts({ ...w, storageBytes: w.claimBytes })
+    ),
     requests: { cpu: w.cpu, memory: w.memory },
   };
 }
@@ -457,13 +491,20 @@ export function readingPicture(
       unpriced.storage !== null,
   };
 
-  const namespaces = Object.entries(reading.namespaces)
-    .filter(([namespace]) => inScope(scope, namespace))
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([namespace, parts]): NamespaceCost => ({
+  // Every namespace the cluster runs something in, priced or not: one
+  // nothing priced is a row that says so, not a row left out.
+  const held = new Map(basis.namespaces.map((n) => [n.namespace, n]));
+  const namespaces = [
+    ...new Set([...Object.keys(reading.namespaces), ...held.keys()]),
+  ]
+    .filter((namespace) => inScope(scope, namespace))
+    .sort((a, b) => a.localeCompare(b))
+    .map((namespace): NamespaceCost => ({
       namespace,
-      perHour: partsTotal(parts),
-      parts,
+      ...pricedRow(
+        reading.namespaces[namespace] ?? {},
+        heldParts(held.get(namespace) ?? { pods: 0, gpus: 0, storageBytes: 0 })
+      ),
     }));
 
   const fold = "failed" in reading.workloads ? null : reading.workloads;
@@ -477,8 +518,10 @@ export function readingPicture(
     return {
       key: w.key,
       pods: w.pods,
-      perHour: valuesTotal(values),
-      parts,
+      // A failed read priced nothing it could vouch for: no total at all.
+      ...(fold
+        ? pricedRow(parts, heldParts({ ...w, storageBytes: w.claimBytes }))
+        : { perHour: null, atLeast: false, parts, unpriced: [] }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });
@@ -525,6 +568,8 @@ export type CostTarget =
 
 export interface CostOf {
   perHour: number | null;
+  /** Its own total is a floor: some of what it holds carries no price. */
+  partial: boolean;
   /** Of the whole cluster, where both are known. */
   share: number | null;
   atLeast: boolean;
@@ -556,6 +601,7 @@ export function costOf(
   const cluster = picture.cluster;
   return {
     perHour: row.perHour,
+    partial: row.atLeast,
     share:
       row.perHour === null || !cluster || cluster.perHour <= 0
         ? null

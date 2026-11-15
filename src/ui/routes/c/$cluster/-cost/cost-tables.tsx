@@ -20,6 +20,7 @@ import {
   type CostPicture,
   type NamespaceCost,
   type NodeCost,
+  type CostPart,
   type Parts,
   type WorkloadCost,
 } from "@/lib/cost";
@@ -59,15 +60,46 @@ interface Used {
   memory: { avg: number | null; peak: number | null } | null;
 }
 
-function money(
-  value: number | null | undefined,
-  currency: string,
-  t: T
-): string {
-  return value === null || value === undefined
-    ? t("cost", "notPriced")
-    : formatMoney(value, currency);
+/**
+ * What a money cell says: an amount, an amount that is a floor, no price
+ * for what is there, or nothing there to price.
+ */
+type Said = number | { atLeast: number } | "notPriced" | "none";
+
+function money(value: Said | null | undefined, currency: string, t: T): string {
+  if (value === null || value === undefined || value === "notPriced")
+    return t("cost", "notPriced");
+  if (value === "none") return t("empty", "noneLower");
+  if (typeof value === "number") return formatMoney(value, currency);
+  return t("cost", "atLeast", { amount: formatMoney(value.atLeast, currency) });
 }
+
+/** A row's total: a floor where some of what it holds carries no price. */
+const totalOf = (
+  row: { perHour: number | null; atLeast: boolean },
+  scale = 1
+): Said =>
+  row.perHour === null
+    ? "notPriced"
+    : row.atLeast
+      ? { atLeast: row.perHour * scale }
+      : row.perHour * scale;
+
+/** One part: its price, no price for what is there, or nothing there. */
+const partOf = (
+  row: { parts: Parts; unpriced: readonly CostPart[] },
+  part: CostPart
+): Said =>
+  row.parts[part] ?? (row.unpriced.includes(part) ? "notPriced" : "none");
+
+const sortable = (said: Said): number =>
+  typeof said === "number"
+    ? said
+    : typeof said === "object"
+      ? said.atLeast
+      : said === "none"
+        ? 0
+        : -1;
 
 function share(value: number | null, t: T): string {
   return value === null ? t("cost", "notPriced") : formatShare(value);
@@ -77,30 +109,27 @@ function Money({
   value,
   currency,
 }: {
-  value: number | null | undefined;
+  value: Said | null | undefined;
   currency: string;
 }) {
   const t = useT();
-  return value === null || value === undefined ? (
-    <span className="text-fg-fnt">{t("cost", "notPriced")}</span>
+  const words = money(value, currency, t);
+  return typeof value === "number" || (value && typeof value === "object") ? (
+    <span className="font-mono tabular-nums">{words}</span>
   ) : (
-    <span className="font-mono tabular-nums">
-      {formatMoney(value, currency)}
-    </span>
+    <span className="text-fg-fnt">{words}</span>
   );
 }
-
-const part = (parts: Parts, key: keyof Parts) => parts[key] ?? null;
 
 function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
   const moneyColumn = (
     id: string,
     header: string,
-    read: (row: NamespaceRow) => number | null
+    read: (row: NamespaceRow) => Said
   ): ColumnDef<NamespaceRow> => ({
     id,
     header,
-    accessorFn: (row) => read(row) ?? -1,
+    accessorFn: (row) => sortable(read(row)),
     cell: ({ row }) => (
       <Money value={read(row.original)} currency={row.original.currency} />
     ),
@@ -121,9 +150,9 @@ function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
         />
       ),
     },
-    moneyColumn("perHour", t("cost", "perHour"), (row) => row.perHour),
+    moneyColumn("perHour", t("cost", "perHour"), (row) => totalOf(row)),
     moneyColumn("perMonth", t("cost", "perMonth"), (row) =>
-      row.perHour === null ? null : monthOf(row.perHour)
+      totalOf(row, monthOf(1))
     ),
     {
       id: "share",
@@ -136,16 +165,14 @@ function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
       ),
       meta: { share: (row: NamespaceRow, tt: T) => share(row.share, tt) },
     },
-    moneyColumn("cpu", t("cost", "cpu"), (row) => part(row.parts, "cpu")),
-    moneyColumn("memory", t("cost", "memory"), (row) =>
-      part(row.parts, "memory")
-    ),
-    moneyColumn("gpu", t("cost", "gpu"), (row) => part(row.parts, "gpu")),
+    moneyColumn("cpu", t("cost", "cpu"), (row) => partOf(row, "cpu")),
+    moneyColumn("memory", t("cost", "memory"), (row) => partOf(row, "memory")),
+    moneyColumn("gpu", t("cost", "gpu"), (row) => partOf(row, "gpu")),
     moneyColumn("storage", t("cost", "storage"), (row) =>
-      part(row.parts, "storage")
+      partOf(row, "storage")
     ),
     moneyColumn("loadBalancer", t("cost", "loadBalancers"), (row) =>
-      part(row.parts, "loadBalancer")
+      partOf(row, "loadBalancer")
     ),
   ];
 }
@@ -212,13 +239,13 @@ function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
     {
       id: "perHour",
       header: t("cost", "perHour"),
-      accessorFn: (row) => row.perHour ?? -1,
+      accessorFn: (row) => sortable(totalOf(row)),
       cell: ({ row }) => (
-        <Money value={row.original.perHour} currency={row.original.currency} />
+        <Money value={totalOf(row.original)} currency={row.original.currency} />
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
-          money(row.perHour, row.currency, tt),
+          money(totalOf(row), row.currency, tt),
       },
     },
     {

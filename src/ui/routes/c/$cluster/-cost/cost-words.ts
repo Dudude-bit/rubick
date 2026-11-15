@@ -148,11 +148,12 @@ export function costLineWords(
   }
   if (of.perHour === null) return t("cost", "lineNotPriced");
   const currency = currencyOf(picture);
+  // Some of what it holds carries no price: its own amount is a floor.
+  const amount = (perHour: number) =>
+    amountWords({ perHour, atLeast: of.partial }, currency, t);
   const parts = [
-    t("cost", "linePerHour", { amount: formatMoney(of.perHour, currency) }),
-    t("cost", "linePerMonth", {
-      amount: formatMoney(monthOf(of.perHour), currency),
-    }),
+    t("cost", "linePerHour", { amount: amount(of.perHour) }),
+    t("cost", "linePerMonth", { amount: amount(monthOf(of.perHour)) }),
   ];
   if (of.share !== null)
     parts.push(
