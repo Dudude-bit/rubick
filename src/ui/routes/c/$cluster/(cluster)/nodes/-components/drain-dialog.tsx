@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -75,6 +76,7 @@ const OUTCOME_LABEL: Record<DrainOutcome, keyof typeof en.action> = {
   stopped: "drainStopped",
   cancelled: "drainCancelled",
   failed: "drainFailed",
+  refused: "drainRefused",
 };
 
 /** Split for the two lists: one is waiting, the other is not going to move. */
@@ -89,9 +91,12 @@ export function DrainDialog({
   onOpenChange,
   onConfirm,
   onCancelDrain,
+  onItsPage = false,
 }: {
   /** The node to drain, or `null` for a closed dialog. */
   node: string | null;
+  /** Opened from the node's own page, where "Open the node first" leads nowhere. */
+  onItsPage?: boolean;
   state: DrainState;
   onOpenChange: (open: boolean) => void;
   onConfirm: (node: string, choices: DrainChoices) => void;
@@ -117,6 +122,7 @@ export function DrainDialog({
           <DrainConfirm
             key={node ?? ""}
             node={node}
+            onItsPage={onItsPage}
             t={t}
             onCancel={() => onOpenChange(false)}
             onConfirm={onConfirm}
@@ -137,11 +143,13 @@ export function DrainDialog({
 /** Everything read and decided before the drain runs. */
 function DrainConfirm({
   node,
+  onItsPage,
   t,
   onCancel,
   onConfirm,
 }: {
   node: string | null;
+  onItsPage: boolean;
   t: T;
   onCancel: () => void;
   onConfirm: (node: string, choices: DrainChoices) => void;
@@ -240,7 +248,7 @@ function DrainConfirm({
             explained={t("tell", "askDrainExplained")}
           />
         </div>
-        {node && (
+        {node && !onItsPage && (
           <Link
             {...objectLink({ kind: ResourceType.Node, name: node })!}
             className="pt-1 text-caption text-info hover:underline"
@@ -268,6 +276,18 @@ function DrainConfirm({
   );
 }
 
+/** A drain the cluster said no to is a lock in amber, not a red break. */
+function DrainEnd({ refused, t }: { refused: boolean; t: T }) {
+  return refused ? (
+    <p className="inline-flex items-center gap-1.5 text-xs font-medium text-warn">
+      <Lock className="h-3 w-3 flex-none" aria-hidden="true" />
+      {t("action", "drainRefused")}
+    </p>
+  ) : (
+    <p className="text-xs font-medium text-bad">{t("action", "drainFailed")}</p>
+  );
+}
+
 /** The drain while it runs, and where it ended. */
 function DrainLive({
   state,
@@ -286,9 +306,7 @@ function DrainLive({
     return (
       <>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium text-bad">
-            {t("action", "drainFailed")}
-          </p>
+          <DrainEnd refused={state.refused} t={t} />
           <p className="text-caption text-fg-fnt">{state.message}</p>
         </div>
         <DialogFooter>
@@ -346,6 +364,8 @@ function DrainLive({
               </p>
             )}
           </>
+        ) : state.outcome === "refused" ? (
+          <DrainEnd refused t={t} />
         ) : (
           <p className="text-xs font-medium text-fg-mid">
             {state.outcome

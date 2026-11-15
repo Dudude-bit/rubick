@@ -504,15 +504,63 @@ describe("reading how a drain ended", () => {
       dialog({
         phase: "failed",
         node: "node-7",
-        message: 'nodes "node-7" is forbidden',
+        message: "the connection was reset",
+        refused: false,
       })
     );
 
-    expect(screen.getByText(/is forbidden/)).toBeInTheDocument();
+    expect(screen.getByText(/the drain broke/i)).toBeInTheDocument();
+    expect(screen.getByText(/connection was reset/)).toBeInTheDocument();
     // Nothing is running, so there is nothing to stop.
     expect(
       screen.queryByRole("button", { name: /stop draining/i })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("a drain the cluster refused", () => {
+  /**
+   * A cordon the cluster refused read "The drain broke. 0 pods moved off."
+   * beside Scale, Restart and Delete saying the cluster refused. Fails if a
+   * refusal, before or during the drain, is told as a drain that broke.
+   */
+  it("says the cluster refused it, before the drain started and after", async () => {
+    const { unmount } = await wrap(
+      dialog({
+        phase: "failed",
+        node: "node-7",
+        message: 'nodes "node-7" is forbidden',
+        refused: true,
+      })
+    );
+    expect(screen.getByText("The cluster refused the drain.")).toHaveClass(
+      "text-warn"
+    );
+    expect(screen.queryByText(/the drain broke/i)).not.toBeInTheDocument();
+    unmount();
+
+    await wrap(
+      dialog({
+        phase: "done",
+        node: "node-7",
+        outcome: "refused",
+        report: report({ evicted: 0, refused: [] }),
+        message: 'nodes "node-7" is forbidden',
+      })
+    );
+    expect(screen.getByText("The cluster refused the drain.")).toHaveClass(
+      "text-warn"
+    );
+    expect(screen.queryByText(/the drain broke/i)).not.toBeInTheDocument();
+  });
+
+  /** Fails if the dialog opened from the node's own page sends the reader to open that node. */
+  it("does not offer to open the node from the node's own page", async () => {
+    const { unmount } = await wrap(dialog({ phase: "idle" }));
+    expect(screen.getByText("Open the node first")).toBeInTheDocument();
+    unmount();
+    await wrap(dialog({ phase: "idle" }, { onItsPage: true }));
+    expect(screen.queryByText("Open the node first")).not.toBeInTheDocument();
   });
 });
 

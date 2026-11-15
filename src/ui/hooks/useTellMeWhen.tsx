@@ -51,6 +51,7 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
   drainStopped: "saysDrainStopped",
   drainCancelled: "saysDrainCancelled",
   drainFailed: "saysDrainFailed",
+  drainRefused: "saysDrainRefused",
   renewed: "saysRenewed",
   issuanceFailed: "saysIssuanceFailed",
   forwardDied: "saysForwardDied",
@@ -70,6 +71,7 @@ const DRAIN_SAYS: Record<DrainOutcome, Says> = {
   stopped: "drainStopped",
   cancelled: "drainCancelled",
   failed: "drainFailed",
+  refused: "drainRefused",
 };
 
 export function answerLine(answer: Answer, t: T): string {

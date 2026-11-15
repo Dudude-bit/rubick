@@ -156,6 +156,7 @@ export function useNodeActions(asked: string | null): NodeActions {
       />
       <DrainDialog
         node={open}
+        onItsPage={open !== null && open === asked}
         state={state}
         onOpenChange={(next) => {
           if (next) return;

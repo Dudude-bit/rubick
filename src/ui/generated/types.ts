@@ -3327,7 +3327,12 @@ export type ListedWith = "gnuFind" | "busyboxStat";
 
 export type FileKind = "file" | "dir" | "symlink" | "other";
 
-export type DrainOutcome = "drained" | "stopped" | "cancelled" | "failed";
+export type DrainOutcome =
+  | "drained"
+  | "stopped"
+  | "cancelled"
+  | "failed"
+  | "refused";
 
 export type DrainRefusal =
   | "notNow"

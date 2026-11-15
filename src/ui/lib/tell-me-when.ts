@@ -75,6 +75,7 @@ export type Says =
   | "drainStopped"
   | "drainCancelled"
   | "drainFailed"
+  | "drainRefused"
   | "renewed"
   | "issuanceFailed"
   | "forwardDied"
@@ -116,6 +117,8 @@ export const SAYS_TONE: Record<Says, string> = {
   drainStopped: "bg-warn",
   drainCancelled: "bg-fg-fnt",
   drainFailed: "bg-err",
+  // The cluster said no: a read we could not do, not a fault.
+  drainRefused: "bg-warn",
   renewed: "bg-ok",
   issuanceFailed: "bg-err",
   forwardDied: "bg-err",

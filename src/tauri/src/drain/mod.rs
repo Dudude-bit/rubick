@@ -196,6 +196,18 @@ pub enum DrainOutcome {
     /// The drain itself broke — the node could not be listed, say. Not a
     /// pod refusing, which is `refused`.
     Failed,
+    /// The cluster said no to the drain's own cordon or reads: a 403, which
+    /// broke nothing and is answered by access, not by trying again.
+    Refused,
+}
+
+/// A drain that could not go on: refused where the cluster said no.
+fn stopped_by(err: &Error) -> DrainOutcome {
+    if err.is_refusal() {
+        DrainOutcome::Refused
+    } else {
+        DrainOutcome::Failed
+    }
 }
 
 // --- deciding ------------------------------------------------------------
@@ -552,7 +564,7 @@ async fn run(
     if let Err(err) = cordoned {
         let message = crate::state::readable_cause(&err);
         tracing::warn!("Drain {drain_id} could not cordon {node}: {message}");
-        bail!(DrainOutcome::Failed, &empty, Some(message));
+        bail!(stopped_by(&err), &empty, Some(message));
     }
 
     let surveyed = tokio::select! {
@@ -570,7 +582,7 @@ async fn run(
         Err(err) => {
             let message = crate::state::readable_cause(&err);
             tracing::warn!("Drain {drain_id} could not read {node}: {message}");
-            bail!(DrainOutcome::Failed, &empty, Some(message));
+            bail!(stopped_by(&err), &empty, Some(message));
         }
     };
 
@@ -601,7 +613,7 @@ async fn run(
                     let message = crate::state::readable_cause(&err);
                     let report =
                         assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
-                    bail!(DrainOutcome::Failed, &report, Some(message));
+                    bail!(stopped_by(&err), &report, Some(message));
                 }
             }
         }
@@ -1164,6 +1176,52 @@ mod tests {
             0,
             "the session row goes with the task, on every exit path"
         );
+    }
+
+    /// A refused cordon read "The drain broke", a fault, beside the other
+    /// dialogs' "The cluster refused it". Fails if a 403 from the cluster is
+    /// told as a drain that broke.
+    #[tokio::test]
+    async fn a_drain_the_cluster_refuses_ends_refused_not_failed() {
+        use http::{Request, Response};
+        use kube::client::Body;
+
+        let service = tower::service_fn(|_: Request<Body>| async move {
+            Ok::<_, std::convert::Infallible>(
+                Response::builder()
+                    .status(403)
+                    .body(Body::from(
+                        br#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"nodes \"node-a\" is forbidden","reason":"Forbidden","code":403}"#
+                            .to_vec(),
+                    ))
+                    .unwrap(),
+            )
+        });
+        let (manager, mut rx) = manager();
+        let handle = manager.start(
+            Client::new(service, "default"),
+            || None,
+            "node-a".to_string(),
+            safe(),
+        );
+        manager
+            .mark_subscribed(&handle.drain_id)
+            .expect("the drain is there to subscribe to");
+        let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                if let AppEvent::DrainFinished {
+                    drain_id, outcome, ..
+                } = rx.recv().await.expect("the channel stays open")
+                {
+                    if drain_id == handle.drain_id {
+                        return outcome;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("a refused drain has to finish");
+        assert_eq!(outcome, DrainOutcome::Refused);
     }
 
     /// A drain waiting on a pod to leave outlives the token it started with.
