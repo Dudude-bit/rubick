@@ -7,8 +7,8 @@
 //! said to have been let go: the stretch it leaves is never drawn quiet.
 //!
 //! Nothing a change row says can be a value the app does not show: an env
-//! literal and every `ConfigMap` or `Secret` value are compared by a digest
-//! that never leaves this process (`project`).
+//! literal, every `ConfigMap` or `Secret` value and every annotation that may
+//! copy them are compared by a digest that never leaves this process (`project`).
 
 mod disk;
 pub(crate) mod follow;
@@ -98,8 +98,9 @@ pub enum FieldMove {
         from: Option<String>,
         to: Option<String>,
     },
-    /// A value the timeline does not keep, an env literal or a `ConfigMap`
-    /// or `Secret` value: only whether it was there, and that it changed.
+    /// A value the timeline does not keep, an env literal, a `ConfigMap` or
+    /// `Secret` value, or an annotation that may copy one: only whether it
+    /// was there, and that it changed.
     NotKept { path: String, was: bool, is: bool },
 }
 
