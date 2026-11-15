@@ -152,6 +152,23 @@ function titleMatches(
 /** Kinds a query offers to open the list of, before any object it finds. */
 export const KINDS_SHOWN = 6;
 
+/** 0 a whole name of the kind, 1 a prefix of one, 2 inside one, null no match. */
+export function kindTier(
+  entry: CatalogEntry,
+  needle: string,
+  words: readonly string[] = []
+): 0 | 1 | 2 | null {
+  const names = [entry.kind.toLowerCase(), entry.plural.toLowerCase()];
+  if (
+    [...names, ...words].includes(needle) ||
+    shortNamesOf(entry).includes(needle)
+  )
+    return 0;
+  if ([...names, ...words].some((name) => name.startsWith(needle))) return 1;
+  if ([...names, ...words].some((name) => name.includes(needle))) return 2;
+  return null;
+}
+
 /**
  * Kinds the query names: by kind, plural, kubectl short name, or a word the
  * reader's language or English calls it. Whole names first, then prefixes.
@@ -163,18 +180,8 @@ export function matchingKinds(
 ): CatalogEntry[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
-  const rank = (entry: CatalogEntry) => {
-    const names = [entry.kind.toLowerCase(), entry.plural.toLowerCase()];
-    const words = wordsFor(entry.kind);
-    if (
-      [...names, ...words].includes(needle) ||
-      shortNamesOf(entry).includes(needle)
-    )
-      return 0;
-    if ([...names, ...words].some((name) => name.startsWith(needle))) return 1;
-    if ([...names, ...words].some((name) => name.includes(needle))) return 2;
-    return null;
-  };
+  const rank = (entry: CatalogEntry) =>
+    kindTier(entry, needle, wordsFor(entry.kind));
   return kinds
     .flatMap((entry) => {
       const at = rank(entry);
@@ -690,6 +697,7 @@ export function buildPaletteEntries({
     );
 
   const out: Entry[] = [];
+  let laterKindRows: Entry[] = [];
 
   if (bang) {
     out.push({
@@ -851,19 +859,29 @@ export function buildPaletteEntries({
       ? matchingKinds(kinds, query, (kind) => wordsOf(kind, t))
       : [];
     if (served.length > 0) {
-      out.push({
-        id: "cap:kinds",
-        kind: "caption",
-        text: t("action", "paletteKinds"),
-      });
-      for (const entry of served) {
-        out.push({
+      const kindRows: Entry[] = [
+        {
+          id: "cap:kinds",
+          kind: "caption",
+          text: t("action", "paletteKinds"),
+        },
+        ...served.map((entry): Entry => ({
           id: `kind:${entry.group}/${entry.plural}`,
           kind: "kind",
           entry,
           path: servedListLink(entry),
-        });
-      }
+        })),
+      ];
+      const wholeKind = served.some(
+        (entry) => kindTier(entry, needle, wordsOf(entry.kind, t)) === 0
+      );
+      const wholeObject = shownClusters.some((cluster) =>
+        [...(hitsByContext.get(cluster.context)?.values() ?? [])].some(
+          (hit) => hit.name.toLowerCase() === needle
+        )
+      );
+      if (wholeObject && !wholeKind) laterKindRows = kindRows;
+      else out.push(...kindRows);
     }
 
     // Under their own caption, not Navigation: they open a panel over the
@@ -1028,6 +1046,11 @@ export function buildPaletteEntries({
     if (own && !everything && more > 0 && cluster.status === "done") {
       out.push({ id: "search-more", kind: "search-more", count: more });
     }
+  }
+
+  if (laterKindRows.length > 0) {
+    const lastHit = out.map((entry) => entry.kind).lastIndexOf("hit");
+    out.splice(lastHit < 0 ? out.length : lastHit + 1, 0, ...laterKindRows);
   }
 
   // Rows, not hits: a cluster whose every match was a kind with nowhere to

@@ -650,7 +650,7 @@ export function EnvironmentVariables({
 
     if (ev.isFromEnvFrom && ev.name.endsWith("*")) {
       if (isSecret && !showSecrets) {
-        return t("empty", "enableShowSecrets");
+        return t("empty", "valueHidden");
       }
       // No variable came of it: still reading, refused, failed, or it holds none.
       const names = isSecret ? allSecretNames : allConfigMapNames;
@@ -731,7 +731,7 @@ export function EnvironmentVariables({
       <Section>
         <SectionHeader
           title={t("columns", "environment")}
-          count={expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length}
+          count={expandedEnvVars.length}
           actions={
             <>
               {sources.size > 1 && (
@@ -927,6 +927,19 @@ export function EnvironmentVariables({
               </TableBody>
             </Table>
           )}
+          {!showSecrets &&
+            filteredEnvVars.some(
+              (ev) =>
+                ev.isFromEnvFrom &&
+                ev.name.endsWith("*") &&
+                ev.sourceType === "envFromSecret"
+            ) && (
+              <p className="mt-1.5 text-caption text-fg-mut">
+                {t("empty", "secretKeysHidden", {
+                  toggle: t("action", "showSecrets"),
+                })}
+              </p>
+            )}
         </CollapsibleContent>
       </Section>
     </Collapsible>

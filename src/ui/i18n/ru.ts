@@ -3795,6 +3795,7 @@ export const ru: Catalogue = {
     usageShareOf: "{percent}% от значения «{noun}»",
     usageRestarted: "перезапуск",
     usageNoSample: "Нет замера между {from} и {to}",
+    usageGapCaption: "нет замеров",
     usageNoSampleSince: "Нет замера после {from}",
     usageNoSampleBefore: "Нет замера до {to}",
     usageNoSampleHere: "Здесь нет замера",
@@ -6362,7 +6363,7 @@ export const ru: Catalogue = {
     showLineDetail: "Показать подробности строки",
     collapseRepeats: "Свернуть повторы",
     watchingFromNow:
-      "Наблюдаем с этого момента: metrics-server истории не хранит, поэтому линия начинается здесь и растёт вправо.",
+      "Наблюдаем с {time}: metrics-server истории не хранит, поэтому линия начинается там и растёт вправо.",
     noLimitSet:
       "Предел не задан: шкала показывает израсходованное, и ничто не мешает занять всё, что есть у узла.",
     noRulesRoutesNothing:
@@ -7304,7 +7305,9 @@ export const ru: Catalogue = {
     addRepositoryThenSearch: "Добавьте репозиторий, затем ищите в нём чарты.",
     manifestsAreAt: "Манифесты лежат в",
     inRevision: "на ревизии",
-    enableShowSecrets: "(включите «Показать секреты», чтобы увидеть)",
+    valueHidden: "Скрыто",
+    secretKeysHidden:
+      "Ключи из секрета не перечислены, пока вы не включите «{toggle}».",
     noDataFound: "(данных нет)",
     notFoundRef: "(не найдено: {name}:{key})",
     allKeysFrom: "все ключи из",
@@ -7874,7 +7877,7 @@ export const ru: Catalogue = {
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
     shellRefused:
-      "Кластер не дал открыть оболочку в {target}: этому пользователю pods/exec запрещён.",
+      "Этому пользователю нельзя открыть оболочку в {target}: pods/exec запрещён.",
     shellExited: "Оболочка в {target} завершилась.",
     noLongerAvailable: "{target} больше недоступен.",
     nothingLeftToAttachTo: "Подключаться уже не к чему",
@@ -10272,7 +10275,7 @@ export const ru: Catalogue = {
     },
     fromEndpoint: "из {endpoint}",
     watchingFromNow: "наблюдаем с этого момента",
-    watchedSincePageOpen: "наблюдаем с момента открытия страницы · пока {span}",
+    watchedSincePageOpen: "наблюдаем с {time} · пока {span}",
     nodes: {
       one: "{n} узел",
       few: "{n} узла",

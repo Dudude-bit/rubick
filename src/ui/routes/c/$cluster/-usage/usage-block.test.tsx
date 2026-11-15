@@ -332,7 +332,7 @@ describe("UsageBlock window label", () => {
       />
     );
     expect(
-      screen.getByText(/watched since you opened this page/i)
+      screen.getByText(/watched since \d{1,2}:\d{2}/i)
     ).toBeInTheDocument();
   });
 });
@@ -498,7 +498,9 @@ describe("UsageBlock in its first seconds", () => {
         status={{ status: "available", message: null }}
       />
     );
-    expect(screen.getAllByText(/Watching from now/i)).toHaveLength(1);
+    expect(screen.getAllByText(/Watching since \d{1,2}:\d{2}/i)).toHaveLength(
+      1
+    );
   });
 });
 
@@ -541,9 +543,7 @@ describe("UsageBlock and a history supplier", () => {
     }
     // The core answer is drawn and stays drawn.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "connect one" })).toHaveAttribute(
       "href",
@@ -660,9 +660,7 @@ describe("UsageBlock and a history supplier", () => {
 
     // An integration may never take something away.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
     // And it must not read as never-configured.
     expect(
@@ -687,9 +685,7 @@ describe("UsageBlock and a history supplier", () => {
 
     // Still the watched window, drawn, while the range is in flight.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
   });
 });

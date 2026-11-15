@@ -508,3 +508,60 @@ describe("UsageChart where a sample was missed", () => {
     expect(tip.textContent).toMatch(/No sample between \S+ and \S+/);
   });
 });
+
+describe("UsageChart before it has a line", () => {
+  /** At 32 s the band was two dots in an unlabelled shaded box. Fails if the shaded span has no caption. */
+  it("captions the shaded span", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[
+          {
+            t: 1_000_000,
+            cpuMillicores: 40,
+            memoryBytes: null,
+            restarts: null,
+          },
+          {
+            t: 1_090_000,
+            cpuMillicores: null,
+            memoryBytes: null,
+            restarts: null,
+          },
+          {
+            t: 1_120_000,
+            cpuMillicores: 46,
+            memoryBytes: null,
+            restarts: null,
+          },
+        ]}
+        limit={200}
+        current={46}
+      />
+    );
+    expect(container.querySelector(".recharts-reference-area")).not.toBeNull();
+    expect(container.textContent).toContain("not sampled");
+  });
+
+  /** A lone reading says when watching began, not just that it began. Fails if the clock leaves the sentence. */
+  it("says when watching began beside a lone reading", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[
+          {
+            t: 1_000_000,
+            cpuMillicores: 40,
+            memoryBytes: null,
+            restarts: null,
+          },
+        ]}
+        limit={200}
+        current={40}
+      />
+    );
+    expect(container.textContent).toMatch(/Watching since \d{1,2}:\d{2}/);
+  });
+});

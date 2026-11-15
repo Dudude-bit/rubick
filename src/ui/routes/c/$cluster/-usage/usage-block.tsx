@@ -32,6 +32,7 @@ import type {
   VolumeFullness,
 } from "@/integrations";
 import { errorToShow } from "@/lib/error-utils";
+import { formatWhen } from "@/lib/utils";
 import { pageLink } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
 import {
@@ -214,7 +215,7 @@ export function UsageBlock({
       ? t("empty", noLimitNote)
       : null
     : available && samples.length > 0 && samples.length < 2
-      ? t("empty", WATCHING_NOTE)
+      ? t("empty", WATCHING_NOTE, { time: formatWhen(samples[0].t, "clock") })
       : available && samples.length >= 2 && neither
         ? t("empty", noLimitNote)
         : null;
@@ -253,7 +254,10 @@ export function UsageBlock({
             ? null
             : watched === null
               ? t("count", "watchingFromNow")
-              : t("count", "watchedSincePageOpen", { span: watched }),
+              : t("count", "watchedSincePageOpen", {
+                  span: watched,
+                  time: formatWhen(samples[0].t, "clock"),
+                }),
         ]
           .filter(Boolean)
           .join(" · ");

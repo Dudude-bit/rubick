@@ -156,6 +156,7 @@ function UsageChartInner({
   const ratio =
     limit !== null && limit > 0 && value !== null ? value / limit : null;
   const average = ranged ? averageOf(points) : null;
+  const firstAt = points.find((p) => p.v !== null)?.t ?? null;
   const peak = ranged && live ? peakOf(points) : null;
   const peakAt = peak === null ? null : points.find((p) => p.v === peak)?.t;
 
@@ -249,8 +250,8 @@ function UsageChartInner({
       <UsageNote>
         {suppressNote || (drawn === 0 && value === null)
           ? null
-          : drawn <= 1 && live
-            ? t("empty", WATCHING_NOTE)
+          : drawn <= 1 && live && firstAt !== null
+            ? t("empty", WATCHING_NOTE, { time: clockOf(firstAt) })
             : (limit === null || limit <= 0) && noLimitNote !== null
               ? t("empty", noLimitNote)
               : null}

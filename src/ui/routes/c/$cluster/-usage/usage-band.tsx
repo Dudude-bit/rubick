@@ -230,6 +230,12 @@ export default function Band(props: BandProps) {
               strokeOpacity={0.3}
               strokeDasharray="2 2"
               ifOverflow="hidden"
+              label={{
+                value: t("readings", "usageGapCaption"),
+                position: "insideTopLeft",
+                fill: "hsl(var(--fg-fnt))",
+                fontSize: 10,
+              }}
             />
           ))}
 

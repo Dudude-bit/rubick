@@ -181,9 +181,11 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
 
     expect(
       await screen.findByText(
-        "The cluster refused a shell in log-demo-7f9/app: pods/exec is forbidden to this user."
+        "This user may not open a shell in log-demo-7f9/app: pods/exec is forbidden."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/^No shell/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/refused/i)).toHaveLength(1);
     expect(screen.getAllByText(/403 Forbidden/)).toHaveLength(1);
     expect(screen.queryByText(/No shell on/)).not.toBeInTheDocument();
     expect(

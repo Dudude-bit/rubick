@@ -313,3 +313,41 @@ describe("variables taken whole from a Secret or a ConfigMap", () => {
     );
   });
 });
+
+describe("the environment's count and its hidden secret rows", () => {
+  const fromSecret = (
+    <EnvironmentVariables
+      namespace="team-checkout"
+      env={[]}
+      envFrom={[
+        {
+          prefix: null,
+          secretRef: "checkout-db",
+          configMapRef: null,
+          optional: null,
+        },
+      ]}
+    />
+  );
+
+  /**
+   * "Environment 0" sat above a table listing a row, and the Value cell held
+   * a sentence that broke one word per line. Fails if the count stops
+   * counting the rows listed, or the hint goes back into the narrow cell
+   * under another name for the switch.
+   */
+  it("counts the row it lists and says once, under the table, which switch reveals it", async () => {
+    vi.mocked(commands.getSecret).mockResolvedValue({
+      dataKeys: ["DB_PASSWORD"],
+    } as never);
+    await renderWithRouter(fromSecret, POD);
+
+    expect(await screen.findByTestId("section-count")).toHaveTextContent("1");
+    const hint = screen.getByText(
+      /not listed until you turn on “Show secrets”/
+    );
+    expect(hint.closest("td")).toBeNull();
+    expect(screen.getByText("Show secrets")).toBeInTheDocument();
+    expect(screen.queryByText(/Show all secrets/)).toBeNull();
+  });
+});

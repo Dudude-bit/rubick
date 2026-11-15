@@ -522,11 +522,6 @@ export function ResourceDetailLayout({
             unread={unread}
           />
 
-          {/* Above the strip, and so on every tab: both say something about the
-            object rather than about a view of it. Usually neither is there at
-            all — the delivery line is earned per object, never per managed
-            object, and a summary is what a healthy object does not have. */}
-          <DeliveryBanner deliveries={deliveries} />
           {/* One mount for every kind that has a page. An alert names objects
             this app draws through six different components, and a banner
             copied into each is how five of them come to say something the
@@ -543,6 +538,7 @@ export function ResourceDetailLayout({
           )}
           {summary}
           <FindingsBlock findings={shown} />
+          <DeliveryBanner deliveries={deliveries} />
 
           <DetailTabs
             tabs={tabs}

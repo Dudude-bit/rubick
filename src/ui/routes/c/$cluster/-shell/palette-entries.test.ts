@@ -117,6 +117,77 @@ const read = (kind: string, group = "", plural = `${kind.toLowerCase()}s`) => ({
   plural,
 });
 
+describe("the palette's order between a kind and an object", () => {
+  const kind = (name: string, group: string, plural: string) => ({
+    kind: name,
+    group,
+    plural,
+    version: "v1",
+    namespaced: true,
+    verbs: ["list"],
+    shortNames: [],
+  });
+  const kinds = [
+    kind("FrontendConfig", "networking.gke.io", "frontendconfigs"),
+    kind("Deployment", "apps", "deployments"),
+  ];
+  const hit = (name: string, kindName = "Deployment"): SearchHit => ({
+    context: "k3d-dev",
+    kind: kindName,
+    group: kindName === "Deployment" ? "apps" : "",
+    plural: kindName === "Deployment" ? "deployments" : "services",
+    name,
+    namespace: "default",
+  });
+  const order = (text: string, hits: SearchHit[]) =>
+    buildPaletteEntries(
+      state({
+        text,
+        kinds,
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext(hits),
+      })
+    )
+      .filter((entry) => entry.kind === "kind" || entry.kind === "hit")
+      .map((entry) => (entry.kind === "kind" ? "kind" : "hit"));
+
+  /**
+   * Rule: a whole object name, then a whole kind name, then prefixes of
+   * either. "frontend" opened the FrontendConfig list above the Deployment
+   * named frontend.
+   */
+  it.each([
+    [
+      "a whole object name beats a kind's prefix",
+      "frontend",
+      [hit("frontend")],
+      ["hit", "kind"],
+    ],
+    [
+      "a whole kind name beats an object's prefix",
+      "deployment",
+      [hit("deployment-x")],
+      ["kind", "hit"],
+    ],
+    [
+      "a whole name of both keeps the kind first",
+      "deployments",
+      [hit("deployments")],
+      ["kind", "hit"],
+    ],
+    [
+      "a prefix of each keeps the kind first",
+      "frontend",
+      [hit("frontend-web")],
+      ["kind", "hit"],
+    ],
+  ])("%s", (_, text, hits, expected) => {
+    const got = order(text, hits as SearchHit[]);
+    expect(got.filter((x) => x === "kind").length).toBeGreaterThan(0);
+    expect(got.filter((_, i, all) => all.indexOf(_) === i)).toEqual(expected);
+  });
+});
+
 describe("the palette's entries with nothing typed", () => {
   /**
    * Recent objects are what a reader opens the palette for most often;

@@ -3486,6 +3486,7 @@ export const en = {
     usageShareOf: "{percent}% of {noun}",
     usageRestarted: "restarted",
     usageNoSample: "No sample between {from} and {to}",
+    usageGapCaption: "not sampled",
     usageNoSampleSince: "No sample since {from}",
     usageNoSampleBefore: "No sample before {to}",
     usageNoSampleHere: "No sample here",
@@ -5735,7 +5736,7 @@ export const en = {
     showLineDetail: "Show line detail",
     collapseRepeats: "Collapse these repeats",
     watchingFromNow:
-      "Watching from now: metrics-server keeps no history, so the line starts here and grows to the right.",
+      "Watching since {time}: metrics-server keeps no history, so the line starts there and grows to the right.",
     noLimitSet:
       "No limit set: the scale is what it has used, and nothing stops it taking the node's.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
@@ -6589,7 +6590,9 @@ export const en = {
     addRepositoryThenSearch: "Add a repository, then search it for charts.",
     manifestsAreAt: "The manifests are at",
     inRevision: "in",
-    enableShowSecrets: "(enable 'Show all secrets' to reveal)",
+    valueHidden: "Hidden",
+    secretKeysHidden:
+      "The keys from a secret are not listed until you turn on “{toggle}”.",
     noDataFound: "(no data found)",
     notFoundRef: "(not found: {name}:{key})",
     allKeysFrom: "all keys from",
@@ -7143,7 +7146,7 @@ export const en = {
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
     shellRefused:
-      "The cluster refused a shell in {target}: pods/exec is forbidden to this user.",
+      "This user may not open a shell in {target}: pods/exec is forbidden.",
     shellExited: "The shell on {target} ended.",
     noLongerAvailable: "{target} is no longer available.",
     nothingLeftToAttachTo: "Nothing left to attach to",
@@ -8857,7 +8860,7 @@ export const en = {
     podNotCreatedSegment: { one: "not created", other: "not created" },
     fromEndpoint: "from {endpoint}",
     watchingFromNow: "watching from now",
-    watchedSincePageOpen: "watched since you opened this page · {span} so far",
+    watchedSincePageOpen: "watched since {time} · {span} so far",
     nodes: { one: "{n} node", other: "{n} nodes" },
     clusters: { one: "{n} cluster", other: "{n} clusters" },
     users: { one: "{n} user", other: "{n} users" },
