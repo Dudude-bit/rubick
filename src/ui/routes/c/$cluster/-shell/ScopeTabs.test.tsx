@@ -775,6 +775,30 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
+   * The designer typed "all" and pressed Enter: the picker scoped the whole
+   * app to a namespace named "all" that the cluster does not have, over the
+   * "All namespaces" row above it, and no row was drawn as the one Enter
+   * would take. Fails if the typed row beats All namespaces for its own
+   * first letters, or the row Enter takes is not drawn active.
+   */
+  it("takes All namespaces for its first letters, and shows what Enter takes", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    await openPicker(user);
+    await user.keyboard("all");
+    const input = screen.getByRole("combobox", {
+      name: t("action", "filterNamespaces"),
+    });
+    const active = input.getAttribute("aria-activedescendant");
+    expect(active).not.toBeNull();
+    expect(document.getElementById(active ?? "")).toHaveTextContent(
+      t("cluster", "allNamespaces")
+    );
+    await user.keyboard("{Enter}");
+    expect(scope()).toEqual([]);
+  });
+
+  /**
    * A pod page under a scope that does not hold its namespace is a tab
    * naming one namespace over an object in another. Fails if a pick that
    * leaves the object out keeps its page, or one that keeps it in leaves it.

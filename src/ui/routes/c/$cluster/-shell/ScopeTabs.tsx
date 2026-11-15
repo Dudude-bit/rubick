@@ -1304,8 +1304,27 @@ function NamespacePopover({
         ]),
   ];
 
+  // What Enter takes with nothing arrowed onto, drawn as the active row so
+  // the reader sees it before pressing: a listed name typed in full, then
+  // "All namespaces" for its own first letters (typing "all" scoped the app
+  // to a namespace of that name nobody has), then the first row the filter
+  // left, the typed row only when nothing listed matches.
+  const exact = ordered.findIndex((ns) => ns.name === typedName);
+  const meansAll =
+    needle.length >= 3 &&
+    t("cluster", "allNamespaces").toLowerCase().startsWith(needle);
+  const pick =
+    needle === ""
+      ? -1
+      : exact >= 0
+        ? exact + 1
+        : meansAll
+          ? 0
+          : rows.length > 1
+            ? 1
+            : -1;
   // A cursor left pointing past a list the filter has shortened is not a row.
-  const at = cursor < rows.length ? cursor : -1;
+  const at = cursor >= 0 && cursor < rows.length ? cursor : pick;
 
   // The caret stays in the input, so the browser will not bring the arrowed
   // row into view. Optional call because jsdom does not implement it.
@@ -1399,18 +1418,10 @@ function NamespacePopover({
                 return;
               }
               if (event.key !== "Enter") return;
-              // Enter with nothing arrowed onto is the filter's own answer:
-              // type three letters, press it, and you are in that namespace —
-              // which is the frequent job done without touching the mouse.
-              // A listed namespace before the typed text: the typed row is
-              // always an exact match, and took "lena" over lena-sandbox.
-              const exact = ordered.findIndex((ns) => ns.name === typedName);
-              const row =
-                at >= 0
-                  ? rows[at]
-                  : needle !== ""
-                    ? rows[exact >= 0 ? exact + 1 : 1]
-                    : undefined;
+              // Enter with nothing arrowed onto is the filter's own answer,
+              // the row drawn active above: type three letters, press it, and
+              // you are in that namespace without touching the mouse.
+              const row = at >= 0 ? rows[at] : undefined;
               if (!row) return;
               event.preventDefault();
               if (event.metaKey || event.ctrlKey) toggle(row);
