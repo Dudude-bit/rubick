@@ -1036,7 +1036,7 @@ describe("a detail page whose re-read fails", () => {
 
     expect(await screen.findByText("read failing")).toBeInTheDocument();
     expect(
-      screen.getByText(/Could not read Pod api-7bcd just now/)
+      screen.getByText(/Could not read Pod api-7bcd\./)
     ).toBeInTheDocument();
     expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(

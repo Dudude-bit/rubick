@@ -316,9 +316,7 @@ describe("a list whose rows come from outside", () => {
 
     expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(
-      screen.getByText(
-        /Could not read pods just now\. The rows below are from 09:55:10/
-      )
+      screen.getByText(/Could not read pods\. The rows below are from 09:55:10/)
     ).toBeVisible();
     expect(screen.getByText(/502 Bad Gateway/)).toBeVisible();
     expect(screen.getByText("read failing")).toBeVisible();

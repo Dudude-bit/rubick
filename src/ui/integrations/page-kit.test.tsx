@@ -688,7 +688,7 @@ describe("a vendor page whose re-read failed over data it already has", () => {
       />
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Could not read Flux just now"
+      "Could not read Flux."
     );
     fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
     await waitFor(() => expect(refetch).toHaveBeenCalledOnce());

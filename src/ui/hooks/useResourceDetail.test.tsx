@@ -50,6 +50,8 @@ import {
 import { useLastOwners, type KnownOwners, type Owner } from "./useLastOwners";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useWindowActivity } from "@/lib/window-activity";
+import { wrapCommand } from "@/lib/commands";
+import { currentConnection, noteRefusal, refusalOf } from "@/lib/refusals";
 
 interface Pod {
   name: string;
@@ -637,5 +639,26 @@ describe("a detail page whose own read comes back", () => {
 
     await act(() => result.current.refetch());
     await waitFor(() => expect(part).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("an object page opened over a refusal kept from before", () => {
+  /**
+   * The api Deployment's read was refused for 4 s; ten minutes later its
+   * peek, opened again, still said "refused · 10m ago" and asked nothing:
+   * the kept refusal answered every read. Fails if opening the page does not
+   * ask the cluster once more, or the answer leaves the refusal kept.
+   */
+  it("asks the cluster once more when it is opened", async () => {
+    const asked = vi.fn(async (name: string) => ({ name }));
+    const getPod = wrapCommand(asked, "getPod");
+    const read = 'getPod ["api-7bcd",null]';
+    noteRefusal(read, new Error("pods is forbidden"), currentConnection());
+    const { result } = await detail((name) => getPod(name, null));
+    await waitFor(() =>
+      expect(result.current.resource).toEqual({ name: "api-7bcd" })
+    );
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect(refusalOf(read)).toBeUndefined();
   });
 });

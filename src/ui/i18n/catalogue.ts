@@ -7080,11 +7080,11 @@ export const en = {
       "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
     staleRows:
-      "Could not read {label} just now. The rows below are from {time}, the last read that answered.",
+      "Could not read {label}. The rows below are from {time}, the last read that answered.",
     watchLiveListFailing:
       "The rows come from the open watch, which is still live. A fresh list of {label} is failing.",
     staleObject:
-      "Could not read {label} just now. What is below is from {time}, the last read that answered.",
+      "Could not read {label}. What is below is from {time}, the last read that answered.",
     couldNotReadInNamespace: "Could not read {label} in {namespace}.",
     noneWhereAnswered: "No {label} in {namespaces}.",
     gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",

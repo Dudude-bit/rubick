@@ -81,7 +81,7 @@ import { usePeekWidth } from "./peek-width";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
-import { useRefusedAt } from "@/lib/refusals";
+import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
 import { useHeldRow, useHoldingList } from "@/hooks/useHeldRow";
 import { usePartsReadAgainOnAnswer } from "@/hooks/useResourceDetail";
 import { useListLive } from "@/hooks/useWatchedList";
@@ -124,9 +124,16 @@ export function PeekContent({
   // of its name is this panel's to draw.
   const builtIn = builtInKindOf(target);
 
+  // Opening an object asks the cluster once more, as a list visit does: a
+  // refusal kept from minutes before is not this look's answer.
+  const visit = useMemo(
+    () => askedAgainFirst(),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one visit per object
+    [source, target.name, namespace]
+  );
   const read = useLiveQuery({
     queryKey: peekQueryKey(target),
-    queryFn: () => source.fetch(target.name, namespace),
+    queryFn: () => visit(() => source.fetch(target.name, namespace)),
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
     refetchOnWindowFocus: false,

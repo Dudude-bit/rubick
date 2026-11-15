@@ -9,7 +9,7 @@
  * - Copy to clipboard
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   useMutation,
@@ -34,7 +34,7 @@ import { useObjectWatch, watchedByName } from "./useObjectWatch";
 import { useHeldRow } from "./useHeldRow";
 import { asksAgainOnMount, useStaleNotFound } from "./useStaleNotFound";
 import { backInTab } from "@/stores/scopeTabStore";
-import { askAgain } from "@/lib/refusals";
+import { askAgain, askedAgainFirst } from "@/lib/refusals";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -139,6 +139,14 @@ export function useResourceDetail<T>(
     [setSearch, defaultTab]
   );
 
+  // Opening the page asks the cluster once more, as a list visit does: a
+  // refusal kept from minutes before is not this look's answer.
+  const visit = useMemo(
+    () => askedAgainFirst(),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one visit per object
+    [resourceKind, namespace, name]
+  );
+
   // Fetch resource data
   const {
     data: held,
@@ -153,7 +161,7 @@ export function useResourceDetail<T>(
     queryKey: queryKeys.detail(resourceKind, namespace, name),
     queryFn: async () => {
       if (!name) throw new Error("Name is required");
-      const result = await fetchResource(name, namespace || null);
+      const result = await visit(() => fetchResource(name, namespace || null));
       onResourceFetched?.(result);
       return result;
     },

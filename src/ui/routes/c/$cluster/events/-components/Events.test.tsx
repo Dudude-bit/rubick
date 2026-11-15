@@ -1446,7 +1446,7 @@ describe("a feed a watch keeps", () => {
     // The read that drew the page ahead of the watch is still fresh, so the
     // poll that replaces the watch comes on its own beat.
     expect(
-      await screen.findByText(/Could not read events just now/, undefined, {
+      await screen.findByText(/Could not read events\./, undefined, {
         timeout: 3000,
       })
     ).toBeInTheDocument();
@@ -1473,7 +1473,7 @@ describe("a feed a watch keeps", () => {
     );
     listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
     send([{ op: "failed", resource: null }], "connection reset by peer");
-    await screen.findByText(/Could not read events just now/, undefined, {
+    await screen.findByText(/Could not read events\./, undefined, {
       timeout: 3000,
     });
 
@@ -1490,9 +1490,7 @@ describe("a feed a watch keeps", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.getByText("read failing")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Could not read events just now/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Could not read events\./)).toBeInTheDocument();
 
     await act(async () => answer([dated("prod", 0)]));
     await waitFor(() =>
@@ -1570,7 +1568,7 @@ describe("a feed whose re-read fails", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read events just now/)
+      await screen.findByText(/Could not read events\./)
     ).toBeInTheDocument();
     expect(document.body.textContent).toContain("prod-pod-0");
     expect(screen.getByText("read failing")).toBeInTheDocument();
@@ -1654,7 +1652,7 @@ describe("a feed across namespaces whose re-read fails", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read events just now/)
+      await screen.findByText(/Could not read events\./)
     ).toBeInTheDocument();
     expect(document.body.textContent).toContain("staging-pod-1");
     expect(document.body.textContent).toContain("prod-pod-1");
@@ -1677,7 +1675,7 @@ describe("a feed across namespaces whose re-read fails", () => {
     expect(
       await screen.findByText(/Could not read the events in/)
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Could not read events just now/)).toBeNull();
+    expect(screen.queryByText(/Could not read events\./)).toBeNull();
   });
 });
 

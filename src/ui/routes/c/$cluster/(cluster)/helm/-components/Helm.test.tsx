@@ -79,7 +79,7 @@ describe("Helm releases whose re-read fails", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read Helm releases just now/)
+      await screen.findByText(/Could not read Helm releases\./)
     ).toBeInTheDocument();
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.getByText("api")).toBeInTheDocument();

@@ -813,7 +813,7 @@ describe("PeekPanel", () => {
 
     expect(
       await screen.findByText(
-        /Could not read Pod crash-demo-56588f6b8c-8bj9v just now/
+        /Could not read Pod crash-demo-56588f6b8c-8bj9v\./
       )
     ).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
@@ -839,7 +839,7 @@ describe("PeekPanel", () => {
     });
     expect(await screen.findByText(/500 from get/)).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
-    expect(screen.getByText(/Could not read Pod .* just now/)).toBeVisible();
+    expect(screen.getByText(/Could not read Pod .*\./)).toBeVisible();
     expect(screen.queryByText("Could not read this Pod")).toBeNull();
   });
 
