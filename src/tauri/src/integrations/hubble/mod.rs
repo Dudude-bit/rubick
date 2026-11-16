@@ -588,14 +588,38 @@ fn end_of(endpoint: Option<&flow::Endpoint>, address: &str, names: &[String]) ->
     }
 }
 
-/// A drop's reason, whether an L7 rule denied it, and the policies behind it.
-type DropCause = (String, bool, Vec<PolicyRef>);
+/// A drop's reason, and whether an L7 rule denied it.
+type DropCause = (String, bool);
+
+/// Cilium's monitor message type of a policy verdict (`pkg/monitor/api`).
+const POLICY_VERDICT: i32 = 5;
+
+/// One cause's drops. The datapath reports a denied packet twice, as a drop
+/// and as a policy verdict, and only the verdict names the policy
+/// (`CorrelatePolicy`): the two are counted apart and the larger kept.
+#[derive(Default)]
+struct Tally {
+    drops: u32,
+    verdicts: u32,
+    policies: BTreeSet<PolicyRef>,
+}
+
+impl Tally {
+    fn add(&mut self, other: &Tally) {
+        self.drops += other.drops;
+        self.verdicts += other.verdicts;
+        self.policies.extend(other.policies.iter().cloned());
+    }
+
+    fn count(&self) -> u32 {
+        self.drops.max(self.verdicts)
+    }
+}
 
 #[derive(Default)]
 struct Second {
     forwarded: u32,
-    dropped: u32,
-    drops: BTreeMap<DropCause, u32>,
+    drops: BTreeMap<DropCause, Tally>,
     requests: u32,
     errors: u32,
     latencies: Vec<f64>,
@@ -708,7 +732,6 @@ impl Fold {
                 }
             }
         } else if one.verdict == Verdict::Dropped as i32 {
-            second.dropped += 1;
             let reason = DropReason::try_from(one.drop_reason_desc).map_or_else(
                 |_| one.drop_reason_desc.to_string(),
                 |r| r.as_str_name().to_string(),
@@ -720,10 +743,17 @@ impl Fold {
                 ]
                 .concat(),
             );
-            *second
-                .drops
-                .entry((reason, one.l7.is_some(), denied))
-                .or_default() += 1;
+            let tally = second.drops.entry((reason, one.l7.is_some())).or_default();
+            tally.policies.extend(denied);
+            if one
+                .event_type
+                .as_ref()
+                .is_some_and(|e| e.r#type == POLICY_VERDICT)
+            {
+                tally.verdicts += 1;
+            } else {
+                tally.drops += 1;
+            }
         } else {
             second.forwarded += 1;
         }
@@ -769,11 +799,10 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
     let mut sum = Second::default();
     for (_, second) in seconds {
         sum.forwarded += second.forwarded;
-        sum.dropped += second.dropped;
         sum.requests += second.requests;
         sum.errors += second.errors;
-        for (why, n) in &second.drops {
-            *sum.drops.entry(why.clone()).or_default() += n;
+        for (why, tally) in &second.drops {
+            sum.drops.entry(why.clone()).or_default().add(tally);
         }
         sum.latencies.extend_from_slice(&second.latencies);
         sum.protocols.extend(second.protocols.iter().cloned());
@@ -790,14 +819,14 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
         from: key.0.clone(),
         to: key.1.clone(),
         forwarded: per(sum.forwarded),
-        dropped: per(sum.dropped),
+        dropped: per(sum.drops.values().map(Tally::count).sum()),
         drops: sum
             .drops
             .into_iter()
-            .map(|((reason, l7, policies), n)| LiveDrop {
+            .map(|((reason, l7), tally)| LiveDrop {
                 reason,
-                rate: per(n),
-                policies,
+                rate: per(tally.count()),
+                policies: tally.policies.into_iter().collect(),
                 l7,
             })
             .collect(),
@@ -904,6 +933,44 @@ mod tests {
                 name: "deny-all".into(),
             }]
         );
+    }
+
+    /// One denied packet is a drop notification and a policy verdict, both
+    /// DROPPED: counted once, with the policy only the verdict names; with
+    /// drop notifications off, the verdicts alone are the count.
+    #[test]
+    fn a_denied_packet_is_one_drop_named_by_its_policy_verdict() {
+        let denied = |kind: i32, by: &str| flow::Flow {
+            event_type: Some(flow::CiliumEventType {
+                r#type: kind,
+                sub_type: 0,
+            }),
+            drop_reason_desc: DropReason::PolicyDenied as i32,
+            ingress_denied_by: if by.is_empty() {
+                vec![]
+            } else {
+                vec![flow::Policy {
+                    name: by.into(),
+                    namespace: "shop".into(),
+                    kind: "NetworkPolicy".into(),
+                    ..Default::default()
+                }]
+            },
+            ..event(Verdict::Dropped, "intruder", "db")
+        };
+        let mut fold = Fold::new(100);
+        fold.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        fold.add(100, &denied(1, ""));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs[0].dropped, 1.0);
+        assert_eq!(pairs[0].drops.len(), 1);
+        assert_eq!(pairs[0].drops[0].rate, 1.0);
+        assert_eq!(pairs[0].drops[0].policies[0].name, "db-from-caller-only");
+
+        let mut verdicts_only = Fold::new(100);
+        verdicts_only.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        verdicts_only.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        assert_eq!(verdicts_only.tick(101).0[0].dropped, 2.0);
     }
 
     /// A request an L7 rule denied is a drop the pair carries, marked as
