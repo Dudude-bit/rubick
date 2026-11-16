@@ -34,7 +34,7 @@ vi.mock("@/hooks/useCost", async (importOriginal) => ({
 }));
 
 const { CostPage } = await import("./CostPage");
-const { WorkloadCostLine } = await import("./cost-line");
+const { NamespaceCostLine, WorkloadCostLine } = await import("./cost-line");
 
 const node = (name: string): NodeBasis => ({
   name,
@@ -424,6 +424,49 @@ describe("the Cost page", () => {
     expect(
       screen.getAllByText(/^50m average · 100m peak, over 2h$/).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("a namespace no OpenCost series prices", () => {
+  /**
+   * `ml` runs pods on a node OpenCost has no price for, so the join drops
+   * every one of its series. Its row stays on the page and its own line
+   * says it is not priced. Fails if either read the missing series as
+   * nothing running on a node.
+   */
+  it("keeps its row and says it is not priced, never that nothing runs", async () => {
+    const ml = {
+      namespace: "ml",
+      workloads: 1,
+      pods: 2,
+      cpu: 2000,
+      memory: 4 * GIB,
+      gpus: 0,
+      storageBytes: 0,
+    };
+    const picture = readingPicture(
+      { ...BASIS, namespaces: [...BASIS.namespaces, ml] },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      ["ml"]
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["ml"] });
+    await open();
+    // The scope is `ml` alone, so the one namespace row is its own.
+    const [, row] = screen.getAllByRole("row");
+    expect(row).toHaveTextContent(/^not priced/);
+    expect(
+      screen.queryByText("Nothing in this scope runs on a node.")
+    ).toBeNull();
+
+    await renderWithRouter(<NamespaceCostLine namespace="ml" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
+      "No OpenCost series priced its pods."
+    );
   });
 });
 
