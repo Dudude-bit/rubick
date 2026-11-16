@@ -749,11 +749,13 @@ impl Inner {
         let Some(sub) = self.subscribers.get_mut(&id) else {
             return;
         };
-        if let Update::Whole { slot, .. } = &update {
-            sub.seen.insert(slot.clone());
-        }
+        // A set it never received is not one it has seen.
+        let whole = match &update {
+            Update::Whole { slot, .. } => Some(slot.clone()),
+            _ => None,
+        };
         match sub.tx.try_send(update) {
-            Ok(()) => {}
+            Ok(()) => sub.seen.extend(whole),
             Err(mpsc::error::TrySendError::Full(_)) => sub.lagged = true,
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 self.leave(id);
@@ -761,8 +763,9 @@ impl Inner {
         }
     }
 
-    /// A subscriber that fell behind is handed every slot it follows whole,
-    /// and is caught up when all of them fit.
+    /// A subscriber that fell behind is handed each slot it follows as it
+    /// stands, its state and then its set, and is caught up when all of
+    /// them fit. What it lost meanwhile, a state among them, is in these.
     fn resync(&mut self, id: u64) {
         let Some(sub) = self.subscribers.get(&id) else {
             return;
@@ -774,40 +777,51 @@ impl Inner {
                     .get(&slot.kind)
                     .is_some_and(|f| f.serving == generation)
         };
-        let unkept: Vec<SlotKey> = self
-            .stores
-            .iter()
-            .filter(|((generation, slot), store)| {
-                store.synced && !keeps(&slot.kind) && serving(*generation, slot)
-            })
-            .map(|((_, slot), _)| slot.clone())
-            .collect();
-        let wholes: Vec<Update> = self
-            .stores
-            .iter()
-            .filter(|((generation, slot), store)| {
-                store.synced && keeps(&slot.kind) && serving(*generation, slot)
-            })
-            .map(|((_, slot), store)| Update::Whole {
+        let mut unkept: Vec<SlotKey> = Vec::new();
+        let mut updates: Vec<Update> = Vec::new();
+        for ((generation, slot), state) in &self.states {
+            if !serving(*generation, slot) {
+                continue;
+            }
+            let store = self
+                .stores
+                .get(&(*generation, slot.clone()))
+                .filter(|store| store.synced);
+            if store.is_some() && !keeps(&slot.kind) {
+                // Listed for it, which says its own states.
+                unkept.push(slot.clone());
+                continue;
+            }
+            updates.push(Update::State {
                 slot: slot.clone(),
-                why: Whole::Relist,
-                objects: unpacked(store.objects.values())
-                    .into_iter()
-                    .filter(|o| in_scope(sub.scope.as_deref(), o))
-                    .collect(),
-            })
-            .collect();
+                state: state.clone(),
+            });
+            if let Some(store) = store {
+                updates.push(Update::Whole {
+                    slot: slot.clone(),
+                    why: if sub.seen.contains(slot) {
+                        Whole::Relist
+                    } else {
+                        Whole::Fresh
+                    },
+                    objects: unpacked(store.objects.values())
+                        .into_iter()
+                        .filter(|o| in_scope(sub.scope.as_deref(), o))
+                        .collect(),
+                });
+            }
+        }
         let Some(sub) = self.subscribers.get_mut(&id) else {
             return;
         };
-        if sub.tx.capacity() < wholes.len() + 1 {
+        if sub.tx.capacity() < updates.len() {
             return;
         }
-        for whole in wholes {
-            if let Update::Whole { slot, .. } = &whole {
+        for update in updates {
+            if let Update::Whole { slot, .. } = &update {
                 sub.seen.insert(slot.clone());
             }
-            let _ = sub.tx.try_send(whole);
+            let _ = sub.tx.try_send(update);
         }
         sub.lagged = false;
         for slot in unkept {
@@ -2346,8 +2360,12 @@ mod tests {
         context.end();
     }
 
-    /// A reader that falls behind is handed the whole set once there is
-    /// room, not left holding half of the changes.
+    /// A reader that falls behind is handed its slot's state and whole set
+    /// once there is room, not left holding half of the changes; a set it
+    /// never received comes as its first. Fails if a watch that broke while
+    /// it was behind still reads as synced, or if its first set comes as a
+    /// relist, which the Timeline compared with nothing and wrote every
+    /// object as created.
     #[tokio::test]
     async fn a_reader_that_falls_behind_is_handed_the_whole_set_again() {
         let feeds = feeds().lingering(LINGER, PAGE_IDLE, 2);
@@ -2363,18 +2381,42 @@ mod tests {
                 deployment("shop", &format!("burst-{n}"), "1"),
             );
         }
-        drain(&mut sub);
-        apply(&generation, &slot, deployment("shop", "after", "1"));
+        let first = drain(&mut sub);
+        assert!(
+            !first.iter().any(|u| matches!(u, Update::Whole { .. })),
+            "the queue held the first set: {first:?}"
+        );
+        generation.failed(
+            &slot,
+            "connection reset".to_string(),
+            &CancellationToken::new(),
+        );
         let caught_up = drain(&mut sub);
-        let set = caught_up.iter().find_map(|u| match u {
-            Update::Whole {
-                why: Whole::Relist,
-                objects,
-                ..
-            } => Some(objects.len()),
-            _ => None,
-        });
-        assert_eq!(set, Some(7));
+        assert!(
+            matches!(
+                caught_up.as_slice(),
+                [
+                    Update::State {
+                        state: FeedState::Blind { .. },
+                        ..
+                    },
+                    Update::Whole {
+                        why: Whole::Fresh,
+                        ..
+                    }
+                ]
+            ),
+            "{caught_up:?}"
+        );
+        let Update::Whole { objects, .. } = &caught_up[1] else {
+            unreachable!()
+        };
+        assert_eq!(objects.len(), 6);
+        apply(&generation, &slot, deployment("shop", "after", "1"));
+        assert!(matches!(
+            drain(&mut sub).as_slice(),
+            [Update::Applied { .. }]
+        ));
         context.end();
     }
 
