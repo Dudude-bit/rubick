@@ -27,7 +27,7 @@ use kube::api::{Api, DynamicObject};
 use kube::discovery::ApiResource;
 use kube::Client;
 use parking_lot::{Mutex, RwLock};
-use tokio::sync::{broadcast, mpsc, Notify, Semaphore};
+use tokio::sync::{broadcast, mpsc, oneshot, Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use super::context::{beside, Beside, Defaults, Replicated, Scales};
@@ -421,6 +421,9 @@ pub struct AuditIndex {
     stop: CancellationToken,
     /// Held while the page asks; dropping the index lets the feeds go.
     lease: Mutex<Option<Lease>>,
+    /// To the reader: move the feeds to these namespaces, and say when what
+    /// they handed for them is taken.
+    recuts: Mutex<Option<mpsc::UnboundedSender<Recut>>>,
     scope: Mutex<Option<Vec<String>>>,
     last_used: Mutex<Instant>,
     /// Each audited kind's name, by the key the feeds hand it under.
@@ -457,6 +460,7 @@ impl AuditIndex {
             client,
             stop: CancellationToken::new(),
             lease: Mutex::new(None),
+            recuts: Mutex::new(None),
             scope: Mutex::new(scope),
             last_used: Mutex::new(Instant::now()),
             kinds: audited()
@@ -480,6 +484,37 @@ impl AuditIndex {
     /// How every slot the feeds handed over reads now.
     pub(super) fn slot_states(&self) -> BTreeMap<SlotKey, FeedState> {
         self.states.lock().clone()
+    }
+
+    /// The page asked again, in `scope`. Where that moved, the feeds are
+    /// moved with it, and this returns once the reader has taken what they
+    /// handed, so the answer read next is never the old namespaces' set
+    /// read as the new ones'.
+    async fn asked_again(&self, scope: Option<Vec<String>>) {
+        *self.last_used.lock() = Instant::now();
+        self.asked.notify_one();
+        let moved = {
+            let mut held = self.scope.lock();
+            let moved = *held != scope;
+            held.clone_from(&scope);
+            moved
+        };
+        if let Some(lease) = self.lease.lock().as_ref() {
+            lease.touch();
+        }
+        if !moved {
+            return;
+        }
+        let (taken, done) = oneshot::channel();
+        let sent = self
+            .recuts
+            .lock()
+            .as_ref()
+            .is_some_and(|recuts| recuts.send((scope, taken)).is_ok());
+        if sent {
+            let _ = done.await;
+        }
+        self.rescoped.notify_one();
     }
 
     fn changed(&self) {
@@ -663,23 +698,7 @@ impl AuditIndexes {
     ) -> Result<Arc<AuditIndex>> {
         let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
-            *index.last_used.lock() = Instant::now();
-            index.asked.notify_one();
-            let moved = {
-                let mut held = index.scope.lock();
-                let moved = *held != scope;
-                held.clone_from(&scope);
-                moved
-            };
-            if let Some(lease) = index.lease.lock().as_ref() {
-                lease.touch();
-                if moved {
-                    lease.rescope(scope);
-                }
-            }
-            if moved {
-                index.rescoped.notify_one();
-            }
+            index.asked_again(scope).await;
             return Ok(index);
         }
         let index = Arc::new(AuditIndex::new(
@@ -749,13 +768,26 @@ impl AuditIndexes {
     }
 }
 
+type Recut = (Option<Vec<String>>, oneshot::Sender<()>);
+
 /// Takes what the feeds say into the index until either lets go.
 fn spawn_reader(index: Arc<AuditIndex>, mut updates: mpsc::Receiver<Update>) {
+    let (recuts, mut recut) = mpsc::unbounded_channel::<Recut>();
+    *index.recuts.lock() = Some(recuts);
     tokio::spawn(async move {
         loop {
             tokio::select! {
                 biased;
                 () = index.stop.cancelled() => break,
+                Some((scope, taken)) = recut.recv() => {
+                    if let Some(lease) = index.lease.lock().as_ref() {
+                        lease.rescope(scope);
+                    }
+                    while let Ok(update) = updates.try_recv() {
+                        index.take(update);
+                    }
+                    let _ = taken.send(());
+                }
                 update = updates.recv() => match update {
                     Some(update) => index.take(update),
                     None => break,
@@ -1322,6 +1354,53 @@ pub(super) mod tests {
             },
         );
         assert_eq!(why_unread(&slots, &kind, Some("shop")), None);
+    }
+
+    /// Moved to a namespace the feeds already watch, the page reads what it
+    /// holds at once: the feeds hand it, and the answer waits until the
+    /// reader has taken it. Fails if a namespace added to the scope reads as
+    /// holding nothing, which Audit said of it until the next break.
+    #[tokio::test]
+    async fn a_namespace_added_to_the_scope_is_read_with_what_it_holds() {
+        use crate::ownership::slots::SlotHost;
+        use kube::runtime::watcher::Event;
+        let client = client().await;
+        let feeds =
+            crate::feeds::Feeds::new((Arc::new(Semaphore::new(0)), Arc::new(Semaphore::new(0))));
+        let shop = Some(vec!["shop".to_string()]);
+        let index = AuditIndex::holding(client.clone(), shop.clone());
+        let subscription = feeds.joined("prod", client, &feed_ask(shop));
+        *index.lease.lock() = Some(subscription.lease);
+        spawn_reader(index.clone(), subscription.updates);
+        let generation = feeds.context("prod").expect("a context").serving();
+        let slot = SlotKey {
+            kind: key_of(&deployments()),
+            namespace: None,
+        };
+        let stop = CancellationToken::new();
+        generation.saw(&slot, &deployments(), Event::Init, &stop);
+        for (namespace, name) in [("shop", "web"), ("payments", "api")] {
+            let object = serde_json::from_value(deployment(namespace, name, "1", "web:1"))
+                .expect("an object");
+            generation.saw(&slot, &deployments(), Event::InitApply(object), &stop);
+        }
+        generation.saw(&slot, &deployments(), Event::InitDone, &stop);
+        let held = |index: &AuditIndex| -> Vec<String> {
+            let mut names: Vec<String> = index
+                .store
+                .read()
+                .entries
+                .values()
+                .map(|entry| entry.subject.name.clone())
+                .collect();
+            names.sort();
+            names
+        };
+        tokio::task::yield_now().await;
+        assert_eq!(held(&index), vec!["web"]);
+        index.asked_again(Some(vec!["payments".to_string()])).await;
+        assert_eq!(held(&index), vec!["api"]);
+        index.stop.cancel();
     }
 
     /// A relist hands the whole set again; what the index held and the set
