@@ -75,7 +75,7 @@ const TURN_PAUSE: Duration = Duration::from_millis(250);
 const RELIST_EVERY: Duration = Duration::from_secs(30);
 
 /// How old such a list may be and still be the kind as it is: three turns.
-const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
+pub(crate) const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
 
 /// How one kind is being read, across the cluster or in one namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]

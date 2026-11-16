@@ -36,6 +36,7 @@ use super::{is_system, objects, AuditFinding, Subject, Unchecked, Why};
 use crate::error::Result;
 use crate::feeds::{Ask, Binding, FeedState, Lease, Update};
 use crate::ownership::{KindKey, SlotKey};
+use crate::resources::OtherPolicies;
 use crate::state::{AppEvent, AppState};
 
 const IDLE_AFTER: Duration = Duration::from_mins(3);
@@ -389,6 +390,25 @@ pub(super) struct PodJudged {
     pub facts: TemplateFacts,
 }
 
+/// A pod read whole, or why it is not yet.
+#[derive(Debug, Clone)]
+pub(super) enum PodRead {
+    /// The read is on its way.
+    Reading,
+    Judged(PodJudged),
+    /// The cluster did not hand it over: said with the namespace's unread
+    /// kinds, and asked again once `POD_READ_AGAIN` has passed.
+    Unread {
+        namespace: String,
+        why: Why,
+        at: Instant,
+    },
+}
+
+/// How long a pod the cluster would not hand over is said not checked
+/// before it is asked for again.
+pub(super) const POD_READ_AGAIN: Duration = Duration::from_secs(30);
+
 /// How one pod is judged: on its own, or for the controller that stamped it.
 #[must_use]
 pub(super) fn pod_judged(pod: &Pod, minor: Option<u32>) -> Option<PodJudged> {
@@ -435,12 +455,18 @@ pub struct AuditIndex {
     pub(super) store: RwLock<Store>,
     pub(super) revision: AtomicU64,
     changed: Arc<Notify>,
-    /// Pods judged whole, by the key they are held under: `pod/<uid>` or
-    /// `controller/<uid>`; `None` while the read is on its way.
-    pub(super) pods: Mutex<HashMap<String, Option<PodJudged>>>,
-    pod_reads: Arc<Semaphore>,
+    /// Pods read whole, by the key they are held under: `pod/<uid>` or
+    /// `controller/<uid>`.
+    pub(super) pods: Mutex<HashMap<String, PodRead>>,
+    pub(super) pod_reads: Arc<Semaphore>,
     /// The upgrade rules' last pass; `None` before the first ends.
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
+    /// Other engines' policy kinds that may hold over each namespace's pods,
+    /// and the scope they were read for; `None` before the first read.
+    pub(super) others: RwLock<Option<(Option<Vec<String>>, OtherPolicies)>>,
+    /// The webhooks that may change pods on admission; `None` before the
+    /// first read.
+    pub(super) admission: RwLock<Option<super::admitted::Admission>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
     /// The reader asked again: a source that failed is read at once.
@@ -476,6 +502,8 @@ impl AuditIndex {
             pods: Mutex::new(HashMap::new()),
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
+            others: RwLock::new(None),
+            admission: RwLock::new(None),
             rescoped: Notify::new(),
             again: Notify::new(),
             asked: Notify::new(),
@@ -584,10 +612,10 @@ impl AuditIndex {
     pub(super) fn read_pod(self: &Arc<Self>, key: String, namespace: String, name: String) {
         {
             let mut pods = self.pods.lock();
-            if pods.contains_key(&key) {
+            if matches!(pods.get(&key), Some(PodRead::Reading | PodRead::Judged(_))) {
                 return;
             }
-            pods.insert(key.clone(), None);
+            pods.insert(key.clone(), PodRead::Reading);
         }
         let index = self.clone();
         tokio::spawn(async move {
@@ -603,13 +631,26 @@ impl AuditIndex {
                 () = index.stop.cancelled() => return,
                 read = api.get_opt(&name) => read,
             };
-            let Ok(Some(pod)) = read else {
-                // Gone, or not read: asked again when the pod is next seen.
-                index.pods.lock().remove(&key);
-                return;
+            let held = match read {
+                Ok(found) => {
+                    let Some(judged) = found.as_ref().and_then(|pod| pod_judged(pod, index.minor))
+                    else {
+                        // Gone: asked again if it is seen again.
+                        index.pods.lock().remove(&key);
+                        return;
+                    };
+                    PodRead::Judged(judged)
+                }
+                Err(error) => {
+                    let error: crate::error::Error = error.into();
+                    PodRead::Unread {
+                        namespace,
+                        why: super::why_of(&error),
+                        at: Instant::now(),
+                    }
+                }
             };
-            let judged = pod_judged(&pod, index.minor);
-            index.pods.lock().insert(key, judged);
+            index.pods.lock().insert(key, held);
             index.changed();
         });
     }
@@ -748,9 +789,16 @@ impl AuditIndexes {
     }
 
     pub fn forget(&self, context: &str) {
+        self.decoded.remove(context);
+        self.renewed(context);
+    }
+
+    /// The context's client was renewed: the index on the old one stops, and
+    /// the releases decoded, which hold no client and are kept by each
+    /// Secret's `resourceVersion`, are kept for the next.
+    pub fn renewed(&self, context: &str) {
         self.besides.retain(|(held, _), _| held != context);
         self.enforced.remove(context);
-        self.decoded.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
             index.lease.lock().take();
@@ -826,6 +874,22 @@ fn spawn_upgrade(
                 read = pass => read,
             };
             drop(decoded);
+            let discovery = crate::commands::other_policies::Discovery {
+                served: clients.served(),
+                context: &index.context,
+            };
+            let others = tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                others = others_over(discovery, &index.client, scope.as_deref()) => others,
+            };
+            let admission = tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                admission = super::admitted::read(&index.client, scope.as_deref()) => admission,
+            };
+            *index.admission.write() = Some(admission);
+            *index.others.write() = Some((scope, others));
             *index.upgrade.write() = Some(Arc::new(read));
             index.changed();
             if !next_pass(&index, UPGRADE_EVERY, ASKED_WITHIN).await {
@@ -833,6 +897,32 @@ fn spawn_upgrade(
             }
         }
     });
+}
+
+/// The other engines' policy kinds that may hold over `scope`'s pods: read
+/// across the cluster where the scope is, else a namespace at a time, as the
+/// `NetworkPolicy` screens read them for a reader bound to namespaces.
+async fn others_over(
+    discovery: crate::commands::other_policies::Discovery<'_>,
+    client: &Client,
+    scope: Option<&[String]>,
+) -> OtherPolicies {
+    let Some(names) = scope else {
+        return discovery.other_policies(client, None).await;
+    };
+    let reads = futures::future::join_all(
+        names
+            .iter()
+            .map(|namespace| discovery.other_policies(client, Some(namespace))),
+    )
+    .await;
+    let mut others = OtherPolicies::none();
+    for (namespace, found) in names.iter().zip(reads) {
+        for kind in found.over(namespace) {
+            others.within(namespace, &kind);
+        }
+    }
+    others
 }
 
 /// This cluster's Prometheus as Settings holds it, read again each pass so
@@ -924,6 +1014,9 @@ impl AuditIndex {
     pub(super) fn holding(client: Client, scope: Option<Vec<String>>) -> Arc<Self> {
         let mut index = Self::new("test".to_string(), client, scope, Some(32));
         index.pod_reads = Arc::new(Semaphore::new(0));
+        *index.others.write() = Some((None, OtherPolicies::none()));
+        *index.admission.write() =
+            Some(super::admitted::Admission::of(Vec::new(), BTreeMap::new()));
         let index = Arc::new(index);
         for (resource, _) in audited() {
             index.set(&resource, None, FeedState::Synced);
@@ -1378,14 +1471,14 @@ pub(super) mod tests {
             kind: key_of(&deployments()),
             namespace: None,
         };
-        let stop = CancellationToken::new();
-        generation.saw(&slot, &deployments(), Event::Init, &stop);
+        let never = CancellationToken::new();
+        generation.saw(&slot, &deployments(), Event::Init, &never);
         for (namespace, name) in [("shop", "web"), ("payments", "api")] {
             let object = serde_json::from_value(deployment(namespace, name, "1", "web:1"))
                 .expect("an object");
-            generation.saw(&slot, &deployments(), Event::InitApply(object), &stop);
+            generation.saw(&slot, &deployments(), Event::InitApply(object), &never);
         }
-        generation.saw(&slot, &deployments(), Event::InitDone, &stop);
+        generation.saw(&slot, &deployments(), Event::InitDone, &never);
         let held = |index: &AuditIndex| -> Vec<String> {
             let mut names: Vec<String> = index
                 .store
@@ -1402,6 +1495,23 @@ pub(super) mod tests {
         index.asked_again(Some(vec!["payments".to_string()])).await;
         assert_eq!(held(&index), vec!["api"]);
         index.stop.cancel();
+    }
+
+    /// A renewal keeps the releases Audit decoded; a reconnect, which may put
+    /// another cluster behind the name, lets them go. Fails if every token
+    /// renewal sent the page back to reading and fetching each release.
+    #[test]
+    fn a_renewal_keeps_the_releases_decoded_and_a_reconnect_does_not() {
+        let (events, _) = broadcast::channel(4);
+        let indexes = AuditIndexes::new(events);
+        indexes.decoded.entry("prod".to_string()).or_default();
+        indexes.renewed("prod");
+        assert!(
+            indexes.decoded.contains_key("prod"),
+            "a renewal let them go"
+        );
+        indexes.forget("prod");
+        assert!(!indexes.decoded.contains_key("prod"));
     }
 
     /// A relist hands the whole set again; what the index held and the set
@@ -1431,7 +1541,7 @@ pub(super) mod tests {
     fn an_answer_row_names_its_shape() {
         let row = AuditRow::Rule {
             rule: RuleId::PssPrivileged,
-            worst: crate::audit::AuditSeverity::High,
+            worst: Some(crate::audit::AuditSeverity::High),
             objects: 1,
             unchecked: 0,
         };

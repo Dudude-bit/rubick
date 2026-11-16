@@ -6,7 +6,7 @@ use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{PolicyRule, RoleRef, Subject as RbacSubject};
 
-use super::{is_system_namespace, AuditFinding, RuleId, What};
+use super::{AuditFinding, AuditSeverity, RuleId, What};
 use crate::resources::{shown_text, withhold_reason};
 
 /// Every key of a `ConfigMap` that holds a private key, by name and by the
@@ -40,11 +40,13 @@ fn finding_if(rule: RuleId, what: Vec<What>) -> Vec<AuditFinding> {
     }
 }
 
-/// Every rule of a role granting every verb on every resource.
+/// Every rule of a role granting every verb on every resource. High where
+/// its groups take in RBAC's own, which is the power to grant more; within
+/// other groups, the rule's usual severity.
 #[must_use]
 pub fn role(rules: Option<&Vec<PolicyRule>>) -> Vec<AuditFinding> {
     let star = |list: Option<&Vec<String>>| list.is_some_and(|list| list.iter().any(|v| v == "*"));
-    let what = rules
+    let what: Vec<What> = rules
         .into_iter()
         .flatten()
         .filter(|rule| star(Some(&rule.verbs)) && star(rule.resources.as_ref()))
@@ -52,19 +54,26 @@ pub fn role(rules: Option<&Vec<PolicyRule>>) -> Vec<AuditFinding> {
             groups: rule.api_groups.clone().unwrap_or_default(),
         })
         .collect();
+    let grants = what.iter().any(|what| {
+        matches!(what, What::Wildcard { groups } if groups.iter().any(|g| g == "*" || g == "rbac.authorization.k8s.io"))
+    });
     finding_if(RuleId::WildcardRole, what)
+        .into_iter()
+        .map(|mut finding| {
+            if grants {
+                finding.severity = AuditSeverity::High;
+            }
+            finding
+        })
+        .collect()
 }
 
-/// A subject Kubernetes itself grants: a `system:` user or group, or a
-/// `ServiceAccount` in a `kube-` namespace.
+/// The one subject Kubernetes binds `cluster-admin` to itself: the
+/// `system:masters` group (reference/access-authn-authz/rbac, user-facing
+/// roles). `system:authenticated` or an account in `kube-system` holds it
+/// only because someone bound it.
 fn the_systems(subject: &RbacSubject) -> bool {
-    match subject.kind.as_str() {
-        "ServiceAccount" => subject
-            .namespace
-            .as_deref()
-            .is_some_and(is_system_namespace),
-        _ => subject.name.starts_with("system:"),
-    }
+    subject.kind == "Group" && subject.name == "system:masters"
 }
 
 /// Every subject a binding grants `cluster-admin` to that is not the
@@ -185,9 +194,31 @@ mod tests {
         assert!(role(Some(&rules(&["*"], &["pods"]))).is_empty());
     }
 
-    /// The default binding of `system:masters`, and a kube-system account,
-    /// are the system's own. Fails if they are flagged, or a chart's account
-    /// bound to cluster-admin is not.
+    /// A wildcard within one group cannot reach RBAC and grant more, so it
+    /// is not ranked with one that can. Fails if `apps/*` is High, or if
+    /// `*` or RBAC's own group is not.
+    #[test]
+    fn a_wildcard_is_high_only_where_its_groups_take_in_rbac() {
+        let severity = |groups: &[&str]| {
+            let rules: Vec<PolicyRule> = vec![serde_json::from_value(json!({
+                "apiGroups": groups, "verbs": ["*"], "resources": ["*"]
+            }))
+            .unwrap()];
+            role(Some(&rules)).first().map(|finding| finding.severity)
+        };
+        assert_eq!(severity(&["apps"]), Some(AuditSeverity::Medium));
+        assert_eq!(severity(&["ceph.rook.io"]), Some(AuditSeverity::Medium));
+        assert_eq!(severity(&["*"]), Some(AuditSeverity::High));
+        assert_eq!(
+            severity(&["apps", "rbac.authorization.k8s.io"]),
+            Some(AuditSeverity::High)
+        );
+    }
+
+    /// Only the default binding of `system:masters` is the system's own.
+    /// Fails if it is flagged, or if a chart's account, a `kube-system`
+    /// account or a `system:` group everyone is in holds cluster-admin
+    /// unflagged.
     #[test]
     fn a_cluster_admin_binding_names_only_subjects_that_are_not_the_systems() {
         let role: RoleRef = serde_json::from_value(json!({
@@ -201,16 +232,38 @@ mod tests {
         ]))
         .unwrap();
         let findings = binding(&role, Some(&subjects), Some("tools"));
+        let account = |name: &str, namespace: &str| What::Subject {
+            kind: "ServiceAccount".to_string(),
+            name: name.to_string(),
+            namespace: Some(namespace.to_string()),
+            role: "cluster-admin".to_string(),
+        };
         assert_eq!(
             findings[0].what,
-            vec![What::Subject {
-                kind: "ServiceAccount".to_string(),
-                name: "installer".to_string(),
-                namespace: Some("tools".to_string()),
-                role: "cluster-admin".to_string()
-            }]
+            vec![
+                account("addon", "kube-system"),
+                account("installer", "tools")
+            ]
         );
-        let only_system = &subjects[..2];
+        let only_system = &subjects[..1];
         assert!(binding(&role, Some(&only_system.to_vec()), None).is_empty());
+        for (kind, name, namespace) in [
+            ("Group", "system:authenticated", None),
+            ("Group", "system:unauthenticated", None),
+            ("Group", "system:serviceaccounts", None),
+            ("User", "system:anonymous", None),
+            ("ServiceAccount", "tiller", Some("kube-system")),
+            ("ServiceAccount", "default", Some("kube-monitoring")),
+        ] {
+            let subject: RbacSubject = serde_json::from_value(
+                json!({ "kind": kind, "name": name, "namespace": namespace }),
+            )
+            .unwrap();
+            let findings = binding(&role, Some(&vec![subject]), None);
+            assert!(
+                matches!(findings.first().map(|f| f.what.as_slice()), Some([What::Subject { name: n, .. }]) if n == name),
+                "{kind} {name} holds cluster-admin unflagged"
+            );
+        }
     }
 }

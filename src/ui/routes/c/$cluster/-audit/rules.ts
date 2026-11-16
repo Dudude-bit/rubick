@@ -212,6 +212,8 @@ const WHY_WORDS: {
       ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
       : t("audit", "whyYoungUndated"),
   folded: (_, t) => t("audit", "whyFolded"),
+  admitted: (why, t) =>
+    t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),
 };
 
 /** Why a kind was not read, worded. */

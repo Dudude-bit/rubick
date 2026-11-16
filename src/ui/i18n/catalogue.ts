@@ -1940,6 +1940,8 @@ export const en = {
     whyRefused: "refused: {message}",
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
+    whyAdmitted:
+      "admitted through {webhooks}, which may add containers the template does not show",
     whyUnserved: "this cluster does not serve the kind",
     whyNoPrometheus:
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
@@ -2017,12 +2019,22 @@ export const en = {
     showMore: "Show more",
     tab: "Audit",
     tabNone: "Nothing found",
+    sharedOnly: "Only {filters}.",
+    rulesUnchecked: {
+      one: "{n} rule could not check every object",
+      other: "{n} rules could not check every object",
+    },
+    tabNonePartly: "Nothing found in what could be read.",
     judgedOn: "This {kind}'s template is judged as part of {object}.",
     notCheckedHere: "Not checked here",
     uncheckedLine: "{rule}: {kind} {where}, {why}",
     peekMore: {
       one: "and {n} more on the Audit tab",
       other: "and {n} more on the Audit tab",
+    },
+    peekUnchecked: {
+      one: "{n} rule could not check here; the Audit tab says why",
+      other: "{n} rules could not check here; the Audit tab says why",
     },
     couldNotRead: "Audit could not read this cluster: {error}",
     noneOpen: "Pick a row to see why it matters and how to fix it.",
@@ -2170,10 +2182,10 @@ export const en = {
       "On a writable root filesystem whoever gets into the container can change its binaries and leave tools behind. readOnlyRootFilesystem: true, with an emptyDir where it needs to write, prevents it.",
     clusterAdminBinding: "Binds cluster-admin",
     clusterAdminBindingWhy:
-      "cluster-admin may do anything to any object. A subject other than the system's own holding it is one stolen token away from the whole cluster.",
+      "cluster-admin may do anything to any object. Kubernetes binds it only to the system:masters group; any other subject holding it is one stolen token away from the whole cluster, and a group such as system:authenticated hands it to everyone.",
     wildcardRole: "Grants every verb on every resource",
     wildcardRoleWhy:
-      "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
+      "A role with * verbs on * resources grants whatever its groups hold now and whatever is installed in them later. Where the groups take in RBAC's own (* or rbac.authorization.k8s.io), that includes the power to grant more.",
     defaultServiceAccountToken: "Mounts the default ServiceAccount's token",
     defaultServiceAccountTokenWhy:
       "Pods under the default ServiceAccount share one identity, and a mounted token is a credential for the API server inside every one of them. A pod that does not call the API needs none.",
