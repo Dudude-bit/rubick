@@ -157,7 +157,7 @@ export function Changes() {
           watching ? (
             <>
               {t("changes", "watchingNow", {
-                since: formatWhen(watching.from, "clock"),
+                since: moment(watching.from),
               })}
               {refused && (
                 <span
@@ -233,7 +233,7 @@ export function Changes() {
                 aria-hidden="true"
               />
               {t("changes", "nothingRecordedSince", {
-                since: formatWhen(quiet, "clock"),
+                since: moment(quiet),
                 kinds: journalKindsWords(t, watching),
               })}
             </p>

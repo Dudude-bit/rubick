@@ -587,7 +587,7 @@ describe("rows older than the running watch", () => {
     });
 
     const collect = await mount();
-    const since = `Watching since ${formatWhen(allNamespaces.from, "clock")}`;
+    const since = `Watching since ${formatWhen(allNamespaces.from, "moment")}`;
     expect(screen.getByText(since)).toBeInTheDocument();
     expect(screen.queryByText(/were recorded by this app/)).toBeNull();
     const utc = new Intl.DateTimeFormat("en", {
@@ -622,7 +622,7 @@ describe("rows older than the running watch", () => {
 
     await mount();
     expect(
-      screen.getByText(`Watching since ${formatWhen(NOW - 30 * MIN, "clock")}`)
+      screen.getByText(`Watching since ${formatWhen(NOW - 30 * MIN, "moment")}`)
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -713,7 +713,7 @@ describe("a watch that has recorded nothing", () => {
     to: NOW - 20 * 60 * MIN,
   };
   const running = { from: watchingSince, seenAt: NOW, to: null };
-  const quiet = `No change recorded since ${formatWhen(watchingSince, "clock")}: of the Deployments, StatefulSets, and DaemonSets this app watches here, none was created, deleted, scaled or edited.`;
+  const quiet = `No change recorded since ${formatWhen(watchingSince, "moment")}: of the Deployments, StatefulSets, and DaemonSets this app watches here, none was created, deleted, scaled or edited.`;
 
   /**
    * Marco's Changes page showed only the "Not observed" box, never whether
@@ -929,7 +929,7 @@ describe("warnings only, where the Event watch was refused", () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          `Watching since ${formatWhen(granted.from, "clock")}`,
+          `Watching since ${formatWhen(granted.from, "moment")}`,
           { exact: false }
         )
       ).toBeInTheDocument()
@@ -937,6 +937,30 @@ describe("warnings only, where the Event watch was refused", () => {
     const unobserved = screen.getByText(/^Not observed /).textContent ?? "";
     expect(unobserved).toMatch(
       new RegExp(` to ${formatWhen(refused.to, "moment")}$`)
+    );
+  });
+
+  /**
+   * "Watching since 22:47:36" stood beside "Nov 15 at 10:47 PM" for the same
+   * moment. Fails if the header and the stretch it follows write one moment
+   * in two formats.
+   */
+  it("writes the moment the watch began as the stretch before it ends", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const began = NOW - 30 * MIN;
+    recorded({
+      entries: [],
+      spans: { prod: [{ from: began, seenAt: NOW, to: null }] },
+    });
+    await mount();
+    const said = formatWhen(began, "moment");
+    expect(screen.getByText(`Watching since ${said}`)).toBeInTheDocument();
+    expect(screen.getByText(/^Not observed /).textContent).toMatch(
+      new RegExp(` to ${said}$`)
     );
   });
 });
