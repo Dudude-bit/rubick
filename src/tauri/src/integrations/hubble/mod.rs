@@ -50,6 +50,9 @@ const BATCH_PAIRS: usize = 400;
 /// Latencies a pair keeps a second, for its percentiles.
 const KEPT_LATENCIES: usize = 64;
 const SEND_EVERY: Duration = Duration::from_secs(1);
+/// How often the connection asks the relay whether it is there, and how long
+/// it waits: a port-forward that died in a sleep sends nothing, ever.
+const KEEP_ALIVE: Duration = Duration::from_secs(15);
 const SELECTOR: &str = "k8s-app=hubble-relay";
 const CONFIG: &str = "hubble-relay-config";
 const SERVER_CERTS: &str = "hubble-relay-server-certs";
@@ -393,11 +396,18 @@ async fn connect(
                 said: e.to_string(),
             })?,
     };
-    let channel = endpoint
+    let channel = kept_alive(endpoint, KEEP_ALIVE)
         .connect_with_connector(connector)
         .await
         .map_err(|e| ended_by(&e, &found.at.namespace))?;
     Ok(ObserverClient::new(channel))
+}
+
+fn kept_alive(endpoint: tonic::transport::Endpoint, every: Duration) -> tonic::transport::Endpoint {
+    endpoint
+        .http2_keep_alive_interval(every)
+        .keep_alive_timeout(every)
+        .keep_alive_while_idle(true)
 }
 
 /// How a failed connection or call ends the stream: a certificate the CA
@@ -1344,5 +1354,39 @@ mod tests {
             found(answer(false)).await,
             Err(LiveEnd::NoPod { .. })
         ));
+    }
+
+    /// A relay that stops answering without closing, as a port-forward does
+    /// when the laptop sleeps, ends the call instead of leaving it to wait
+    /// forever while the page empties into "saw no flows".
+    #[tokio::test]
+    async fn a_relay_gone_silent_ends_the_call_instead_of_hanging_it() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a port");
+        let at = listener.local_addr().expect("its address");
+        let held = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.expect("a connection");
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            drop(socket);
+        });
+        let connector = tower::service_fn(move |_: http::Uri| async move {
+            tokio::net::TcpStream::connect(at).await.map(TokioIo::new)
+        });
+        let channel = kept_alive(
+            tonic::transport::Endpoint::from_static("http://hubble-relay"),
+            Duration::from_millis(200),
+        )
+        .connect_with_connector(connector)
+        .await
+        .expect("connected");
+        let mut observer = ObserverClient::new(channel);
+        let call = observer.get_flows(proto::observer::GetFlowsRequest {
+            follow: true,
+            ..Default::default()
+        });
+        let answered = tokio::time::timeout(Duration::from_secs(10), call).await;
+        assert!(answered.is_ok_and(|call| call.is_err()), "the call hung");
+        held.abort();
     }
 }
