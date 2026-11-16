@@ -626,7 +626,7 @@ describe("rows older than the running watch", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /^Rows before .+ were recorded by this app while it watched from .+ to .+$/
+        /^Changes before .+ were recorded by this app while it watched from .+ to .+; the events are the cluster's own record$/
       )
     ).toBeInTheDocument();
   });
@@ -664,7 +664,7 @@ describe("rows older than the running watch", () => {
     const at = (ago: number) => formatWhen(NOW - ago * MIN, "moment");
     expect(
       screen.getByText(
-        `Rows before ${at(1)} were recorded by this app while it watched from ${at(36)} to ${at(1)}`
+        `Changes before ${at(1)} were recorded by this app while it watched from ${at(36)} to ${at(1)}; the events are the cluster's own record`
       )
     ).toBeInTheDocument();
     expect(
@@ -740,6 +740,27 @@ describe("a watch that has recorded nothing", () => {
     expect(watched?.body).toMatchObject({
       text: expect.stringContaining("No change recorded since"),
     });
+  });
+
+  /**
+   * After a restart, the rows under a "Not observed" stretch were the
+   * cluster's own events from those hours, beside a footer saying nothing is
+   * known of a gap. Fails if the footer stops excepting the events the
+   * cluster still held.
+   */
+  it("says a gap's only known rows are the events the cluster still held", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    recorded({ entries: [], spans: { prod: [yesterday, running] } });
+    await mount();
+    expect(
+      screen.getByText(
+        /no change made then is known, and its only events are those the cluster still held when this app looked again/
+      )
+    ).toBeInTheDocument();
   });
 
   /**

@@ -2221,7 +2221,7 @@ export const en = {
     explained:
       "One clock for what changed: the controller's revisions, the delivery owner's history, Helm's history, what this app recorded of the object while it was connected, and the cluster's events about it. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching: no change made then is known, and its only events are those the cluster still held when this app looked again.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -2301,7 +2301,7 @@ export const en = {
     notWatchingNow: "Not watching this cluster right now.",
     watchingNow: "Watching since {since}",
     earlierRows:
-      "Rows before {since} were recorded by this app while it watched from {from} to {to}",
+      "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",

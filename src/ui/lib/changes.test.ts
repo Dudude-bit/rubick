@@ -1375,7 +1375,7 @@ describe("where the rows before the running watch came from", () => {
         clock
       )
     ).toBe(
-      "Rows before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59"
+      "Changes before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59; the events are the cluster's own record"
     );
   });
 });
