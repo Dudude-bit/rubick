@@ -128,8 +128,10 @@ function TopologyMap() {
     () => ({ for: [t, policies, grouping], drawn: newMemo() }),
     [t, policies, grouping]
   ).drawn;
+  // Decided once, by what the map held when first drawn whole: a count
+  // crossing the line, or a reopen, does not fold or open every group.
   const collapsedAtFirst =
-    several && (map.phase !== "ready" || map.nodes.size > COLLAPSE_ABOVE);
+    several && (map.firstWhole === null || map.firstWhole > COLLAPSE_ABOVE);
   const model = useMemo(
     () =>
       modelOf(
@@ -179,7 +181,7 @@ function TopologyMap() {
       grouping === "namespace" && groupIds.has(namespace) ? namespace : null,
     [grouping, groupIds]
   );
-  const whole = map.phase === "ready" || map.phase === "ended";
+  const whole = map.firstWhole !== null || map.phase === "ended";
   const vendor = useVendorLayers(
     map.nodes,
     openServices,

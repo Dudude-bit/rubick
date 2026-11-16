@@ -32,6 +32,12 @@ export interface TopologySnapshot {
   error: unknown;
   /** Moves with every change, for a memo to key on. */
   version: number;
+  /**
+   * How many objects the map held when first drawn whole, `null` before.
+   * Kept through a reopen, so what was decided once the map was whole is
+   * not decided again by a reset or by the count moving past a line.
+   */
+  firstWhole: number | null;
 }
 
 const EMPTY: TopologySnapshot = {
@@ -43,6 +49,7 @@ const EMPTY: TopologySnapshot = {
   end: null,
   error: null,
   version: 0,
+  firstWhole: null,
 };
 
 /**
@@ -69,7 +76,11 @@ export class TopologyStore {
     this.nodes = new Map();
     this.edges = new Map();
     this.reads = new Map();
-    this.publish({ ...EMPTY, version: this.current.version + 1 });
+    this.publish({
+      ...EMPTY,
+      version: this.current.version + 1,
+      firstWhole: this.current.firstWhole,
+    });
   }
 
   apply(pieces: readonly TopologyPiece[]) {
@@ -131,6 +142,7 @@ export class TopologyStore {
       ...this.current,
       phase: "ready",
       version: this.current.version + 1,
+      firstWhole: this.current.firstWhole ?? this.nodes.size,
     });
   }
 
