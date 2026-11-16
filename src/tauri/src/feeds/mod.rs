@@ -912,14 +912,18 @@ impl Inner {
             },
         );
         for update in waited {
-            let newer = match &update {
-                Update::Applied { object, .. } => match (version_of(object), at) {
-                    (Some(version), Some(at)) => version > at,
-                    _ => true,
-                },
+            let wanted = match &update {
+                Update::Applied { object, .. } => {
+                    in_scope(scope.as_deref(), object)
+                        && match (version_of(object), at) {
+                            (Some(version), Some(at)) => version > at,
+                            _ => true,
+                        }
+                }
+                Update::Deleted { object, .. } => in_scope(scope.as_deref(), object),
                 _ => true,
             };
-            if newer {
+            if wanted {
                 self.send(id, update);
             }
         }
@@ -2843,6 +2847,60 @@ mod tests {
             1,
             "a second watch was opened"
         );
+        context.end();
+    }
+
+    /// A change that waited on a reader's own list is handed only within its
+    /// namespaces, as the list is. Fails if a `ConfigMap` edited elsewhere
+    /// during the list reaches it, which the Timeline wrote as created.
+    #[tokio::test]
+    async fn a_change_that_waited_on_a_list_is_handed_only_within_the_readers_namespaces() {
+        let (client, _) = answering(|path, _| {
+            if path == "/api/v1/configmaps" {
+                (200, config_map_list("500", &["app"]))
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut first = context.join(&config_maps_of(&context), std::slice::from_ref(&maps), &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut first);
+
+        let mut ask = config_maps_of(&context);
+        ask.scope = Some(vec!["shop".to_string()]);
+        let mut late = context.join(&ask, &[maps], &[]);
+        let elsewhere: DynamicObject = serde_json::from_value(json!({ "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": { "name": "ledger", "namespace": "payments", "uid": "payments/ledger", "resourceVersion": "600" } }))
+        .unwrap();
+        apply(&generation, &slot, elsewhere.clone());
+        let resource = ApiResource::erase::<ConfigMap>(&());
+        generation.saw(
+            &slot,
+            &resource,
+            Event::Delete(elsewhere),
+            &CancellationToken::new(),
+        );
+        apply(&generation, &slot, config_map("cache", "700"));
+        let seen = whole_within(&mut late).await;
+        let changed: Vec<String> = seen
+            .iter()
+            .filter_map(|u| match u {
+                Update::Applied { object, .. } | Update::Deleted { object, .. } => {
+                    object.metadata.name.clone()
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(changed, vec!["cache".to_string()]);
         context.end();
     }
 
