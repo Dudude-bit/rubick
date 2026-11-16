@@ -4,7 +4,7 @@
 //! refused. A list after a break is compared with what was seen before it,
 //! and what differs is said to have been noticed then, not seen happening.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -58,6 +58,11 @@ fn key_of(object: &Value) -> Option<Key> {
     Some((namespace, name))
 }
 
+/// How long the creation time of a deleted object is held: longer than any
+/// hand-over between clients or list a watch makes again, after which no
+/// report of it is late but simply wrong.
+const GONE_FOR_MS: i64 = 10 * 60 * 1000;
+
 /// What one slot of a followed kind holds.
 #[derive(Default)]
 struct Objects {
@@ -65,6 +70,25 @@ struct Objects {
     /// The creation time of what was deleted under each key, so a late
     /// report of it does not bring it back.
     gone: HashMap<Key, Option<String>>,
+    /// When each went, oldest first, so `gone` lets go of them in turn and
+    /// does not grow with every object a busy cluster ever deleted.
+    went: VecDeque<(i64, Key, Option<String>)>,
+}
+
+impl Objects {
+    fn forget_gone(&mut self, now: i64) {
+        while self
+            .went
+            .front()
+            .is_some_and(|(at, ..)| now - at >= GONE_FOR_MS)
+        {
+            if let Some((_, key, born)) = self.went.pop_front() {
+                if self.gone.get(&key) == Some(&born) {
+                    self.gone.remove(&key);
+                }
+            }
+        }
+    }
 }
 
 /// One object of a kind read by name only.
@@ -192,15 +216,37 @@ impl Recorder {
 
     /// One object of a followed kind deleted.
     pub fn deleted(&mut self, followed: &'static Followed, slot: Option<&str>, object: &Value) {
+        self.deleted_at(followed, slot, object, now());
+    }
+
+    pub(crate) fn deleted_at(
+        &mut self,
+        followed: &'static Followed,
+        slot: Option<&str>,
+        object: &Value,
+        at: i64,
+    ) {
         let Some(key) = key_of(object) else {
             return;
         };
         let objects = self.slot_objects(followed, slot);
+        objects.forget_gone(at);
         let Some(prev) = objects.seen.remove(&key) else {
             return;
         };
-        objects.gone.insert(key.clone(), prev.born);
+        objects.gone.insert(key.clone(), prev.born.clone());
+        objects.went.push_back((at, key.clone(), prev.born));
         self.record(Self::row(followed, &key, RowSays::Deleted), false);
+    }
+
+    /// How many deleted objects' creation times are held.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn gone_held(&self) -> usize {
+        self.objects
+            .values()
+            .map(|objects| objects.gone.len())
+            .sum()
     }
 
     /// One of the cluster's events, new or repeated.

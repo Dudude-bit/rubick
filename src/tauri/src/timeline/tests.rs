@@ -1169,6 +1169,29 @@ mod recording {
         assert!(found.contains(&"deleted") && found.contains(&"created"));
     }
 
+    /// A CI cluster creating and deleting namespaces all day, each with its
+    /// own `ConfigMap`. Fails if the recorder holds something of every object
+    /// it ever saw deleted for as long as the app stays connected.
+    #[test]
+    fn what_is_held_of_the_deleted_lets_go_after_a_while() {
+        let (_t, _cluster, mut recorder) = recorder();
+        let kind = followed_kind("ConfigMap");
+        let cm = |name: &str| {
+            json!({"metadata": {"name": name, "namespace": "ci",
+                "creationTimestamp": "2026-11-01T00:00:00Z"}})
+        };
+        let runs: Vec<Value> = (0..100).map(|n| cm(&format!("run-{n}"))).collect();
+        recorder.listed(kind, None, runs.iter(), true);
+        for run in &runs {
+            recorder.deleted_at(kind, None, run, T0);
+        }
+        assert_eq!(recorder.gone_held(), 100);
+        let late = cm("late");
+        recorder.applied(kind, None, &late);
+        recorder.deleted_at(kind, None, &late, T0 + 11 * 60 * 1000);
+        assert_eq!(recorder.gone_held(), 1);
+    }
+
     fn followed_spans(cluster: &ClusterTimeline) -> Vec<ObservedSpan> {
         cluster.page(&query(Show::All)).spans.followed
     }
