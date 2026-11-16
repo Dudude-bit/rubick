@@ -2819,6 +2819,7 @@ export interface Flow {
   from: number;
   to: number;
   protocols: string[];
+  sides: string[];
   values: (number | null)[];
   reasons: DropRate[];
 }
@@ -2842,6 +2843,7 @@ export interface FlowQuery {
   to: EndLabels;
   protocol: string | null;
   reason: string | null;
+  side: string | null;
   zeroWhenAbsent: boolean;
 }
 

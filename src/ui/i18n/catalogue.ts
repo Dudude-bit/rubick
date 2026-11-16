@@ -2488,6 +2488,11 @@ export const en = {
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelSideServer: "From the server's proxy.",
+    panelSideCaller:
+      "From the caller's proxy: the server's reported none of it.",
+    panelSideBoth:
+      "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
     subRequests: "{v} req/s",
     subEvents: "{v} flow events/s",
     subErrors: "{share} errors",

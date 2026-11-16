@@ -134,6 +134,7 @@ const query = (
   to,
   protocol: null,
   reason: null,
+  side: null,
   zeroWhenAbsent: measure === "errors" || measure === "drops",
   ...more,
 });
@@ -173,6 +174,37 @@ const ISTIO_TO = end({
 });
 /** The server's own proxy, ztunnel's inbound or a waypoint, before the client's. */
 const REPORTERS = ['reporter=~"destination|waypoint"', 'reporter="source"'];
+/** A call as both proxies report it: one series a pair, code and flags. */
+const ISTIO_CALL = [
+  ...ISTIO_PAIR,
+  "request_protocol",
+  "response_code",
+  "response_flags",
+  "grpc_response_status",
+];
+const SIDE = "rubick_side";
+
+/**
+ * The server's proxy and the caller's report the same calls; the caller's
+ * alone holds a call that failed before it reached the server (UF, UH, UO,
+ * URX). The server's series are taken, and the caller's added where the
+ * server has none of the same pair, code and flags, as Kiali's graph merges
+ * them (graph/telemetry/istio/istio.go). `tagged` names each series' side.
+ */
+function bothSides(
+  metric: string,
+  matchers: readonly string[],
+  call: readonly string[],
+  ask: Ask,
+  tagged = false
+): string {
+  const [server, caller] = REPORTERS.map((r) =>
+    sum(call, scoped(metric, [r, ...matchers], ISTIO_SCOPE, ask))
+  );
+  const tag = (q: string, as: string) =>
+    tagged ? `label_replace(${q}, "${SIDE}", "${as}", "", "")` : q;
+  return `${tag(server, "server")} or (${tag(caller, "caller")} unless on(${call.join(", ")}) ${server})`;
+}
 
 export function istioQueries(
   source: number,
@@ -184,53 +216,36 @@ export function istioQueries(
     out.push(query(source, measure, promql, ISTIO_FROM, ISTIO_TO, more));
   if (found.includes("istio_requests_total")) {
     const metric = "istio_requests_total";
-    const requests = REPORTERS.map((r) =>
-      sum(
-        [...ISTIO_PAIR, "request_protocol"],
-        scoped(metric, [r], ISTIO_SCOPE, ask)
-      )
+    const sides = (matchers: string[], tagged = false) =>
+      bothSides(metric, matchers, ISTIO_CALL, ask, tagged);
+    pair(
+      "requests",
+      sum([...ISTIO_PAIR, "request_protocol", SIDE], sides([], true)),
+      { protocol: "request_protocol", side: SIDE }
     );
-    pair("requests", first(...requests), { protocol: "request_protocol" });
     pair(
       "errors",
-      sameReporterAs(
+      sum(
         ISTIO_PAIR,
-        requests,
-        REPORTERS.map((r) =>
-          sum(
-            ISTIO_PAIR,
-            `${scoped(metric, [r, 'response_code=~"5.."'], ISTIO_SCOPE, ask)} or ${scoped(
-              metric,
-              [
-                r,
-                'request_protocol="grpc"',
-                'grpc_response_status!="0"',
-                'response_code!~"5.."',
-              ],
-              ISTIO_SCOPE,
-              ask
-            )}`
-          )
-        )
+        `${sides(['response_code=~"5.."'])} or ${sides([
+          'request_protocol="grpc"',
+          'grpc_response_status!="0"',
+          'response_code!~"5.."',
+        ])}`
       )
     );
     for (const [measure, q] of QUANTILES)
       pair(
         measure,
-        first(
-          ...REPORTERS.map(
-            (r) =>
-              `histogram_quantile(${q}, ${sum(
-                ["le", ...ISTIO_PAIR],
-                scoped(
-                  "istio_request_duration_milliseconds_bucket",
-                  [r],
-                  ISTIO_SCOPE,
-                  ask
-                )
-              )})`
+        `histogram_quantile(${q}, ${sum(
+          ["le", ...ISTIO_PAIR],
+          bothSides(
+            "istio_request_duration_milliseconds_bucket",
+            [],
+            ["le", ...ISTIO_CALL],
+            ask
           )
-        )
+        )})`
       );
   }
   if (found.includes("istio_tcp_sent_bytes_total")) {

@@ -2603,6 +2603,11 @@ export const ru: Catalogue = {
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
+    panelSideServer: "По данным прокси сервера.",
+    panelSideCaller:
+      "По данным прокси вызывающей стороны: прокси сервера ничего из этого не сообщил.",
+    panelSideBoth:
+      "По данным прокси сервера и вызовы, которые видел только прокси вызывающей стороны: они не дошли до сервера.",
     subRequests: "{v} запр./с",
     subEvents: "{v} событий/с",
     subErrors: "{share} ошибок",

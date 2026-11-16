@@ -81,20 +81,44 @@ describe("Istio's queries", () => {
   });
 
   /**
-   * A share of errors over requests from another reporter can pass 100%:
-   * the client's errors count only where the server reported no requests.
+   * A call that failed before it reached the server (UF, UH, UO) is in the
+   * caller's proxy's report only: it is added to the server's, matched by
+   * pair, code and flags so a call both report is counted once, and each
+   * series says which side it came from.
    */
-  it("takes the client's errors only for a pair the server reported no requests for", () => {
-    const errors = of(istio(), "errors");
-    const [server, rest] = errors.split(") or ((");
-    const [client, guard] = rest.split(" unless on(");
+  it("adds the calls only the caller's proxy reported to the server's, each tagged with its side", () => {
+    const [requests] = istio();
+    expect(requests.side).toBe("rubick_side");
+    const call =
+      "source_workload_namespace, source_workload, destination_workload_namespace, destination_workload, destination_service_namespace, destination_service_name, request_protocol, response_code, response_flags, grpc_response_status";
+    const [server, rest] = requests.query.split(" or (label_replace(");
+    const [caller, guard] = rest.split(" unless on(");
     expect(server).toContain('reporter=~"destination|waypoint"');
+    expect(server).toContain('"rubick_side", "server"');
     expect(server).not.toContain('reporter="source"');
-    expect(client).toContain('reporter="source"');
-    expect(guard).toMatch(
-      /^source_workload_namespace, source_workload, destination_workload_namespace, destination_workload, destination_service_namespace, destination_service_name\) \(sum by \([^)]*request_protocol\) \(rate\(istio_requests_total\{reporter=~"destination\|waypoint"/
-    );
+    expect(caller).toContain('reporter="source"');
+    expect(caller).toContain('"rubick_side", "caller"');
+    expect(guard.startsWith(`${call}) sum by (${call}) (`)).toBe(true);
+    expect(guard).toContain('reporter=~"destination|waypoint"');
     expect(guard).not.toContain('reporter="source"');
+  });
+
+  /**
+   * Errors and latency are over the same calls as requests: a share of the
+   * server's errors over both sides' requests, or the reverse, misstates it.
+   */
+  it("takes errors and latency from the same calls as requests", () => {
+    const errors = of(istio(), "errors");
+    const guards = errors.split(" unless on(").slice(1);
+    expect(guards).toHaveLength(2);
+    for (const guard of guards) {
+      expect(guard.startsWith("source_workload_namespace,")).toBe(true);
+      expect(guard.split(")")[0]).toContain("response_flags");
+      expect(guard.split(" or ")[0]).not.toContain('reporter="source"');
+    }
+    const p95 = of(istio(), "p95");
+    expect(p95).toContain('reporter="source"');
+    expect(p95).toContain(" unless on(le, source_workload_namespace,");
   });
 
   /** `rate` drops a metric's name: sent and received are told apart before they are added. */

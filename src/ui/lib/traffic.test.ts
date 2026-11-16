@@ -60,6 +60,7 @@ const flow = (at: number, set: Partial<Record<Measure, number>>): Flow => ({
   from: 0,
   to: 1,
   protocols: [],
+  sides: [],
   values: values(set),
   reasons: [],
 });
