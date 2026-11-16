@@ -51,13 +51,15 @@ beforeEach(() => {
 
 describe("the cost PromQL", () => {
   /**
-   * Scraped without honor_labels, the metric's namespace, pod and node
-   * arrive as exported_*; read under their own names only, every join
-   * would come back empty and the page would say there are no series.
+   * Scraped without honor_labels, the metric's namespace, pod, container
+   * and node arrive as exported_*; read under their own names only, every
+   * join would come back empty, and every container of a pod would carry
+   * the target's one name, so `max by (…, container, …)` priced the pod at
+   * its largest container instead of their sum.
    */
-  it("reads namespace, pod and node back from their exported_ names", () => {
+  it("reads namespace, pod, container and node back from their exported_ names", () => {
     const expression = own("container_cpu_allocation");
-    for (const label of ["namespace", "pod", "node"])
+    for (const label of ["namespace", "pod", "container", "node"])
       expect(expression).toContain(
         `"${label}", "$1", "exported_${label}", "(.+)"`
       );

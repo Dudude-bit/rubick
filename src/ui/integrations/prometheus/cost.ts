@@ -11,8 +11,8 @@
  * currency.
  *
  * Every selector reads a label under its own name or as `exported_*`: a
- * scrape without `honor_labels` renames the metric's `namespace`, `pod` and
- * `node` when the target carries its own.
+ * scrape without `honor_labels` renames the metric's `namespace`, `pod`,
+ * `container` and `node` when the target carries its own.
  *
  * A workload's numbers are per pod here and added up per workload in Rust
  * (`prometheus_by_workload`), by the rule the pod list names a pod's
@@ -28,7 +28,7 @@ import type { CostRange, CostTrend, DeclaredPoint } from "../registry";
 import { RANGE_WINDOW_MS } from "../registry";
 import { RANGE_SPECS, escapeLabel, escapeRegex } from "./queries";
 
-const RENAMED = ["namespace", "pod", "node"] as const;
+const RENAMED = ["namespace", "pod", "container", "node"] as const;
 
 /** The series' own labels back, wherever a scrape renamed them. */
 export function own(expression: string): string {
