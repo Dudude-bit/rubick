@@ -2427,7 +2427,7 @@ export const en = {
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
     notReadInWindow:
       "{sources}: flows could not be read, so whether there were any is not known.",
-    cut: "Showing the busiest {kept}; the quietest {cut} are left out.",
+    cut: "Showing {kept}: the busiest by requests, bytes, flow events and drops in turn; {cut} quieter are left out.",
     podsFailed:
       "Pods could not be read ({said}), so names the sources wrote are not matched to workloads.",
     podsLabel: "pods",

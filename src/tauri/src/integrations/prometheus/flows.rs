@@ -665,22 +665,31 @@ pub(crate) fn fold(
         }
     }
 
-    let primary = |pair: &Joined| {
-        [Measure::Requests, Measure::Bytes, Measure::Events]
-            .iter()
-            .enumerate()
-            .find_map(|(tier, m)| pair.values[m.at()].map(|v| (tier, v)))
-            .unwrap_or((3, 0.0))
-    };
-    let mut ranked: Vec<_> = joined.into_iter().collect();
-    ranked.sort_by(|(a_key, a), (b_key, b)| {
-        let (a_tier, a_value) = primary(a);
-        let (b_tier, b_value) = primary(b);
-        a_tier
-            .cmp(&b_tier)
-            .then(b_value.total_cmp(&a_value))
-            .then_with(|| a_key.cmp(b_key))
-    });
+    // A flow's place is its best rank among the busiest of each family, so
+    // the cap keeps the busiest requests, bytes, events and drops in turn.
+    let ranked: Vec<_> = joined.into_iter().collect();
+    let mut place = vec![usize::MAX; ranked.len()];
+    for family in [
+        Measure::Requests,
+        Measure::Bytes,
+        Measure::Events,
+        Measure::Drops,
+    ] {
+        let value = |i: usize| ranked[i].1.values[family.at()];
+        let mut having: Vec<usize> = (0..ranked.len()).filter(|&i| value(i).is_some()).collect();
+        having.sort_by(|&a, &b| {
+            value(b)
+                .unwrap_or_default()
+                .total_cmp(&value(a).unwrap_or_default())
+                .then_with(|| ranked[a].0.cmp(&ranked[b].0))
+        });
+        for (rank, i) in having.into_iter().enumerate() {
+            place[i] = place[i].min(rank);
+        }
+    }
+    let mut placed: Vec<_> = ranked.into_iter().zip(place).collect();
+    placed.sort_by(|((a, _), a_at), ((b, _), b_at)| a_at.cmp(b_at).then_with(|| a.cmp(b)));
+    let mut ranked: Vec<_> = placed.into_iter().map(|(flow, _)| flow).collect();
     let cut = ranked.len().saturating_sub(MAX_FLOW_ROWS);
     ranked.truncate(MAX_FLOW_ROWS);
 
@@ -1451,6 +1460,32 @@ mod tests {
         );
         let size = serde_json::to_vec(&answer).expect("serialises").len();
         assert!(size < 256 * 1024, "{size} bytes");
+    }
+
+    /// Past the cap each family keeps its busiest in turn: a pair with only
+    /// drops, or only bytes, is not cut behind a thousand idle requests.
+    #[test]
+    fn the_cap_keeps_the_busiest_of_every_family_not_requests_first() {
+        let read = read_of(vec![]);
+        let requests: Vec<_> = (0..MAX_FLOW_ROWS + 100)
+            .map(|n| pair("web", &format!("api-{n}"), 0.0))
+            .collect();
+        let asked = vec![
+            by_name(0, Measure::Requests),
+            by_name(1, Measure::Drops),
+            by_name(2, Measure::Bytes),
+        ];
+        let answers = vec![
+            Ok(requests),
+            Ok(vec![pair("intruder", "db", 500.0)]),
+            Ok(vec![pair("backup", "store", 9e6)]),
+        ];
+        let answer = fold(&asked, answers, Some(&read), None, None, None, &[]);
+        assert_eq!(answer.flows.len(), MAX_FLOW_ROWS);
+        assert_eq!(answer.cut, 102);
+        let kept: Vec<u8> = answer.flows.iter().map(|f| f.source).collect();
+        assert!(kept.contains(&1), "the drop-only pair was cut");
+        assert!(kept.contains(&2), "the bytes-only pair was cut");
     }
 
     /// `src/contracts/traffic-budget.json` is the other half of the row cap
