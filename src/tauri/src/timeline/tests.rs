@@ -191,6 +191,73 @@ fn the_last_applied_annotation_is_never_diffed() {
     assert!(changed(&before, &after).is_none());
 }
 
+/// kapp, Rancher and others keep a copy of the object in an annotation of
+/// their own naming, a Secret's values and a container's env literals with
+/// it. Fails if such a value reaches a row under any name, or a short plain
+/// annotation stops being said.
+#[test]
+fn an_annotation_that_may_copy_the_object_is_compared_by_digest_alone() {
+    let secret = |value: &str| {
+        let copy = json!({"apiVersion": "v1", "data": {"password": value}, "kind": "Secret"});
+        json!({"metadata": {"name": "db", "namespace": "shop",
+            "annotations": {"kapp.k14s.io/original": copy.to_string(), "team": value}},
+            "type": "Opaque", "data": {"password": value}})
+    };
+    let said = changed(
+        &snap("Secret", "", &secret("aHVudGVyMg==")),
+        &snap("Secret", "", &secret("c3dvcmRmaXNo")),
+    )
+    .expect("a change");
+    let wire = serde_json::to_string(&said).unwrap();
+    assert!(
+        !wire.contains("aHVudGVyMg==") && !wire.contains("c3dvcmRmaXNo"),
+        "{wire}"
+    );
+    assert!(
+        wire.contains("metadata.annotations[kapp.k14s.io/original]"),
+        "{wire}"
+    );
+
+    let annotated = |note: &str, at: &str| {
+        let mut object = deployment("nginx:1", 2, note);
+        let copy = deployment("nginx:1", 2, note).to_string();
+        object["metadata"]["annotations"] = json!({
+            "banzaicloud.com/last-applied": copy,
+            "objectset.rio.cattle.io/applied": format!("H4sIAAAAAAAA/{}", note.repeat(60)),
+            "kubectl.kubernetes.io/restartedAt": at,
+        });
+        object
+    };
+    let found = moves(
+        &snap("Deployment", "apps", &annotated("first-value", "10:00")),
+        &snap("Deployment", "apps", &annotated("second-value", "11:00")),
+    );
+    let wire = serde_json::to_string(&found).unwrap();
+    assert!(
+        !wire.contains("first-value") && !wire.contains("second-value"),
+        "{wire}"
+    );
+    assert!(found.contains(&moved(
+        "metadata.annotations[kubectl.kubernetes.io/restartedAt]",
+        Some("10:00"),
+        Some("11:00")
+    )));
+    for key in [
+        "banzaicloud.com/last-applied",
+        "objectset.rio.cattle.io/applied",
+    ] {
+        let path = format!("metadata.annotations[{key}]");
+        assert!(
+            found.contains(&FieldMove::NotKept {
+                path: path.clone(),
+                was: true,
+                is: true
+            }),
+            "{path}: {wire}"
+        );
+    }
+}
+
 /// A private key never reaches the screen, whatever field carries it.
 /// Fails if a kept value skips the one door.
 #[test]
@@ -963,7 +1030,7 @@ mod recording {
     fn recorder() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
         let (timelines, _rx) = holder(None, false);
         let cluster = timelines.cluster("kind");
-        let recorder = Recorder::new(cluster.clone(), vec!["shop".into()]);
+        let recorder = Recorder::new(cluster.clone());
         (timelines, cluster, recorder)
     }
 
@@ -986,6 +1053,44 @@ mod recording {
             kind: kind.into(),
             namespace: namespace.map(str::to_string),
         }
+    }
+
+    /// A Secret deployed by kapp, its value changed: the tool rewrites the
+    /// copy it keeps in an annotation. Fails if either value reaches a kept
+    /// file or the window by that copy.
+    #[cfg(unix)]
+    #[test]
+    fn a_secret_copied_into_an_annotation_reaches_no_file_and_no_page() {
+        let root = tempfile::tempdir().unwrap();
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        let mut recorder = Recorder::new(cluster.clone());
+        let secret = |value: &str| {
+            let copy = json!({"apiVersion": "v1", "data": {"password": value}, "kind": "Secret"});
+            json!({"metadata": {"name": "db", "namespace": "shop",
+                "creationTimestamp": "2026-11-01T00:00:00Z",
+                "annotations": {"kapp.k14s.io/original": copy.to_string()}},
+                "type": "Opaque", "data": {"password": value}})
+        };
+        let kind = followed_kind("Secret");
+        recorder.listed(kind, None, [&secret("aHVudGVyMg==")], true);
+        recorder.applied(kind, None, &secret("c3dvcmRmaXNo"));
+        timelines.flush();
+
+        let page = serde_json::to_string(&cluster.page(&query(Show::All))).unwrap();
+        assert!(page.contains("kapp.k14s.io/original"), "{page}");
+        let mut files = 0;
+        for file in std::fs::read_dir(disk::dir_of(root.path(), "kind"))
+            .unwrap()
+            .flatten()
+        {
+            files += 1;
+            let text = std::fs::read_to_string(file.path()).unwrap();
+            for said in [&text, &page] {
+                assert!(!said.contains("aHVudGVyMg==") && !said.contains("c3dvcmRmaXNo"));
+            }
+        }
+        assert!(files > 0, "nothing was written");
     }
 
     /// A first list is what was there, not what changed. Fails if it writes
@@ -1130,6 +1235,51 @@ mod recording {
         assert!(span.unwatched.is_empty());
     }
 
+    /// A narrowed span speaks for the namespaces its watches report reading,
+    /// another reader's among them, and only where every kind is read. Fails
+    /// if it names a namespace one kind was not read in, or a span no
+    /// namespace is whole in claims the whole cluster.
+    #[test]
+    fn a_narrowed_span_speaks_for_where_every_kind_is_read() {
+        let (_t, cluster, mut recorder) = recorder();
+        for (kind, namespace, state) in [
+            ("Deployment", None, SlotState::Refused),
+            ("Deployment", Some("shop"), SlotState::Live),
+            ("Deployment", Some("payments"), SlotState::Live),
+            ("Secret", None, SlotState::Refused),
+            ("Secret", Some("shop"), SlotState::Live),
+        ] {
+            recorder.state(Source::Followed, slot(kind, namespace), state, None);
+        }
+        assert_eq!(
+            followed_spans(&cluster).pop().expect("a span").scope,
+            ["shop"]
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", Some("shop")),
+            SlotState::Refused,
+            None,
+        );
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(
+            (span.scope, span.unwatched),
+            (
+                vec!["payments".to_string(), "shop".to_string()],
+                vec!["Secret".to_string()]
+            )
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", Some("ops")),
+            SlotState::Live,
+            None,
+        );
+        assert!(followed_spans(&cluster)
+            .iter()
+            .all(|span| span.to.is_some()));
+    }
+
     /// A refusal that arrives while watching is a new stretch with its own
     /// words. Fails if the span goes on claiming the kind it lost.
     #[test]
@@ -1255,7 +1405,7 @@ mod following {
     fn setup() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
         let (timelines, _rx) = holder(None, false);
         let cluster = timelines.cluster("kind");
-        let recorder = Recorder::new(cluster.clone(), Vec::new());
+        let recorder = Recorder::new(cluster.clone());
         (timelines, cluster, recorder)
     }
 
@@ -1501,7 +1651,7 @@ mod listed_for_a_reader {
     fn setup() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
         let (timelines, _rx) = holder(None, false);
         let cluster = timelines.cluster("kind");
-        let recorder = Recorder::new(cluster.clone(), Vec::new());
+        let recorder = Recorder::new(cluster.clone());
         (timelines, cluster, recorder)
     }
 

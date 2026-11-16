@@ -70,7 +70,9 @@ export function changesScreenSection(
   t: T,
   /** How far back the screen was looking, as its own toggle words it. */
   window: string,
-  show: Show = "all"
+  show: Show = "all",
+  /** Why no rows are in hand, where the read failed or has not answered. */
+  unread: string | null = null
 ): PlacedSection {
   const changes: ReportChange[] = items.flatMap((item): ReportChange[] => {
     if (item.kind === "journal") {
@@ -170,7 +172,11 @@ export function changesScreenSection(
               {
                 at: null,
                 ref: null,
-                parts: [{ text: t("changes", "nothingInWindow"), quiet: true }],
+                parts: [
+                  unread
+                    ? { text: unread, quiet: false }
+                    : { text: t("changes", "nothingInWindow"), quiet: true },
+                ],
               },
             ],
     },
@@ -200,7 +206,12 @@ export function watchedSection(
   spans: readonly SpanLike[],
   items: readonly ChangeItem[],
   t: T,
-  read?: Pick<TimelineRead, "keeping" | "unreadable" | "error" | "letGo">
+  /** The rows the screen read: under warnings only, no change was. */
+  show: Show,
+  read?: Pick<
+    TimelineRead,
+    "read" | "keeping" | "unreadable" | "error" | "letGo" | "readFrom"
+  >
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
   const refused = watching && unwatchedWords(watching, t);
@@ -208,8 +219,10 @@ export function watchedSection(
     watching && earlierRowsWords(spans, items, watching.from, t, clock);
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
-    : t("changes", "notWatchingNow");
-  const quiet = quietSince(watching, items, changesKnownFrom(read?.letGo));
+    : read?.read === false
+      ? null
+      : t("changes", "notWatchingNow");
+  const quiet = quietSince(watching, items, changesKnownFrom(read), show);
   const nothing =
     quiet !== null &&
     t("changes", "nothingRecordedSince", {

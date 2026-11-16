@@ -1,10 +1,17 @@
 import { Pin } from "lucide-react";
 
-import { rowWords, type ChangeRow } from "@/lib/changes";
+import { isChange, rowWords, type ChangeRow } from "@/lib/changes";
+import type { TimelineRead } from "@/hooks/useTimeline";
+import type { LetGo } from "@/generated/types";
 import { iconSvg } from "@/lib/icon-svg";
 import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
-import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import {
+  ORDER,
+  refOf,
+  utcMoment,
+  type PlacedSection,
+} from "@/lib/report-parts";
 import {
   pinKey,
   waysVerdict,
@@ -18,6 +25,37 @@ import {
 import { ASK_SHORT, type Watch } from "@/lib/tell-me-when";
 import type { T } from "@/i18n/useT";
 import type { UnexploredKind } from "@/generated/types";
+
+/**
+ * The newest change a card names: its row; the let-go line where none is
+ * kept past what was let go or cleared, which may have held one; `null` for
+ * none seen; `undefined` where the timeline was not read.
+ */
+export type LastChange = ChangeRow | LetGo | null | undefined;
+
+export function lastChangeOf(
+  read: Pick<TimelineRead, "read" | "rows" | "letGo">
+): LastChange {
+  if (!read.read) return undefined;
+  return read.rows.find(isChange) ?? read.letGo?.changes ?? null;
+}
+
+/** The last change in words, the row's own aside, on the card and in its Share. */
+export function lastChangeWords(
+  latest: LastChange,
+  t: T,
+  clock: (ms: number) => string
+): string {
+  if (latest === undefined) return t("services", "notReadYet");
+  if (latest === null) return t("services", "nothingSeen");
+  if ("before" in latest)
+    return t(
+      "services",
+      latest.cleared ? "nothingSeenSinceCleared" : "nothingSeenSinceLetGo",
+      { at: clock(latest.before) }
+    );
+  return rowWords(latest, t);
+}
 
 /** The card and its Share say the same word beside a way in. */
 export const WAY_WORDS: Record<WayState, (t: T) => string> = {
@@ -107,8 +145,7 @@ export function pinShare(
   state: ServiceState,
   ways: { entries: EntryPoint[]; known: boolean },
   unread: readonly UnexploredKind[],
-  /** The newest change, `null` for none seen, `undefined` where the timeline was not read. */
-  latest: ChangeRow | null | undefined,
+  latest: LastChange,
   waiting: readonly Watch[],
   t: T
 ): PlacedSection {
@@ -137,12 +174,7 @@ export function pinShare(
       label: t("services", "lastChange"),
       values: [
         {
-          text:
-            latest === undefined
-              ? t("services", "notReadYet")
-              : latest
-                ? rowWords(latest, t)
-                : t("services", "nothingSeen"),
+          text: lastChangeWords(latest, t, utcMoment),
         },
       ],
     },

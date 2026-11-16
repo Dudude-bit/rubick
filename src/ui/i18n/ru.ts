@@ -2982,6 +2982,10 @@ export const ru: Catalogue = {
     moreWays: "ещё {n}",
     lastChange: "Последнее изменение",
     nothingSeen: "приложение ничего не видело, пока смотрело",
+    nothingSeenSinceLetGo:
+      "приложение ничего не видело с {at}: более старые изменения удалены",
+    nothingSeenSinceCleared:
+      "приложение ничего не видело с {at}, когда историю очистили",
     waitingOn: "Ждём",
     notLookedAt: "Не смотрели",
     pinsFull: {

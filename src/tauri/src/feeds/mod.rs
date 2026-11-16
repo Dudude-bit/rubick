@@ -150,8 +150,12 @@ pub enum Binding {
 pub struct Ask {
     pub kinds: Vec<KindKey>,
     /// Where a kind refused across the cluster is read instead; `None` is
-    /// the whole cluster. Objects outside it are not handed over.
+    /// the whole cluster.
     pub scope: Option<Vec<String>>,
+    /// Objects outside `scope` are not handed over: a page drawing the
+    /// window's namespaces. A recorder of the whole cluster is handed
+    /// everything the layer reads, and `scope` only says where to fall back.
+    pub narrow: bool,
     pub binding: Binding,
 }
 
@@ -186,8 +190,10 @@ impl Lease {
                 let Some(sub) = inner.subscribers.get_mut(&self.id) else {
                     return;
                 };
-                let moved = namespaces(sub.scope.as_deref()) != namespaces(scope.as_deref());
-                sub.scope = scope;
+                let filter = scope.clone().filter(|_| sub.narrow);
+                let moved = namespaces(sub.scope.as_deref()) != namespaces(filter.as_deref());
+                sub.scope = filter;
+                sub.fallback = scope;
                 let kinds = sub.kinds.clone();
                 if moved {
                     inner.recut(self.id);
@@ -593,7 +599,11 @@ impl Feeds {
 
 struct Subscriber {
     kinds: BTreeSet<KindKey>,
+    /// What it is handed is held to these namespaces; `None` is everything.
     scope: Option<Vec<String>>,
+    /// Where it asks a kind refused across the cluster to be read.
+    fallback: Option<Vec<String>>,
+    narrow: bool,
     binding: Binding,
     touched: Instant,
     tx: mpsc::Sender<Update>,
@@ -1123,7 +1133,9 @@ impl ContextFeeds {
                 id,
                 Subscriber {
                     kinds: kinds.iter().map(|(kind, _)| kind.clone()).collect(),
-                    scope: ask.scope.clone(),
+                    scope: ask.scope.clone().filter(|_| ask.narrow),
+                    fallback: ask.scope.clone(),
+                    narrow: ask.narrow,
                     binding: ask.binding,
                     touched: Instant::now(),
                     tx,
@@ -1181,7 +1193,7 @@ impl ContextFeeds {
                     },
                 );
                 if let Some(objects) = objects {
-                    let scope = ask.scope.clone();
+                    let scope = ask.scope.clone().filter(|_| ask.narrow);
                     let objects = objects
                         .into_iter()
                         .filter(|o| in_scope(scope.as_deref(), o))
@@ -1292,7 +1304,7 @@ impl ContextFeeds {
                 .subscribers
                 .values()
                 .filter(|sub| sub.kinds.contains(kind))
-                .filter_map(|sub| sub.scope.clone())
+                .filter_map(|sub| sub.fallback.clone())
                 .flatten()
                 .collect();
             (
@@ -1893,6 +1905,7 @@ mod tests {
         Ask {
             kinds: vec![deployments().0],
             scope: scope.map(|names| names.into_iter().map(str::to_string).collect()),
+            narrow: true,
             binding,
         }
     }
@@ -2373,6 +2386,72 @@ mod tests {
         context.end();
     }
 
+    /// With the window on `shop`, a page draws `shop` and the timeline records
+    /// the cluster, whose span says it watched the whole of it. Fails if the
+    /// timeline loses a rollout in `payments` the whole-cluster watch saw, a
+    /// page is handed it, or the timeline stops falling back to its window's
+    /// namespaces where the cluster refuses.
+    #[tokio::test]
+    async fn the_timeline_is_handed_the_whole_cluster_and_a_page_its_namespaces() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let window = Some(vec!["shop".to_string()]);
+        let mut page = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let mut timeline = context.join(
+            &crate::timeline::follow::ask(window.clone()),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("payments", "api", "1"),
+            ],
+        );
+        apply(&generation, &slot, deployment("payments", "api", "2"));
+        let named = |updates: Vec<Update>| -> Vec<String> {
+            updates
+                .iter()
+                .flat_map(|update| match update {
+                    Update::Whole { objects, .. } => names(objects),
+                    Update::Applied { object, .. } => {
+                        vec![object.metadata.name.clone().unwrap_or_default()]
+                    }
+                    _ => Vec::new(),
+                })
+                .collect()
+        };
+        assert_eq!(named(drain(&mut page)), ["web"]);
+        assert_eq!(named(drain(&mut timeline)), ["api", "web", "api"]);
+        timeline.lease.rescope(Some(vec!["ops".to_string()]));
+        apply(&generation, &slot, deployment("payments", "api", "3"));
+        assert_eq!(named(drain(&mut timeline)), ["api"]);
+
+        let refusing = feeds.context_for("staging", client().await);
+        let _timeline = refusing.join(&crate::timeline::follow::ask(window), &[deployments()], &[]);
+        let generation = refusing.serving();
+        SlotHost::refused(
+            &generation,
+            &whole(&deployments().0),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        assert!(generation.holds(&SlotKey {
+            kind: deployments().0,
+            namespace: Some("shop".to_string()),
+        }));
+        context.end();
+        refusing.end();
+    }
+
     /// A renewed client reads every kind again; the old one serves until the
     /// new one has listed, then the new set is handed over with no gap.
     /// Fails if a change on the old client is lost before the hand-over, or
@@ -2731,6 +2810,7 @@ mod tests {
                     slot_of("", "secrets").kind,
                 ],
                 scope: None,
+                narrow: true,
                 binding: Binding::Session,
             },
             &[
@@ -2801,6 +2881,7 @@ mod tests {
             &Ask {
                 kinds: vec![pods.kind.clone()],
                 scope: None,
+                narrow: true,
                 binding: Binding::Session,
             },
             &[(pods.kind.clone(), (ApiResource::erase::<Pod>(&()), true))],
@@ -2915,6 +2996,7 @@ mod tests {
         Ask {
             kinds: vec![slot_of("", "configmaps").kind],
             scope: None,
+            narrow: true,
             binding: Binding::Session,
         }
     }

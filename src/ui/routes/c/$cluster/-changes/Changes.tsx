@@ -33,6 +33,7 @@ import {
 import { Eye, History, Lock } from "lucide-react";
 import type { Show } from "@/generated/types";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useTimeline, useTimelineHold } from "@/hooks/useTimeline";
@@ -46,6 +47,8 @@ const WINDOWS = {
 type Window = keyof typeof WINDOWS;
 
 const NO_SPANS: ObservedSpan[] = [];
+const NO_KINDS: string[] = [];
+const EVENTS = ["Event"];
 
 const moment = (ms: number) => formatWhen(ms, "moment");
 
@@ -67,12 +70,15 @@ export function Changes() {
 
   const ours = read.spans?.followed ?? NO_SPANS;
   const meta = read.spans?.meta ?? NO_SPANS;
+  // Under warnings only the rows are the cluster's events: a stretch their
+  // watch was refused is not one that had none.
+  const events = show === "warnings" ? EVENTS : NO_KINDS;
   const covering = useMemo(
-    () => spansCovering(ours, { kinds: [], namespaces: scope.scope }),
-    [ours, scope.scope]
+    () => spansCovering(ours, { kinds: events, namespaces: scope.scope }),
+    [ours, events, scope.scope]
   );
   const end = windowEnd(ours, now);
-  const knownFrom = changesKnownFrom(read.letGo);
+  const knownFrom = changesKnownFrom(read);
   const items = useMemo(() => {
     const from = now - WINDOWS[window];
     const timeline = timelineOf({
@@ -81,7 +87,7 @@ export function Changes() {
       helm: [],
       journal: read.rows,
       spans: covering,
-      watching: spansWatching(ours, []),
+      watching: spansWatching(ours, events),
       scope: scope.scope,
       window: { from, to: end },
       show,
@@ -98,7 +104,18 @@ export function Changes() {
       knownFrom
     );
     return merged(timeline, stretches.sort(newestFirst));
-  }, [read, ours, covering, now, end, window, scope.scope, show, knownFrom]);
+  }, [
+    read,
+    ours,
+    covering,
+    events,
+    now,
+    end,
+    window,
+    scope.scope,
+    show,
+    knownFrom,
+  ]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.
@@ -106,8 +123,7 @@ export function Changes() {
     ...open,
     from: watchedSince(covering, end) ?? open.from,
   };
-  const quiet =
-    show === "warnings" ? null : quietSince(watching, items, knownFrom);
+  const quiet = quietSince(watching, items, knownFrom, show);
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
     watching && earlierRowsWords(ours, items, watching.from, t, moment);
@@ -116,9 +132,17 @@ export function Changes() {
   const windowWords =
     window === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day");
 
+  // A read that failed or has not answered says nothing of watching, and
+  // holds no rows to call the window empty by.
+  const unread = read.read
+    ? null
+    : read.error
+      ? t("changes", "readFailed", { reason: errorToShow(read.error) })
+      : t("share", "stillReading");
+
   useShareSection("changes", () => [
-    changesScreenSection(items, t, windowWords, show),
-    watchedSection(watching, ours, items, t, read),
+    changesScreenSection(items, t, windowWords, show, unread),
+    watchedSection(watching, ours, items, t, show, read),
   ]);
 
   if (!isConnected) {
@@ -148,9 +172,9 @@ export function Changes() {
                 </span>
               )}
             </>
-          ) : (
+          ) : read.read ? (
             t("changes", "notWatchingNow")
-          )
+          ) : undefined
         }
         description={
           earlier && (
@@ -219,6 +243,7 @@ export function Changes() {
               {t("changes", "readingKept")}
             </p>
           ) : (
+            read.read &&
             (items.length > 0 || quiet === null) && (
               <ChangesTimeline
                 items={items}

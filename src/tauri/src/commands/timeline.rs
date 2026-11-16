@@ -35,9 +35,9 @@ pub struct Following {
 }
 
 /// Records the cluster on screen: the followed kinds and its events, on the
-/// shared watches, read across the cluster first and in the window's
-/// namespaces `scope` where the cluster refuses. Asked again with the same
-/// context, it moves the namespaces only.
+/// shared watches, read across the cluster, and in the window's namespaces
+/// `scope` where the cluster refuses a kind across it. Asked again with the
+/// same context, it moves those namespaces only.
 #[tauri::command]
 pub async fn timeline_follow(
     scope: Option<Vec<String>>,
@@ -63,8 +63,8 @@ pub async fn timeline_follow(
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }
-    let subscription = state.feeds.subscribe(&here, ask(scope.clone())).await?;
-    timelines.follow(context, subscription, scope);
+    let subscription = state.feeds.subscribe(&here, ask(scope)).await?;
+    timelines.follow(context, subscription);
     Ok(Following { another_cluster })
 }
 

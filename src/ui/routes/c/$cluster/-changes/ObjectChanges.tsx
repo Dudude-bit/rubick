@@ -11,13 +11,12 @@ import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { formatWhen } from "@/lib/utils";
 import {
   changesCount,
+  coverageOf,
   helmReleaseOf,
   revisionOfController,
   revisionOfReplicaSet,
   REVISED_KINDS,
-  spansCovering,
   spansFor,
-  spansWatching,
   timelineOf,
   windowEnd,
   type Revision,
@@ -305,40 +304,43 @@ function ChangesPanel({
     () => (subject.namespace ? [subject.namespace] : []),
     [subject.namespace]
   );
-  const items = useMemo(
-    () =>
-      timelineOf({
-        revisions,
-        deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
-        helm,
-        journal: read.rows,
-        spans: spansCovering(spans, {
-          kinds: [subject.kind],
-          namespaces: scope,
-        }),
-        watching: spansWatching(spans, [subject.kind]),
-        scope,
-        window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
-        createdAt: subject.createdAt,
-        show,
-        letGo: read.letGo,
-        readFrom: read.readFrom,
-      }),
-    [
-      revisions,
-      deliveries,
-      helm,
-      read.rows,
-      read.letGo,
-      read.readFrom,
-      spans,
-      subject.kind,
-      subject.createdAt,
-      scope,
-      now,
-      show,
-    ]
+  const coverage = useMemo(
+    () => coverageOf(read.spans, [subject.kind], scope, show),
+    [read.spans, subject.kind, scope, show]
   );
+  const known = read.read;
+  const items = useMemo(() => {
+    const drawn = timelineOf({
+      revisions,
+      deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
+      helm,
+      journal: read.rows,
+      spans: coverage.covering,
+      watching: coverage.watching,
+      scope,
+      window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
+      createdAt: subject.createdAt,
+      show,
+      letGo: read.letGo,
+      readFrom: read.readFrom,
+    });
+    // An unread timeline has no spans: no stretch of it is known either way.
+    return known ? drawn : drawn.filter((item) => item.kind !== "gap");
+  }, [
+    known,
+    revisions,
+    deliveries,
+    helm,
+    read.rows,
+    read.letGo,
+    read.readFrom,
+    coverage,
+    spans,
+    subject.createdAt,
+    scope,
+    now,
+    show,
+  ]);
   const watching = spans.find((span) => span.to === null);
   const lines = [...keepingWords(read, t), ...unread];
 
