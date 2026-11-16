@@ -1377,14 +1377,14 @@ pub(super) mod tests {
             kind: key_of(&deployments()),
             namespace: None,
         };
-        let stop = CancellationToken::new();
-        generation.saw(&slot, &deployments(), Event::Init, &stop);
+        let never = CancellationToken::new();
+        generation.saw(&slot, &deployments(), Event::Init, &never);
         for (namespace, name) in [("shop", "web"), ("payments", "api")] {
             let object = serde_json::from_value(deployment(namespace, name, "1", "web:1"))
                 .expect("an object");
-            generation.saw(&slot, &deployments(), Event::InitApply(object), &stop);
+            generation.saw(&slot, &deployments(), Event::InitApply(object), &never);
         }
-        generation.saw(&slot, &deployments(), Event::InitDone, &stop);
+        generation.saw(&slot, &deployments(), Event::InitDone, &never);
         let held = |index: &AuditIndex| -> Vec<String> {
             let mut names: Vec<String> = index
                 .store
