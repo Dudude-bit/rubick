@@ -60,6 +60,11 @@ const KINDS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The kinds asked about, by the names a reader knows them by.
+pub(crate) fn kind_names() -> Vec<&'static str> {
+    KINDS.iter().map(|&(_, _, kind)| kind).collect()
+}
+
 /// One page says which namespaces hold a policy; past it, every one may.
 const PAGE: u32 = 500;
 

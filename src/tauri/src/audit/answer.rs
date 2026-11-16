@@ -14,6 +14,7 @@ use super::{
 };
 use crate::feeds::FeedState;
 use crate::ownership::{ClusterIndex, KindKey, SlotKey};
+use crate::resources::OtherPolicies;
 use crate::state::perf::{wire_len, IPC_TARGET_BYTES};
 
 /// The most rows one answer carries.
@@ -421,7 +422,15 @@ pub(super) fn world(
         &slots,
         &mut namespaces,
     );
-    network_policies(&mut world, owners, &slots, &namespaces, &policies);
+    let others = index.others.read().clone();
+    network_policies(
+        &mut world,
+        owners,
+        &slots,
+        &namespaces,
+        &policies,
+        others.as_ref(),
+    );
     readings(&mut world, &slots, owners, scope);
     super::upgrade::merge(&mut world, index.upgrade.read().as_deref(), scope);
     for object in &mut world.objects {
@@ -628,13 +637,17 @@ fn pods(
     }
 }
 
-/// One finding per namespace that runs pods and has no `NetworkPolicy`.
+/// One finding per namespace that runs pods and has no `NetworkPolicy`,
+/// where no other engine's policy may hold over them: Cilium, Calico,
+/// Antrea and `AdminNetworkPolicy` admit what a namespace's `NetworkPolicy`
+/// objects alone do not say, so there the rule could not check.
 fn network_policies(
     world: &mut World,
     owners: Owners<'_>,
     slots: &BTreeMap<SlotKey, FeedState>,
     namespaces: &BTreeSet<String>,
     policies: &HashMap<&str, u32>,
+    others: Option<&(Option<Vec<String>>, OtherPolicies)>,
 ) {
     let pod_counts: HashMap<String, usize> = owners
         .ok()
@@ -658,11 +671,23 @@ fn network_policies(
             namespace: None,
             name: namespace.clone(),
         };
+        let engines = match others {
+            Some((read, found)) if read.as_ref().is_none_or(|read| read.contains(namespace)) => {
+                let kinds = found.over(namespace);
+                (!kinds.is_empty()).then(|| (kinds.join(", "), Why::NotAudited))
+            }
+            _ => Some((
+                crate::commands::other_policies::kind_names().join(", "),
+                Why::Reading,
+            )),
+        };
         let blind = pods_unread(owners, namespace)
-            .map(|why| (POD, why))
+            .map(|why| (POD.to_string(), why))
             .or_else(|| {
-                why_unread(slots, &policy_kind, Some(namespace)).map(|why| (NETWORK_POLICY, why))
-            });
+                why_unread(slots, &policy_kind, Some(namespace))
+                    .map(|why| (NETWORK_POLICY.to_string(), why))
+            })
+            .or(engines);
         let mut audited = Audited {
             system: is_system(&subject, None),
             subject,
@@ -672,7 +697,7 @@ fn network_policies(
         if let Some((kind, why)) = blind {
             audited.unchecked.push(Unchecked {
                 rule: RuleId::NamespaceWithoutNetworkPolicy,
-                kind: kind.to_string(),
+                kind,
                 namespace: Some(namespace.clone()),
                 why,
             });
@@ -1335,6 +1360,63 @@ mod tests {
         let blind = shop(&world(&index, Err(&missing), Some(&["shop".to_string()])));
         assert!(blind.findings.is_empty());
         assert_eq!(blind.unchecked[0].kind, POD);
+    }
+
+    /// A world of two namespaces running pods and holding no NetworkPolicy,
+    /// with `others` as the last read of other engines' policies said.
+    async fn policed(others: (Option<Vec<String>>, OtherPolicies)) -> World {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        for namespace in ["shop", "web"] {
+            owners.hold(
+                &pods(),
+                "Pod",
+                namespace,
+                (namespace, Some(namespace)),
+                Some("someone"),
+            );
+        }
+        *index.others.write() = Some(others);
+        world(&index, Ok(&owners), None)
+    }
+
+    fn namespace(seen: &World, name: &str) -> Audited {
+        seen.objects
+            .iter()
+            .find(|o| o.subject.kind == "Namespace" && o.subject.name == name)
+            .cloned()
+            .unwrap()
+    }
+
+    /// Where another engine's policy may hold over a namespace's pods, its
+    /// `NetworkPolicy` objects do not say who is let in: the rule could not
+    /// check there, and names the kinds. Fails if a Cilium cluster's
+    /// namespaces are each told every pod accepts traffic from every pod.
+    #[tokio::test]
+    async fn a_namespace_another_engine_may_police_is_not_checked_not_open() {
+        let mut found = OtherPolicies::none();
+        found.within("shop", "CiliumNetworkPolicy");
+        let seen = policed((None, found)).await;
+        let shop = namespace(&seen, "shop");
+        assert!(shop.findings.is_empty());
+        assert_eq!(shop.unchecked[0].kind, "CiliumNetworkPolicy");
+        assert_eq!(shop.unchecked[0].why, Why::NotAudited);
+        assert_eq!(namespace(&seen, "web").findings.len(), 1);
+    }
+
+    /// Fails if a namespace the other engines were not yet asked about
+    /// reads as open rather than as still being read.
+    #[tokio::test]
+    async fn a_namespace_not_yet_asked_about_other_engines_is_still_being_read() {
+        let seen = policed((Some(vec!["shop".to_string()]), OtherPolicies::none())).await;
+        let web = namespace(&seen, "web");
+        assert!(
+            web.findings.is_empty(),
+            "a namespace not yet asked about reads as open"
+        );
+        assert_eq!(web.unchecked[0].why, Why::Reading);
+        assert_eq!(namespace(&seen, "shop").findings.len(), 1);
     }
 
     /// A `CronJob`'s runs are judged on the `CronJob`, a Deployment's pods on the

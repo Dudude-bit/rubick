@@ -36,6 +36,7 @@ use super::{is_system, objects, AuditFinding, Subject, Unchecked, Why};
 use crate::error::Result;
 use crate::feeds::{Ask, Binding, FeedState, Lease, Update};
 use crate::ownership::{KindKey, SlotKey};
+use crate::resources::OtherPolicies;
 use crate::state::{AppEvent, AppState};
 
 const IDLE_AFTER: Duration = Duration::from_mins(3);
@@ -459,6 +460,9 @@ pub struct AuditIndex {
     pub(super) pod_reads: Arc<Semaphore>,
     /// The upgrade rules' last pass; `None` before the first ends.
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
+    /// Other engines' policy kinds that may hold over each namespace's pods,
+    /// and the scope they were read for; `None` before the first read.
+    pub(super) others: RwLock<Option<(Option<Vec<String>>, OtherPolicies)>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
     /// The reader asked again: a source that failed is read at once.
@@ -494,6 +498,7 @@ impl AuditIndex {
             pods: Mutex::new(HashMap::new()),
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
+            others: RwLock::new(None),
             rescoped: Notify::new(),
             again: Notify::new(),
             asked: Notify::new(),
@@ -863,6 +868,16 @@ fn spawn_upgrade(
                 read = pass => read,
             };
             drop(decoded);
+            let discovery = crate::commands::other_policies::Discovery {
+                served: clients.served(),
+                context: &index.context,
+            };
+            let others = tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                others = others_over(discovery, &index.client, scope.as_deref()) => others,
+            };
+            *index.others.write() = Some((scope, others));
             *index.upgrade.write() = Some(Arc::new(read));
             index.changed();
             if !next_pass(&index, UPGRADE_EVERY, ASKED_WITHIN).await {
@@ -870,6 +885,32 @@ fn spawn_upgrade(
             }
         }
     });
+}
+
+/// The other engines' policy kinds that may hold over `scope`'s pods: read
+/// across the cluster where the scope is, else a namespace at a time, as the
+/// NetworkPolicy screens read them for a reader bound to namespaces.
+async fn others_over(
+    discovery: crate::commands::other_policies::Discovery<'_>,
+    client: &Client,
+    scope: Option<&[String]>,
+) -> OtherPolicies {
+    let Some(names) = scope else {
+        return discovery.other_policies(client, None).await;
+    };
+    let reads = futures::future::join_all(
+        names
+            .iter()
+            .map(|namespace| discovery.other_policies(client, Some(namespace))),
+    )
+    .await;
+    let mut others = OtherPolicies::none();
+    for (namespace, found) in names.iter().zip(reads) {
+        for kind in found.over(namespace) {
+            others.within(namespace, &kind);
+        }
+    }
+    others
 }
 
 /// This cluster's Prometheus as Settings holds it, read again each pass so
@@ -961,6 +1002,7 @@ impl AuditIndex {
     pub(super) fn holding(client: Client, scope: Option<Vec<String>>) -> Arc<Self> {
         let mut index = Self::new("test".to_string(), client, scope, Some(32));
         index.pod_reads = Arc::new(Semaphore::new(0));
+        *index.others.write() = Some((None, OtherPolicies::none()));
         let index = Arc::new(index);
         for (resource, _) in audited() {
             index.set(&resource, None, FeedState::Synced);
