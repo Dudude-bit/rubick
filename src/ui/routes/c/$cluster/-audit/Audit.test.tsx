@@ -7,6 +7,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
 const asked: AuditQuery[] = [];
+const moreRules: AuditPage["rows"] = [];
 const summary: AuditPage["summary"] = {
   findings: 1,
   severities: { high: 1, medium: 0, low: 0 },
@@ -73,8 +74,9 @@ vi.mock("@/lib/commands", () => ({
             objects: 1,
             unchecked: 1,
           },
+          ...moreRules,
         ],
-        total: 1,
+        total: 1 + moreRules.length,
         next: null,
       });
     },
@@ -85,6 +87,7 @@ const { Audit } = await import("./Audit");
 
 beforeEach(() => {
   asked.length = 0;
+  moreRules.length = 0;
   useClusterStore.setState({
     currentContext: "prod",
     isConnected: true,
@@ -148,6 +151,31 @@ describe("the Audit page", () => {
    * glued to a count that already has its noun. Fails if it reads "1
    * object Findings".
    */
+  /**
+   * A rule that found nothing and only could not check is not a finding of
+   * its severity. Fails if its row wears the rule's red High badge.
+   */
+  it("draws a rule that only could not check as not checked, with no severity", async () => {
+    moreRules.push({
+      row: "rule",
+      rule: "autoscaler-target-missing",
+      worst: null,
+      objects: 0,
+      unchecked: 1,
+    });
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    const title = await screen.findByText("Autoscaler's target does not exist");
+    const row = title.closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByText("High")).toBeNull();
+    expect(
+      within(row as HTMLElement).getByLabelText("Not checked here")
+    ).toBeInTheDocument();
+  });
+
   it("counts the table's rows as rules", async () => {
     await renderWithRouter(<Audit />, {
       at: "/c/prod/audit",

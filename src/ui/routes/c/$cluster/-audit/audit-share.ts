@@ -45,14 +45,28 @@ export function auditScreenSection(
 ): PlacedSection {
   const items: ReportFinding[] = page.rows.flatMap((row): ReportFinding[] => {
     switch (row.row) {
-      case "rule":
+      case "rule": {
+        const unchecked =
+          row.unchecked > 0
+            ? t("audit", "uncheckedOf", { n: row.unchecked })
+            : null;
         return [
-          {
-            title: `${t("audit", SEVERITY_WORDS[row.worst])} · ${ruleTitle(row.rule, t)}`,
-            detail: t("audit", "objectsOf", { n: row.objects }),
-            role: ROLE[row.worst],
-          },
+          row.worst === null
+            ? {
+                title: ruleTitle(row.rule, t),
+                detail: unchecked,
+                role: "neutral",
+                mark: "notRead",
+              }
+            : {
+                title: `${t("audit", SEVERITY_WORDS[row.worst])} · ${ruleTitle(row.rule, t)}`,
+                detail: [t("audit", "objectsOf", { n: row.objects }), unchecked]
+                  .filter(Boolean)
+                  .join(" · "),
+                role: ROLE[row.worst],
+              },
         ];
+      }
       case "object":
         return [
           {

@@ -3672,7 +3672,7 @@ export type AuditRow =
   | {
       row: "rule";
       rule: RuleId;
-      worst: AuditSeverity;
+      worst: AuditSeverity | null;
       objects: number;
       unchecked: number;
     }

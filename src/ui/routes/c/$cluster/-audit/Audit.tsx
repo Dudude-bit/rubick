@@ -73,8 +73,16 @@ function ruleColumns(t: T): ColumnDef<RuleRow>[] {
       id: "severity",
       header: t("audit", "severity"),
       size: 90,
-      accessorFn: (row) => SEVERITIES.indexOf(row.worst),
-      cell: ({ row }) => <SeverityBadge severity={row.original.worst} />,
+      accessorFn: (row) => (row.worst ? SEVERITIES.indexOf(row.worst) : 3),
+      cell: ({ row }) =>
+        row.original.worst ? (
+          <SeverityBadge severity={row.original.worst} />
+        ) : (
+          <EyeOff
+            className="h-3 w-3 text-fg-fnt"
+            aria-label={t("audit", "notCheckedHere")}
+          />
+        ),
     },
     {
       id: "rule",

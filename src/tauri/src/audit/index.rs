@@ -1430,7 +1430,7 @@ pub(super) mod tests {
     fn an_answer_row_names_its_shape() {
         let row = AuditRow::Rule {
             rule: RuleId::PssPrivileged,
-            worst: crate::audit::AuditSeverity::High,
+            worst: Some(crate::audit::AuditSeverity::High),
             objects: 1,
             unchecked: 0,
         };

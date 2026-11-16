@@ -166,7 +166,8 @@ pub struct AuditSummary {
 pub enum AuditRow {
     Rule {
         rule: RuleId,
-        worst: AuditSeverity,
+        /// `None` where the rule found nothing and only could not check.
+        worst: Option<AuditSeverity>,
         objects: u32,
         unchecked: u32,
     },
@@ -898,30 +899,31 @@ fn rows(world: &World, query: &AuditQuery) -> Vec<AuditRow> {
     }
     match query.by {
         Grouping::Rule => {
-            let mut by_rule: BTreeMap<RuleId, (AuditSeverity, u32, u32)> = BTreeMap::new();
+            let mut by_rule: BTreeMap<RuleId, (Option<AuditSeverity>, u32, u32)> = BTreeMap::new();
             for object in part {
                 for finding in object.findings.iter().filter(|f| passes(f, query)) {
-                    let entry = by_rule
-                        .entry(finding.rule)
-                        .or_insert((finding.severity, 0, 0));
-                    entry.0 = entry.0.min(finding.severity);
+                    let entry = by_rule.entry(finding.rule).or_default();
+                    entry.0 = Some(
+                        entry
+                            .0
+                            .map_or(finding.severity, |w| w.min(finding.severity)),
+                    );
                     entry.1 += 1;
                 }
                 for unchecked in object.unchecked.iter().filter(|u| blind_passes(u, query)) {
-                    let entry = by_rule.entry(unchecked.rule).or_insert((
-                        unchecked.rule.rule().severity,
-                        0,
-                        0,
-                    ));
-                    entry.2 += 1;
+                    by_rule.entry(unchecked.rule).or_default().2 += 1;
                 }
             }
-            let mut rows: Vec<(AuditSeverity, RuleId, u32, u32)> = by_rule
+            let mut rows: Vec<(Option<AuditSeverity>, RuleId, u32, u32)> = by_rule
                 .into_iter()
                 .map(|(rule, (worst, objects, unchecked))| (worst, rule, objects, unchecked))
                 .collect();
             rows.sort_by_key(|(worst, rule, objects, _)| {
-                (*worst, std::cmp::Reverse(*objects), *rule)
+                (
+                    worst.map_or(3, |s| s as u8),
+                    std::cmp::Reverse(*objects),
+                    *rule,
+                )
             });
             rows.into_iter()
                 .map(|(worst, rule, objects, unchecked)| AuditRow::Rule {
@@ -1207,6 +1209,60 @@ mod tests {
             .unchecked
             .iter()
             .any(|u| u.rule == RuleId::AutoscalerTargetMissing));
+    }
+
+    /// A rule that found nothing and only could not check carries no
+    /// severity and sorts after every rule that found something. Fails if an
+    /// autoscaler aimed at a Rollout reads as a High finding on no object.
+    #[test]
+    fn a_rule_that_only_could_not_check_wears_no_severity() {
+        let object = |name: &str| Audited {
+            subject: Subject {
+                kind: "HorizontalPodAutoscaler".to_string(),
+                namespace: Some("shop".to_string()),
+                name: name.to_string(),
+            },
+            system: false,
+            findings: Vec::new(),
+            unchecked: Vec::new(),
+        };
+        let mut low = object("web");
+        low.findings
+            .push(AuditFinding::of(RuleId::NoLivenessProbe, Vec::new()));
+        let mut rollout = object("rollout");
+        rollout.unchecked.push(Unchecked {
+            rule: RuleId::AutoscalerTargetMissing,
+            kind: "Rollout".to_string(),
+            namespace: Some("shop".to_string()),
+            why: Why::NotAudited,
+        });
+        let world = World {
+            objects: vec![low, rollout],
+            ..World::default()
+        };
+        let by_rule = AuditQuery {
+            by: Grouping::Rule,
+            ..query()
+        };
+        let shown: Vec<(RuleId, Option<AuditSeverity>, u32, u32)> = rows(&world, &by_rule)
+            .into_iter()
+            .filter_map(|row| match row {
+                AuditRow::Rule {
+                    rule,
+                    worst,
+                    objects,
+                    unchecked,
+                } => Some((rule, worst, objects, unchecked)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            vec![
+                (RuleId::NoLivenessProbe, Some(AuditSeverity::Low), 1, 0),
+                (RuleId::AutoscalerTargetMissing, None, 0, 1),
+            ]
+        );
     }
 
     /// One finding per namespace, never per workload. Fails if a namespace

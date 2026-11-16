@@ -46,6 +46,53 @@ const page: AuditPage = {
 
 describe("Audit in a shared file", () => {
   /**
+   * A rule row says how many objects it could not check, and one that only
+   * could not check is filed as not read, not as a finding of its
+   * severity. Fails if the file reads "High · … · 0 objects".
+   */
+  it("files a rule that only could not check as not read, and counts what was not checked", () => {
+    const section = auditScreenSection(
+      {
+        ...page,
+        rows: [
+          {
+            row: "rule",
+            rule: "pss-privileged",
+            worst: "high",
+            objects: 1,
+            unchecked: 2,
+          },
+          {
+            row: "rule",
+            rule: "autoscaler-target-missing",
+            worst: null,
+            objects: 0,
+            unchecked: 1,
+          },
+        ],
+      },
+      "rule",
+      t
+    );
+    expect(section.body).toMatchObject({
+      type: "findings",
+      items: [
+        {
+          title: "High · Runs a privileged container",
+          detail: "1 object · 2 not checked",
+          role: "err",
+        },
+        {
+          title: "Autoscaler's target does not exist",
+          detail: "1 not checked",
+          role: "neutral",
+          mark: "notRead",
+        },
+      ],
+    });
+  });
+
+  /**
    * The file is read without the screen. Fails if a kind the screen says it
    * could not read is missing from the file, or the file states a total it
    * does not have.
