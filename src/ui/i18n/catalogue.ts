@@ -2006,12 +2006,17 @@ export const en = {
     showMore: "Show more",
     tab: "Audit",
     tabNone: "Nothing found",
+    tabNonePartly: "Nothing found in what could be read.",
     judgedOn: "This {kind}'s template is judged as part of {object}.",
     notCheckedHere: "Not checked here",
     uncheckedLine: "{rule}: {kind} {where}, {why}",
     peekMore: {
       one: "and {n} more on the Audit tab",
       other: "and {n} more on the Audit tab",
+    },
+    peekUnchecked: {
+      one: "{n} rule could not check here; the Audit tab says why",
+      other: "{n} rules could not check here; the Audit tab says why",
     },
     couldNotRead: "Audit could not read this cluster: {error}",
     noneOpen: "Pick a row to see why it matters and how to fix it.",
