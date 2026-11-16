@@ -395,4 +395,20 @@ describe("the cluster map's model", () => {
     expect(section.unread).toBe("The map could not be read: refused");
     expect(section.count).toBeNull();
   });
+
+  /**
+   * The scope's words are written to follow a preposition, and the empty map
+   * read "Nothing to draw any namespace" and "Рисовать нечего любом
+   * пространстве имён". Fails if either language drops it again.
+   */
+  it("names the scope of an empty map after its preposition, in both languages", () => {
+    expect(
+      translate("en", "topology", "nothingToDraw", { scope: "any namespace" })
+    ).toMatch(/^Nothing to draw in any namespace:/);
+    expect(
+      translate("ru", "topology", "nothingToDraw", {
+        scope: "любом пространстве имён",
+      })
+    ).toMatch(/^Рисовать нечего в любом пространстве имён:/);
+  });
 });

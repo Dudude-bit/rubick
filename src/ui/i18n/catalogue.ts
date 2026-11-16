@@ -1892,7 +1892,8 @@ export const en = {
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",
     stillListing: "Still listing: {kinds}",
-    nothingToDraw: "Nothing to draw {scope}: no routes, Services or workloads.",
+    nothingToDraw:
+      "Nothing to draw in {scope}: no routes, Services or workloads.",
     shareNotRead: "Not read, so not on the map: {kinds}",
     outsideScope:
       "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
