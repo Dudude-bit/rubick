@@ -490,6 +490,8 @@ impl Snapshot {
                 config_maps: held.config_maps,
                 secrets: held.secrets,
                 accounts: held.accounts,
+                gateways_here: held.gateways_here,
+                routes_read: held.routes_read,
             },
         )
     }

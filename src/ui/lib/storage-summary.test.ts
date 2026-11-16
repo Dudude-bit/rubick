@@ -41,6 +41,7 @@ const mountedAt = (to: ObjectRef, path: string): ConnectionEdge => ({
         subPath: null,
         volume: "data",
         projected: false,
+        optional: false,
       },
     ],
   },

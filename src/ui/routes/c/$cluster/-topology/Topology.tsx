@@ -125,11 +125,13 @@ function TopologyMap() {
   const several = scope.wire === null || scope.wire.length > 1;
   // What each object was drawn as, kept while nothing that decides it moves.
   const memo = useMemo(
-    () => ({ for: [toneInputs, t, policies, grouping], drawn: newMemo() }),
-    [toneInputs, t, policies, grouping]
+    () => ({ for: [t, policies, grouping], drawn: newMemo() }),
+    [t, policies, grouping]
   ).drawn;
+  // Decided once, by what the map held when first drawn whole: a count
+  // crossing the line, or a reopen, does not fold or open every group.
   const collapsedAtFirst =
-    several && (map.phase !== "ready" || map.nodes.size > COLLAPSE_ABOVE);
+    several && (map.firstWhole === null || map.firstWhole > COLLAPSE_ABOVE);
   const model = useMemo(
     () =>
       modelOf(
@@ -179,27 +181,38 @@ function TopologyMap() {
       grouping === "namespace" && groupIds.has(namespace) ? namespace : null,
     [grouping, groupIds]
   );
-  const vendor = useVendorLayers(map.nodes, openServices, vendorGroup, t);
+  const whole = map.firstWhole !== null || map.phase === "ended";
+  const vendor = useVendorLayers(
+    map.nodes,
+    openServices,
+    vendorGroup,
+    t,
+    whole
+  );
   const shownVendor = vendor.nodes.filter(
     (each) => !hidden.has(each.node.kind)
   );
   const allNodes = [...model.nodes, ...shownVendor.map((each) => each.node)];
   const allEdges = [...model.edges, ...vendor.edges];
 
-  // Read every render: the vendor layers are, and this is one pass over memory.
-  const matches = (() => {
-    const asked = query.trim().toLowerCase();
-    if (!asked) return null;
-    return new Set(
-      allNodes
+  // Found every render, as the vendor layers are built, and kept as one Set
+  // while it names the same nodes: a new one lights every node again.
+  const asked = query.trim().toLowerCase();
+  const found = asked
+    ? allNodes
         .filter(
           (node) =>
             node.label.toLowerCase().includes(asked) ||
             node.kind.toLowerCase() === asked
         )
         .map((node) => node.id)
-    );
-  })();
+        .join("\n")
+    : null;
+  const matches = useMemo(
+    () =>
+      found === null ? null : new Set(found === "" ? [] : found.split("\n")),
+    [found]
+  );
 
   const goTo = useCallback(
     (id: string) => {
@@ -267,19 +280,26 @@ function TopologyMap() {
   const vendorKinds = [
     ...new Set(vendor.nodes.map((each) => each.node.kind)),
   ].filter((kind) => !(MAP_KINDS as readonly string[]).includes(kind));
+  const mapRail = useMemo(
+    () =>
+      MAP_KINDS.map((kind) => {
+        const { count, used } = countOf(kind, map.reads, map.nodes);
+        return {
+          kind,
+          count,
+          used,
+          reading: readingOf(kind, map.kinds),
+          hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
+        };
+      }),
+    [map.reads, map.nodes, map.kinds, hidden, policies]
+  );
   const rail: RailRow[] = [
-    ...MAP_KINDS.map((kind) => {
-      const { count, used } = countOf(kind, map.reads, map.nodes);
-      return {
-        kind,
-        count,
-        used,
-        reading: readingOf(kind, map.kinds),
-        hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
-      };
-    }),
+    ...mapRail,
     ...vendorKinds.map((kind) => ({
       kind,
+      crd:
+        vendor.nodes.find((each) => each.node.kind === kind)?.node.crd ?? null,
       count: vendor.nodes.filter((each) => each.node.kind === kind).length,
       used: null,
       reading: null,
@@ -313,7 +333,30 @@ function TopologyMap() {
   useShareSection("topology", () =>
     topologySection(
       model,
-      notLooked.map((entry) => entry.kind),
+      {
+        unread:
+          map.error !== null
+            ? t("topology", "failed", { said: errorToShow(map.error) })
+            : map.phase === "opening"
+              ? t("topology", "shareStillOpening")
+              : null,
+        notes: [
+          notLooked.length > 0 &&
+            t("topology", "shareNotRead", {
+              kinds: notLooked.map((entry) => entry.kind).join(", "),
+            }),
+          ...notLooked
+            .filter((entry) => entry.edges)
+            .map((entry) => t("topology", "edgesAbsent", { kind: entry.kind })),
+          ...vendor.unread,
+          others.length > 0 &&
+            t("topology", "otherEngines", { kinds: others.join(", ") }),
+          syncing.length > 0 &&
+            t("topology", "stillListing", {
+              kinds: syncing.map((kind) => kind.kind).join(", "),
+            }),
+        ].filter((line): line is string => typeof line === "string"),
+      },
       t,
       caption
     )
@@ -506,6 +549,7 @@ function TopologyMap() {
             onOpen={onOpen}
             highlight={matches}
             focus={focus}
+            fitKey={`${grouping}${whole ? "\u0000whole" : ""}`}
             ariaLabel={t("topology", "canvasLabel")}
             summaryText={(group) => model.summaries.get(group.id) ?? ""}
           />

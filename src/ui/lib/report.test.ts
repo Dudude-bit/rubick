@@ -229,6 +229,39 @@ describe("renderReport", () => {
     );
   });
 
+  /** The tab draws a missing object the pod may start without in the warning tone; the file must not draw it red. */
+  it("tags a missing connection the pod may start without as a warning, not an error", () => {
+    const html = renderReport(
+      report({
+        sections: [
+          section("connections", {
+            type: "connections",
+            groups: [
+              {
+                title: "Needs to run",
+                caption: null,
+                rows: [
+                  {
+                    label: "Secret",
+                    ref: ref("Secret", "dex-tls"),
+                    name: null,
+                    detail: "",
+                    existence: "not in this namespace",
+                    missing: true,
+                    optional: true,
+                  },
+                ],
+              },
+            ],
+          }),
+        ],
+      })
+    );
+    expect(html).toContain(
+      '<span class="tag warn">not in this namespace</span>'
+    );
+  });
+
   it("says a section is empty rather than leaving a heading over nothing", () => {
     const html = renderReport(
       report({

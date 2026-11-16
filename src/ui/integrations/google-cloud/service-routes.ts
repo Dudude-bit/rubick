@@ -17,6 +17,7 @@
 
 import type { ServiceRoute } from "../registry";
 import { covers } from "@/lib/certificates";
+import { inFlightOnce } from "@/lib/in-flight";
 import { fetchIngressSources } from "./data";
 import {
   MANAGED_CERTIFICATE_CRD,
@@ -76,11 +77,13 @@ function terminates(
 const rankOf = (tls: boolean | null): number =>
   tls === true ? 2 : tls === null ? 1 : 0;
 
+const ingressSources = inFlightOnce(fetchIngressSources);
+
 export async function serviceRoutes(input: {
   namespace: string;
   name: string;
 }): Promise<ServiceRoute[]> {
-  const sources = await fetchIngressSources();
+  const sources = await ingressSources();
   const certificatesKnown = !sources.unread.some(
     (read) => read.crd === MANAGED_CERTIFICATE_CRD
   );

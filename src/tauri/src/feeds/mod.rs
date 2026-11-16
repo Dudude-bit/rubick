@@ -103,7 +103,8 @@ impl FeedState {
 /// Why a subscriber is handed a slot's whole set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Whole {
-    /// The first set of this slot it is handed.
+    /// A set to start from, with nothing to compare it with: the first of
+    /// this slot it is handed, or the first since its namespaces moved.
     Fresh,
     /// After a break or a list turn: what it held and is not here was
     /// deleted while nobody watched.
@@ -179,19 +180,29 @@ impl Lease {
         }
     }
 
-    /// The window's namespaces changed: a kind refused across the cluster
-    /// is read in the new ones.
+    /// The window's namespaces changed: every set it was handed is handed
+    /// again within the new ones, and a kind refused across the cluster is
+    /// read in them.
     pub fn rescope(&self, scope: Option<Vec<String>>) {
         if let Some(context) = self.context.upgrade() {
-            let kinds = {
+            let (kinds, lists) = {
                 let mut inner = context.inner.lock();
                 let Some(sub) = inner.subscribers.get_mut(&self.id) else {
                     return;
                 };
-                sub.scope = scope.clone().filter(|_| sub.narrow);
+                let within = scope.clone().filter(|_| sub.narrow);
+                let moved = namespaces(sub.scope.as_deref()) != namespaces(within.as_deref());
+                sub.scope = within;
                 sub.fallback = scope;
-                sub.kinds.clone()
+                let kinds = sub.kinds.clone();
+                if moved {
+                    inner.recut(self.id);
+                }
+                (kinds, std::mem::take(&mut inner.to_list))
             };
+            for (id, slot) in lists {
+                context.spawn_list(id, slot);
+            }
             for kind in kinds {
                 context.fall_back_all(&kind);
             }
@@ -563,6 +574,17 @@ impl Feeds {
     pub(crate) fn context(&self, name: &str) -> Option<Arc<ContextFeeds>> {
         self.contexts.get(name).map(|held| held.clone())
     }
+
+    /// Joins `ask`'s built-in kinds on `client`, discovery aside.
+    #[cfg(test)]
+    pub(crate) fn joined(&self, name: &str, client: Client, ask: &Ask) -> Subscription {
+        let kinds: Vec<_> = ask
+            .kinds
+            .iter()
+            .filter_map(|kind| Some((kind.clone(), built_in(kind)?)))
+            .collect();
+        self.context_for(name, client).join(ask, &kinds, &[])
+    }
 }
 
 struct Subscriber {
@@ -647,6 +669,10 @@ fn keeps(kind: &KindKey) -> bool {
 /// A resourceVersion as the number etcd writes, where it is one.
 fn version_of(object: &DynamicObject) -> Option<u64> {
     object.metadata.resource_version.as_deref()?.parse().ok()
+}
+
+fn namespaces(scope: Option<&[String]>) -> Option<BTreeSet<&str>> {
+    scope.map(|names| names.iter().map(String::as_str).collect())
 }
 
 fn in_scope(scope: Option<&[String]>, object: &DynamicObject) -> bool {
@@ -796,6 +822,40 @@ impl Inner {
         sub.lagged = false;
         for slot in unkept {
             self.list_for(id, slot);
+        }
+    }
+
+    /// Subscriber `id`'s namespaces moved: each slot it was handed is handed
+    /// whole again within the new ones, from the store or by a list where
+    /// the kind is kept as nothing. Changes only ever reached it within the
+    /// old ones, so what the new ones hold arrives no other way.
+    fn recut(&mut self, id: u64) {
+        let Some(sub) = self.subscribers.get_mut(&id) else {
+            return;
+        };
+        let scope = sub.scope.clone();
+        for slot in std::mem::take(&mut sub.seen) {
+            let held = self
+                .kinds
+                .get(&slot.kind)
+                .and_then(|feed| self.stores.get(&(feed.serving, slot.clone())))
+                .filter(|store| store.synced)
+                .map(|store| keeps(&slot.kind).then(|| unpacked(store.objects.values())));
+            match held {
+                Some(Some(objects)) => self.send(
+                    id,
+                    Update::Whole {
+                        slot,
+                        why: Whole::Fresh,
+                        objects: objects
+                            .into_iter()
+                            .filter(|o| in_scope(scope.as_deref(), o))
+                            .collect(),
+                    },
+                ),
+                Some(None) => self.list_for(id, slot),
+                None => {}
+            }
         }
     }
 
@@ -2167,6 +2227,111 @@ mod tests {
         }));
         context.end();
         refusing.end();
+    }
+
+    /// A reader moved to other namespaces is handed, from the store, what is
+    /// there now as a set to start from; only a real move hands anything.
+    /// Fails if a namespace added to the scope reads as empty until the next
+    /// break, which is what Audit said of it and why the Timeline wrote its
+    /// objects as created when they changed.
+    #[tokio::test]
+    async fn a_reader_moved_to_other_namespaces_is_handed_what_is_there_now() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("payments", "api", "1"),
+            ],
+        );
+        drain(&mut sub);
+        let sets = |updates: Vec<Update>| -> Vec<(Whole, Vec<String>)> {
+            updates
+                .into_iter()
+                .filter_map(|u| match u {
+                    Update::Whole { why, objects, .. } => Some((why, names(&objects))),
+                    _ => None,
+                })
+                .collect()
+        };
+
+        sub.lease.rescope(Some(vec!["payments".to_string()]));
+        assert_eq!(
+            sets(drain(&mut sub)),
+            vec![(Whole::Fresh, vec!["api".to_string()])]
+        );
+        sub.lease.rescope(Some(vec!["payments".to_string()]));
+        assert!(
+            drain(&mut sub).is_empty(),
+            "the same namespaces moved nothing"
+        );
+        sub.lease.rescope(None);
+        assert_eq!(
+            sets(drain(&mut sub)),
+            vec![(Whole::Fresh, vec!["api".to_string(), "web".to_string()])]
+        );
+        apply(&generation, &slot, deployment("payments", "api", "2"));
+        assert!(matches!(
+            drain(&mut sub).as_slice(),
+            [Update::Applied { .. }]
+        ));
+        context.end();
+    }
+
+    /// A kind kept as nothing has no store to hand from, so a moved reader
+    /// is listed its set, said to be reading meanwhile. Fails if a moved
+    /// reader of `ConfigMaps` is left with the old namespaces' set.
+    #[tokio::test]
+    async fn a_reader_moved_on_a_kind_kept_as_nothing_is_listed_its_new_namespaces() {
+        let (client, hits) = answering(|path, _| {
+            if path == "/api/v1/configmaps" {
+                let item = |namespace: &str, name: &str| json!({ "metadata": { "name": name, "namespace": namespace, "uid": format!("{namespace}/{name}"), "resourceVersion": "450" } });
+                let items = vec![item("shop", "app"), item("payments", "ledger")];
+                (200, json!({ "apiVersion": "v1", "kind": "ConfigMapList", "metadata": { "resourceVersion": "500" }, "items": items }).to_string())
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut ask = config_maps_of(&context);
+        ask.scope = Some(vec!["shop".to_string()]);
+        let mut sub = context.join(&ask, &[maps], &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut sub);
+
+        sub.lease.rescope(Some(vec!["payments".to_string()]));
+        let seen = whole_within(&mut sub).await;
+        assert!(matches!(
+            seen.first(),
+            Some(Update::State {
+                state: FeedState::Syncing,
+                ..
+            })
+        ));
+        let set = seen.iter().find_map(|u| match u {
+            Update::Whole { why, objects, .. } => Some((*why, names(objects))),
+            _ => None,
+        });
+        assert_eq!(set, Some((Whole::Fresh, vec!["ledger".to_string()])));
+        assert_eq!(hits.lock().unwrap().get("/api/v1/configmaps"), Some(&1));
+        context.end();
     }
 
     /// A renewed client reads every kind again; the old one serves until the

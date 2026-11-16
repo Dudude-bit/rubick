@@ -13,7 +13,8 @@ import type {
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { MapTone } from "@/integrations";
-import { describeUsages } from "@/lib/connections";
+import { describeUsages, onlyOptional } from "@/lib/connections";
+import { drawnCrd } from "@/lib/links";
 import { reachWords } from "@/lib/network-policy";
 import { serviceHealthWords } from "@/lib/service-health";
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
@@ -167,6 +168,13 @@ export function subOf(node: TopologyNode, t: T): string | undefined {
     case "owner":
       words.push(t("topology", "notRead"));
       break;
+    case "ownerless":
+      words.push(
+        verdict.statuses
+          .map(({ status, total }) => `${status} ${total}`)
+          .join(", ")
+      );
+      break;
     case "exists":
     case "ingress":
     case "route":
@@ -178,9 +186,10 @@ export function subOf(node: TopologyNode, t: T): string | undefined {
   if (node.ref.existence === "missing") words.push(t("topology", "missing"));
   if (node.ref.existence === "notChecked" && verdict.says !== "owner")
     words.push(t("topology", "notRead"));
-  if (node.pods && verdict.says !== "rollout")
+  const readiness = verdict.says === "rollout" || verdict.says === "ownerless";
+  if (node.pods && !readiness)
     words.push(t("count", "pods", { n: node.pods.total }));
-  if (node.pods && verdict.says === "rollout")
+  if (node.pods && readiness)
     words.push(
       t("count", "readyOfTotal", {
         ready: node.pods.ready,
@@ -237,13 +246,13 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
 
 /**
  * What was drawn of each object the stream sent, kept by the object's own
- * identity: a batch that replaced one node costs that node's words and tone,
- * and every other node keeps the drawing it had. Valid for one grouping, one
- * overlay, one language and one set of tone inputs; the caller starts a new
- * one when any of them changes.
+ * identity: a batch that replaced one node costs that node's words, and every
+ * other node keeps the drawing it had unless its tone moved. Valid for one
+ * grouping, one overlay and one language; the caller starts a new one when
+ * any of them changes.
  */
 export interface ModelMemo {
-  nodes: WeakMap<TopologyNode, GraphNode>;
+  nodes: WeakMap<TopologyNode, { graph: GraphNode; optional: boolean }>;
   edges: WeakMap<TopologyEdge, { graph: GraphEdge; ends: string }>;
 }
 
@@ -263,6 +272,12 @@ export function modelOf(
   t: T,
   memo: ModelMemo = newMemo()
 ): Model {
+  // A missing object every use of which says `optional: true` is drawn as
+  // the Connections tab says it: a warning, since the pods start without it.
+  const softly = new Set<string>();
+  const firmly = new Set<string>();
+  for (const edge of edges.values())
+    (softEdge(edge) ? softly : firmly).add(edge.to);
   const drawn: GraphNode[] = [];
   const tones = new Map<string, MapTone>();
   const groupOf = new Map<string, string | null>();
@@ -271,22 +286,39 @@ export function modelOf(
     const kind = node.ref.kind;
     if (settings.hidden.has(kind)) continue;
     if (kind === "NetworkPolicy" && !settings.policies) continue;
-    let graph = memo.nodes.get(node);
-    if (!graph) {
+    const optional =
+      node.ref.existence === "missing" &&
+      softly.has(node.id) &&
+      !firmly.has(node.id);
+    // The tone is asked of every node on every build, so what it reads (an
+    // Ingress's health, a stale kind) may change without throwing away every
+    // node's drawing; a node whose tone did not change keeps its object.
+    const tone = optional ? "warn" : toneOf(node);
+    const kept = memo.nodes.get(node);
+    let graph = kept?.graph;
+    if (graph && kept?.optional === optional && graph.tone !== tone) {
+      graph = { ...graph, tone };
+      memo.nodes.set(node, { graph, optional });
+    }
+    if (!graph || kept?.optional !== optional) {
+      const sub = subOf(node, t);
       graph = {
         id: node.id,
         group: groupIdOf(node, settings.grouping),
         kind,
+        crd: drawnCrd({ kind, group: node.ref.group }),
         label:
           node.ref.name === OWNERLESS && kind === "Pod"
             ? t("topology", "ownerlessPods")
             : node.ref.name,
-        sub: subOf(node, t),
-        tone: toneOf(node),
+        sub: optional
+          ? [sub, t("readings", "envRefOptional")].filter(Boolean).join(" · ")
+          : sub,
+        tone,
         badge: settings.policies ? coverBadge(node, t) : undefined,
         rank: RANK[kind] ?? WORKLOAD_RANK,
       };
-      memo.nodes.set(node, graph);
+      memo.nodes.set(node, { graph, optional });
     }
     tones.set(node.id, graph.tone);
     groupOf.set(node.id, graph.group);
@@ -304,26 +336,52 @@ export function modelOf(
       byName(a.label, b.label)
   );
 
+  // A namespace nothing could be read in has no members to make its group,
+  // and is drawn refused all the same, by namespace or by app.
+  const refusedIds = [...reads.values()]
+    .filter(refusedWhole)
+    .map((read) =>
+      settings.grouping === "namespace"
+        ? read.namespace
+        : `ns:${read.namespace}`
+    );
   const ids = new Set(
     settings.grouping === "namespace"
       ? [...reads.keys(), ...members.keys()]
-      : members.keys()
+      : [...members.keys(), ...refusedIds]
   );
   const summaries = new Map<string, string>();
   const groups: GraphGroup[] = [...ids].sort().map((id) => {
     const held = members.get(id) ?? [];
-    const read = settings.grouping === "namespace" ? reads.get(id) : undefined;
+    // The namespaces a group was read from: its own, or every one its
+    // members came from. One not read at all is outside the scope.
+    const namespaces =
+      settings.grouping === "namespace"
+        ? [id]
+        : id.startsWith("ns:")
+          ? [id.slice(3)]
+          : [...new Set(held.flatMap((node) => node.home ?? []))];
+    const read = namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
+    // Before any namespace is read the whole map is opening, not outside.
+    const outside =
+      reads.size === 0
+        ? []
+        : namespaces.filter((namespace) => !reads.has(namespace));
     const counts = new Map<string, number>();
     for (const node of held)
       counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
     const failing = held.filter((node) => tones.get(node.id) === "err").length;
     const warning = held.filter((node) => tones.get(node.id) === "warn").length;
-    const unread = unreadKinds(read);
+    const unread = [
+      ...new Set(
+        namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
+      ),
+    ];
     const refused = refusedWhole(read);
     const lines = refused
       ? [
           t("topology", "refusedWhole", {
-            namespace: id,
+            namespace: namespaces[0],
             said:
               read?.notLookedAt[0]?.why.says === "unanswered"
                 ? read.notLookedAt[0].why.said
@@ -342,6 +400,8 @@ export function modelOf(
             .join(" · "),
           unread.length > 0 &&
             t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
+          outside.length > 0 &&
+            t("topology", "outsideScope", { namespaces: outside.join(", ") }),
         ].filter((line): line is string => Boolean(line));
     summaries.set(id, lines.join(" · "));
     return {
@@ -353,7 +413,9 @@ export function modelOf(
         : loudest(
             [
               ...held.map((node) => tones.get(node.id) ?? "mute"),
-              ...(unread.length > 0 ? ["unknown" as const] : []),
+              ...(unread.length > 0 || outside.length > 0
+                ? ["unknown" as const]
+                : []),
             ],
             "mute"
           ),
@@ -379,11 +441,16 @@ export function modelOf(
       id: edge.id,
       from: edge.from,
       to: edge.to,
-      tone: existence.includes("missing")
-        ? "err"
-        : existence.includes("notChecked")
-          ? "unknown"
-          : "ok",
+      tone:
+        from.ref.existence === "missing"
+          ? "err"
+          : to.ref.existence === "missing"
+            ? softEdge(edge)
+              ? "warn"
+              : "err"
+            : existence.includes("notChecked")
+              ? "unknown"
+              : "ok",
       label: edge.relations.map((relation) => relationWords(relation, t))[0],
       sub:
         edge.relations.length > 1
@@ -396,6 +463,13 @@ export function modelOf(
   }
   return { groups, nodes: drawn, edges: graphEdges, groupOf, summaries };
 }
+
+/** Whether an edge is only uses that say `optional: true`. */
+const softEdge = (edge: TopologyEdge): boolean =>
+  edge.relations.length > 0 &&
+  edge.relations.every(
+    (relation) => relation.verb === "uses" && onlyOptional(relation.usages)
+  );
 
 /** How a kind was read, across the scope, for the rail. */
 export function readingOf(

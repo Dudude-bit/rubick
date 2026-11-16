@@ -523,6 +523,7 @@ fn main() {
             commands::overview::get_cluster_overview,
             commands::audit::get_audit,
             commands::audit::get_audit_of,
+            commands::audit::read_audit_again,
             commands::cost::cost_basis,
             commands::overview::follow_cluster_overview,
             commands::overview::name_holder,

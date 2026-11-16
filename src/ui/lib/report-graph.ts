@@ -223,9 +223,17 @@ export function graphSections(
               .filter(Boolean)
               .join(" · "),
             existence: row.object
-              ? describeExistence(row.object, t, row.verifiable ?? false)
+              ? [
+                  describeExistence(row.object, t, row.verifiable ?? false),
+                  row.object.existence === "missing" && row.optional
+                    ? t("readings", "envRefOptional")
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || null
               : null,
             missing: row.object?.existence === "missing",
+            optional: row.optional === true,
           })),
         }))
     : [];

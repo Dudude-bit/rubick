@@ -118,6 +118,7 @@ const withClaim = (): ResourceConnections => {
           subPath: null,
           volume: "data",
           projected: false,
+          optional: false,
         },
       ],
     },

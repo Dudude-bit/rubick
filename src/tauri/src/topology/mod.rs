@@ -29,7 +29,7 @@ use crate::resources::topology::{MapKindReading, MapKindState};
 use crate::resources::{GatewayInfo, ListenerSetInfo, OtherPolicies, RouteInfo, UnexploredKind};
 
 pub use feed::{ask, pump, types_of};
-pub use stream::{run, Drawn, Opening};
+pub use stream::{run, Drawn, Opening, Reread, SessionCheck};
 
 /// How one slot of a kind is being read, as the watch layer says it.
 pub use crate::feeds::FeedState as Reading;
@@ -162,6 +162,14 @@ kinds! {
 }
 
 impl Kind {
+    /// Whether one of these changing changes what other namespaces draw: a
+    /// route names Gateways and Services across namespaces, and the set of
+    /// namespaces is the map itself.
+    #[must_use]
+    pub fn reaches_across(self) -> bool {
+        self.optional() || self == Kind::Namespace
+    }
+
     /// The Gateway API kinds, which a cluster may simply not serve.
     #[must_use]
     pub fn optional(self) -> bool {
@@ -324,6 +332,8 @@ impl Object {
 pub struct Stores {
     objects: Objects,
     reads: BTreeMap<(Kind, Option<String>), Reading>,
+    /// Fed only the namespaces a scope names: no list here is the cluster's.
+    scoped: bool,
 }
 
 /// A kind's answer in one namespace.
@@ -341,6 +351,11 @@ impl Stores {
     /// Takes one feed; the namespaces it changed.
     pub fn apply(&mut self, feed: Feed) -> Touched {
         let mut touched = Touched::default();
+        let across = match &feed {
+            Feed::Applied(object) | Feed::Deleted(object) => object.kind(),
+            Feed::Relisted { kind, .. } | Feed::Read { kind, .. } => *kind,
+        }
+        .reaches_across();
         match feed {
             Feed::Applied(object) => {
                 touched.namespaces.insert(object.key().0);
@@ -379,6 +394,9 @@ impl Stores {
                 }
             }
         }
+        if across && (touched.all || touched.reads || !touched.namespaces.is_empty()) {
+            touched.all = true;
+        }
         touched.namespaces.remove("");
         touched
     }
@@ -391,9 +409,10 @@ impl Stores {
         if let Some(here) = self.reads.get(&(kind, Some(namespace.to_string()))) {
             return Self::answer_of(kind, here);
         }
+        // No reading at all is a kind still waiting for a watch: the layer
+        // says `Unserved` of every kind the cluster does not serve.
         match cluster {
             Some(reading) => Self::answer_of(kind, reading),
-            None if kind.optional() => Answer::NotServed,
             None => Answer::Unread(String::new(), UNANSWERED),
         }
     }
@@ -451,6 +470,7 @@ impl Stores {
     pub fn held(&self, namespace: &str, others: OtherPolicies, now: DateTime<Utc>) -> Held {
         let o = &self.objects;
         let mut routes = Vec::new();
+        let mut routes_read = Vec::new();
         let mut gateway_unread = Vec::new();
         for (kind, map) in [
             (Kind::HttpRoute, &o.http_routes),
@@ -460,7 +480,10 @@ impl Stores {
             (Kind::UdpRoute, &o.udp_routes),
         ] {
             match self.answer(kind, namespace) {
-                Answer::Read => routes.extend(Self::everywhere(map)),
+                Answer::Read => {
+                    routes.extend(Self::everywhere(map));
+                    routes_read.push(kind.name());
+                }
                 Answer::NotServed => {}
                 Answer::Unread(said, _) => {
                     gateway_unread.push(UnexploredKind::unanswered(
@@ -471,16 +494,32 @@ impl Stores {
                 }
             }
         }
-        let gateways = match self.answer(Kind::Gateway, namespace) {
-            Answer::Read => {
-                let sets = matches!(self.answer(Kind::ListenerSet, namespace), Answer::Read)
-                    .then(|| Self::everywhere(&o.listener_sets));
-                let mut gateways = Self::everywhere(&o.gateways);
-                for gateway in &mut gateways {
-                    gateway.merge_listener_sets(sets.as_deref());
-                }
-                Some(gateways)
+        let merged = |mut gateways: Vec<GatewayInfo>| {
+            let sets = matches!(self.answer(Kind::ListenerSet, namespace), Answer::Read)
+                .then(|| Self::everywhere(&o.listener_sets));
+            for gateway in &mut gateways {
+                gateway.merge_listener_sets(sets.as_deref());
             }
+            gateways
+        };
+        // Every Gateway, or none: a route's parent is ordinarily in another
+        // namespace, and a list of only some would call every Gateway
+        // outside it missing. Only the whole cluster's slot, fed unscoped,
+        // is every Gateway.
+        let gateways = (!self.scoped
+            && matches!(
+                self.reads.get(&(Kind::Gateway, None)),
+                Some(Reading::Synced | Reading::Blind { .. })
+            ))
+        .then(|| merged(Self::everywhere(&o.gateways)));
+        let gateways_here = match self.answer(Kind::Gateway, namespace) {
+            Answer::Read => Some(merged(
+                o.gateways
+                    .range((namespace.to_string(), String::new())..)
+                    .take_while(|((ns, _), _)| ns == namespace)
+                    .map(|(_, gateway)| gateway.as_ref().clone())
+                    .collect(),
+            )),
             Answer::NotServed => None,
             Answer::Unread(said, _) => {
                 gateway_unread.push(UnexploredKind::unanswered(
@@ -514,6 +553,8 @@ impl Stores {
             accounts: self.said_in(Kind::ServiceAccount, &o.accounts, namespace),
             gateway_routes: routes,
             gateways,
+            gateways_here,
+            routes_read,
             gateway_unread,
             taken_at: now,
         }
@@ -550,12 +591,26 @@ impl Stores {
         seen
     }
 
-    /// Whether any kind is still waiting for its first answer.
+    /// Whether any kind is still waiting for its first answer, one the
+    /// layer has said nothing of yet included.
     #[must_use]
     pub fn syncing(&self) -> bool {
+        Kind::ALL
+            .iter()
+            .any(|kind| !self.reads.keys().any(|(of, _)| of == kind))
+            || self
+                .reads
+                .values()
+                .any(|reading| matches!(reading, Reading::Syncing | Reading::Queued))
+    }
+
+    /// Whether any kind's read failed or went stale, which an expired
+    /// session looks like from here.
+    #[must_use]
+    pub fn failing(&self) -> bool {
         self.reads
             .values()
-            .any(|reading| matches!(reading, Reading::Syncing | Reading::Queued))
+            .any(|reading| matches!(reading, Reading::Failed { .. } | Reading::Blind { .. }))
     }
 
     /// How each kind is read, for the rail.
@@ -587,7 +642,6 @@ impl Stores {
             Some(Reading::Blind { since }) => MapKindReading::Stale {
                 since: since.clone(),
             },
-            Some(Reading::Queued) => MapKindReading::Queued,
             Some(Reading::Refused { message }) if !read_in.is_empty() => {
                 MapKindReading::NamespacesOnly {
                     namespaces: read_in,
@@ -606,8 +660,8 @@ impl Stores {
                 namespaces: read_in,
                 said: String::new(),
             },
-            None if kind.optional() => MapKindReading::NotServed,
-            Some(Reading::Syncing) | None => MapKindReading::Syncing,
+            Some(Reading::Syncing) => MapKindReading::Syncing,
+            Some(Reading::Queued) | None => MapKindReading::Queued,
         }
     }
 }
@@ -631,6 +685,14 @@ impl Default for ClusterMap {
 }
 
 impl ClusterMap {
+    /// A map fed only the namespaces a scope names.
+    #[must_use]
+    pub fn scoped() -> Self {
+        let map = Self::default();
+        map.stores.write().scoped = true;
+        map
+    }
+
     /// Takes feeds from a source, and tells every stream what they touched.
     pub fn feed(&self, feeds: impl IntoIterator<Item = Feed>) {
         let mut touched = Touched::default();

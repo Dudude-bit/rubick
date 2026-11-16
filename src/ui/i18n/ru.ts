@@ -1884,6 +1884,8 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    layoutFailed:
+      "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",
     collapseGroup: "Свернуть {name}",
     nodeKeys:
@@ -1934,12 +1936,16 @@ export const ru: Catalogue = {
     notLookedAt: "Не прочитано: {kinds}",
     edgesAbsent: "{kind} не прочитаны: связи с ними здесь не нарисованы.",
     otherEngines:
-      "{kinds} здесь действует, но не нарисован: рабочую нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
+      "{kinds} здесь действует, но не нарисован: нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
     noMatch: "На карте нет ничего с таким именем",
     stillListing: "Ещё читается: {kinds}",
     nothingToDraw:
-      "Рисовать нечего {scope}: нет ни маршрутов, ни Services, ни рабочих нагрузок.",
+      "Рисовать нечего в {scope}: нет ни маршрутов, ни Services, ни нагрузок.",
     shareNotRead: "Не прочитано, поэтому нет на карте: {kinds}",
+    outsideScope:
+      "{namespaces}: не прочитано, это пространство имён вне области карты, поэтому здесь только то, на что ссылаются из неё",
+    shareStillOpening:
+      "Карта ещё открывалась: в ней ещё ничего не было прочитано.",
     shareGroup: "Группа",
     shareHolds: "Что в ней",
   },
@@ -2055,6 +2061,18 @@ export const ru: Catalogue = {
       few: "{n} объекта",
       many: "{n} объектов",
       other: "{n} объекта",
+    },
+    rulesCounted: {
+      one: "{n} правило",
+      few: "{n} правила",
+      many: "{n} правил",
+      other: "{n} правила",
+    },
+    findingsOf: {
+      one: "{n} находка",
+      few: "{n} находки",
+      many: "{n} находок",
+      other: "{n} находки",
     },
     uncheckedOf: {
       one: "{n} не проверен",
@@ -2206,7 +2224,7 @@ export const ru: Catalogue = {
       "Пока allowPrivilegeEscalation не false, процесс может получить больше прав, чем у родителя, через setuid-файл. Профиль Restricted требует false.",
     pssRunAsNonRoot: "Не требует запуска не от root",
     pssRunAsNonRootWhy:
-      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. Явное false означает root нарочно и обходится дороже. Профиль Restricted требует true.",
+      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. С явным false эту проверку не делает никто. Профиль Restricted требует true; если контейнеру задан пользователь 0, это отдельная находка.",
     pssRunAsUserRoot: "Запускается от пользователя 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 означает root, заданный нарочно. Профиль Restricted это запрещает.",
@@ -4506,6 +4524,9 @@ export const ru: Catalogue = {
       many: "{n} строк, из ответивших пространств имён",
       other: "{n} строки, из ответивших пространств имён",
     },
+    countedSoFar: "{counted}, из прочитанной части списка",
+    countedWhereAnswered: "{counted}, из ответивших пространств имён",
+    countedOfTotal: "{counted}, показано {shown}",
     longListTrim: {
       one: "{n} строка. Чтобы сократить список, сузьте область или поиск",
       few: "{n} строки. Чтобы сократить список, сузьте область или поиск",

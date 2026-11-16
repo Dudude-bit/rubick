@@ -1839,6 +1839,8 @@ export const en = {
   topology: {
     title: "Topology",
     canvasLabel: "The cluster map",
+    layoutFailed:
+      "The map could not be laid out, so what is drawn may be missing objects: {said}",
     expandGroup: "Expand {name}",
     collapseGroup: "Collapse {name}",
     nodeKeys: "Enter opens its page, Space its peek",
@@ -1891,8 +1893,13 @@ export const en = {
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",
     stillListing: "Still listing: {kinds}",
-    nothingToDraw: "Nothing to draw {scope}: no routes, Services or workloads.",
+    nothingToDraw:
+      "Nothing to draw in {scope}: no routes, Services or workloads.",
     shareNotRead: "Not read, so not on the map: {kinds}",
+    outsideScope:
+      "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
+    shareStillOpening:
+      "The map was still being opened: nothing in it had been read yet.",
     shareGroup: "Group",
     shareHolds: "What it holds",
   },
@@ -1994,6 +2001,14 @@ export const en = {
     objectsOf: {
       one: "{n} object",
       other: "{n} objects",
+    },
+    rulesCounted: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
+    findingsOf: {
+      one: "{n} finding",
+      other: "{n} findings",
     },
     uncheckedOf: {
       one: "{n} not checked",
@@ -2131,7 +2146,7 @@ export const en = {
       "Unless allowPrivilegeEscalation is false, a process can gain more privileges than its parent through a setuid binary. The Restricted profile requires false.",
     pssRunAsNonRoot: "Does not require a non-root user",
     pssRunAsNonRootWhy:
-      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, it runs as root on purpose, which costs more. The Restricted profile requires true.",
+      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, nothing checks it at all. The Restricted profile requires true; a container set to run as user 0 is its own finding.",
     pssRunAsUserRoot: "Runs as user 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 is root, stated on purpose. The Restricted profile forbids it.",
@@ -4151,6 +4166,9 @@ export const en = {
       one: "{n} row, from the namespaces that answered",
       other: "{n} rows, from the namespaces that answered",
     },
+    countedSoFar: "{counted}, from the part of the list read so far",
+    countedWhereAnswered: "{counted}, from the namespaces that answered",
+    countedOfTotal: "{counted}, {shown} shown",
     longListTrim: {
       one: "{n} row. To trim the list, narrow the scope or search",
       other: "{n} rows. To trim the list, narrow the scope or search",

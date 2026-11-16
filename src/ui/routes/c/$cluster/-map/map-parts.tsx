@@ -17,7 +17,12 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { useActions, useLight } from "./map-context";
 import { EDGE_TEXT, NODE_BORDER, TONE_TEXT } from "./tone-classes";
-import type { GraphEdge, GraphGroup, GraphNode } from "./types";
+import {
+  subLine,
+  type GraphEdge,
+  type GraphGroup,
+  type GraphNode,
+} from "./types";
 
 const HIDDEN_HANDLE = { opacity: 0, pointerEvents: "none" } as const;
 
@@ -86,7 +91,7 @@ export const ObjectNode = memo(function ObjectNode({
     >
       <Handles />
       <span className="flex min-w-0 items-center gap-1.5">
-        <KindIcon kind={node.kind} crd={node.crd ?? null} className="h-3 w-3" />
+        <KindIcon kind={node.kind} crd={node.crd} className="h-3 w-3" />
         <span
           className={cn(
             "min-w-0 flex-1 truncate font-mono text-[11.5px]",
@@ -108,11 +113,9 @@ export const ObjectNode = memo(function ObjectNode({
           </span>
         )}
       </span>
-      {node.sub && (
-        <span className="mt-0.5 block truncate text-[10px] text-fg-fnt">
-          {node.sub}
-        </span>
-      )}
+      <span className="mt-0.5 block truncate text-[10px] text-fg-fnt">
+        {subLine(node)}
+      </span>
     </div>
   );
 });

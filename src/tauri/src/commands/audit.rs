@@ -30,6 +30,15 @@ pub async fn get_audit(
     .await
 }
 
+/// Reads Audit's sources again now, the Prometheus the API server's count
+/// comes from among them, rather than at the next pass a few minutes on.
+#[tauri::command]
+pub async fn read_audit_again(state: State<'_, AppState>) -> Result<()> {
+    let here = state.here()?;
+    state.audit.read_again(&here.context);
+    Ok(())
+}
+
 /// One object's findings: a workload's or pod's for its page and peek, any
 /// object's while the Audit page is open. Never starts Audit's watches.
 #[tauri::command]

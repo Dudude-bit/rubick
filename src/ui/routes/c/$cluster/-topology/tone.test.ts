@@ -73,6 +73,51 @@ const ROLLOUTS: Rollout[] = [
 ];
 
 describe("a map node's colour", () => {
+  /**
+   * The EndpointSlice watch broke and every Service stayed green from slices
+   * as of then; stale Pods left every workload's tone as of then too. Fails
+   * if a node coloured from a stale read keeps its colour, or one that
+   * reads nothing stale loses it.
+   */
+  it("rings a node whose verdict was worked out from a read gone stale", () => {
+    const stale = (kinds: string[]) => ({ ...inputs, stale: new Set(kinds) });
+    const service = node(ref("Service"), {
+      says: "service",
+      published: null,
+      unread: null,
+    });
+    expect(toneOf(service, stale(["EndpointSlice"]))).toBe("unknown");
+    const rollout = node(ref("Deployment"), {
+      says: "rollout",
+      rollout: { state: "ready" } as Rollout,
+    });
+    expect(toneOf(rollout, stale(["Pod"]))).toBe("unknown");
+    const claim = node(ref("PersistentVolumeClaim"), {
+      says: "claim",
+      phase: "Bound",
+    });
+    expect(toneOf(claim, stale(["Pod"]))).not.toBe("unknown");
+  });
+
+  /**
+   * "Pods with no owner" was ringed not checked on a cluster whose pods were
+   * read. Fails if their node stops taking the colour the Pods list gives
+   * their statuses, or a running pod that is not ready reads green.
+   */
+  it("colours pods with no owner by their statuses, and a running pod not ready as a warning", () => {
+    const ownerless = (
+      statuses: { status: string; total: number; ready: number }[]
+    ) => toneOf(node(ref("Pod"), { says: "ownerless", statuses }), inputs);
+    expect(ownerless([{ status: "Running", total: 2, ready: 2 }])).toBe("ok");
+    expect(ownerless([{ status: "Running", total: 2, ready: 1 }])).toBe("warn");
+    expect(
+      ownerless([
+        { status: "CrashLoopBackOff", total: 1, ready: 0 },
+        { status: "Running", total: 1, ready: 1 },
+      ])
+    ).toBe(ROLE_TONE[statusRole("CrashLoopBackOff")]);
+  });
+
   /** The workload's badge on its list, its page and its peek is `rolloutBadge`; a map that coloured the same verdict otherwise would disagree with all three. */
   it("is a workload's own badge for every verdict its page can give", () => {
     for (const rollout of ROLLOUTS)
