@@ -444,6 +444,51 @@ describe("a picture from OpenCost's prices", () => {
   });
 });
 
+describe("a Prometheus that prices another cluster's nodes too", () => {
+  /**
+   * A shared Prometheus holds staging's OpenCost series beside prod's.
+   * Where prod's node list was read, its total, its node table and its idle
+   * are prod's nodes only, and the others are named. Fails if a node the
+   * cluster does not list was added to its total.
+   */
+  it("counts only the nodes the cluster lists, and names the rest", () => {
+    const shared = reading({
+      nodes: [
+        { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+      allocatedByNode: { "node-a": 0.05, "staging-1": 0.1 },
+    });
+    const picture = readingPicture(basis(), shared, opencost, null);
+    expect(picture.cluster?.perHour).toBeCloseTo(0.2);
+    expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a"]);
+    expect(picture.idle?.perHour).toBeCloseTo(0.15);
+    expect(picture.foreignNodes).toEqual(["staging-1"]);
+  });
+
+  /**
+   * Without the node list there is nothing to tell another cluster's
+   * nodes by, so none is called foreign. Fails if a refused node list
+   * dropped every priced node from the total.
+   */
+  it("keeps every priced node where the cluster's node list was not read", () => {
+    const shared = reading({
+      nodes: [
+        { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+    });
+    const picture = readingPicture(
+      basis({ nodes: null }),
+      shared,
+      opencost,
+      null
+    );
+    expect(picture.cluster?.perHour).toBeCloseTo(0.7);
+    expect(picture.foreignNodes).toEqual([]);
+  });
+});
+
 describe("one object's cost", () => {
   /**
    * The detail pages read their line through this, the page reads the same

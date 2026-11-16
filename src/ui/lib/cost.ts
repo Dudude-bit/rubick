@@ -208,6 +208,11 @@ export interface CostPicture {
   unplaced: Array<{ namespace: string; pods: number; perHour: number }>;
   waiting: number;
   missingLabels: string[];
+  /**
+   * Nodes the supplier prices that the cluster's node list, read, does not
+   * hold: another cluster's in a shared Prometheus. Left out of the totals.
+   */
+  foreignNodes: string[];
 }
 
 export const monthOf = (perHour: number): number => perHour * HOURS_PER_MONTH;
@@ -442,6 +447,7 @@ export function estimatePicture(
     ...unread(basis),
     unplaced: [],
     missingLabels: [],
+    foreignNodes: [],
   };
 }
 
@@ -468,7 +474,13 @@ export function readingPicture(
   source: Extract<CostSource, { kind: "opencost" }>,
   scope: readonly string[] | null
 ): CostPicture {
-  const priced = new Map(reading.nodes.map((n) => [n.name, n]));
+  // A shared Prometheus prices other clusters' nodes too; where this one's
+  // list was read, only its own count.
+  const listed = basis.nodes && new Set(basis.nodes.map((n) => n.name));
+  const ours = listed
+    ? reading.nodes.filter((n) => listed.has(n.name))
+    : reading.nodes;
+  const priced = new Map(ours.map((n) => [n.name, n]));
   const unpriced: Unpriced = {
     nodes: [],
     gpuNodes: [],
@@ -483,7 +495,7 @@ export function readingPicture(
     if (!priced.has(node.name)) unpriced.nodes.push(node.name);
 
   const names = new Set([
-    ...reading.nodes.map((n) => n.name),
+    ...ours.map((n) => n.name),
     ...(basis.nodes ?? []).map((n) => n.name),
   ]);
   const types = new Map(
@@ -508,7 +520,7 @@ export function readingPicture(
 
   const cluster: Amount = {
     perHour:
-      sum(reading.nodes.map((n) => n.perHour)) +
+      sum(ours.map((n) => n.perHour)) +
       (reading.storage.total ?? 0) +
       (reading.fee ?? 0) +
       (reading.loadBalancers ?? 0),
@@ -587,6 +599,9 @@ export function readingPicture(
       perHour: sum(u.values),
     })),
     missingLabels: reading.missingLabels,
+    foreignNodes: listed
+      ? reading.nodes.filter((n) => !listed.has(n.name)).map((n) => n.name)
+      : [],
   };
 }
 

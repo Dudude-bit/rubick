@@ -249,6 +249,31 @@ describe("the Cost page", () => {
   });
 
   /**
+   * A shared Prometheus prices another cluster's nodes too: the page says
+   * which, and that they are not in its totals. Fails if they were left
+   * out silently, or the note named this cluster's own nodes.
+   */
+  it("names the nodes Prometheus prices that this cluster does not list", async () => {
+    const shared = readingPicture(
+      BASIS,
+      {
+        ...READING,
+        nodes: [
+          ...READING.nodes,
+          { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+        ],
+      },
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({ state: "picture", picture: shared, trouble: null });
+    await open();
+    expect(screen.getByTestId("cost-notes")).toHaveTextContent(
+      "Prometheus at prom.example.com also prices 1 node this cluster does not list: staging-1. It is left out of the totals"
+    );
+  });
+
+  /**
    * "Carries no price in OpenCost" is true and says neither why nor what to
    * do: OpenCost found no price list, and either it is given custom pricing
    * or prices are entered here.

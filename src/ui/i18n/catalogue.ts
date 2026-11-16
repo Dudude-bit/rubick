@@ -2593,6 +2593,11 @@ export const en = {
       one: "{n} node carries no price in OpenCost: {names}.",
       other: "{n} nodes carry no price in OpenCost: {names}.",
     },
+    foreignNodes: {
+      one: "Prometheus at {endpoint} also prices {n} node this cluster does not list: {names}. It is left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+      other:
+        "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+    },
     gpusUnpriced: "GPUs on {names} have no price entered.",
     storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
     storageUnpricedOpenCost:

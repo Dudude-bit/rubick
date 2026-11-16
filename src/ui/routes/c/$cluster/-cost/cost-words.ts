@@ -120,6 +120,14 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
         said: picture.nodesUnread.message,
       })
     );
+  if (picture.foreignNodes.length > 0 && picture.source.kind === "opencost")
+    notes.push(
+      t("cost", "foreignNodes", {
+        n: picture.foreignNodes.length,
+        names: names(picture.foreignNodes),
+        endpoint: picture.source.endpoint,
+      })
+    );
   if (picture.missingLabels.length > 0)
     notes.push(
       t("cost", "missingLabels", { labels: picture.missingLabels.join(", ") })
