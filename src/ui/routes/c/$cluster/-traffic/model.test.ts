@@ -169,6 +169,30 @@ describe("flows on the map", () => {
     ).toBeNull();
   });
 
+  /**
+   * A workload in another cluster of the mesh is not this cluster's
+   * namesake: its own node outside every card, saying its cluster.
+   */
+  it("draws an end in another cluster apart from its namesake here", () => {
+    const web = mapped("Deployment", "web", "apps");
+    const remote: FlowEnd = {
+      is: "remote",
+      cluster: "west",
+      namespace: "shop",
+      kind: "Deployment",
+      name: "web",
+    };
+    const drawn = model(
+      [remote, workload("Deployment", "web")],
+      [[0, 1]],
+      [web]
+    );
+    const there = drawn.nodes.find((node) => node.id !== web.id);
+    expect(there).toMatchObject({ group: null, kind: "Deployment" });
+    expect(there?.sub).toBe("shop in cluster west of the mesh");
+    expect(drawn.edges[0]).toMatchObject({ from: there?.id, to: web.id });
+  });
+
   /** A workload calling itself is a row, and no line from a node to itself. */
   it("draws no line from a node to itself", () => {
     const drawn = model(

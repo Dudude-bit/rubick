@@ -2443,6 +2443,7 @@ export const en = {
     endNode: "a node",
     endAddress: "an address no workload has",
     endUnidentified: "not identified by its source",
+    endRemote: "{namespace} in cluster {cluster} of the mesh",
     milliseconds: "{v} ms",
     cellNotRead: "not read",
     cellNone: "none",

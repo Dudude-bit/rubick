@@ -577,6 +577,28 @@ fn now_secs() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// An end in another cluster of a Cluster Mesh, by the cluster its identity
+/// carries: a name there is not the object of the same name here.
+fn remote_of(endpoint: Option<&flow::Endpoint>, here: Option<&str>) -> Option<FlowEnd> {
+    let endpoint = endpoint?;
+    let cluster = endpoint.cluster_name.as_str();
+    if cluster.is_empty() || here.is_none_or(|here| here == cluster) {
+        return None;
+    }
+    let (kind, name) = endpoint
+        .workloads
+        .first()
+        .map_or(("Pod", endpoint.pod_name.as_str()), |w| {
+            (w.kind.as_str(), w.name.as_str())
+        });
+    (!name.is_empty()).then(|| FlowEnd::Remote {
+        cluster: cluster.to_string(),
+        namespace: endpoint.namespace.clone(),
+        kind: kind.to_string(),
+        name: name.to_string(),
+    })
+}
+
 /// An end of a flow by what Hubble says it is: a workload with its kind, a
 /// pod nothing owns, or a reserved identity such as `world`.
 fn end_of(endpoint: Option<&flow::Endpoint>, address: &str, names: &[String]) -> FlowEnd {
@@ -761,16 +783,23 @@ impl Fold {
             return;
         }
         let ip = one.ip.as_ref();
-        let from = end_of(
-            one.source.as_ref(),
-            ip.map_or("", |i| i.source.as_str()),
-            &one.source_names,
-        );
-        let to = end_of(
-            one.destination.as_ref(),
-            ip.map_or("", |i| i.destination.as_str()),
-            &one.destination_names,
-        );
+        // A flow's node is `<cluster>/<node>` (GetAbsoluteNodeName): the
+        // cluster whose relay is read.
+        let here = one.node_name.split_once('/').map(|(cluster, _)| cluster);
+        let from = remote_of(one.source.as_ref(), here).unwrap_or_else(|| {
+            end_of(
+                one.source.as_ref(),
+                ip.map_or("", |i| i.source.as_str()),
+                &one.source_names,
+            )
+        });
+        let to = remote_of(one.destination.as_ref(), here).unwrap_or_else(|| {
+            end_of(
+                one.destination.as_ref(),
+                ip.map_or("", |i| i.destination.as_str()),
+                &one.destination_names,
+            )
+        });
         // Cilium logs an L7 response from the server to the client
         // (pkg/envoy/accesslog_server.go swaps the addresses); the pair is the caller's.
         let key = if response.is_some() {
@@ -1233,6 +1262,41 @@ mod tests {
                 word: "kube-apiserver".into()
             }
         );
+    }
+
+    /// In a Cluster Mesh a name in another cluster is not the workload of
+    /// the same name here: it is said with its cluster, and a local or
+    /// unlabelled end stays as Hubble names it.
+    #[test]
+    fn an_end_in_another_cluster_of_the_mesh_is_remote() {
+        let mut fold = Fold::new(0);
+        let at = |cluster: &str, name: &str| flow::Endpoint {
+            cluster_name: cluster.into(),
+            ..endpoint("shop", Some(("Deployment", name)), "")
+        };
+        fold.add(
+            100,
+            &flow::Flow {
+                verdict: Verdict::Forwarded as i32,
+                node_name: "east/kind-worker".into(),
+                source: Some(at("west", "web")),
+                destination: Some(at("east", "api")),
+                ..Default::default()
+            },
+        );
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(
+            pairs[0].from,
+            FlowEnd::Remote {
+                cluster: "west".into(),
+                namespace: "shop".into(),
+                kind: "Deployment".into(),
+                name: "web".into(),
+            }
+        );
+        assert!(matches!(&pairs[0].to, FlowEnd::Workload { key } if key.name == "api"));
+        assert_eq!(remote_of(Some(&at("", "web")), Some("east")), None);
+        assert_eq!(remote_of(Some(&at("west", "web")), None), None);
     }
 
     #[derive(Debug)]

@@ -52,6 +52,7 @@ export function endLabel(end: FlowEnd): string {
     case "notListed":
     case "service":
     case "node":
+    case "remote":
       return end.name;
     case "address":
       return end.address;
@@ -81,6 +82,11 @@ export function endSub(end: FlowEnd, t: T): string {
       return t("traffic", "endAddress");
     case "unidentified":
       return t("traffic", "endUnidentified");
+    case "remote":
+      return t("traffic", "endRemote", {
+        namespace: end.namespace,
+        cluster: end.cluster,
+      });
   }
 }
 
@@ -95,6 +101,8 @@ export function endKind(end: FlowEnd): string {
       return "Service";
     case "node":
       return "Node";
+    case "remote":
+      return end.kind;
     case "ambiguous":
     case "address":
     case "unidentified":

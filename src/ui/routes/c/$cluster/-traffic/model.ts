@@ -54,6 +54,7 @@ const homeOf = (end: FlowEnd): string | null => {
       return end.namespace;
     case "node":
     case "address":
+    case "remote":
       return null;
   }
 };

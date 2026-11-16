@@ -2556,6 +2556,7 @@ export const ru: Catalogue = {
     endNode: "узел",
     endAddress: "адрес, которого нет ни у одной нагрузки",
     endUnidentified: "источник не опознал",
+    endRemote: "{namespace} в кластере {cluster} из того же меша",
     milliseconds: "{v} мс",
     cellNotRead: "не прочитано",
     cellNone: "нет",

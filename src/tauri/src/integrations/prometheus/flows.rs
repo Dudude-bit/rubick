@@ -166,6 +166,13 @@ pub enum FlowEnd {
         namespace: Option<String>,
         word: String,
     },
+    /// In another cluster of a Cluster Mesh: no object here is it.
+    Remote {
+        cluster: String,
+        namespace: String,
+        kind: String,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -528,7 +535,7 @@ fn namespace_of(end: &FlowEnd) -> Option<&str> {
         FlowEnd::Service { namespace, .. } | FlowEnd::Unidentified { namespace, .. } => {
             namespace.as_deref()
         }
-        FlowEnd::Node { .. } | FlowEnd::Address { .. } => None,
+        FlowEnd::Node { .. } | FlowEnd::Address { .. } | FlowEnd::Remote { .. } => None,
     }
 }
 

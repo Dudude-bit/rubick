@@ -156,6 +156,8 @@ export function endId(end: FlowEnd): string {
       return `address:${end.address}`;
     case "unidentified":
       return `unidentified:${end.namespace ?? ""}/${end.word}`;
+    case "remote":
+      return `remote:${end.cluster}/${end.kind}/${end.namespace}/${end.name}`;
   }
 }
 

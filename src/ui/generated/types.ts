@@ -3966,7 +3966,14 @@ export type FlowEnd =
   | { is: "service"; namespace: string | null; name: string }
   | { is: "node"; name: string }
   | { is: "address"; address: string }
-  | { is: "unidentified"; namespace: string | null; word: string };
+  | { is: "unidentified"; namespace: string | null; word: string }
+  | {
+      is: "remote";
+      cluster: string;
+      namespace: string;
+      kind: string;
+      name: string;
+    };
 
 export type NotListedWhy = "noSuch" | "podsUnread";
 
