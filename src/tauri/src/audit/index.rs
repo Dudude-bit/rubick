@@ -747,9 +747,16 @@ impl AuditIndexes {
     }
 
     pub fn forget(&self, context: &str) {
+        self.decoded.remove(context);
+        self.renewed(context);
+    }
+
+    /// The context's client was renewed: the index on the old one stops, and
+    /// the releases decoded, which hold no client and are kept by each
+    /// Secret's `resourceVersion`, are kept for the next.
+    pub fn renewed(&self, context: &str) {
         self.besides.retain(|(held, _), _| held != context);
         self.enforced.remove(context);
-        self.decoded.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
             index.lease.lock().take();
@@ -1401,6 +1408,23 @@ pub(super) mod tests {
         index.asked_again(Some(vec!["payments".to_string()])).await;
         assert_eq!(held(&index), vec!["api"]);
         index.stop.cancel();
+    }
+
+    /// A renewal keeps the releases Audit decoded; a reconnect, which may put
+    /// another cluster behind the name, lets them go. Fails if every token
+    /// renewal sent the page back to reading and fetching each release.
+    #[test]
+    fn a_renewal_keeps_the_releases_decoded_and_a_reconnect_does_not() {
+        let (events, _) = broadcast::channel(4);
+        let indexes = AuditIndexes::new(events);
+        indexes.decoded.entry("prod".to_string()).or_default();
+        indexes.renewed("prod");
+        assert!(
+            indexes.decoded.contains_key("prod"),
+            "a renewal let them go"
+        );
+        indexes.forget("prod");
+        assert!(!indexes.decoded.contains_key("prod"));
     }
 
     /// A relist hands the whole set again; what the index held and the set

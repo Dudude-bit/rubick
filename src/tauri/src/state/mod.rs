@@ -458,11 +458,23 @@ impl AppState {
     /// overview's watches and the ownership index hold the client itself; a
     /// metrics refusal was an answer to its credentials.
     pub fn client_replaced(&self, context: &str) {
+        self.let_go_of_client(context);
+        self.audit.forget(context);
+    }
+
+    /// A credential renewal: the same cluster under a new token. What was
+    /// read of it and holds no client, the releases Audit decoded, is kept,
+    /// or every renewal would fetch each release Secret again.
+    pub fn client_renewed(&self, context: &str) {
+        self.let_go_of_client(context);
+        self.audit.renewed(context);
+    }
+
+    fn let_go_of_client(&self, context: &str) {
         self.overview_cache.forget(context);
         self.ownership.forget(context);
         self.feeds
             .client_replaced(context, self.client_of(context).ok().map(|c| (*c).clone()));
-        self.audit.forget(context);
         self.metrics_unserved.forget_refusals(context);
     }
 
