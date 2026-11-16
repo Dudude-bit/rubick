@@ -202,6 +202,8 @@ export interface CostPicture {
   /** Whether every node could be checked for a price. */
   nodesChecked: boolean;
   nodesUnread: ReadFailure | null;
+  /** Why what each node holds was not counted, where the pods were refused. */
+  heldUnread: ReadFailure | null;
   /** Namespaces whose pods could not be read. */
   unread: UnreadNamespace[];
   /** Series for pods not on a node, per namespace. */
@@ -273,10 +275,14 @@ const storagePerHour = (bytes: number, perGibMonth: number): number =>
 
 function unread(
   basis: CostBasis
-): Pick<CostPicture, "nodesChecked" | "nodesUnread" | "unread" | "waiting"> {
+): Pick<
+  CostPicture,
+  "nodesChecked" | "nodesUnread" | "heldUnread" | "unread" | "waiting"
+> {
   return {
     nodesChecked: basis.nodes !== null,
     nodesUnread: basis.nodesUnread,
+    heldUnread: basis.heldUnread,
     unread: basis.unread,
     waiting: basis.waiting,
   };

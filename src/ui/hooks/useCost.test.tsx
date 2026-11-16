@@ -31,6 +31,7 @@ const { useCostPricesStore } = await import("@/stores/costPricesStore");
 const BASIS: CostBasis = {
   nodes: [],
   nodesUnread: null,
+  heldUnread: null,
   namespaces: [],
   workloads: [],
   rest: null,

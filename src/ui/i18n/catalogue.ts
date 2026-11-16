@@ -2598,6 +2598,8 @@ export const en = {
       other:
         "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
     },
+    heldUnread:
+      "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
     storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
     storageUnpricedOpenCost:

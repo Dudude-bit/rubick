@@ -655,6 +655,7 @@ export interface ResourceBudget {
 export interface CostBasis {
   nodes: NodeBasis[] | null;
   nodesUnread: ReadFailure | null;
+  heldUnread: ReadFailure | null;
   namespaces: NamespaceBasis[];
   workloads: WorkloadBasis[];
   rest: RestBasis | null;

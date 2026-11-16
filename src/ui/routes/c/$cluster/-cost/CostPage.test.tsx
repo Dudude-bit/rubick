@@ -52,6 +52,7 @@ const node = (name: string): NodeBasis => ({
 const BASIS: CostBasis = {
   nodes: [node("node-a"), node("worker-7")],
   nodesUnread: null,
+  heldUnread: null,
   namespaces: [
     {
       namespace: "shop",
@@ -246,6 +247,42 @@ describe("the Cost page", () => {
     expect(screen.getByTestId("cost-notes")).toHaveTextContent(
       "lack the labels this page joins them on: node"
     );
+  });
+
+  /**
+   * A token that lists the nodes and only `shop`'s pods: the nodes were read,
+   * so the cluster's total and `shop`'s share of it stand, and only idle is
+   * unknown, with the refusal named. Fails if the refused pod list took the
+   * nodes with it ("there is no cluster total"), or idle read as 0.
+   */
+  it("keeps the cluster total when only what the nodes hold could not be counted", async () => {
+    const uncounted = {
+      cpuRequested: null,
+      memoryRequested: null,
+      gpusRequested: null,
+    };
+    const picture = estimatePicture(
+      {
+        ...BASIS,
+        nodes: BASIS.nodes!.map((n) => ({ ...n, ...uncounted })),
+        heldUnread: {
+          code: "PERMISSION_DENIED",
+          message: "pods is forbidden at the cluster scope",
+        },
+      },
+      { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "" },
+      ["shop"]
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    await open();
+    expect(screen.getByText(/of the cluster/)).toBeInTheDocument();
+    expect(screen.getByTestId("cost-idle")).toHaveTextContent("Not known");
+    const notes = screen.getByTestId("cost-notes");
+    expect(notes).toHaveTextContent(
+      "What each node holds could not be counted (pods is forbidden at the cluster scope), so idle is not known."
+    );
+    expect(notes).not.toHaveTextContent("There is no cluster total");
   });
 
   /**

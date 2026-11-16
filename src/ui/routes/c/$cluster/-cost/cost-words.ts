@@ -128,6 +128,9 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
         endpoint: picture.source.endpoint,
       })
     );
+  // OpenCost says what each node holds itself; only an estimate counts it.
+  if (picture.heldUnread && !opencost)
+    notes.push(t("cost", "heldUnread", { said: picture.heldUnread.message }));
   if (picture.missingLabels.length > 0)
     notes.push(
       t("cost", "missingLabels", { labels: picture.missingLabels.join(", ") })
