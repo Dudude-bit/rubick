@@ -531,7 +531,11 @@ impl Timelines {
                 };
                 (pending, told, state, since)
             };
-            if let (Some(dir), true) = (&cluster.dir, keep || pending.wipe) {
+            // A cluster with nothing new since is not written again: an idle
+            // one was a full fsync a second, and a context merely read was a
+            // folder in Settings.
+            let changed = told.rows || told.spans;
+            if let (Some(dir), true) = (&cluster.dir, (keep && changed) || pending.wipe) {
                 let written = disk::write(dir, &pending, keep.then_some(&state), now);
                 let mut inner = cluster.inner.lock();
                 let next = match written {

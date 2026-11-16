@@ -859,6 +859,30 @@ fn a_stretch_whose_rows_were_not_kept_is_not_written_as_watched() {
     );
 }
 
+/// A cluster with nothing new is not written again: an idle app was a full
+/// fsync a second per cluster, and a context only read was a folder in
+/// Settings. Fails if a flush writes a cluster that recorded nothing.
+#[test]
+fn a_cluster_with_nothing_new_is_not_written() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let _read = timelines.cluster("read-only");
+    let cluster = timelines.cluster("kind");
+    cluster.change(change(
+        "1",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    timelines.flush();
+    assert!(!disk::dir_of(root.path(), "read-only").exists());
+    let state = disk::dir_of(root.path(), "kind").join("state.json");
+    std::fs::remove_file(&state).unwrap();
+    timelines.flush();
+    assert!(!state.exists());
+}
+
 /// A disk that refuses is said, and the session's rows stay. Fails if a
 /// write error passes as kept.
 #[test]
