@@ -74,6 +74,32 @@ const ROLLOUTS: Rollout[] = [
 
 describe("a map node's colour", () => {
   /**
+   * The EndpointSlice watch broke and every Service stayed green from slices
+   * as of then; stale Pods left every workload's tone as of then too. Fails
+   * if a node coloured from a stale read keeps its colour, or one that
+   * reads nothing stale loses it.
+   */
+  it("rings a node whose verdict was worked out from a read gone stale", () => {
+    const stale = (kinds: string[]) => ({ ...inputs, stale: new Set(kinds) });
+    const service = node(ref("Service"), {
+      says: "service",
+      published: null,
+      unread: null,
+    });
+    expect(toneOf(service, stale(["EndpointSlice"]))).toBe("unknown");
+    const rollout = node(ref("Deployment"), {
+      says: "rollout",
+      rollout: { state: "ready" } as Rollout,
+    });
+    expect(toneOf(rollout, stale(["Pod"]))).toBe("unknown");
+    const claim = node(ref("PersistentVolumeClaim"), {
+      says: "claim",
+      phase: "Bound",
+    });
+    expect(toneOf(claim, stale(["Pod"]))).not.toBe("unknown");
+  });
+
+  /**
    * "Pods with no owner" was ringed not checked on a cluster whose pods were
    * read. Fails if their node stops taking the colour the Pods list gives
    * their statuses, or a running pod that is not ready reads green.
