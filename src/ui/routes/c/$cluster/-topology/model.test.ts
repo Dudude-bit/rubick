@@ -221,6 +221,52 @@ describe("the cluster map's model", () => {
     expect(of(after, "Ingress").tone).toBe("err");
   });
 
+  /**
+   * By app, a Service list refused in `shop` vanished from `cart`'s card,
+   * which turned green; a namespace that refused everything had no members
+   * and left the canvas; and by namespace, a Gateway's namespace outside
+   * the scope read as fully read. Fails if any of the three reads as read.
+   */
+  it("says what was not read in a group made by app, or from outside the scope", () => {
+    const shop = read("shop", false);
+    const unreadShop: NamespaceRead = {
+      ...shop,
+      notLookedAt: [
+        {
+          kind: "Service",
+          why: { says: "unanswered", version: "v1", said: "forbidden" },
+        },
+      ],
+    };
+    const byApp = of(
+      [
+        node("Deployment", "cart", "shop", "cart"),
+        node("Deployment", "cart", "billing", "cart"),
+      ],
+      [unreadShop, read("billing"), read("payments", true)],
+      [],
+      { grouping: "app" }
+    );
+    const cart = byApp.groups.find((group) => group.id === "app:cart")!;
+    expect(cart.tone).toBe("unknown");
+    expect(byApp.summaries.get("app:cart")).toContain("Service");
+    const payments = byApp.groups.find((group) => group.id === "ns:payments")!;
+    expect(payments.refused).toBe(true);
+
+    const gateway = { ...node("Gateway", "public", "gateway-system") };
+    const byNamespace = of([node("Deployment", "cart"), gateway], [shop]);
+    const outside = byNamespace.groups.find(
+      (group) => group.id === "gateway-system"
+    )!;
+    expect(outside.tone).toBe("unknown");
+    expect(byNamespace.summaries.get("gateway-system")).toContain(
+      "gateway-system not read"
+    );
+    expect(
+      byNamespace.groups.find((group) => group.id === "shop")!.tone
+    ).not.toBe("unknown");
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

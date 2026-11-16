@@ -1894,6 +1894,8 @@ export const en = {
     stillListing: "Still listing: {kinds}",
     nothingToDraw: "Nothing to draw {scope}: no routes, Services or workloads.",
     shareNotRead: "Not read, so not on the map: {kinds}",
+    outsideScope:
+      "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
     shareStillOpening:
       "The map was still being opened: nothing in it had been read yet.",
     shareGroup: "Group",

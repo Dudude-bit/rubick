@@ -336,26 +336,52 @@ export function modelOf(
       byName(a.label, b.label)
   );
 
+  // A namespace nothing could be read in has no members to make its group,
+  // and is drawn refused all the same, by namespace or by app.
+  const refusedIds = [...reads.values()]
+    .filter(refusedWhole)
+    .map((read) =>
+      settings.grouping === "namespace"
+        ? read.namespace
+        : `ns:${read.namespace}`
+    );
   const ids = new Set(
     settings.grouping === "namespace"
       ? [...reads.keys(), ...members.keys()]
-      : members.keys()
+      : [...members.keys(), ...refusedIds]
   );
   const summaries = new Map<string, string>();
   const groups: GraphGroup[] = [...ids].sort().map((id) => {
     const held = members.get(id) ?? [];
-    const read = settings.grouping === "namespace" ? reads.get(id) : undefined;
+    // The namespaces a group was read from: its own, or every one its
+    // members came from. One not read at all is outside the scope.
+    const namespaces =
+      settings.grouping === "namespace"
+        ? [id]
+        : id.startsWith("ns:")
+          ? [id.slice(3)]
+          : [...new Set(held.flatMap((node) => node.home ?? []))];
+    const read = namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
+    // Before any namespace is read the whole map is opening, not outside.
+    const outside =
+      reads.size === 0
+        ? []
+        : namespaces.filter((namespace) => !reads.has(namespace));
     const counts = new Map<string, number>();
     for (const node of held)
       counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
     const failing = held.filter((node) => tones.get(node.id) === "err").length;
     const warning = held.filter((node) => tones.get(node.id) === "warn").length;
-    const unread = unreadKinds(read);
+    const unread = [
+      ...new Set(
+        namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
+      ),
+    ];
     const refused = refusedWhole(read);
     const lines = refused
       ? [
           t("topology", "refusedWhole", {
-            namespace: id,
+            namespace: namespaces[0],
             said:
               read?.notLookedAt[0]?.why.says === "unanswered"
                 ? read.notLookedAt[0].why.said
@@ -374,6 +400,8 @@ export function modelOf(
             .join(" · "),
           unread.length > 0 &&
             t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
+          outside.length > 0 &&
+            t("topology", "outsideScope", { namespaces: outside.join(", ") }),
         ].filter((line): line is string => Boolean(line));
     summaries.set(id, lines.join(" · "));
     return {
@@ -385,7 +413,9 @@ export function modelOf(
         : loudest(
             [
               ...held.map((node) => tones.get(node.id) ?? "mute"),
-              ...(unread.length > 0 ? ["unknown" as const] : []),
+              ...(unread.length > 0 || outside.length > 0
+                ? ["unknown" as const]
+                : []),
             ],
             "mute"
           ),
