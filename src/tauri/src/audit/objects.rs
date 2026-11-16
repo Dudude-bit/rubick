@@ -6,7 +6,7 @@ use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{PolicyRule, RoleRef, Subject as RbacSubject};
 
-use super::{is_system_namespace, AuditFinding, RuleId, What};
+use super::{AuditFinding, RuleId, What};
 use crate::resources::{shown_text, withhold_reason};
 
 /// Every key of a `ConfigMap` that holds a private key, by name and by the
@@ -55,16 +55,12 @@ pub fn role(rules: Option<&Vec<PolicyRule>>) -> Vec<AuditFinding> {
     finding_if(RuleId::WildcardRole, what)
 }
 
-/// A subject Kubernetes itself grants: a `system:` user or group, or a
-/// `ServiceAccount` in a `kube-` namespace.
+/// The one subject Kubernetes binds `cluster-admin` to itself: the
+/// `system:masters` group (reference/access-authn-authz/rbac, user-facing
+/// roles). `system:authenticated` or an account in `kube-system` holds it
+/// only because someone bound it.
 fn the_systems(subject: &RbacSubject) -> bool {
-    match subject.kind.as_str() {
-        "ServiceAccount" => subject
-            .namespace
-            .as_deref()
-            .is_some_and(is_system_namespace),
-        _ => subject.name.starts_with("system:"),
-    }
+    subject.kind == "Group" && subject.name == "system:masters"
 }
 
 /// Every subject a binding grants `cluster-admin` to that is not the
@@ -185,9 +181,10 @@ mod tests {
         assert!(role(Some(&rules(&["*"], &["pods"]))).is_empty());
     }
 
-    /// The default binding of `system:masters`, and a kube-system account,
-    /// are the system's own. Fails if they are flagged, or a chart's account
-    /// bound to cluster-admin is not.
+    /// Only the default binding of `system:masters` is the system's own.
+    /// Fails if it is flagged, or if a chart's account, a `kube-system`
+    /// account or a `system:` group everyone is in holds cluster-admin
+    /// unflagged.
     #[test]
     fn a_cluster_admin_binding_names_only_subjects_that_are_not_the_systems() {
         let role: RoleRef = serde_json::from_value(json!({
@@ -201,16 +198,38 @@ mod tests {
         ]))
         .unwrap();
         let findings = binding(&role, Some(&subjects), Some("tools"));
+        let account = |name: &str, namespace: &str| What::Subject {
+            kind: "ServiceAccount".to_string(),
+            name: name.to_string(),
+            namespace: Some(namespace.to_string()),
+            role: "cluster-admin".to_string(),
+        };
         assert_eq!(
             findings[0].what,
-            vec![What::Subject {
-                kind: "ServiceAccount".to_string(),
-                name: "installer".to_string(),
-                namespace: Some("tools".to_string()),
-                role: "cluster-admin".to_string()
-            }]
+            vec![
+                account("addon", "kube-system"),
+                account("installer", "tools")
+            ]
         );
-        let only_system = &subjects[..2];
+        let only_system = &subjects[..1];
         assert!(binding(&role, Some(&only_system.to_vec()), None).is_empty());
+        for (kind, name, namespace) in [
+            ("Group", "system:authenticated", None),
+            ("Group", "system:unauthenticated", None),
+            ("Group", "system:serviceaccounts", None),
+            ("User", "system:anonymous", None),
+            ("ServiceAccount", "tiller", Some("kube-system")),
+            ("ServiceAccount", "default", Some("kube-monitoring")),
+        ] {
+            let subject: RbacSubject = serde_json::from_value(
+                json!({ "kind": kind, "name": name, "namespace": namespace }),
+            )
+            .unwrap();
+            let findings = binding(&role, Some(&vec![subject]), None);
+            assert!(
+                matches!(findings.first().map(|f| f.what.as_slice()), Some([What::Subject { name: n, .. }]) if n == name),
+                "{kind} {name} holds cluster-admin unflagged"
+            );
+        }
     }
 }

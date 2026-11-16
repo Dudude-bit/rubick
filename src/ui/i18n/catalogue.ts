@@ -2159,7 +2159,7 @@ export const en = {
       "On a writable root filesystem whoever gets into the container can change its binaries and leave tools behind. readOnlyRootFilesystem: true, with an emptyDir where it needs to write, prevents it.",
     clusterAdminBinding: "Binds cluster-admin",
     clusterAdminBindingWhy:
-      "cluster-admin may do anything to any object. A subject other than the system's own holding it is one stolen token away from the whole cluster.",
+      "cluster-admin may do anything to any object. Kubernetes binds it only to the system:masters group; any other subject holding it is one stolen token away from the whole cluster, and a group such as system:authenticated hands it to everyone.",
     wildcardRole: "Grants every verb on every resource",
     wildcardRoleWhy:
       "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
