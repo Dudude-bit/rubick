@@ -30,7 +30,7 @@ import { useAppSearchValue, useSetSearch } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
-import { auditScreenSection } from "./audit-share";
+import { auditScreenSection, filterWords } from "./audit-share";
 import { AuditSummaryBlock } from "./AuditSummary";
 import {
   FindingList,
@@ -444,8 +444,9 @@ export function Audit() {
     [page]
   );
 
+  const narrowed = filterWords(base, t);
   useShareSection("audit", () =>
-    page ? [auditScreenSection(page, view, t)] : []
+    page ? [auditScreenSection(page, view, t, narrowed)] : []
   );
 
   if (!isConnected) {
@@ -598,7 +599,7 @@ export function Audit() {
                   widthsKey="audit-rules"
                   emptyMessage={empty}
                   pageKeys
-                  share={{ title: t("audit", "byRule") }}
+                  share={{ title: t("audit", "byRule"), narrowed }}
                 />
               ) : (
                 <DataTable
@@ -615,7 +616,7 @@ export function Audit() {
                   emptyMessage={empty}
                   more={page?.next !== null && page?.next !== undefined}
                   pageKeys
-                  share={{ title: t("audit", "byObject") }}
+                  share={{ title: t("audit", "byObject"), narrowed }}
                 />
               )}
               <Pager page={page} offset={offset} onOffset={setOffset} />

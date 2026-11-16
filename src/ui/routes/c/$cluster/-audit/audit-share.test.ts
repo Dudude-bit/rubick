@@ -3,7 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import type { AuditPage } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { auditObjectSection, auditScreenSection } from "./audit-share";
+import {
+  auditObjectSection,
+  auditScreenSection,
+  filterWords,
+} from "./audit-share";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -45,6 +49,67 @@ const page: AuditPage = {
 };
 
 describe("Audit in a shared file", () => {
+  /**
+   * A file of a filtered page holds only the filtered rows. Fails if it
+   * does not say so, which reads three High rules as the cluster's findings.
+   */
+  it("says which filters narrowed the shared rows", () => {
+    const narrowed = filterWords(
+      {
+        by: "rule",
+        severities: ["high"],
+        categories: ["security"],
+        rules: [],
+        system: false,
+        offset: 0,
+      },
+      t
+    );
+    expect(narrowed).toBe("Only High, Security.");
+    expect(auditScreenSection(page, "rule", t, narrowed).caption).toMatch(
+      /^Only High, Security\. /
+    );
+    expect(
+      filterWords(
+        {
+          by: "rule",
+          severities: [],
+          categories: [],
+          rules: [],
+          system: false,
+          offset: 0,
+        },
+        t
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * Pods still being read and pods no workload claims are not judged. Fails
+   * if the file drops them and states a whole total, where the screen warns.
+   */
+  it("says what is still being read or was not judged, with no total", () => {
+    const section = auditScreenSection(
+      {
+        ...page,
+        summary: {
+          ...page.summary,
+          notChecked: [],
+          reading: 2,
+          unattributed: 1,
+        },
+      },
+      "rule",
+      t
+    );
+    expect(section.count).toBeNull();
+    expect(section.partial).toContain(
+      "2 pods with no workload Audit reads are still being read"
+    );
+    expect(section.partial).toMatch(/^.*; .+$/);
+    expect(section.notRead).toHaveLength(2);
+  });
+
   /**
    * A rule row says how many objects it could not check, and one that only
    * could not check is filed as not read, not as a finding of its

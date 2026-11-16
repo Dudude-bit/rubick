@@ -2,6 +2,7 @@ import { ShieldCheck } from "lucide-react";
 
 import type {
   AuditPage,
+  AuditQuery,
   AuditSeverity,
   Grouping,
   ObjectAudit,
@@ -10,6 +11,7 @@ import type {
 import type { T } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import { iconSvg } from "@/lib/icon-svg";
+import { formatWhen } from "@/lib/utils";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
@@ -20,7 +22,13 @@ import {
   upgradeWords,
   usageWords,
 } from "./summary-words";
-import { SEVERITY_WORDS, ruleTitle, uncheckedWords, whatWords } from "./rules";
+import {
+  CATEGORY_WORDS,
+  SEVERITY_WORDS,
+  ruleTitle,
+  uncheckedWords,
+  whatWords,
+} from "./rules";
 import { kindWords } from "./subjects";
 
 /** A subject's reference in the file: a Helm release named in words, as on screen. */
@@ -33,6 +41,47 @@ const ROLE: Record<AuditSeverity, StatusRole> = {
   low: "neutral",
 };
 
+/** The filters a page's rows were narrowed by, in words; `null` for every row. */
+export function filterWords(query: AuditQuery, t: T): string | null {
+  const filters = [
+    ...query.severities.map((severity) => t("audit", SEVERITY_WORDS[severity])),
+    ...query.categories.map((category) => t("audit", CATEGORY_WORDS[category])),
+    ...query.rules.map((rule) => ruleTitle(rule, t)),
+  ];
+  return filters.length > 0
+    ? t("audit", "sharedOnly", { filters: filters.join(", ") })
+    : null;
+}
+
+/** Everything the screen says was not read, or not read whole, in its words. */
+function unreadWords(page: AuditPage, t: T): string[] {
+  const { summary } = page;
+  const unchecked = summary.rules.filter((rule) => rule.unchecked > 0).length;
+  return [
+    ...summary.notChecked.map((each) => notCheckedWords(each, t)),
+    ...summary.late.map((late) =>
+      t("audit", "late", {
+        kind: late.kind,
+        where: late.namespace
+          ? t("audit", "lateIn", { namespace: late.namespace })
+          : t("audit", "lateAcross"),
+        since: formatWhen(late.since, "moment"),
+      })
+    ),
+    ...(summary.reading > 0
+      ? [t("audit", "reading", { n: summary.reading })]
+      : []),
+    ...(summary.unattributed > 0
+      ? [t("audit", "unattributed", { n: summary.unattributed })]
+      : []),
+    ...(unchecked > 0 ? [t("audit", "rulesUnchecked", { n: unchecked })] : []),
+    ...(summary.upgrade.read === null ? [upgradeWords(page, t)] : []),
+    ...(summary.usage !== null && summary.usage.says !== "read"
+      ? [usageWords(page, t) ?? ""]
+      : []),
+  ];
+}
+
 /**
  * The Audit page in a shared file: the rows the screen shows, the scope's
  * counts, and every kind that was not read, said where the counts are, so a
@@ -41,7 +90,8 @@ const ROLE: Record<AuditSeverity, StatusRole> = {
 export function auditScreenSection(
   page: AuditPage,
   view: Grouping,
-  t: T
+  t: T,
+  narrowed: string | null = null
 ): PlacedSection {
   const items: ReportFinding[] = page.rows.flatMap((row): ReportFinding[] => {
     switch (row.row) {
@@ -100,21 +150,15 @@ export function auditScreenSection(
         ];
     }
   });
-  const unread = [
-    ...page.summary.notChecked.map((each) => notCheckedWords(each, t)),
-    ...(page.summary.upgrade.read === null ? [upgradeWords(page, t)] : []),
-    ...(page.summary.usage !== null && page.summary.usage.says !== "read"
-      ? [usageWords(page, t) ?? ""]
-      : []),
-  ];
+  const unread = unreadWords(page, t);
   return {
     id: "audit",
     order: ORDER.own,
     title: t("audit", view === "rule" ? "byRule" : "byObject"),
     icon: iconSvg(ShieldCheck),
-    count: unread.length > 0 ? null : page.total,
-    partial: anythingUnread(page) ? unread.join("; ") || null : null,
-    caption: checkedWords(page, t),
+    count: unread.length > 0 || anythingUnread(page) ? null : page.total,
+    partial: unread.join("; ") || null,
+    caption: [narrowed, checkedWords(page, t)].filter(Boolean).join(" "),
     body: { type: "findings", items },
     notRead: unread,
   };

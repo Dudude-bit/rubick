@@ -2006,6 +2006,11 @@ export const en = {
     showMore: "Show more",
     tab: "Audit",
     tabNone: "Nothing found",
+    sharedOnly: "Only {filters}.",
+    rulesUnchecked: {
+      one: "{n} rule could not check every object",
+      other: "{n} rules could not check every object",
+    },
     tabNonePartly: "Nothing found in what could be read.",
     judgedOn: "This {kind}'s template is judged as part of {object}.",
     notCheckedHere: "Not checked here",
