@@ -208,6 +208,8 @@ const WHY_WORDS: {
   noUsage: (_, t) => t("audit", "whyNoUsage"),
   noSamples: (_, t) => t("audit", "whyNoSamples"),
   folded: (_, t) => t("audit", "whyFolded"),
+  admitted: (why, t) =>
+    t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),
 };
 
 /** Why a kind was not read, worded. */

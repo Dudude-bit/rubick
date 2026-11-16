@@ -5,6 +5,7 @@
 //! A rule answers only for what it read. Where a kind it needs went unread
 //! it says so for that object instead of passing it.
 
+mod admitted;
 mod answer;
 mod context;
 mod deprecated;
@@ -265,6 +266,11 @@ pub enum Why {
     NoSamples,
     /// Past the row cap of the requests list, its usage was read only as a sum.
     Folded,
+    /// Pods here pass these mutating webhooks, which may add containers
+    /// the template does not show.
+    Admitted {
+        webhooks: Vec<String>,
+    },
 }
 
 /// Why a read did not answer: refused, or failed in the server's words.

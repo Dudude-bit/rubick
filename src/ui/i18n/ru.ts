@@ -1980,6 +1980,8 @@ export const ru: Catalogue = {
     whyRefused: "отказано: {message}",
     whyFailed: "не удалось прочитать: {message}",
     whyNotAudited: "этот вид Аудит не читает",
+    whyAdmitted:
+      "поды проходят через {webhooks}, а они могут добавить контейнеры, которых нет в шаблоне",
     whyUnserved: "кластер этот вид не обслуживает",
     whyNoPrometheus:
       "к кластеру не подключён Prometheus, а собственный счёт устаревших запросов API-сервера читается из него",

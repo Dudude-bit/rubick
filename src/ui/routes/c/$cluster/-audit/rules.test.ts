@@ -312,6 +312,21 @@ describe("the words Audit draws its rules and findings with", () => {
     }
   });
 
+  /**
+   * Pods a webhook may change are named with the webhooks, in both
+   * languages. Fails if the line drops which webhook it is.
+   */
+  it("names the webhooks pods pass on admission", () => {
+    const why: Why = {
+      says: "admitted",
+      webhooks: ["sidecar-injector.istio.io", "linkerd-proxy-injector"],
+    };
+    expect(whyWords(why, tIn("en"))).toBe(
+      "admitted through sidecar-injector.istio.io, linkerd-proxy-injector, which may add containers the template does not show"
+    );
+    expect(whyWords(why, tIn("ru"))).toContain("sidecar-injector.istio.io");
+  });
+
   /** A refusal keeps the cluster's words, and an unread kind says where. */
   it("says why a rule went unanswered with the cluster's own words", () => {
     const t = tIn("en");

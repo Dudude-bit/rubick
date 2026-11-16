@@ -432,6 +432,7 @@ pub(super) fn world(
         others.as_ref(),
     );
     readings(&mut world, &slots, owners, scope);
+    admitted(&mut world, index.admission.read().as_ref(), &namespaces);
     super::upgrade::merge(&mut world, index.upgrade.read().as_deref(), scope);
     for object in &mut world.objects {
         object.findings.sort_by_key(|f| (f.severity, f.rule));
@@ -712,6 +713,48 @@ fn network_policies(
         }
         *world.checked.entry("Namespace".to_string()).or_default() += 1;
         world.objects.push(audited);
+    }
+}
+
+/// Where a mutating webhook may change pods on admission, what the Pod
+/// Security controls judged is the template and not what runs: said where
+/// the counts are, as any kind not read is.
+fn admitted(
+    world: &mut World,
+    admission: Option<&super::admitted::Admission>,
+    namespaces: &BTreeSet<String>,
+) {
+    let controls: Vec<RuleId> = super::rules::RULES
+        .iter()
+        .filter(|rule| rule.standard.is_some())
+        .map(|rule| rule.id)
+        .collect();
+    let webhooks = "MutatingWebhookConfiguration".to_string();
+    for namespace in namespaces {
+        let unread = match admission.and_then(|admission| admission.over(namespace)) {
+            Some(Ok(names)) if names.is_empty() => continue,
+            Some(Ok(names)) => NotChecked {
+                kind: POD.to_string(),
+                namespace: Some(namespace.clone()),
+                why: Why::Admitted { webhooks: names },
+                rules: controls.clone(),
+            },
+            Some(Err(why)) => NotChecked {
+                kind: webhooks.clone(),
+                namespace: None,
+                why,
+                rules: controls.clone(),
+            },
+            None => NotChecked {
+                kind: webhooks.clone(),
+                namespace: None,
+                why: Why::Reading,
+                rules: controls.clone(),
+            },
+        };
+        if !world.not_checked.contains(&unread) {
+            world.not_checked.push(unread);
+        }
     }
 }
 
@@ -1403,6 +1446,50 @@ mod tests {
         assert_eq!(shop.unchecked[0].kind, "CiliumNetworkPolicy");
         assert_eq!(shop.unchecked[0].why, Why::NotAudited);
         assert_eq!(namespace(&seen, "web").findings.len(), 1);
+    }
+
+    /// A namespace whose pods pass a webhook that may add containers is said
+    /// not checked by the Pod Security controls, with the webhook named; one
+    /// no webhook selects is not. Fails if Istio's injected init container
+    /// passes the controls unread, or every namespace is said so.
+    #[tokio::test]
+    async fn a_namespace_a_webhook_may_change_pods_in_is_not_checked_by_the_controls() {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        index.feed(&deployments(), deployment("mesh", "web", "1", "web:1"));
+        index.feed(&deployments(), deployment("plain", "web", "1", "web:1"));
+        let injection: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector =
+            serde_json::from_value(
+                json!({ "matchLabels": { "kubernetes.io/metadata.name": "mesh" } }),
+            )
+            .expect("a selector");
+        let named = |name: &str| {
+            (
+                name.to_string(),
+                BTreeMap::from([("kubernetes.io/metadata.name".to_string(), name.to_string())]),
+            )
+        };
+        *index.admission.write() = Some(super::super::admitted::Admission::of(
+            vec![("sidecar-injector.istio.io".to_string(), injection)],
+            BTreeMap::from([named("mesh"), named("plain")]),
+        ));
+        let seen = world(&index, Ok(&owners), None);
+        let mesh: Vec<&NotChecked> = seen
+            .not_checked
+            .iter()
+            .filter(|each| matches!(each.why, Why::Admitted { .. }))
+            .collect();
+        assert_eq!(mesh.len(), 1, "{:?}", seen.not_checked);
+        assert_eq!(mesh[0].kind, POD);
+        assert_eq!(mesh[0].namespace.as_deref(), Some("mesh"));
+        assert_eq!(
+            mesh[0].why,
+            Why::Admitted {
+                webhooks: vec!["sidecar-injector.istio.io".to_string()]
+            }
+        );
+        assert!(mesh[0].rules.contains(&RuleId::PssCapabilities));
     }
 
     /// Fails if a namespace the other engines were not yet asked about

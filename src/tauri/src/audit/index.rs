@@ -463,6 +463,9 @@ pub struct AuditIndex {
     /// Other engines' policy kinds that may hold over each namespace's pods,
     /// and the scope they were read for; `None` before the first read.
     pub(super) others: RwLock<Option<(Option<Vec<String>>, OtherPolicies)>>,
+    /// The webhooks that may change pods on admission; `None` before the
+    /// first read.
+    pub(super) admission: RwLock<Option<super::admitted::Admission>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
     /// The reader asked again: a source that failed is read at once.
@@ -499,6 +502,7 @@ impl AuditIndex {
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
             others: RwLock::new(None),
+            admission: RwLock::new(None),
             rescoped: Notify::new(),
             again: Notify::new(),
             asked: Notify::new(),
@@ -877,6 +881,12 @@ fn spawn_upgrade(
                 () = index.stop.cancelled() => break,
                 others = others_over(discovery, &index.client, scope.as_deref()) => others,
             };
+            let admission = tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                admission = super::admitted::read(&index.client, scope.as_deref()) => admission,
+            };
+            *index.admission.write() = Some(admission);
             *index.others.write() = Some((scope, others));
             *index.upgrade.write() = Some(Arc::new(read));
             index.changed();
@@ -1003,6 +1013,8 @@ impl AuditIndex {
         let mut index = Self::new("test".to_string(), client, scope, Some(32));
         index.pod_reads = Arc::new(Semaphore::new(0));
         *index.others.write() = Some((None, OtherPolicies::none()));
+        *index.admission.write() =
+            Some(super::admitted::Admission::of(Vec::new(), BTreeMap::new()));
         let index = Arc::new(index);
         for (resource, _) in audited() {
             index.set(&resource, None, FeedState::Synced);

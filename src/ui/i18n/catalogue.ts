@@ -1933,6 +1933,8 @@ export const en = {
     whyRefused: "refused: {message}",
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
+    whyAdmitted:
+      "admitted through {webhooks}, which may add containers the template does not show",
     whyUnserved: "this cluster does not serve the kind",
     whyNoPrometheus:
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",

@@ -3538,7 +3538,8 @@ export type Why =
   | { says: "notScraped" }
   | { says: "noUsage" }
   | { says: "noSamples" }
-  | { says: "folded" };
+  | { says: "folded" }
+  | { says: "admitted"; webhooks: string[] };
 
 export type RuleId =
   | "pss-host-process"
