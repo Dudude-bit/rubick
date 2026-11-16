@@ -149,7 +149,7 @@ mod tests {
     }
 
     /// A webhook that takes in pod creation may change a pod; one for
-    /// ConfigMaps, or for pod deletion only, may not. Fails if Istio's
+    /// `ConfigMaps`, or for pod deletion only, may not. Fails if Istio's
     /// injector is missed, or every webhook counted.
     #[test]
     fn only_a_webhook_on_pod_creation_may_change_a_pod() {

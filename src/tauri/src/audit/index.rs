@@ -632,14 +632,15 @@ impl AuditIndex {
                 read = api.get_opt(&name) => read,
             };
             let held = match read {
-                Ok(found) => match found.as_ref().and_then(|pod| pod_judged(pod, index.minor)) {
-                    Some(judged) => PodRead::Judged(judged),
-                    // Gone: asked again if it is seen again.
-                    None => {
+                Ok(found) => {
+                    let Some(judged) = found.as_ref().and_then(|pod| pod_judged(pod, index.minor))
+                    else {
+                        // Gone: asked again if it is seen again.
                         index.pods.lock().remove(&key);
                         return;
-                    }
-                },
+                    };
+                    PodRead::Judged(judged)
+                }
                 Err(error) => {
                     let error: crate::error::Error = error.into();
                     PodRead::Unread {
@@ -900,7 +901,7 @@ fn spawn_upgrade(
 
 /// The other engines' policy kinds that may hold over `scope`'s pods: read
 /// across the cluster where the scope is, else a namespace at a time, as the
-/// NetworkPolicy screens read them for a reader bound to namespaces.
+/// `NetworkPolicy` screens read them for a reader bound to namespaces.
 async fn others_over(
     discovery: crate::commands::other_policies::Discovery<'_>,
     client: &Client,
@@ -1470,14 +1471,14 @@ pub(super) mod tests {
             kind: key_of(&deployments()),
             namespace: None,
         };
-        let stop = CancellationToken::new();
-        generation.saw(&slot, &deployments(), Event::Init, &stop);
+        let never = CancellationToken::new();
+        generation.saw(&slot, &deployments(), Event::Init, &never);
         for (namespace, name) in [("shop", "web"), ("payments", "api")] {
             let object = serde_json::from_value(deployment(namespace, name, "1", "web:1"))
                 .expect("an object");
-            generation.saw(&slot, &deployments(), Event::InitApply(object), &stop);
+            generation.saw(&slot, &deployments(), Event::InitApply(object), &never);
         }
-        generation.saw(&slot, &deployments(), Event::InitDone, &stop);
+        generation.saw(&slot, &deployments(), Event::InitDone, &never);
         let held = |index: &AuditIndex| -> Vec<String> {
             let mut names: Vec<String> = index
                 .store

@@ -1405,7 +1405,7 @@ mod tests {
         assert_eq!(blind.unchecked[0].kind, POD);
     }
 
-    /// A world of two namespaces running pods and holding no NetworkPolicy,
+    /// A world of two namespaces running pods and holding no `NetworkPolicy`,
     /// with `others` as the last read of other engines' policies said.
     async fn policed(others: (Option<Vec<String>>, OtherPolicies)) -> World {
         let client = client().await;

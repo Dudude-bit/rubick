@@ -946,7 +946,7 @@ impl Inner {
             },
         );
         for update in waited {
-            let wanted = match &update {
+            let handed = match &update {
                 Update::Applied { object, .. } => {
                     in_scope(scope.as_deref(), object)
                         && match (version_of(object), at) {
@@ -957,7 +957,7 @@ impl Inner {
                 Update::Deleted { object, .. } => in_scope(scope.as_deref(), object),
                 _ => true,
             };
-            if wanted {
+            if handed {
                 self.send(id, update);
             }
         }
@@ -1335,7 +1335,7 @@ impl ContextFeeds {
                 {
                     continue;
                 }
-                generation.spawn(slot, resource.clone());
+                generation.spawn(&slot, resource.clone());
             }
         }
     }
@@ -1507,18 +1507,18 @@ impl Generation {
             kind: kind.clone(),
             namespace: None,
         };
-        self.spawn(slot, resource);
+        self.spawn(&slot, resource);
     }
 
     /// Starts reading `slot`; one left waiting for a watch says so, rather
     /// than nothing until its turn comes.
-    fn spawn(self: &Arc<Self>, slot: SlotKey, resource: ApiResource) {
+    fn spawn(self: &Arc<Self>, slot: &SlotKey, resource: ApiResource) {
         spawn_slot(self, slot.clone(), resource, RELIST_EVERY, PAGE_WITHIN);
         let slots = self.slots.lock();
-        if matches!(slots.get(&slot), Some(SlotState::Queued)) {
+        if matches!(slots.get(slot), Some(SlotState::Queued)) {
             let id = self.id;
             self.tell(|inner| {
-                inner.state(id, &slot, FeedState::Queued);
+                inner.state(id, slot, FeedState::Queued);
                 Vec::new()
             });
         }
