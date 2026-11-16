@@ -82,18 +82,39 @@ export function WorkloadCostLine({
   kind,
   name,
   namespace,
+  billedTo = null,
 }: {
   group: string;
   kind: string;
   name: string;
   namespace: string;
+  /**
+   * The workload this one's pods are billed to: a Job a CronJob made is
+   * one run of the CronJob, and the cost is the CronJob's row.
+   */
+  billedTo?: { group: string; kind: string; name: string } | null;
 }) {
   const t = useT();
+  const billed = billedTo && [billedTo.group, billedTo.kind, billedTo.name];
   const target = useMemo(
-    () => ({ namespace, group, kind, name }),
-    [namespace, group, kind, name]
+    () =>
+      billed
+        ? { namespace, group: billed[0], kind: billed[1], name: billed[2] }
+        : { namespace, group, kind, name },
+    // By what it names: the page builds `billedTo` afresh on every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [namespace, group, kind, name, billed?.join("/")]
   );
-  const { cost, words, tone } = useLine(target);
+  const line = useLine(target);
+  const { cost, tone } = line;
+  const words =
+    billedTo && line.words !== null
+      ? t("cost", "lineBilledTo", {
+          kind: billedTo.kind,
+          name: billedTo.name,
+          line: line.words,
+        })
+      : line.words;
   const row =
     cost.state === "picture"
       ? cost.picture.workloads.find((w) => sameKey(w.key, target))

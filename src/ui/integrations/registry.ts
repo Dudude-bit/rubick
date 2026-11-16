@@ -897,7 +897,22 @@ export type CapabilityState<K extends CapabilityKey> =
    * the reader already did.
    */
   | { state: "reading" }
-  | { state: "unreachable"; vendor: string; endpoint: string; reason: string }
+  | {
+      state: "unreachable";
+      vendor: string;
+      endpoint: string;
+      reason: string;
+      /**
+       * Probes the supplier again. Its answer is cached and never retried
+       * behind the reader's back, so a sentence saying it did not answer
+       * goes on saying so after it is back unless somebody asks.
+       */
+      askAgain: () => void;
+      /** A probe asked again has not answered yet. */
+      asking: boolean;
+      /** The supplier's own Connection tab, where its address is set. */
+      settings: AppLink;
+    }
   | {
       state: "ready";
       vendor: string;

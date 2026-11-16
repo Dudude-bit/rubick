@@ -27,6 +27,7 @@ const workload = (
 const basis = (workloads: WorkloadBasis[]): CostBasis => ({
   nodes: null,
   nodesUnread: null,
+  heldUnread: null,
   namespaces: [],
   workloads,
   rest: null,
@@ -42,11 +43,18 @@ const basis = (workloads: WorkloadBasis[]): CostBasis => ({
   servedFrom: "list" as CostBasis["servedFrom"],
 });
 
+/** A start long enough ago that every pod has run the whole day. */
+const LONG_AGO = "2020-01-01T00:00:00Z";
+
 /** cpuAvg, cpuPeak, memoryAvg, memoryPeak, per workload in the basis's order. */
-const reading = (b: CostBasis, values: (number | null)[][]): UsageReading => ({
+const reading = (
+  b: CostBasis,
+  values: (number | null)[][],
+  since: (string | null)[] = values.map(() => LONG_AGO)
+): UsageReading => ({
   state: "read",
   keys: b.workloads.map((w) => w.key),
-  fold: { values, rest: [], unplaced: [], unread: [], unlabelled: 0 },
+  fold: { values, rest: [], unplaced: [], unread: [], unlabelled: 0, since },
 });
 
 const shop = basis([
@@ -125,6 +133,32 @@ describe("Audit's reading of requests against use", () => {
       { namespace: "bank", message: "pods is forbidden" },
     ]);
     expect(read.window).toBe("24h");
+  });
+
+  /**
+   * A workload rolled out two hours ago has a peak of two hours, which has
+   * not met the day's busiest hour: neither page calls its request far
+   * above use, and Audit says why it did not judge rather than passing it.
+   * Fails if a young workload's low peak was flagged, or read as within.
+   */
+  it("judges no workload whose pods have not run a whole day", () => {
+    const started = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const fresh = reading(one, [[200, 300, 200 * MI, 300 * MI]], [started]);
+    const row = estimatePicture(
+      one,
+      { cpu: 0.03, memory: 0.004, storage: null, gpu: null, currency: "" },
+      null
+    ).workloads[0]!;
+    const e = workloadEfficiency(fresh, row.key, row.requests);
+    expect(overRequested(e.cpu)).toBe(false);
+
+    const read = usageRead(one, null, fresh);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "young",
+      since: started,
+    });
   });
 
   /**

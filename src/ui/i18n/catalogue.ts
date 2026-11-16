@@ -1053,6 +1053,7 @@ export const en = {
     filterIdentitiesPlaceholder: "Filter by identity, client id or pod…",
     filterHostsPlaceholder: "Filter by host or Service…",
     askAgain: "Ask again",
+    supplierConnection: "{vendor} connection",
     readTheLast: "Read the last {range}",
     readWhatVendorKept: "Read what {vendor} kept",
     connectOne: "connect one",
@@ -1941,6 +1942,10 @@ export const en = {
       "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
     whyNoSamples:
       "the connected Prometheus holds no sample of its pods in the last day",
+    whyYoung:
+      "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyYoungUndated:
+      "when its pods started is not known, and a peak is judged over a whole day",
     whyFolded:
       "it is not among the workloads that request most, whose usage is read one by one",
     pickNamespaces:
@@ -2485,6 +2490,7 @@ export const en = {
     monthNote: "Projected: the hourly rate × 730 hours, not a bill.",
     idle: "Idle",
     idleCluster: "Idle in the cluster",
+    idleUnpriced: "Not known while no node carries a price.",
     idleNote: "Paid for and allocated to nobody.",
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
@@ -2520,8 +2526,14 @@ export const en = {
     memoryRequested: "Memory requested",
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
+    usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
+    effMeasuredFor: "{avg} average, {peak} peak, over {age}",
+    effYoung:
+      "Its youngest pod started {age} ago, so these figures cover only that. Whether it asks for too much is judged over a whole day.",
+    effUndated:
+      "When its pods started is not known, so these figures may not cover a whole day, and whether it asks for too much is not judged.",
     effNoSupplier: "not measured: needs Prometheus",
     effReading: "reading…",
     effFailed: "could not read use: {said}",
@@ -2563,6 +2575,12 @@ export const en = {
       "Or {prices}, and this page estimates from node capacity and what each workload requests.",
     noSeries:
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
+    noNodePrices:
+      "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    whyNoNodePrices:
+      "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
+    whySomeNodePrices:
+      "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
     estimateMeanwhile:
@@ -2577,6 +2595,13 @@ export const en = {
       one: "{n} node carries no price in OpenCost: {names}.",
       other: "{n} nodes carry no price in OpenCost: {names}.",
     },
+    foreignNodes: {
+      one: "Prometheus at {endpoint} also prices {n} node this cluster does not list: {names}. It is left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+      other:
+        "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+    },
+    heldUnread:
+      "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
     storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
     storageUnpricedOpenCost:
@@ -2636,6 +2661,8 @@ export const en = {
       "Nothing of it runs on a node, so nothing is billed to it now.",
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
+    lineBilledTo: "Billed to {kind} {name}: {line}",
+    lineNotRead: "Not in the cost read yet.",
     lineUnread: "Could not read what this costs.",
   },
   hints: {

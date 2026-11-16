@@ -10,7 +10,7 @@ import type {
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
-import { formatWhen } from "@/lib/utils";
+import { formatAge, formatWhen } from "@/lib/utils";
 
 type AuditKey = keyof typeof en.audit;
 
@@ -207,6 +207,10 @@ const WHY_WORDS: {
   notScraped: (_, t) => t("audit", "whyNotScraped"),
   noUsage: (_, t) => t("audit", "whyNoUsage"),
   noSamples: (_, t) => t("audit", "whyNoSamples"),
+  young: (why, t) =>
+    why.says === "young" && why.since !== null
+      ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
+      : t("audit", "whyYoungUndated"),
   folded: (_, t) => t("audit", "whyFolded"),
 };
 

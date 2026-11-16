@@ -7,10 +7,11 @@
 import { useCallback, useMemo } from "react";
 
 import { useCapabilityState } from "@/integrations";
-import type { CostRange, CostTrend } from "@/integrations";
+import type { CapabilityState, CostRange, CostTrend } from "@/integrations";
 import { commands } from "@/lib/commands";
 import {
   estimatePicture,
+  pricesNoNode,
   readingPicture,
   type CostPicture,
   type Prices,
@@ -26,7 +27,16 @@ import { useClusterStore } from "@/stores/clusterStore";
 /** Why the supplier gave no picture, said beside an estimate or alone. */
 export type SupplierTrouble =
   | { kind: "noSeries"; vendor: string; endpoint: string }
-  | { kind: "unreachable"; vendor: string; endpoint: string; said: string }
+  /** OpenCost answers and prices none of the nodes. */
+  | { kind: "noNodePrices"; vendor: string; endpoint: string }
+  | {
+      kind: "unreachable";
+      vendor: string;
+      endpoint: string;
+      said: string;
+      /** The supplier's probe, to ask again from the sentence. */
+      power: Extract<CapabilityState<"cost.now">, { state: "unreachable" }>;
+    }
   | { kind: "failed"; vendor: string; endpoint: string; said: string };
 
 export type CostState =
@@ -116,8 +126,21 @@ export function useCost(
         vendor: power.vendor,
         endpoint: power.endpoint,
         said: power.reason,
+        power,
       };
     if (power.state === "ready") {
+      // OpenCost found no price list for any node (kind, or a provider it
+      // has none for): entered prices fill that in, saying why.
+      if (reading.data?.reading && prices && pricesNoNode(reading.data.reading))
+        return {
+          state: "picture",
+          picture: estimatePicture(basis.data, prices, namespaces),
+          trouble: {
+            kind: "noNodePrices",
+            vendor: power.vendor,
+            endpoint: power.endpoint,
+          },
+        };
       if (reading.data?.reading)
         return {
           state: "picture",

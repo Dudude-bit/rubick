@@ -10,23 +10,35 @@ import { useShareCaveat } from "@/components/share/screen-share";
 import { Unknown } from "@/components/ui/unknown";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import type { CostPicture } from "@/lib/cost";
+import { noNodePriced, type CostPicture } from "@/lib/cost";
 import { pageLink } from "@/lib/links";
 import type { SupplierTrouble } from "@/hooks/useCost";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { pictureNotes, troubleWords } from "./cost-words";
+import { AskAgain } from "../-supplier/AskAgain";
 
 export function CostNotes({
   picture,
   trouble,
   onRetry,
+  onPrices,
 }: {
   picture: CostPicture;
   trouble: SupplierTrouble | null;
   onRetry?: () => void;
+  onPrices: () => void;
 }) {
   const t = useT();
   const notes = pictureNotes(picture, t);
+  // Why OpenCost priced no node, and the two ways out; entered prices take
+  // over only while it prices none.
+  const why =
+    picture.source.kind === "opencost" && picture.unpriced.nodes.length > 0
+      ? noNodePriced(picture)
+        ? "whyNoNodePrices"
+        : "whySomeNodePrices"
+      : null;
+  useShareCaveat(why && t("cost", why, { prices: t("cost", "enterPrices") }));
   const said = trouble
     ? `${troubleWords(trouble, t)} ${t("cost", "estimateMeanwhile")}`
     : null;
@@ -34,9 +46,9 @@ export function CostNotes({
   useShareCaveat(notes.length > 0 ? notes.join(" ") : null);
   return (
     <div className="flex flex-col gap-1.5" data-testid="cost-notes">
-      {said && (
+      {said && trouble && (
         <p className="text-xs text-warn" data-testid="cost-trouble">
-          {said}
+          {said} <AskAgainFor trouble={trouble} />
         </p>
       )}
       {notes.map((note) => (
@@ -44,6 +56,13 @@ export function CostNotes({
           {note}
         </p>
       ))}
+      {why && (
+        <p className="text-xs text-fg-mut" data-testid="cost-why-unpriced">
+          {parts(t("cost", why), {
+            prices: <PricesLink onPrices={onPrices} />,
+          })}
+        </p>
+      )}
       <UnreadNamespaces
         unread={picture.unread}
         label={t("cost", "podsLabel")}
@@ -89,6 +108,13 @@ function PricesLink({ onPrices }: { onPrices: () => void }) {
   );
 }
 
+/** Where the supplier did not answer its probe, the way to ask it again. */
+function AskAgainFor({ trouble }: { trouble: SupplierTrouble }) {
+  return trouble.kind === "unreachable" ? (
+    <AskAgain power={trouble.power} />
+  ) : null;
+}
+
 /** The supplier gave nothing and nobody entered prices. */
 export function SupplierOnly({
   trouble,
@@ -106,7 +132,7 @@ export function SupplierOnly({
       data-testid="cost-supplier"
     >
       <p className={trouble.kind === "noSeries" ? "text-fg-mut" : "text-warn"}>
-        {said}
+        {said} <AskAgainFor trouble={trouble} />
       </p>
       <p className="text-fg-mut">
         {parts(t("cost", "pricesOffer"), {

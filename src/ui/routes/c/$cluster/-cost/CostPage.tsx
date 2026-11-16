@@ -19,6 +19,7 @@ import {
   formatMoney,
   formatShare,
   monthOf,
+  noNodePriced,
   type CostPicture,
 } from "@/lib/cost";
 import { iconSvg } from "@/lib/icon-svg";
@@ -59,8 +60,12 @@ function summarySection(
   }
   if (scoped && picture.cluster)
     add(t("cost", "theCluster"), amountWords(picture.cluster, currency, t));
-  if (picture.idle)
-    add(t("cost", "idle"), formatMoney(picture.idle.perHour, currency));
+  add(
+    t("cost", "idle"),
+    picture.idle
+      ? amountWords(picture.idle, currency, t)
+      : t("cost", noNodePriced(picture) ? "idleUnpriced" : "notKnown")
+  );
   if (picture.unclaimed !== null)
     add(t("cost", "unclaimed"), formatMoney(picture.unclaimed, currency));
   if (picture.fee !== null)
@@ -135,16 +140,16 @@ function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
       />
       <Tile
         label={t("cost", scoped ? "idleCluster" : "idle")}
-        value={
-          idle ? formatMoney(idle.perHour, currency) : t("cost", "notKnown")
-        }
+        value={idle ? amountWords(idle, currency, t) : t("cost", "notKnown")}
         testId="cost-idle"
         note={
-          idle && idle.reserved !== null && idle.reserved > 0
-            ? t("cost", "reservedNote", {
-                amount: formatMoney(idle.reserved, currency),
-              })
-            : t("cost", "idleNote")
+          !idle && noNodePriced(picture)
+            ? t("cost", "idleUnpriced")
+            : idle && idle.reserved !== null && idle.reserved > 0
+              ? t("cost", "reservedNote", {
+                  amount: formatMoney(idle.reserved, currency),
+                })
+              : t("cost", "idleNote")
         }
       />
       {!scoped && picture.unclaimed !== null && picture.unclaimed > 0 && (
@@ -167,10 +172,12 @@ function PictureView({
   cost,
   namespaces,
   retry,
+  onPrices,
 }: {
   cost: Extract<CostState, { state: "picture" }>;
   namespaces: string[] | null;
   retry: () => void;
+  onPrices: () => void;
 }) {
   const t = useT();
   const { picture, trouble } = cost;
@@ -186,7 +193,12 @@ function PictureView({
   ]);
   return (
     <div className="flex flex-col gap-3">
-      <CostNotes picture={picture} trouble={trouble} onRetry={retry} />
+      <CostNotes
+        picture={picture}
+        trouble={trouble}
+        onRetry={retry}
+        onPrices={onPrices}
+      />
       <Tiles picture={picture} scoped={scoped} />
       <CostTrend picture={picture} namespaces={namespaces} />
       <CostTables picture={picture} usage={usage} />
@@ -233,7 +245,12 @@ export function CostPage() {
         }
       />
       {cost.state === "picture" ? (
-        <PictureView cost={cost} namespaces={namespaces} retry={retry} />
+        <PictureView
+          cost={cost}
+          namespaces={namespaces}
+          retry={retry}
+          onPrices={() => setEditing(true)}
+        />
       ) : (
         <Section>
           <SectionBody>
@@ -249,7 +266,9 @@ export function CostPage() {
         context={context}
         open={editing}
         onOpenChange={setEditing}
-        supplierAnswers={picture?.source.kind === "opencost"}
+        supplierAnswers={
+          picture?.source.kind === "opencost" && !noNodePriced(picture)
+        }
       />
     </div>
   );

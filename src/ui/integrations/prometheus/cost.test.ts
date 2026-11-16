@@ -39,6 +39,7 @@ const FOLD: WorkloadFold = {
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  since: [],
 };
 
 beforeEach(() => {
@@ -50,13 +51,15 @@ beforeEach(() => {
 
 describe("the cost PromQL", () => {
   /**
-   * Scraped without honor_labels, the metric's namespace, pod and node
-   * arrive as exported_*; read under their own names only, every join
-   * would come back empty and the page would say there are no series.
+   * Scraped without honor_labels, the metric's namespace, pod, container
+   * and node arrive as exported_*; read under their own names only, every
+   * join would come back empty, and every container of a pod would carry
+   * the target's one name, so `max by (…, container, …)` priced the pod at
+   * its largest container instead of their sum.
    */
-  it("reads namespace, pod and node back from their exported_ names", () => {
+  it("reads namespace, pod, container and node back from their exported_ names", () => {
     const expression = own("container_cpu_allocation");
-    for (const label of ["namespace", "pod", "node"])
+    for (const label of ["namespace", "pod", "container", "node"])
       expect(expression).toContain(
         `"${label}", "$1", "exported_${label}", "(.+)"`
       );
@@ -87,11 +90,21 @@ describe("the cost PromQL", () => {
     expect(queries[3]).toContain("pod_pvc_allocation");
   });
 
-  it("asks use over a day, average and peak, per pod", () => {
+  /**
+   * Each average runs over the samples a pod has, summed over its
+   * containers at each step: `rate(x[24h])` divided two hours of a fresh
+   * pod by a day, and averaging each container series before summing
+   * counted a restarted container once per restart. Fails if either
+   * average came back to the whole-window or per-series form.
+   */
+  it("averages use over each pod's own samples, its containers summed first", () => {
     const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = usageQueries(null);
-    expect(cpuAvg).toContain("[24h]");
+    const summed = "avg_over_time((sum by (namespace, pod) (";
+    expect(cpuAvg.startsWith(summed)).toBe(true);
+    expect(cpuAvg).toContain("[5m])))[24h:5m])");
+    expect(memoryAvg.startsWith(summed)).toBe(true);
+    expect(memoryAvg).toContain("))[24h:5m])");
     expect(cpuPeak).toContain("[24h:5m]");
-    expect(memoryAvg).toContain("avg_over_time");
     expect(memoryPeak).toContain("max_over_time");
   });
 
