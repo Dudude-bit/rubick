@@ -196,12 +196,34 @@ fn release(holders: &mut HashMap<String, BTreeSet<String>>, id: &str, namespace:
     }
 }
 
+/// Reads the other engines' policies again; `None` where it could not.
+pub type Reread = Arc<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<OtherPolicies>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Asks the cluster whether this session is over: its words where it is.
+pub type SessionCheck = Arc<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+        + Send
+        + Sync,
+>;
+
 /// What a stream needs to run.
 pub struct Opening {
     pub stream_id: String,
     /// The namespaces named, or `None` for every one.
     pub scope: Option<Vec<String>>,
     pub others: OtherPolicies,
+    /// How `others` is read again, each `TOUCH_EVERY`: a Cilium policy
+    /// applied while the map is open changes what "no policy selects it"
+    /// may say.
+    pub reread: Option<Reread>,
+    /// Asked each `TOUCH_EVERY` while a kind's read is failing: a watch's
+    /// 401 reaches the map as words, and only this ends the map so the
+    /// person is asked to sign in again.
+    pub session: Option<SessionCheck>,
     pub map: Arc<ClusterMap>,
     pub events: broadcast::Sender<AppEvent>,
     pub cancel: CancellationToken,
@@ -222,10 +244,10 @@ impl Opening {
 
     /// Draws `namespaces` from the stores, off the reactor: a namespace of
     /// thousands of pods is milliseconds of matching.
-    async fn draw(&self, drawn: &mut Drawn, namespaces: BTreeSet<String>) {
+    async fn draw(&self, drawn: &mut Drawn, namespaces: BTreeSet<String>, others: &OtherPolicies) {
         for namespace in namespaces {
             let now = chrono::Utc::now();
-            let held = self.map.stores().held(&namespace, self.others.clone(), now);
+            let held = self.map.stores().held(&namespace, others.clone(), now);
             let Ok(slice) = tokio::task::spawn_blocking(move || slice_of(held, now)).await else {
                 continue;
             };
@@ -266,9 +288,10 @@ pub async fn run(opening: Opening) -> TopologyEnd {
     }
 
     let mut drawn = Drawn::default();
+    let mut others = opening.others.clone();
     opening.send(vec![opening.kinds()]);
     let first = opening.map.stores().namespaces(opening.scope.as_deref());
-    opening.draw(&mut drawn, first).await;
+    opening.draw(&mut drawn, first, &others).await;
     if let Some(end) = ended(&opening.cancel) {
         return end;
     }
@@ -288,7 +311,23 @@ pub async fn run(opening: Opening) -> TopologyEnd {
                 if let Some(lease) = &opening.lease {
                     lease.touch();
                 }
-                continue;
+                if let Some(check) = &opening.session {
+                    if opening.map.stores().failing() {
+                        if let Some(said) = check().await {
+                            return TopologyEnd::Failed { said };
+                        }
+                    }
+                }
+                match &opening.reread {
+                    Some(reread) => match reread().await {
+                        Some(read) if read != others => {
+                            others = read;
+                            touched.all = true;
+                        }
+                        _ => continue,
+                    },
+                    None => continue,
+                }
             }
             change = changes.recv() => match change {
                 Ok(change) => touched.merge(change),
@@ -330,7 +369,7 @@ pub async fn run(opening: Opening) -> TopologyEnd {
         if touched.reads {
             opening.send(vec![opening.kinds()]);
         }
-        opening.draw(&mut drawn, again).await;
+        opening.draw(&mut drawn, again, &others).await;
     }
 }
 

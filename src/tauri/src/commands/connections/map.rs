@@ -46,7 +46,13 @@ pub struct Held {
     pub secrets: Read<Named>,
     pub accounts: Read<Named>,
     pub gateway_routes: Vec<crate::resources::RouteInfo>,
+    /// Every Gateway in the cluster, or `None` where not all were read.
     pub gateways: Option<Vec<crate::resources::GatewayInfo>>,
+    /// This namespace's own Gateways, drawn as its nodes.
+    pub gateways_here: Option<Vec<crate::resources::GatewayInfo>>,
+    /// The route kinds read here; any other was refused, failed, is still
+    /// listing or is not served, and counts nothing.
+    pub routes_read: Vec<&'static str>,
     pub gateway_unread: Vec<UnexploredKind>,
     pub taken_at: chrono::DateTime<chrono::Utc>,
 }
@@ -61,6 +67,8 @@ pub struct Beside {
     pub config_maps: Read<Named>,
     pub secrets: Read<Named>,
     pub accounts: Read<Named>,
+    pub gateways_here: Option<Vec<crate::resources::GatewayInfo>>,
+    pub routes_read: Vec<&'static str>,
 }
 
 /// One namespace drawn: its nodes and edges by id, and how it was read.
@@ -119,6 +127,16 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
         }
         owned_by(&workload.owners, &workload.subject, ns, &mut out);
         traffic_into(ns, &workload.subject, template, &own, &snapshot, &mut out);
+        // A Service that picks one pod by a label only the pod carries, a
+        // StatefulSet's per-pod Service, is the template's no more.
+        selected_pods(
+            ns,
+            &workload.subject,
+            &own,
+            Some(template),
+            &snapshot,
+            &mut out,
+        );
         governed_by(
             ns,
             std::slice::from_ref(&workload.subject),
@@ -254,12 +272,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             },
         );
     }
-    for gateway in snapshot
-        .gateways
-        .iter()
-        .flatten()
-        .filter(|gateway| gateway.namespace == ns)
-    {
+    for gateway in held.gateways_here.iter().flatten() {
         let gw_ref = gateway_ref(gateway).with_group_of(&gateway.api_version);
         let id = node_id(&gw_ref);
         nodes.insert(
@@ -613,6 +626,63 @@ fn statuses_of(pods: &[&Pod]) -> Vec<PodStatusTally> {
         .collect()
 }
 
+/// The Services, budgets and policies that pick `target`'s pods by the pods'
+/// own labels. With a `template`, only what it does not already match, and
+/// only Services: the rest were drawn from it.
+fn selected_pods(
+    ns: &str,
+    target: &ObjectRef,
+    pods: &[&Pod],
+    template: Option<&BTreeMap<String, String>>,
+    snapshot: &Snapshot,
+    out: &mut Neighbourhood,
+) {
+    let mut seen: Vec<&BTreeMap<String, String>> = Vec::new();
+    for labels in pods.iter().map(|pod| pod.labels()) {
+        if seen.contains(&labels) {
+            continue;
+        }
+        seen.push(labels);
+        for svc in snapshot.services() {
+            let selector = service_selector(svc);
+            let picks = |labels| Selector::Equality(&selector).matches(labels) == Some(true);
+            let Some(text) = Selector::Equality(&selector).says() else {
+                continue;
+            };
+            if picks(labels) && !template.is_some_and(picks) {
+                out.edge(
+                    service_ref(svc, ns),
+                    target.clone(),
+                    Relation::Selects { selector: text },
+                );
+            }
+        }
+        if template.is_some() {
+            continue;
+        }
+        governed_by(
+            ns,
+            std::slice::from_ref(target),
+            target,
+            labels,
+            snapshot,
+            out,
+        );
+        for policy in snapshot.policies.as_deref().unwrap_or_default() {
+            let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
+            if Selector::Query(selector).matches(labels) == Some(true) {
+                out.edge(
+                    policy_ref(policy, ns),
+                    target.clone(),
+                    Relation::Selects {
+                        selector: Selector::Query(selector).says().unwrap_or_default(),
+                    },
+                );
+            }
+        }
+    }
+}
+
 fn policy_ref(policy: &NetworkPolicy, ns: &str) -> ObjectRef {
     ObjectRef::new(
         "NetworkPolicy",
@@ -766,10 +836,15 @@ fn folded_owners(
             node.pods = Some(tally(&pods));
             continue;
         }
-        // No template states what these pods use; each pod's own spec does.
+        // No template states what these pods use, or what picks them; each
+        // pod's own spec and labels do.
         for spec in pods.iter().filter_map(|pod| pod.spec.as_ref()) {
             uses_from_spec(ns, &owner, spec, &snapshot.claims, out);
         }
+        selected_pods(ns, &owner, &pods, None, snapshot, out);
+        // ponytail: the first pod's labels stand for an owner's pods, which
+        // share them; per-pod covers if an owner's pods ever differ.
+        let cover = pods.first().map(|pod| cover_of(pod.labels(), snapshot, ns));
         let verdict = if owner.name == OWNERLESS {
             NodeVerdict::Ownerless {
                 statuses: statuses_of(&pods),
@@ -786,7 +861,7 @@ fn folded_owners(
                 verdict,
                 app: None,
                 pods: Some(tally(&pods)),
-                cover: None,
+                cover,
                 labels: BTreeMap::new(),
                 annotations: BTreeMap::new(),
             },
@@ -951,13 +1026,13 @@ fn counts_of(
         count,
     };
     let routes = |kind: &str| -> Option<usize> {
-        Some(
+        held.routes_read.contains(&kind).then(|| {
             snapshot
                 .gateway_routes
                 .iter()
                 .filter(|r| r.kind == kind && r.namespace == held.namespace)
-                .count(),
-        )
+                .count()
+        })
     };
     vec![
         count("Ingress", listed(&snapshot.ingresses)),
@@ -1056,6 +1131,8 @@ mod tests {
             accounts: Ok(Vec::new()),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateways_here: None,
+            routes_read: Vec::new(),
             gateway_unread: Vec::new(),
             taken_at: chrono::Utc::now(),
         }
@@ -1292,6 +1369,88 @@ mod tests {
         let ownerless = &slice.nodes[&format!("/Pod/shop/{OWNERLESS}")];
         assert_eq!(ownerless.pods, Some(PodTally { total: 2, ready: 2 }));
         assert_eq!(slice.nodes.len(), 2);
+    }
+
+    /// A Service in front of pods a custom resource made, and the budget and
+    /// policy over them, floated unattached: only a template's labels were
+    /// matched, and a CNPG `Cluster` has none. Fails if what picks folded
+    /// pods by their own labels draws no edge to their owner.
+    #[test]
+    fn what_picks_pods_a_custom_resource_made_is_drawn_to_their_owner() {
+        let owner = json!({ "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster", "name": "db", "uid": "db", "controller": true });
+        let slice = slice_of(
+            Held {
+                pods: Ok(vec![pod("db-1", true, "", Some(owner))]),
+                services: Ok(vec![service("web")]),
+                budgets: Ok(vec![of(json!({
+                    "metadata": { "name": "db", "namespace": "shop" },
+                    "spec": { "selector": { "matchLabels": { "app": "web" } }, "minAvailable": 1 },
+                }))]),
+                policies: Ok(vec![of(json!({
+                    "metadata": { "name": "only-web", "namespace": "shop" },
+                    "spec": { "podSelector": { "matchLabels": { "app": "web" } } },
+                }))]),
+                ..held()
+            },
+            chrono::Utc::now(),
+        );
+        let db = "postgresql.cnpg.io/Cluster/shop/db";
+        assert!(
+            edge(&slice, WEB, "selects", db).is_some(),
+            "{:?}",
+            slice.edges.keys()
+        );
+        assert!(
+            edge(&slice, "policy/PodDisruptionBudget/shop/db", "governs", db).is_some(),
+            "{:?}",
+            slice.edges.keys()
+        );
+        assert!(
+            edge(
+                &slice,
+                "networking.k8s.io/NetworkPolicy/shop/only-web",
+                "selects",
+                db
+            )
+            .is_some(),
+            "{:?}",
+            slice.edges.keys()
+        );
+        assert!(matches!(
+            slice.nodes[db].cover,
+            Some(PolicyCover::Covered { .. })
+        ));
+    }
+
+    /// A `StatefulSet`'s per-pod Service picks one pod by a label only that pod
+    /// carries, and the map drew it selecting nothing. Fails if a Service
+    /// that picks a workload's own pod, and not its template, draws no edge.
+    #[test]
+    fn a_service_that_picks_one_of_a_workload_s_pods_is_drawn_to_the_workload() {
+        let mut first = by_rs("cart-a", true, "");
+        first
+            .metadata
+            .labels
+            .get_or_insert_with(BTreeMap::new)
+            .insert("pod".into(), "cart-a".into());
+        let one: Service = of(json!({
+            "metadata": { "name": "cart-a", "namespace": "shop" },
+            "spec": { "selector": { "pod": "cart-a" }, "ports": [{ "port": 80 }] },
+        }));
+        let slice = slice_of(
+            Held {
+                pods: Ok(vec![first, by_rs("cart-b", true, "")]),
+                services: Ok(vec![service("web"), one]),
+                ..shop("")
+            },
+            chrono::Utc::now(),
+        );
+        assert!(
+            edge(&slice, "/Service/shop/cart-a", "selects", CART).is_some(),
+            "{:?}",
+            slice.edges.keys()
+        );
+        assert!(edge(&slice, WEB, "selects", CART).is_some());
     }
 
     /// "Pods with no owner" read "not read" with the not-checked ring, on a
