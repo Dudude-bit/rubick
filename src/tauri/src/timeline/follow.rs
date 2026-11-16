@@ -225,6 +225,15 @@ pub(crate) fn hear(recorder: &mut Recorder, news: News) {
         }
         News::Gone { uid, relisted } => recorder.named_gone(&uid, relisted),
         News::Retired { kind } => recorder.forget(Source::Meta, &named_label(&kind)),
+        News::Dropped { slot, uids } => {
+            if followed_name(&slot.kind).is_none() {
+                let slot = Slot {
+                    kind: named_label(&slot.kind),
+                    namespace: slot.namespace,
+                };
+                recorder.dropped(Source::Meta, slot, &uids);
+            }
+        }
     }
 }
 

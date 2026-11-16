@@ -1624,6 +1624,58 @@ mod following {
         }
     }
 
+    /// The window moved from `shop` to `ops` and back: the index stopped
+    /// reading `shop`'s Jobs and read them again. Fails if a generation that
+    /// moved while they were not read is said to have been seen moving, or
+    /// the slot let go keeps the name-only span shut.
+    #[test]
+    fn a_namespace_the_index_let_go_is_a_first_sight_when_read_again() {
+        use crate::ownership::SlotState::{Live, Syncing};
+        let (_t, cluster, mut recorder) = setup();
+        let shop = SlotKey {
+            kind: kind("batch", "jobs"),
+            namespace: Some("shop".into()),
+        };
+        let ops = SlotKey {
+            namespace: Some("ops".into()),
+            ..shop.clone()
+        };
+        let state = |slot: &SlotKey, state| News::State {
+            slot: slot.clone(),
+            state,
+        };
+        hear(&mut recorder, state(&shop, Live));
+        hear(
+            &mut recorder,
+            news_of("j1", 1, crate::ownership::Sight::First),
+        );
+        hear(&mut recorder, state(&shop, Syncing));
+        hear(
+            &mut recorder,
+            News::Dropped {
+                slot: shop.clone(),
+                uids: vec!["j1".into()],
+            },
+        );
+        hear(&mut recorder, state(&ops, Live));
+        let open = |cluster: &ClusterTimeline| {
+            cluster
+                .page(&query(Show::All))
+                .spans
+                .meta
+                .iter()
+                .any(|span| span.to.is_none())
+        };
+        assert!(open(&cluster), "the slot let go holds the span shut");
+        hear(&mut recorder, state(&shop, Syncing));
+        hear(
+            &mut recorder,
+            news_of("j1", 2, crate::ownership::Sight::First),
+        );
+        hear(&mut recorder, state(&shop, Live));
+        assert!(cluster.page(&query(Show::All)).rows.is_empty());
+    }
+
     /// What the index reads by name only has a span of its own and leaves
     /// the followed kinds to their watches. Fails if a followed kind's index
     /// slot holds the name-only span shut, or a moved generation is not a row.

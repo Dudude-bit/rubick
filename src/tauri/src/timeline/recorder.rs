@@ -414,6 +414,17 @@ impl Recorder {
         self.timeline.spans(super::spans::SpanSets::heartbeat);
     }
 
+    /// A slot no longer read: it holds nothing shut, and what it held is a
+    /// first sight when it is read again, neither gone nor moved unseen.
+    pub fn dropped(&mut self, source: Source, slot: Slot, uids: &[String]) {
+        let was = self.cover(source);
+        self.slots.remove(&(source, slot));
+        for uid in uids {
+            self.named.remove(uid);
+        }
+        self.settle(source, was.as_ref(), None);
+    }
+
     /// The name-only reading ended: its span ends now, and what it held is
     /// a first sight when it is read again.
     pub fn meta_ended(&mut self) {
