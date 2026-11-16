@@ -457,6 +457,8 @@ pub struct Feeds {
     linger: Duration,
     page_idle: Duration,
     queue: usize,
+    /// How long one page of a reader's own list may take, body and all.
+    page_within: Duration,
 }
 
 impl Feeds {
@@ -470,6 +472,7 @@ impl Feeds {
             linger: LINGER,
             page_idle: PAGE_IDLE,
             queue: QUEUE,
+            page_within: PAGE_WITHIN,
         }
     }
 
@@ -509,6 +512,7 @@ impl Feeds {
             linger: self.linger,
             page_idle: self.page_idle,
             queue: self.queue,
+            page_within: self.page_within,
         });
         let context = self
             .contexts
@@ -561,6 +565,12 @@ impl Feeds {
         self.linger = linger;
         self.page_idle = page_idle;
         self.queue = queue;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn listing_within(mut self, page_within: Duration) -> Self {
+        self.page_within = page_within;
         self
     }
 
@@ -943,10 +953,12 @@ impl Inner {
         }
     }
 
-    /// A list for `id` failed: it is told, and the list is tried again.
+    /// A list for `id` failed: it is told, and the list is tried again. What
+    /// waited on it is let go: the next list holds it.
     fn list_failed(&mut self, id: u64, slot: &SlotKey, message: String) {
         if let Some(sub) = self.subscribers.get_mut(&id) {
-            if sub.pending.contains_key(slot) {
+            if let Some(waited) = sub.pending.get_mut(slot) {
+                waited.clear();
                 let _ = sub.tx.try_send(Update::State {
                     slot: slot.clone(),
                     state: FeedState::Failed { message },
@@ -1072,6 +1084,7 @@ pub(crate) struct ContextFeeds {
     linger: Duration,
     page_idle: Duration,
     queue: usize,
+    page_within: Duration,
 }
 
 impl ContextFeeds {
@@ -1246,7 +1259,7 @@ impl ContextFeeds {
                 let listed = tokio::select! {
                     biased;
                     () = context.stop.cancelled() => return,
-                    listed = list_slot(client, &resource, &slot) => listed,
+                    listed = list_slot(client, &resource, &slot, context.page_within) => listed,
                 };
                 match listed {
                     Ok((objects, at)) => {
@@ -1413,11 +1426,14 @@ impl ContextFeeds {
 }
 
 /// Every object of `slot`, narrowed and cut as its watch is, and the
-/// collection's resourceVersion the list was read at.
+/// collection's resourceVersion the list was read at. Each page is given up
+/// after `within`: the client's own deadline ends at the response head, and
+/// a body that stalls part-way would hold the reader listing for good.
 async fn list_slot(
     client: Client,
     resource: &ApiResource,
     slot: &SlotKey,
+    within: Duration,
 ) -> Result<(Vec<Arc<DynamicObject>>, Option<u64>)> {
     let api: Api<DynamicObject> = match &slot.namespace {
         Some(namespace) => Api::namespaced_with(client, namespace, resource),
@@ -1430,7 +1446,11 @@ async fn list_slot(
     let mut objects = Vec::new();
     let mut at = None;
     loop {
-        let page = api.list(&params).await?;
+        let page = tokio::time::timeout(within, api.list(&params))
+            .await
+            .map_err(|_| crate::error::Error::ReadDeadline {
+                after_secs: within.as_secs(),
+            })??;
         at = at.or_else(|| page.metadata.resource_version.as_deref()?.parse().ok());
         objects.extend(page.items.into_iter().map(|object| kept(slot, object)));
         match page.metadata.continue_.filter(|token| !token.is_empty()) {
@@ -2943,6 +2963,79 @@ mod tests {
             })
             .collect();
         assert_eq!(changed, vec!["cache".to_string()]);
+        context.end();
+    }
+
+    /// An API server whose `ConfigMap` list sends its head, half its body,
+    /// and nothing more.
+    async fn stalled_body() -> Client {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let _ = socket.read(&mut buf).await;
+                    let body = config_map_list("500", &["app", "db"]);
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = socket.write_all(head.as_bytes()).await;
+                    let _ = socket.write_all(&body.as_bytes()[..body.len() / 2]).await;
+                    tokio::time::sleep(Duration::from_mins(10)).await;
+                });
+            }
+        });
+        Client::try_from(kube::Config::new(url.parse().expect("url"))).expect("client")
+    }
+
+    /// A reader's own list whose body stalls is given up within the page's
+    /// deadline: the reader is told it failed, and the changes that waited
+    /// on it are let go for the next list to hold. Fails if it reads as
+    /// listing for good while those changes pile up.
+    #[tokio::test]
+    async fn a_readers_own_list_whose_body_stalls_reads_as_failed() {
+        let feeds = feeds().listing_within(Duration::from_millis(200));
+        let context = feeds.context_for("prod", stalled_body().await);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut first = context.join(&config_maps_of(&context), std::slice::from_ref(&maps), &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut first);
+
+        let mut late = context.join(&config_maps_of(&context), &[maps], &[]);
+        apply(&generation, &slot, config_map("db", "400"));
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut failed = false;
+        while let Ok(Some(update)) = tokio::time::timeout_at(deadline, late.updates.recv()).await {
+            if matches!(
+                update,
+                Update::State {
+                    state: FeedState::Failed { .. },
+                    ..
+                }
+            ) {
+                failed = true;
+                break;
+            }
+        }
+        assert!(failed, "the reader was never told its list failed");
+        let waiting: Vec<usize> = context
+            .inner
+            .lock()
+            .subscribers
+            .values()
+            .filter_map(|sub| sub.pending.get(&slot).map(Vec::len))
+            .collect();
+        assert_eq!(waiting, vec![0], "what waited on the list is held");
         context.end();
     }
 
