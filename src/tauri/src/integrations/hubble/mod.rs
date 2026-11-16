@@ -766,6 +766,11 @@ impl Fold {
         let oldest = now.saturating_sub(WINDOW_SECS - 1);
         let span = now.saturating_sub(self.started).clamp(1, WINDOW_SECS);
         let mut changed = std::mem::take(&mut self.touched);
+        // Until a whole window has passed every rate's divisor grows each
+        // second, so every pair is said again.
+        if now.saturating_sub(self.started) <= WINDOW_SECS {
+            changed.extend(self.pairs.keys().cloned());
+        }
         for (key, seconds) in &mut self.pairs {
             let before = seconds.len();
             while seconds.front().is_some_and(|(at, _)| *at < oldest) {
@@ -1049,7 +1054,7 @@ mod tests {
     /// emptied: one busy pair is one row, not the whole table.
     #[test]
     fn a_tick_sends_only_what_changed_and_says_what_went() {
-        let mut fold = Fold::new(100);
+        let mut fold = Fold::new(0);
         fold.add(100, &event(Verdict::Forwarded, "web", "api"));
         fold.add(100, &event(Verdict::Forwarded, "web", "db"));
         assert_eq!(fold.tick(101).0.len(), 2);
@@ -1060,6 +1065,24 @@ mod tests {
         let (_, gone) = fold.tick(100 + WINDOW_SECS);
         assert_eq!(gone.len(), 1);
         assert!(matches!(&gone[0].to, FlowEnd::Workload { key } if key.name == "db"));
+    }
+
+    /// In the first minute a pair's rate is over the seconds so far, which
+    /// grow each tick: a pair nothing touched again is still said again, or
+    /// it keeps the rate of the second it was seen.
+    #[test]
+    fn a_quiet_pair_is_said_again_while_the_first_window_fills() {
+        let mut fold = Fold::new(100);
+        fold.add(102, &event(Verdict::Forwarded, "web", "api"));
+        let first = fold.tick(103).0;
+        assert_eq!(first[0].forwarded, 1.0 / 3.0);
+        let later = fold.tick(150).0;
+        assert_eq!(later.len(), 1);
+        assert_eq!(later[0].forwarded, 1.0 / 50.0);
+        assert!(
+            fold.tick(161).0.is_empty(),
+            "a full window: only what changed"
+        );
     }
 
     /// Past the cap a new pair is counted and not held.
