@@ -774,8 +774,7 @@ impl Fold {
         // A request an L7 rule denied is logged DROPPED (seven parser's
         // decodeVerdict), and is the only L7 request counted.
         let counted = match (Verdict::try_from(one.verdict), &one.l7) {
-            (Ok(Verdict::Dropped), Some(_)) => true,
-            (_, Some(_)) => response.is_some(),
+            (verdict, Some(_)) => response.is_some() || verdict == Ok(Verdict::Dropped),
             (Ok(Verdict::Forwarded | Verdict::Dropped), None) => true,
             _ => false,
         };
