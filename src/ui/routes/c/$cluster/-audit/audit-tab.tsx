@@ -49,8 +49,8 @@ export function auditTab(query: ObjectAuditQuery, t: T): DetailTab {
         <SectionHeader
           title={t("audit", "tab")}
           count={
-            query.data && !query.data.judgedOn
-              ? query.data.findings.length
+            query.data && !query.data.judgedOn && query.data.findings.length > 0
+              ? t("audit", "findingsOf", { n: query.data.findings.length })
               : undefined
           }
           description={t("audit", "caption")}

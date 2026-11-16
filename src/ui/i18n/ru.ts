@@ -1050,6 +1050,7 @@ export const ru: Catalogue = {
       "Фильтр по удостоверению, ID клиента или поду…",
     filterHostsPlaceholder: "Фильтр по хосту или Service…",
     askAgain: "Спросить снова",
+    supplierConnection: "Подключение {vendor}",
     readTheLast: "Прочитать за последние {range}",
     readWhatVendorKept: "Прочитать, что сохранил {vendor}",
     connectOne: "подключите его",
@@ -2057,6 +2058,18 @@ export const ru: Catalogue = {
       many: "{n} объектов",
       other: "{n} объекта",
     },
+    rulesCounted: {
+      one: "{n} правило",
+      few: "{n} правила",
+      many: "{n} правил",
+      other: "{n} правила",
+    },
+    findingsOf: {
+      one: "{n} находка",
+      few: "{n} находки",
+      many: "{n} находок",
+      other: "{n} находки",
+    },
     uncheckedOf: {
       one: "{n} не проверен",
       few: "{n} не проверены",
@@ -2207,7 +2220,7 @@ export const ru: Catalogue = {
       "Пока allowPrivilegeEscalation не false, процесс может получить больше прав, чем у родителя, через setuid-файл. Профиль Restricted требует false.",
     pssRunAsNonRoot: "Не требует запуска не от root",
     pssRunAsNonRootWhy:
-      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. Явное false означает root нарочно и обходится дороже. Профиль Restricted требует true.",
+      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. С явным false эту проверку не делает никто. Профиль Restricted требует true; если контейнеру задан пользователь 0, это отдельная находка.",
     pssRunAsUserRoot: "Запускается от пользователя 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 означает root, заданный нарочно. Профиль Restricted это запрещает.",
@@ -4458,6 +4471,9 @@ export const ru: Catalogue = {
       many: "{n} строк, из ответивших пространств имён",
       other: "{n} строки, из ответивших пространств имён",
     },
+    countedSoFar: "{counted}, из прочитанной части списка",
+    countedWhereAnswered: "{counted}, из ответивших пространств имён",
+    countedOfTotal: "{counted}, показано {shown}",
     longListTrim: {
       one: "{n} строка. Чтобы сократить список, сузьте область или поиск",
       few: "{n} строки. Чтобы сократить список, сузьте область или поиск",

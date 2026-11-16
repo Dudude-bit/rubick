@@ -878,6 +878,10 @@ export async function getAudit(
   return invoke<AuditPage>("get_audit", { scope, query, usage });
 }
 
+export async function readAuditAgain(): Promise<void> {
+  return invoke<void>("read_audit_again");
+}
+
 export async function getAuditOf(
   kind: string,
   namespace: string | null,

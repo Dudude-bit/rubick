@@ -27,7 +27,7 @@ use kube::api::{Api, DynamicObject};
 use kube::discovery::ApiResource;
 use kube::Client;
 use parking_lot::{Mutex, RwLock};
-use tokio::sync::{broadcast, mpsc, Notify, Semaphore};
+use tokio::sync::{broadcast, mpsc, oneshot, Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use super::context::{beside, Beside, Defaults, Replicated, Scales};
@@ -421,6 +421,9 @@ pub struct AuditIndex {
     stop: CancellationToken,
     /// Held while the page asks; dropping the index lets the feeds go.
     lease: Mutex<Option<Lease>>,
+    /// To the reader: move the feeds to these namespaces, and say when what
+    /// they handed for them is taken.
+    recuts: Mutex<Option<mpsc::UnboundedSender<Recut>>>,
     scope: Mutex<Option<Vec<String>>>,
     last_used: Mutex<Instant>,
     /// Each audited kind's name, by the key the feeds hand it under.
@@ -439,6 +442,8 @@ pub struct AuditIndex {
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
     /// The scope moved: the upgrade rules read again at once.
     rescoped: Notify,
+    /// The reader asked again: a source that failed is read at once.
+    again: Notify,
     /// The page asked: an upgrade pass held while it was off screen goes.
     asked: Notify,
 }
@@ -455,6 +460,7 @@ impl AuditIndex {
             client,
             stop: CancellationToken::new(),
             lease: Mutex::new(None),
+            recuts: Mutex::new(None),
             scope: Mutex::new(scope),
             last_used: Mutex::new(Instant::now()),
             kinds: audited()
@@ -470,6 +476,7 @@ impl AuditIndex {
             pod_reads: Arc::new(Semaphore::new(4)),
             upgrade: RwLock::new(None),
             rescoped: Notify::new(),
+            again: Notify::new(),
             asked: Notify::new(),
         }
     }
@@ -477,6 +484,37 @@ impl AuditIndex {
     /// How every slot the feeds handed over reads now.
     pub(super) fn slot_states(&self) -> BTreeMap<SlotKey, FeedState> {
         self.states.lock().clone()
+    }
+
+    /// The page asked again, in `scope`. Where that moved, the feeds are
+    /// moved with it, and this returns once the reader has taken what they
+    /// handed, so the answer read next is never the old namespaces' set
+    /// read as the new ones'.
+    async fn asked_again(&self, scope: Option<Vec<String>>) {
+        *self.last_used.lock() = Instant::now();
+        self.asked.notify_one();
+        let moved = {
+            let mut held = self.scope.lock();
+            let moved = *held != scope;
+            held.clone_from(&scope);
+            moved
+        };
+        if let Some(lease) = self.lease.lock().as_ref() {
+            lease.touch();
+        }
+        if !moved {
+            return;
+        }
+        let (taken, done) = oneshot::channel();
+        let sent = self
+            .recuts
+            .lock()
+            .as_ref()
+            .is_some_and(|recuts| recuts.send((scope, taken)).is_ok());
+        if sent {
+            let _ = done.await;
+        }
+        self.rescoped.notify_one();
     }
 
     fn changed(&self) {
@@ -660,23 +698,7 @@ impl AuditIndexes {
     ) -> Result<Arc<AuditIndex>> {
         let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
-            *index.last_used.lock() = Instant::now();
-            index.asked.notify_one();
-            let moved = {
-                let mut held = index.scope.lock();
-                let moved = *held != scope;
-                held.clone_from(&scope);
-                moved
-            };
-            if let Some(lease) = index.lease.lock().as_ref() {
-                lease.touch();
-                if moved {
-                    lease.rescope(scope);
-                }
-            }
-            if moved {
-                index.rescoped.notify_one();
-            }
+            index.asked_again(scope).await;
             return Ok(index);
         }
         let index = Arc::new(AuditIndex::new(
@@ -710,6 +732,14 @@ impl AuditIndexes {
         Ok(index)
     }
 
+    /// Reads the upgrade rules' sources again at once, where the page has
+    /// the index running: what a reader asks for after a source came back.
+    pub fn read_again(&self, context: &str) {
+        if let Some(index) = self.running(context) {
+            index.again.notify_one();
+        }
+    }
+
     /// A context's index where one is already running; none is started.
     #[must_use]
     pub fn running(&self, context: &str) -> Option<Arc<AuditIndex>> {
@@ -738,13 +768,26 @@ impl AuditIndexes {
     }
 }
 
+type Recut = (Option<Vec<String>>, oneshot::Sender<()>);
+
 /// Takes what the feeds say into the index until either lets go.
 fn spawn_reader(index: Arc<AuditIndex>, mut updates: mpsc::Receiver<Update>) {
+    let (recuts, mut recut) = mpsc::unbounded_channel::<Recut>();
+    *index.recuts.lock() = Some(recuts);
     tokio::spawn(async move {
         loop {
             tokio::select! {
                 biased;
                 () = index.stop.cancelled() => break,
+                Some((scope, taken)) = recut.recv() => {
+                    if let Some(lease) = index.lease.lock().as_ref() {
+                        lease.rescope(scope);
+                    }
+                    while let Ok(update) = updates.try_recv() {
+                        index.take(update);
+                    }
+                    let _ = taken.send(());
+                }
                 update = updates.recv() => match update {
                     Some(update) => index.take(update),
                     None => break,
@@ -815,6 +858,7 @@ async fn next_pass(index: &AuditIndex, every: Duration, asked_within: Duration) 
         biased;
         () = index.stop.cancelled() => return false,
         () = index.rescoped.notified() => return true,
+        () = index.again.notified() => return true,
         () = tokio::time::sleep(every) => {}
     }
     while index.last_used.lock().elapsed() > asked_within {
@@ -1133,6 +1177,107 @@ pub(super) mod tests {
         assert!(released.expect("the ask releases it").expect("joined"));
     }
 
+    /// A reader asking again after a source came back is read at once, not
+    /// at the next pass minutes on. Fails if "ask again" waited out the
+    /// interval, which leaves a failed line standing.
+    #[tokio::test]
+    async fn asking_again_reads_the_sources_at_once() {
+        let index = AuditIndex::holding(client().await, None);
+        let waiting = tokio::spawn({
+            let index = index.clone();
+            async move { next_pass(&index, Duration::from_secs(600), Duration::from_secs(600)).await }
+        });
+        tokio::task::yield_now().await;
+        index.again.notify_one();
+        let read = tokio::time::timeout(Duration::from_secs(1), waiting).await;
+        assert!(read.expect("read at once").expect("joined"));
+    }
+
+    /// Every `Deployment`, `StatefulSet`, `Pod` and `CronJob` in the Audit fixture,
+    /// as it would be judged once applied.
+    fn fixture_templates() -> Vec<(String, DynamicObject)> {
+        use serde::Deserialize;
+        const FIXTURE: &str = include_str!("../../../../tests/manifests/audit.yaml");
+        serde_yaml::Deserializer::from_str(FIXTURE)
+            .filter_map(|document| {
+                let value = Value::deserialize(document).ok()?;
+                let kind = value["kind"].as_str()?.to_string();
+                ["Deployment", "StatefulSet", "Pod", "CronJob"]
+                    .contains(&kind.as_str())
+                    .then(|| (kind, serde_json::from_value(value).expect("an object")))
+            })
+            .collect()
+    }
+
+    fn pod_spec(kind: &str, object: &DynamicObject) -> Value {
+        match kind {
+            "Pod" => object.data["spec"].clone(),
+            "CronJob" => object.data["spec"]["jobTemplate"]["spec"]["template"]["spec"].clone(),
+            _ => object.data["spec"]["template"]["spec"].clone(),
+        }
+    }
+
+    /// The fixture is what a real API server takes and a real kubelet does
+    /// not loop on: with `hostNetwork` each host port equals its container
+    /// port, and a template the kubelet rejects for an unsafe sysctl makes
+    /// no pods, since its controller makes another for every rejected one.
+    /// It still breaks what it was written to break. Fails if the fixture
+    /// is refused on apply, floods the cluster, or stops showing the rules.
+    #[test]
+    fn the_audit_fixture_applies_runs_no_rejected_pods_and_still_breaks_its_rules() {
+        let mut tripped: Vec<(String, RuleId)> = Vec::new();
+        for (kind, object) in fixture_templates() {
+            let name = object.metadata.name.clone().unwrap_or_default();
+            let spec = pod_spec(&kind, &object);
+            if spec["hostNetwork"] == json!(true) {
+                for container in spec["containers"].as_array().into_iter().flatten() {
+                    for port in container["ports"].as_array().into_iter().flatten() {
+                        if let Some(host) = port.get("hostPort") {
+                            assert_eq!(Some(host), port.get("containerPort"), "{name}");
+                        }
+                    }
+                }
+            }
+            let own = if kind == "Pod" {
+                let pod: Pod = object.clone().try_parse().expect("a pod");
+                pod_judged(&pod, Some(37)).expect("judged").own
+            } else {
+                entry_of(&kind, object.clone(), Some(37))
+                    .expect("judged")
+                    .own
+            };
+            let rejected = own.iter().any(|f| f.rule == RuleId::PssSysctls);
+            if rejected {
+                let makes_none = match kind.as_str() {
+                    "CronJob" => object.data["spec"]["suspend"] == json!(true),
+                    "Pod" => false,
+                    _ => object.data["spec"]["replicas"] == json!(0),
+                };
+                assert!(
+                    makes_none,
+                    "{name} would be made again for every rejected pod"
+                );
+            }
+            tripped.extend(own.iter().map(|f| (name.clone(), f.rule)));
+        }
+        for (name, rule) in [
+            ("everything-wrong", RuleId::PssHostPorts),
+            ("everything-wrong", RuleId::PssPrivileged),
+            ("everything-wrong", RuleId::PssHostNamespaces),
+            ("everything-wrong", RuleId::RuntimeSocket),
+            ("everything-wrong", RuleId::EnvSecretLiteral),
+            ("kernel-and-volumes", RuleId::PssSysctls),
+            ("kernel-and-volumes", RuleId::PssSelinux),
+            ("kernel-and-volumes", RuleId::PssVolumeTypes),
+            ("as-root", RuleId::PssRunAsUserRoot),
+        ] {
+            assert!(
+                tripped.contains(&(name.to_string(), rule)),
+                "{name} no longer breaks {rule:?}"
+            );
+        }
+    }
+
     /// The same object seen again at the same version is not judged again.
     /// Fails if a resync, which re-applies every object, judges the cluster.
     #[tokio::test]
@@ -1209,6 +1354,53 @@ pub(super) mod tests {
             },
         );
         assert_eq!(why_unread(&slots, &kind, Some("shop")), None);
+    }
+
+    /// Moved to a namespace the feeds already watch, the page reads what it
+    /// holds at once: the feeds hand it, and the answer waits until the
+    /// reader has taken it. Fails if a namespace added to the scope reads as
+    /// holding nothing, which Audit said of it until the next break.
+    #[tokio::test]
+    async fn a_namespace_added_to_the_scope_is_read_with_what_it_holds() {
+        use crate::ownership::slots::SlotHost;
+        use kube::runtime::watcher::Event;
+        let client = client().await;
+        let feeds =
+            crate::feeds::Feeds::new((Arc::new(Semaphore::new(0)), Arc::new(Semaphore::new(0))));
+        let shop = Some(vec!["shop".to_string()]);
+        let index = AuditIndex::holding(client.clone(), shop.clone());
+        let subscription = feeds.joined("prod", client, &feed_ask(shop));
+        *index.lease.lock() = Some(subscription.lease);
+        spawn_reader(index.clone(), subscription.updates);
+        let generation = feeds.context("prod").expect("a context").serving();
+        let slot = SlotKey {
+            kind: key_of(&deployments()),
+            namespace: None,
+        };
+        let stop = CancellationToken::new();
+        generation.saw(&slot, &deployments(), Event::Init, &stop);
+        for (namespace, name) in [("shop", "web"), ("payments", "api")] {
+            let object = serde_json::from_value(deployment(namespace, name, "1", "web:1"))
+                .expect("an object");
+            generation.saw(&slot, &deployments(), Event::InitApply(object), &stop);
+        }
+        generation.saw(&slot, &deployments(), Event::InitDone, &stop);
+        let held = |index: &AuditIndex| -> Vec<String> {
+            let mut names: Vec<String> = index
+                .store
+                .read()
+                .entries
+                .values()
+                .map(|entry| entry.subject.name.clone())
+                .collect();
+            names.sort();
+            names
+        };
+        tokio::task::yield_now().await;
+        assert_eq!(held(&index), vec!["web"]);
+        index.asked_again(Some(vec!["payments".to_string()])).await;
+        assert_eq!(held(&index), vec!["api"]);
+        index.stop.cancel();
     }
 
     /// A relist hands the whole set again; what the index held and the set

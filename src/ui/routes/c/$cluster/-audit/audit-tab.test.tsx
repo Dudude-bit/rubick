@@ -4,6 +4,7 @@ import { screen } from "@testing-library/react";
 import type { ObjectAudit } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { CaptionScope } from "@/components/ui/section";
 import { renderWithRouter } from "@/test/render";
 import { auditMark, auditTab } from "./audit-tab";
 import { PeekAudit } from "./PeekAudit";
@@ -101,6 +102,33 @@ describe("the Audit tab with requests weighed against use", () => {
     expect(
       document.querySelector('li[data-rule="requests-above-usage"]')
     ).toHaveTextContent("CPU peaked at 300m of the 2.0 it requests");
+  });
+});
+
+describe("the Audit tab's heading", () => {
+  /**
+   * Inside its own tab the heading's title is dropped and the count stands
+   * alone, so the count carries its noun: "2 findings", not "2 audit".
+   * Fails if a bare number borrows the tab's label.
+   */
+  it("counts findings in words inside its tab", async () => {
+    const data = audit({
+      findings: [
+        { rule: "no-liveness-probe", severity: "low", what: [] },
+        { rule: "no-memory-limit", severity: "low", what: [] },
+      ],
+    });
+    await renderWithRouter(
+      <CaptionScope kind="Deployment" tab="Audit">
+        {auditTab(query(data), t).content}
+      </CaptionScope>,
+      {
+        at: "/c/prod/deployments/shop/web",
+        route: "/c/$cluster/deployments/$namespace/$name",
+      }
+    );
+    expect(screen.getByText("2 findings")).toBeInTheDocument();
+    expect(screen.queryByText("2 audit")).toBeNull();
   });
 });
 

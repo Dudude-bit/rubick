@@ -1053,6 +1053,7 @@ export const en = {
     filterIdentitiesPlaceholder: "Filter by identity, client id or pod…",
     filterHostsPlaceholder: "Filter by host or Service…",
     askAgain: "Ask again",
+    supplierConnection: "{vendor} connection",
     readTheLast: "Read the last {range}",
     readWhatVendorKept: "Read what {vendor} kept",
     connectOne: "connect one",
@@ -1997,6 +1998,14 @@ export const en = {
       one: "{n} object",
       other: "{n} objects",
     },
+    rulesCounted: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
+    findingsOf: {
+      one: "{n} finding",
+      other: "{n} findings",
+    },
     uncheckedOf: {
       one: "{n} not checked",
       other: "{n} not checked",
@@ -2133,7 +2142,7 @@ export const en = {
       "Unless allowPrivilegeEscalation is false, a process can gain more privileges than its parent through a setuid binary. The Restricted profile requires false.",
     pssRunAsNonRoot: "Does not require a non-root user",
     pssRunAsNonRootWhy:
-      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, it runs as root on purpose, which costs more. The Restricted profile requires true.",
+      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, nothing checks it at all. The Restricted profile requires true; a container set to run as user 0 is its own finding.",
     pssRunAsUserRoot: "Runs as user 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 is root, stated on purpose. The Restricted profile forbids it.",
@@ -4107,6 +4116,9 @@ export const en = {
       one: "{n} row, from the namespaces that answered",
       other: "{n} rows, from the namespaces that answered",
     },
+    countedSoFar: "{counted}, from the part of the list read so far",
+    countedWhereAnswered: "{counted}, from the namespaces that answered",
+    countedOfTotal: "{counted}, {shown} shown",
     longListTrim: {
       one: "{n} row. To trim the list, narrow the scope or search",
       other: "{n} rows. To trim the list, narrow the scope or search",

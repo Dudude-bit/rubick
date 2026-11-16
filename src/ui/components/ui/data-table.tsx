@@ -136,6 +136,8 @@ interface DataTableProps<TData extends RowData> {
   rowLabel?: string;
   /** The kind the footer counts, where the label is not a kind the registry knows. */
   rowNoun?: KindNoun;
+  /** The footer's count in the table's own words, where the rows are no kind: "45 rules". */
+  countWords?: (n: number) => string;
   /** What dragged column widths are filed under; the row label otherwise. */
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
@@ -688,6 +690,7 @@ function DataTableInner<TData extends RowData>({
   grouping = null,
   rowLabel,
   rowNoun,
+  countWords,
   widthsKey,
   partial = false,
   cutAt,
@@ -1875,22 +1878,39 @@ function DataTableInner<TData extends RowData>({
             {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one
               — a table of something with no kind — the frame counts rows. */}
-            {rowLabel === undefined && rowNoun === undefined
+            {countWords
               ? more
-                ? t("readings", "rowCountSoFar", { n: filteredRows })
+                ? t("readings", "countedSoFar", {
+                    counted: countWords(filteredRows),
+                  })
                 : partial
-                  ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
-                  : t("readings", "rowCount", { n: filteredRows })
-              : more
-                ? t("readings", "rowsSoFar", nounsOf(filteredRows))
-                : partial
-                  ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                  ? t("readings", "countedWhereAnswered", {
+                      counted: countWords(filteredRows),
+                    })
                   : filteredRows === totalRows
-                    ? t("readings", "objectCount", nounsOf(totalRows))
-                    : t("readings", "rowsOfTotal", {
-                        ...nounsOf(totalRows),
+                    ? countWords(totalRows)
+                    : t("readings", "countedOfTotal", {
+                        counted: countWords(totalRows),
                         shown: formatCount(filteredRows),
-                      })}
+                      })
+              : rowLabel === undefined && rowNoun === undefined
+                ? more
+                  ? t("readings", "rowCountSoFar", { n: filteredRows })
+                  : partial
+                    ? t("readings", "rowCountWhereAnswered", {
+                        n: filteredRows,
+                      })
+                    : t("readings", "rowCount", { n: filteredRows })
+                : more
+                  ? t("readings", "rowsSoFar", nounsOf(filteredRows))
+                  : partial
+                    ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                    : filteredRows === totalRows
+                      ? t("readings", "objectCount", nounsOf(totalRows))
+                      : t("readings", "rowsOfTotal", {
+                          ...nounsOf(totalRows),
+                          shown: formatCount(filteredRows),
+                        })}
           </div>
           {yieldedNames && (
             <span
