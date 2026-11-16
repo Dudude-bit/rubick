@@ -40,6 +40,7 @@ use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
 use proto::flow::{self, DropReason, L7FlowType, Verdict};
 use proto::observer::{get_flows_response::ResponseTypes, observer_client::ObserverClient};
+use proto::relay::{NodeState, NodeStatusEvent};
 
 /// How far back a pair's rates reach.
 pub const WINDOW_SECS: u64 = 60;
@@ -105,6 +106,16 @@ pub struct LivePair {
 pub struct LiveKey {
     pub from: FlowEnd,
     pub to: FlowEnd,
+}
+
+/// A node Hubble Relay cannot read flows from: none of its flows arrive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreachedNode {
+    pub name: String,
+    /// relay.proto's own word: `NODE_UNAVAILABLE` or `NODE_ERROR`.
+    pub state: String,
+    pub message: String,
 }
 
 /// Where the stream reads from, said once it is connected.
@@ -509,6 +520,7 @@ async fn run(
             relay,
             lost: fold.lost,
             untracked: fold.untracked,
+            unreached: fold.unreached.values().cloned().collect(),
         });
     };
     send(Vec::new(), Vec::new(), Some(found.at), &fold);
@@ -519,25 +531,44 @@ async fn run(
             () = cancel.cancelled() => return LiveEnd::Closed,
             _ = tick.tick() => {
                 let (pairs, gone) = fold.tick(now_secs());
-                for (at, chunk) in pairs.chunks(BATCH_PAIRS).enumerate() {
-                    let gone = if at == 0 { gone.clone() } else { Vec::new() };
-                    send(chunk.to_vec(), gone, None, &fold);
-                }
-                if pairs.is_empty() && !gone.is_empty() {
-                    send(Vec::new(), gone, None, &fold);
+                let nodes = std::mem::take(&mut fold.nodes_changed);
+                for (pairs, gone) in batches(pairs, gone, nodes) {
+                    send(pairs, gone, None, &fold);
                 }
             }
             message = stream.message() => match message {
                 Ok(Some(answer)) => match answer.response_types {
                     Some(ResponseTypes::Flow(one)) => fold.add(now_secs(), &one),
                     Some(ResponseTypes::LostEvents(lost)) => fold.lost += lost.num_events_lost,
-                    _ => {}
+                    Some(ResponseTypes::NodeStatus(status)) => fold.node_status(&status),
+                    None => {}
                 },
                 Ok(None) => return LiveEnd::RelayEnded,
                 Err(status) => return LiveEnd::Failed { said: status.message().to_string() },
             },
         }
     }
+}
+
+/// A tick's changes as events of at most `BATCH_PAIRS` pairs, what went with
+/// the first; an empty one where only what went, or the nodes, changed.
+fn batches(
+    pairs: Vec<LivePair>,
+    gone: Vec<LiveKey>,
+    nodes: bool,
+) -> Vec<(Vec<LivePair>, Vec<LiveKey>)> {
+    if pairs.is_empty() {
+        return if gone.is_empty() && !nodes {
+            Vec::new()
+        } else {
+            vec![(Vec::new(), gone)]
+        };
+    }
+    let mut gone = Some(gone);
+    pairs
+        .chunks(BATCH_PAIRS)
+        .map(|chunk| (chunk.to_vec(), gone.take().unwrap_or_default()))
+        .collect()
 }
 
 fn now_secs() -> u64 {
@@ -645,6 +676,8 @@ struct Fold {
     touched: BTreeSet<Key>,
     lost: u64,
     untracked: u64,
+    unreached: BTreeMap<String, UnreachedNode>,
+    nodes_changed: bool,
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -676,6 +709,33 @@ impl Fold {
             touched: BTreeSet::new(),
             lost: 0,
             untracked: 0,
+            unreached: BTreeMap::new(),
+            nodes_changed: false,
+        }
+    }
+
+    /// Relay's word on its nodes: one it cannot reach sends no flows, so it
+    /// is held until it is connected again or gone from the cluster.
+    fn node_status(&mut self, status: &NodeStatusEvent) {
+        let state = NodeState::try_from(status.state_change).unwrap_or(NodeState::UnknownNodeState);
+        for name in &status.node_names {
+            match state {
+                NodeState::NodeUnavailable | NodeState::NodeError => {
+                    self.unreached.insert(
+                        name.clone(),
+                        UnreachedNode {
+                            name: name.clone(),
+                            state: state.as_str_name().to_string(),
+                            message: status.message.clone(),
+                        },
+                    );
+                }
+                NodeState::NodeConnected | NodeState::NodeGone => {
+                    self.unreached.remove(name);
+                }
+                NodeState::UnknownNodeState => continue,
+            }
+            self.nodes_changed = true;
         }
     }
 
@@ -1104,6 +1164,37 @@ mod tests {
         }
         assert_eq!(fold.pairs.len(), MAX_LIVE_PAIRS);
         assert_eq!(fold.untracked, 1);
+    }
+
+    /// A node relay cannot reach is held until it connects again, and a tick
+    /// that changed only that still sends it: with no flows anywhere, the
+    /// page would otherwise say none were seen.
+    #[test]
+    fn a_node_relay_cannot_reach_is_held_and_sent_until_it_connects() {
+        let mut fold = Fold::new(0);
+        fold.node_status(&NodeStatusEvent {
+            state_change: NodeState::NodeUnavailable as i32,
+            node_names: vec!["kind/worker".into(), "kind/worker2".into()],
+            message: "connection refused".into(),
+        });
+        fold.node_status(&NodeStatusEvent {
+            state_change: NodeState::NodeConnected as i32,
+            node_names: vec!["kind/worker2".into()],
+            message: String::new(),
+        });
+        assert_eq!(
+            fold.unreached.values().cloned().collect::<Vec<_>>(),
+            vec![UnreachedNode {
+                name: "kind/worker".into(),
+                state: "NODE_UNAVAILABLE".into(),
+                message: "connection refused".into(),
+            }]
+        );
+        let (pairs, gone) = fold.tick(100);
+        let nodes = std::mem::take(&mut fold.nodes_changed);
+        assert_eq!(batches(pairs, gone, nodes).len(), 1);
+        let (pairs, gone) = fold.tick(101);
+        assert!(batches(pairs, gone, fold.nodes_changed).is_empty());
     }
 
     /// Hubble's own words for an end: a workload with its kind, a pod

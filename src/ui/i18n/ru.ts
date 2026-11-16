@@ -2511,6 +2511,10 @@ export const ru: Catalogue = {
     liveLost: "Hubble сообщает: {lost} потеряно, не дойдя до relay.",
     liveUntracked:
       "{untracked} не уместились в число пар, которые держатся одновременно, и не показаны.",
+    liveUnreached:
+      "Hubble Relay не достаёт до узлов {nodes}: потоки оттуда не приходят.",
+    nothingOnReached:
+      "{sources}: на узлах, до которых он достаёт, потоков в {scope} нет ({window}).",
     panelDenied: "запрещено: {policies}",
     panelL7Denied: "HTTP-запросы, отклонённые правилом L7: {v}/с",
     window5m: "последние 5 минут",

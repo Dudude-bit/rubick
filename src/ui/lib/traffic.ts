@@ -16,6 +16,7 @@ import type {
   PolicyRef,
   RelayAt,
   TrafficAnswer,
+  UnreachedNode,
   WorkloadKey,
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
@@ -460,6 +461,8 @@ export interface LiveBatch {
   relay: RelayAt | null;
   lost: number;
   untracked: number;
+  /** Nodes the relay cannot read, every one each batch. */
+  unreached: readonly UnreachedNode[];
 }
 
 export interface LiveListener {

@@ -81,7 +81,14 @@ describe("a live stream from Hubble Relay", () => {
       failed: () => {},
     });
     await waitFor(() => expect(calls.order).toContain("subscribed:hubble-1"));
-    const batch = { pairs: [], gone: [], relay: null, lost: 2, untracked: 0 };
+    const batch = {
+      pairs: [],
+      gone: [],
+      relay: null,
+      lost: 2,
+      untracked: 0,
+      unreached: [],
+    };
     emit("hubble-flows", { stream_id: "other", ...batch });
     emit("hubble-flows", { stream_id: "hubble-1", ...batch });
     emit("hubble-flows-ended", {
@@ -89,6 +96,7 @@ describe("a live stream from Hubble Relay", () => {
       end: { says: "notEnabled" },
     });
     expect(batches.map((b) => b.lost)).toEqual([2]);
+    expect(batches[0].unreached).toEqual([]);
     expect(ended).toEqual(["notEnabled"]);
     stop();
     expect(calls.closed).toEqual(["hubble-1"]);

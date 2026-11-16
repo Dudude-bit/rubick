@@ -2398,6 +2398,10 @@ export const en = {
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
+    liveUnreached:
+      "Hubble Relay cannot reach {nodes}: flows seen there do not arrive.",
+    nothingOnReached:
+      "{sources} saw no flows in {scope} on the nodes it reaches, in the {window}.",
     panelDenied: "denied by {policies}",
     panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",

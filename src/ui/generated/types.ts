@@ -3930,6 +3930,7 @@ export type AppEvent =
       relay: RelayAt | null;
       lost: number;
       untracked: number;
+      unreached: UnreachedNode[];
     }
   | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd }
   | {
@@ -4178,4 +4179,10 @@ export type Show = "all" | "changes" | "warnings";
 
 export interface Following {
   anotherCluster: boolean;
+}
+
+export interface UnreachedNode {
+  name: string;
+  state: string;
+  message: string;
 }

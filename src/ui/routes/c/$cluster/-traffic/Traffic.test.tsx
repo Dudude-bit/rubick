@@ -302,6 +302,7 @@ describe("the Traffic page, live", () => {
     },
     lost: 0,
     untracked: 0,
+    unreached: [],
     end: null,
     error: null,
     ...over,
@@ -391,6 +392,32 @@ describe("the Traffic page, live", () => {
     );
     for (const text of [off, unread, tls, ca, unverified])
       expect(text).not.toMatch(/saw no flows/);
+  });
+
+  /**
+   * A node the relay cannot reach sends no flows: an empty map then is not
+   * a quiet cluster, and the page names the nodes and why.
+   */
+  it("names the nodes the relay cannot reach and never calls their silence no flows", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    live.mockReturnValue(
+      snapshot({
+        unreached: [
+          {
+            name: "kind/worker",
+            state: "NODE_UNAVAILABLE",
+            message: "connection refused",
+          },
+        ],
+      })
+    );
+    await open();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(
+      "Hubble Relay cannot reach kind/worker (connection refused)"
+    );
+    expect(text).toContain("on the nodes it reaches");
+    expect(text).not.toContain("saw no flows in any namespace in the");
   });
 
   /** Without anything live to read, there is no live switch to offer. */

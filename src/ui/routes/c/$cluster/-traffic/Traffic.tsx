@@ -537,6 +537,20 @@ function LiveView({
           },
         ]
       : []),
+    ...(live.unreached.length > 0
+      ? [
+          {
+            text: t("traffic", "liveUnreached", {
+              nodes: live.unreached
+                .map((node) =>
+                  node.message ? `${node.name} (${node.message})` : node.name
+                )
+                .join(", "),
+            }),
+            tone: "warn" as const,
+          },
+        ]
+      : []),
   ];
   return (
     <FlowsView
@@ -559,11 +573,11 @@ function LiveView({
         ...caveats,
       ]}
       unread={[]}
-      quiet={t("traffic", "nothingInWindow", {
-        sources: LIVE_SOURCE.name,
-        scope: scopeWords,
-        window: lastMinute,
-      })}
+      quiet={t(
+        "traffic",
+        live.unreached.length > 0 ? "nothingOnReached" : "nothingInWindow",
+        { sources: LIVE_SOURCE.name, scope: scopeWords, window: lastMinute }
+      )}
       panelWindow={lastMinute}
       cut={live.untracked > 0}
       sharePartial={
