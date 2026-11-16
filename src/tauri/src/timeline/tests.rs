@@ -648,6 +648,21 @@ fn a_late_heartbeat_ends_the_span_where_it_was_last_alive() {
     assert_eq!((list[1].from, list[1].to), (woke, None));
 }
 
+/// The laptop slept eight hours, and on waking a watch broke before the
+/// heartbeat ran. Fails if the span that break ended covers the sleep, or a
+/// span ended in time does not end then.
+#[test]
+fn a_span_ended_after_a_sleep_ends_where_it_was_last_alive() {
+    let mut spans = SpanSets::default();
+    spans.begin(Source::Followed, T0, Cover::default());
+    spans.heartbeat(T0 + HEARTBEAT_MS);
+    spans.end(Source::Followed, T0 + 8 * 60 * 60 * 1000);
+    assert_eq!(spans.followed[0].to, Some(T0 + HEARTBEAT_MS));
+    spans.begin(Source::Meta, T0, Cover::default());
+    spans.end(Source::Meta, T0 + HEARTBEAT_MS);
+    assert_eq!(spans.meta[0].to, Some(T0 + HEARTBEAT_MS));
+}
+
 /// What was open when the app last ran ended with it. Fails if a span read
 /// back still runs, which draws the hours the app was closed as watched.
 #[test]

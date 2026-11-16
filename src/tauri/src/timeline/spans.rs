@@ -138,12 +138,19 @@ impl SpanSets {
         }
     }
 
-    /// The source stopped watching now.
+    /// The source stopped watching now. One whose heartbeat is this late
+    /// ends where it was last alive: whatever ended it first after a sleep,
+    /// a broken watch or a renewal, the hours asleep were not watched.
     pub fn end(&mut self, source: Source, now: i64) {
         for span in self.of(source).iter_mut() {
             if span.to.is_none() {
-                span.seen_at = now;
-                span.to = Some(now);
+                let at = if now - span.seen_at > HEARTBEAT_MISSED_MS {
+                    span.seen_at
+                } else {
+                    now
+                };
+                span.seen_at = at;
+                span.to = Some(at);
             }
         }
     }
