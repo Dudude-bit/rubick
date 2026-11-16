@@ -6,7 +6,7 @@ use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::api::rbac::v1::{PolicyRule, RoleRef, Subject as RbacSubject};
 
-use super::{AuditFinding, RuleId, What};
+use super::{AuditFinding, AuditSeverity, RuleId, What};
 use crate::resources::{shown_text, withhold_reason};
 
 /// Every key of a `ConfigMap` that holds a private key, by name and by the
@@ -40,11 +40,13 @@ fn finding_if(rule: RuleId, what: Vec<What>) -> Vec<AuditFinding> {
     }
 }
 
-/// Every rule of a role granting every verb on every resource.
+/// Every rule of a role granting every verb on every resource. High where
+/// its groups take in RBAC's own, which is the power to grant more; within
+/// other groups, the rule's usual severity.
 #[must_use]
 pub fn role(rules: Option<&Vec<PolicyRule>>) -> Vec<AuditFinding> {
     let star = |list: Option<&Vec<String>>| list.is_some_and(|list| list.iter().any(|v| v == "*"));
-    let what = rules
+    let what: Vec<What> = rules
         .into_iter()
         .flatten()
         .filter(|rule| star(Some(&rule.verbs)) && star(rule.resources.as_ref()))
@@ -52,7 +54,18 @@ pub fn role(rules: Option<&Vec<PolicyRule>>) -> Vec<AuditFinding> {
             groups: rule.api_groups.clone().unwrap_or_default(),
         })
         .collect();
+    let grants = what.iter().any(|what| {
+        matches!(what, What::Wildcard { groups } if groups.iter().any(|g| g == "*" || g == "rbac.authorization.k8s.io"))
+    });
     finding_if(RuleId::WildcardRole, what)
+        .into_iter()
+        .map(|mut finding| {
+            if grants {
+                finding.severity = AuditSeverity::High;
+            }
+            finding
+        })
+        .collect()
 }
 
 /// The one subject Kubernetes binds `cluster-admin` to itself: the
@@ -179,6 +192,27 @@ mod tests {
         assert_eq!(role(Some(&rules(&["*"], &["*"]))).len(), 1);
         assert!(role(Some(&rules(&["get", "list"], &["*"]))).is_empty());
         assert!(role(Some(&rules(&["*"], &["pods"]))).is_empty());
+    }
+
+    /// A wildcard within one group cannot reach RBAC and grant more, so it
+    /// is not ranked with one that can. Fails if `apps/*` is High, or if
+    /// `*` or RBAC's own group is not.
+    #[test]
+    fn a_wildcard_is_high_only_where_its_groups_take_in_rbac() {
+        let severity = |groups: &[&str]| {
+            let rules: Vec<PolicyRule> = vec![serde_json::from_value(json!({
+                "apiGroups": groups, "verbs": ["*"], "resources": ["*"]
+            }))
+            .unwrap()];
+            role(Some(&rules)).first().map(|finding| finding.severity)
+        };
+        assert_eq!(severity(&["apps"]), Some(AuditSeverity::Medium));
+        assert_eq!(severity(&["ceph.rook.io"]), Some(AuditSeverity::Medium));
+        assert_eq!(severity(&["*"]), Some(AuditSeverity::High));
+        assert_eq!(
+            severity(&["apps", "rbac.authorization.k8s.io"]),
+            Some(AuditSeverity::High)
+        );
     }
 
     /// Only the default binding of `system:masters` is the system's own.

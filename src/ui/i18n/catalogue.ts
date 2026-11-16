@@ -2172,7 +2172,7 @@ export const en = {
       "cluster-admin may do anything to any object. Kubernetes binds it only to the system:masters group; any other subject holding it is one stolen token away from the whole cluster, and a group such as system:authenticated hands it to everyone.",
     wildcardRole: "Grants every verb on every resource",
     wildcardRoleWhy:
-      "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
+      "A role with * verbs on * resources grants whatever its groups hold now and whatever is installed in them later. Where the groups take in RBAC's own (* or rbac.authorization.k8s.io), that includes the power to grant more.",
     defaultServiceAccountToken: "Mounts the default ServiceAccount's token",
     defaultServiceAccountTokenWhy:
       "Pods under the default ServiceAccount share one identity, and a mounted token is a credential for the API server inside every one of them. A pod that does not call the API needs none.",

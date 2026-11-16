@@ -1,5 +1,5 @@
 {
-  "about": "Audit's rules, as both halves read them: RULES in src/tauri/src/audit/rules.rs judges with them and src/ui/routes/c/$cluster/-audit/rules.ts draws them. severity is the rule's usual one; a finding may carry a higher one where the rule says why (no-readiness-probe behind a Service). standard is the Pod Security Standards profile the control belongs to, from https://kubernetes.io/docs/concepts/security/pod-security-standards/. needs is every other kind the rule reads before it may answer; a rule whose kind went unread there says not checked.",
+  "about": "Audit's rules, as both halves read them: RULES in src/tauri/src/audit/rules.rs judges with them and src/ui/routes/c/$cluster/-audit/rules.ts draws them. severity is the rule's usual one; a finding may carry a higher one where the rule says why (no-readiness-probe behind a Service, wildcard-role whose groups take in RBAC's own). standard is the Pod Security Standards profile the control belongs to, from https://kubernetes.io/docs/concepts/security/pod-security-standards/. needs is every other kind the rule reads before it may answer; a rule whose kind went unread there says not checked.",
   "helmRelease": "HelmRelease.helm.sh",
   "deprecatedApi": "DeprecatedAPI.k8s.io",
   "rules": [
@@ -167,7 +167,7 @@
     {
       "id": "wildcard-role",
       "category": "security",
-      "severity": "high",
+      "severity": "medium",
       "standard": null,
       "needs": []
     },
