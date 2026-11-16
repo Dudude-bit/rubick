@@ -53,13 +53,22 @@ pub async fn timeline_follow(
         let context = context.clone();
         off_main(move || Ok(timelines.cluster(&context))).await?
     };
-    // A reader who may not read kube-system cannot tell, and nothing is dropped.
-    let identity = kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
-        .get("kube-system")
-        .await
-        .ok()
-        .and_then(|namespace| namespace.metadata.uid);
-    let another_cluster = cluster.seen_cluster(identity);
+    // A reader who may not read kube-system cannot tell: nothing is dropped,
+    // and the rows kept before are said to be perhaps another cluster's.
+    let another_cluster =
+        match kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
+            .get("kube-system")
+            .await
+        {
+            Ok(namespace) => namespace
+                .metadata
+                .uid
+                .is_some_and(|identity| cluster.seen_cluster(identity)),
+            Err(error) => {
+                cluster.not_identified(Error::from(error).said());
+                false
+            }
+        };
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }

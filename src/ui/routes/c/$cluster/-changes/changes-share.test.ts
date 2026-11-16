@@ -180,6 +180,7 @@ describe("what the shared Changes report says beyond the changes", () => {
     const section = watchedSection(span, [span], [], t, "all", {
       read: true,
       keeping: { says: "off" },
+      identity: undefined,
       unreadable: 0,
       error: null,
       letGo: undefined,
@@ -202,6 +203,7 @@ describe("what the shared Changes report says beyond the changes", () => {
     const read = (readFrom: number | null) => ({
       read: true,
       keeping: { says: "kept" as const },
+      identity: undefined,
       unreadable: 0,
       error: null,
       letGo: undefined,
@@ -221,6 +223,27 @@ describe("what the shared Changes report says beyond the changes", () => {
     const whole = watchedSection(span, [span], [], t, "all", read(null));
     expect(whole.body.type === "text" && whole.body.text).toContain(
       "No change recorded"
+    );
+  });
+
+  /**
+   * kind made again under the same name, opened by someone who may not read
+   * kube-system: the rows kept from before may be the old cluster's. Fails if
+   * the file says nothing of it.
+   */
+  it("says the kept rows may be another cluster's where which cluster this is could not be checked", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
+      keeping: { says: "kept" },
+      identity: { says: "unknown", message: "namespaces is forbidden" },
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom: null,
+    });
+    expect(section.body.type === "text" && section.body.text).toContain(
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked (namespaces is forbidden)."
     );
   });
 

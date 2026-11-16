@@ -4090,6 +4090,8 @@ export interface TimelinePage {
   letGo: LetGoes;
   keeping: Keeping;
   unreadable: number;
+  epoch: number;
+  identity: Identity;
 }
 
 export interface LetGoes {
@@ -4156,6 +4158,11 @@ export type Keeping =
   | { says: "kept" }
   | { says: "off" }
   | { says: "failed"; message: string };
+
+export type Identity =
+  | { says: "known" }
+  | { says: "notChecked" }
+  | { says: "unknown"; message: string };
 
 export type RowSays =
   | { says: "created" }

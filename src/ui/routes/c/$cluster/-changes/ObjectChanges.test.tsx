@@ -34,6 +34,8 @@ function page(over: Partial<TimelinePage> = {}): TimelinePage {
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
     unreadable: 0,
+    epoch: 0,
+    identity: { says: "known" },
     ...over,
   };
 }

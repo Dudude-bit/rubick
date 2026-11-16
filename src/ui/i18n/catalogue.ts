@@ -2343,6 +2343,8 @@ export const en = {
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnknown:
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {

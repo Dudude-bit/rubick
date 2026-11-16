@@ -866,9 +866,14 @@ fn clearing_forgets_everything_and_says_so() {
         "api",
     ));
     timelines.flush();
+    let epoch = cluster.page(&query(Show::All)).epoch;
     timelines.clear().unwrap();
     let page = cluster.page(&query(Show::All));
     assert!(page.rows.is_empty());
+    assert!(
+        page.epoch > epoch,
+        "a reader holding the cleared rows would keep them"
+    );
     assert!(page.let_go.changes.is_some_and(|l| l.cleared));
     timelines.flush();
     let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
@@ -878,13 +883,14 @@ fn clearing_forgets_everything_and_says_so() {
 }
 
 /// Another cluster under the name is not this one's history. Fails if a
-/// rebuilt cluster inherits the old rows, or a reader who cannot read
-/// `kube-system` loses theirs.
+/// rebuilt cluster inherits the old rows, a reader holding them is not told
+/// the rows started over, or a reader who cannot read `kube-system` loses
+/// rows this run recorded.
 #[test]
 fn another_cluster_under_the_name_starts_over_and_an_unknown_one_does_not() {
     let (timelines, _rx) = holder(None, false);
     let cluster = timelines.cluster("kind");
-    assert!(!cluster.seen_cluster(Some("uid-a".into())));
+    assert!(!cluster.seen_cluster("uid-a".into()));
     cluster.change(change(
         "1",
         ClusterTimeline::now(),
@@ -892,10 +898,55 @@ fn another_cluster_under_the_name_starts_over_and_an_unknown_one_does_not() {
         Some("shop"),
         "api",
     ));
-    assert!(!cluster.seen_cluster(None));
-    assert_eq!(cluster.page(&query(Show::All)).rows.len(), 1);
-    assert!(cluster.seen_cluster(Some("uid-b".into())));
-    assert!(cluster.page(&query(Show::All)).rows.is_empty());
+    cluster.not_identified("namespaces \"kube-system\" is forbidden".into());
+    let page = cluster.page(&query(Show::All));
+    assert_eq!((page.rows.len(), page.identity), (1, Identity::Known));
+    assert!(cluster.seen_cluster("uid-b".into()));
+    let again = cluster.page(&query(Show::All));
+    assert!(again.rows.is_empty());
+    assert!(
+        again.epoch > page.epoch,
+        "a reader holding the old rows keeps them"
+    );
+}
+
+/// Rows kept from an earlier run, read by someone who may not read
+/// `kube-system`: they may be another cluster's that had the name. Fails if
+/// that is not said, or is still said once the cluster was checked.
+#[test]
+fn rows_kept_before_are_said_to_be_unchecked_where_the_cluster_could_not_be_read() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        cluster.change(change(
+            "1",
+            ClusterTimeline::now(),
+            "Deployment",
+            Some("shop"),
+            "api",
+        ));
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    assert_eq!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::NotChecked
+    );
+    cluster.not_identified("forbidden".into());
+    assert_eq!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::Unknown {
+            message: "forbidden".into()
+        }
+    );
+    assert!(!cluster.seen_cluster("uid-a".into()));
+    let page = cluster.page(&query(Show::All));
+    assert_eq!((page.rows.len(), page.identity), (1, Identity::Known));
+    let fresh = timelines.cluster("never-kept");
+    assert_eq!(fresh.page(&query(Show::All)).identity, Identity::Known);
 }
 
 /// The window is told once a flush, and only of a cluster that recorded.

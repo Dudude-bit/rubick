@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
+  Identity,
   Keeping,
   LetGoes,
   Show,
@@ -48,6 +49,8 @@ export interface TimelineRead {
   spans: SpanSets | undefined;
   letGo: LetGoes | undefined;
   keeping: Keeping | undefined;
+  /** Whether the rows kept from an earlier run are this cluster's. */
+  identity: Identity | undefined;
   unreadable: number;
   /** Where the rows read end while older ones remain unread; `null` when all are read. */
   readFrom: number | null;
@@ -158,6 +161,12 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         const page = await commands.timelineRead(
           question({ after: held.newest })
         );
+        // The rows started over, for another cluster under the name or a
+        // clear: what is held is not this timeline's any more.
+        if (page.epoch !== held.epoch) {
+          await client.resetQueries({ queryKey: key, exact: true });
+          return;
+        }
         if (page.more) {
           await client.invalidateQueries({ queryKey: key, exact: true });
           return;
@@ -198,13 +207,17 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     if (!held?.more || !last) return;
     void commands
       .timelineRead(question({ before: { at: last.at, seq: last.seq } }))
-      .then((page) =>
+      .then((page) => {
+        if (page.epoch !== held.epoch) {
+          void client.resetQueries({ queryKey: key, exact: true });
+          return;
+        }
         client.setQueryData<TimelinePage>(key, (now) =>
           now && now.rows.at(-1)?.seq === last.seq
             ? { ...now, rows: [...now.rows, ...page.rows], more: page.more }
             : now
-        )
-      )
+        );
+      })
       .catch(() => {});
   }, [client, key, question]);
 
@@ -214,6 +227,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     spans: data?.spans,
     letGo: data?.letGo,
     keeping: data?.keeping,
+    identity: data?.identity,
     unreadable: data?.unreadable ?? 0,
     readFrom: data?.more ? (data.rows.at(-1)?.at ?? null) : null,
     loadOlder,

@@ -137,6 +137,20 @@ pub enum Keeping {
     },
 }
 
+/// Whether the rows kept from an earlier run are this cluster's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Identity {
+    /// Nothing was kept from an earlier run, or the cluster was checked to
+    /// be the one it was kept for.
+    Known,
+    /// Kept from an earlier run, and not checked yet.
+    NotChecked,
+    /// Kept from an earlier run, and `kube-system` could not be read: the
+    /// rows may be another cluster's that had this name.
+    Unknown { message: String },
+}
+
 /// The question a timeline surface asks.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,6 +190,11 @@ pub struct TimelinePage {
     pub keeping: Keeping,
     /// Lines of the kept files that could not be read and were skipped.
     pub unreadable: usize,
+    /// Moves each time the rows start over, for another cluster under the
+    /// name or a clear: a reader holding another's rows reads the first page
+    /// again, since `newest` numbers from the start once more.
+    pub epoch: u64,
+    pub identity: Identity,
 }
 
 /// What is kept on this machine, for Settings.
@@ -201,6 +220,9 @@ struct Inner {
     unreadable: usize,
     /// The cluster this name was last seen to be, by its `kube-system` uid.
     identity: Option<String>,
+    /// Whether what was read back from disk is this cluster's.
+    checked: Identity,
+    epoch: u64,
     /// What the files' own bounds let go, kept apart from what memory did.
     disk_let_go: LetGoes,
     /// Something to tell the window and to write since the last flush.
@@ -264,12 +286,8 @@ impl ClusterTimeline {
     }
 
     /// Told which cluster this name turned out to be. Another one drops what
-    /// was kept under the name, and says so; `None`, a reader who may not
-    /// read `kube-system`, drops nothing.
-    pub fn seen_cluster(&self, identity: Option<String>) -> bool {
-        let Some(identity) = identity else {
-            return false;
-        };
+    /// was kept under the name, and says so.
+    pub fn seen_cluster(&self, identity: String) -> bool {
         let mut inner = self.inner.lock();
         let another = inner
             .identity
@@ -283,12 +301,25 @@ impl ClusterTimeline {
                 wipe: true,
                 ..disk::Pending::default()
             };
+            inner.epoch += 1;
+            inner.told.rows = true;
         }
-        if inner.identity.as_deref() != Some(&identity) {
+        if inner.identity.as_deref() != Some(&identity) || inner.checked != Identity::Known {
             inner.identity = Some(identity);
+            inner.checked = Identity::Known;
             inner.told.spans = true;
         }
         another
+    }
+
+    /// Which cluster this name is could not be read: nothing is dropped, and
+    /// what was kept from an earlier run is said to be perhaps another's.
+    pub fn not_identified(&self, message: String) {
+        let mut inner = self.inner.lock();
+        if inner.checked != Identity::Known {
+            inner.checked = Identity::Unknown { message };
+            inner.told.spans = true;
+        }
     }
 
     /// One page of what was recorded.
@@ -304,6 +335,8 @@ impl ClusterTimeline {
             let_go: inner.store.let_go(),
             keeping: inner.keeping.clone(),
             unreadable: inner.unreadable,
+            epoch: inner.epoch,
+            identity: inner.checked.clone(),
         }
     }
 
@@ -312,6 +345,7 @@ impl ClusterTimeline {
     fn clear(&self) {
         let mut inner = self.inner.lock();
         inner.store.clear(Self::now());
+        inner.epoch += 1;
         inner.disk_let_go = LetGoes::default();
         inner.pending = disk::Pending {
             wipe: true,
@@ -400,6 +434,9 @@ impl Timelines {
             .as_deref()
             .map(|dir| disk::load(dir, now))
             .unwrap_or_default();
+        let kept = !loaded.rows.is_empty()
+            || !loaded.spans.followed.is_empty()
+            || !loaded.spans.meta.is_empty();
         let mut store = Store::default();
         store.restore(loaded.rows, loaded.let_go, now);
         let disk_let_go = loaded.let_go;
@@ -421,6 +458,12 @@ impl Timelines {
                 keeping,
                 unreadable: loaded.unreadable,
                 identity: loaded.identity,
+                checked: if kept {
+                    Identity::NotChecked
+                } else {
+                    Identity::Known
+                },
+                epoch: 0,
                 disk_let_go,
                 told: Told::default(),
             }),

@@ -39,12 +39,16 @@ const clock = (ms: number) =>
 
 /** What keeps the timeline from being whole, as the page says it above its rows. */
 export function keepingWords(
-  read: Pick<TimelineRead, "keeping" | "unreadable" | "error">,
+  read: Pick<TimelineRead, "keeping" | "identity" | "unreadable" | "error">,
   t: T
 ): string[] {
   const lines: string[] = [];
   if (read.error)
     lines.push(t("changes", "readFailed", { reason: errorToShow(read.error) }));
+  if (read.identity?.says === "unknown")
+    lines.push(
+      t("changes", "identityUnknown", { reason: read.identity.message })
+    );
   if (read.keeping?.says === "off") lines.push(t("changes", "keptSessionOnly"));
   if (read.keeping?.says === "failed")
     lines.push(t("changes", "keptFailed", { error: read.keeping.message }));
@@ -210,7 +214,13 @@ export function watchedSection(
   show: Show,
   read?: Pick<
     TimelineRead,
-    "read" | "keeping" | "unreadable" | "error" | "letGo" | "readFrom"
+    | "read"
+    | "keeping"
+    | "identity"
+    | "unreadable"
+    | "error"
+    | "letGo"
+    | "readFrom"
   >
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
