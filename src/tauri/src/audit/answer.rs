@@ -7,7 +7,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::context::{beside, Beside, Defaults};
-use super::index::{audited, key_of, why_unread, AuditIndex, Body, Entry};
+use super::index::{audited, key_of, why_unread, AuditIndex, Body, Entry, PodRead, POD_READ_AGAIN};
 use super::rules::{AUTOSCALER, BUDGET, DEPLOYMENT, NETWORK_POLICY, POD, STATEFUL_SET};
 use super::{
     is_system, AuditFinding, AuditSeverity, Category, RuleId, Subject, Unchecked, What, Why,
@@ -567,9 +567,11 @@ fn pods(
         let mut pods = index.pods.lock();
         pods.retain(|key, held| {
             wanted.contains_key(key)
-                || held
-                    .as_ref()
-                    .is_none_or(|pod| !in_scope(pod.subject.namespace.as_deref(), scope))
+                || match held {
+                    PodRead::Reading => true,
+                    PodRead::Judged(pod) => !in_scope(pod.subject.namespace.as_deref(), scope),
+                    PodRead::Unread { namespace, .. } => !in_scope(Some(namespace), scope),
+                }
         });
         pods.clone()
     };
@@ -580,8 +582,23 @@ fn pods(
                 index.read_pod(key, namespace, name);
                 world.reading += 1;
             }
-            Some(None) => world.reading += 1,
-            Some(Some(pod)) => {
+            Some(PodRead::Unread { at, .. }) if at.elapsed() >= POD_READ_AGAIN => {
+                index.read_pod(key, namespace, name);
+                world.reading += 1;
+            }
+            Some(PodRead::Reading) => world.reading += 1,
+            Some(PodRead::Unread { why, .. }) => {
+                let unread = NotChecked {
+                    kind: POD.to_string(),
+                    namespace: Some(namespace),
+                    why: why.clone(),
+                    rules: blinded_by(POD),
+                };
+                if !world.not_checked.contains(&unread) {
+                    world.not_checked.push(unread);
+                }
+            }
+            Some(PodRead::Judged(pod)) => {
                 if !seen.insert(pod.subject.clone()) {
                     continue;
                 }
@@ -1417,10 +1434,16 @@ mod tests {
             let mut pods = index.pods.lock();
             pods.insert(
                 "pod/etcd".to_string(),
-                Some(judged("kube-system", "etcd-node")),
+                PodRead::Judged(judged("kube-system", "etcd-node")),
             );
-            pods.insert("pod/lone".to_string(), Some(judged("shop", "lone")));
-            pods.insert("pod/gone".to_string(), Some(judged("shop", "gone")));
+            pods.insert(
+                "pod/lone".to_string(),
+                PodRead::Judged(judged("shop", "lone")),
+            );
+            pods.insert(
+                "pod/gone".to_string(),
+                PodRead::Judged(judged("shop", "gone")),
+            );
         }
         let shop = ["shop".to_string()];
         world(&index, Ok(&owners), Some(&shop[..]));
@@ -1429,6 +1452,47 @@ mod tests {
         assert_eq!(held, vec!["pod/etcd".to_string(), "pod/lone".to_string()]);
         let page = world(&index, Ok(&owners), None);
         assert_eq!(page.reading, 0, "the page reads its pods again");
+        index.stop_for_test();
+    }
+
+    /// A pod the cluster will not hand over is named not checked with its
+    /// words, not read as "still being read" and fetched on every read.
+    /// Fails if a refused GET reads as reading for good.
+    #[tokio::test]
+    async fn a_pod_the_cluster_will_not_hand_over_is_not_checked_not_reading() {
+        let (client, hits) = crate::client::served::test_server::answering(|path, _| {
+            if path.ends_with("/pods/lone") {
+                crate::client::served::test_server::failure(403, "Forbidden")
+            } else {
+                (404, "{}".to_string())
+            }
+        })
+        .await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        index.pod_reads.add_permits(1);
+        let owners = ClusterIndex::holding(client, &[]);
+        owners.hold(&pods(), "Pod", "lone", ("lone", Some("shop")), None);
+        assert_eq!(world(&index, Ok(&owners), None).reading, 1);
+        for _ in 0..200 {
+            if matches!(
+                index.pods.lock().get("pod/lone"),
+                Some(PodRead::Unread { .. })
+            ) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let seen = world(&index, Ok(&owners), None);
+        assert_eq!(seen.reading, 0, "a refused read is still being read");
+        assert!(seen.not_checked.iter().any(|unread| unread.kind == POD
+            && unread.namespace.as_deref() == Some("shop")
+            && matches!(unread.why, Why::Refused { .. })));
+        assert_eq!(
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/namespaces/shop/pods/lone"),
+            Some(&1)
+        );
         index.stop_for_test();
     }
 

@@ -388,6 +388,25 @@ pub(super) struct PodJudged {
     pub facts: TemplateFacts,
 }
 
+/// A pod read whole, or why it is not yet.
+#[derive(Debug, Clone)]
+pub(super) enum PodRead {
+    /// The read is on its way.
+    Reading,
+    Judged(PodJudged),
+    /// The cluster did not hand it over: said with the namespace's unread
+    /// kinds, and asked again once `POD_READ_AGAIN` has passed.
+    Unread {
+        namespace: String,
+        why: Why,
+        at: Instant,
+    },
+}
+
+/// How long a pod the cluster would not hand over is said not checked
+/// before it is asked for again.
+pub(super) const POD_READ_AGAIN: Duration = Duration::from_secs(30);
+
 /// How one pod is judged: on its own, or for the controller that stamped it.
 #[must_use]
 pub(super) fn pod_judged(pod: &Pod, minor: Option<u32>) -> Option<PodJudged> {
@@ -434,10 +453,10 @@ pub struct AuditIndex {
     pub(super) store: RwLock<Store>,
     pub(super) revision: AtomicU64,
     changed: Arc<Notify>,
-    /// Pods judged whole, by the key they are held under: `pod/<uid>` or
-    /// `controller/<uid>`; `None` while the read is on its way.
-    pub(super) pods: Mutex<HashMap<String, Option<PodJudged>>>,
-    pod_reads: Arc<Semaphore>,
+    /// Pods read whole, by the key they are held under: `pod/<uid>` or
+    /// `controller/<uid>`.
+    pub(super) pods: Mutex<HashMap<String, PodRead>>,
+    pub(super) pod_reads: Arc<Semaphore>,
     /// The upgrade rules' last pass; `None` before the first ends.
     pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
     /// The scope moved: the upgrade rules read again at once.
@@ -583,10 +602,10 @@ impl AuditIndex {
     pub(super) fn read_pod(self: &Arc<Self>, key: String, namespace: String, name: String) {
         {
             let mut pods = self.pods.lock();
-            if pods.contains_key(&key) {
+            if matches!(pods.get(&key), Some(PodRead::Reading | PodRead::Judged(_))) {
                 return;
             }
-            pods.insert(key.clone(), None);
+            pods.insert(key.clone(), PodRead::Reading);
         }
         let index = self.clone();
         tokio::spawn(async move {
@@ -602,13 +621,25 @@ impl AuditIndex {
                 () = index.stop.cancelled() => return,
                 read = api.get_opt(&name) => read,
             };
-            let Ok(Some(pod)) = read else {
-                // Gone, or not read: asked again when the pod is next seen.
-                index.pods.lock().remove(&key);
-                return;
+            let held = match read {
+                Ok(found) => match found.as_ref().and_then(|pod| pod_judged(pod, index.minor)) {
+                    Some(judged) => PodRead::Judged(judged),
+                    // Gone: asked again if it is seen again.
+                    None => {
+                        index.pods.lock().remove(&key);
+                        return;
+                    }
+                },
+                Err(error) => {
+                    let error: crate::error::Error = error.into();
+                    PodRead::Unread {
+                        namespace,
+                        why: super::why_of(&error),
+                        at: Instant::now(),
+                    }
+                }
             };
-            let judged = pod_judged(&pod, index.minor);
-            index.pods.lock().insert(key, judged);
+            index.pods.lock().insert(key, held);
             index.changed();
         });
     }
