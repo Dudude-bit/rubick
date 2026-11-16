@@ -223,10 +223,26 @@ function Pager({
   );
 }
 
+/**
+ * A pager's offset, back at the first page whenever the question it pages
+ * changes: another cluster, namespaces, filter or rule. An offset carried
+ * over asks past the new answer's end, which reads as nothing found.
+ */
+function useOffsetFor(question: unknown): [number, (offset: number) => void] {
+  const at = JSON.stringify(question);
+  const [paged, setPaged] = useState({ at, offset: 0 });
+  return [
+    paged.at === at ? paged.offset : 0,
+    (offset) => setPaged({ at, offset }),
+  ];
+}
+
 /** One rule opened: why, how, and the objects it found, a page at a time. */
 function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
   const t = useT();
-  const [offset, setOffset] = useState(0);
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useNamespaceScope();
+  const [offset, setOffset] = useOffsetFor([context, scope, base, rule]);
   const query = useAuditPage({ ...base, rule, offset, limit: PAGE });
   const rows = query.data?.rows ?? [];
   const first = rows.find((row) => row.row === "found");
@@ -380,6 +396,7 @@ function useBroughtIntoView(opened: string | undefined) {
 export function Audit() {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
+  const context = useClusterStore((s) => s.currentContext);
   const scope = useNamespaceScope();
   const setSearch = useSetSearch();
   const view = useAppSearchValue("view") === "object" ? "object" : "rule";
@@ -391,7 +408,6 @@ export function Audit() {
   const severity = isSeverity(severityParam) ? severityParam : undefined;
   const category = isCategory(categoryParam) ? categoryParam : undefined;
   const rule = isRule(ruleParam) ? ruleParam : undefined;
-  const [offset, setOffset] = useState(0);
   const openedRule = useBroughtIntoView(view === "rule" ? rule : undefined);
   const openedObject = useBroughtIntoView(
     view === "object" && open ? subjectKey(open) : undefined
@@ -409,6 +425,7 @@ export function Audit() {
     }),
     [view, category, severity, rule, system]
   );
+  const [offset, setOffset] = useOffsetFor([context, scope, base]);
   const query = useAuditPage({ ...base, offset });
   const page = query.data;
 
@@ -435,10 +452,8 @@ export function Audit() {
     return <ConnectClusterEmptyState resourceLabel={t("nav", "audit")} />;
   }
 
-  const choose = (patch: Parameters<typeof setSearch>[0]) => {
-    setOffset(0);
+  const choose = (patch: Parameters<typeof setSearch>[0]) =>
     setSearch(patch, { replace: true });
-  };
   const empty =
     page &&
     page.total === 0 &&

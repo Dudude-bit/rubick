@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AuditPage, AuditQuery } from "@/generated/types";
@@ -8,6 +8,7 @@ import { renderWithRouter } from "@/test/render";
 
 const asked: AuditQuery[] = [];
 const moreRules: AuditPage["rows"] = [];
+let paged: { total: number; next: number } | null = null;
 const summary: AuditPage["summary"] = {
   findings: 1,
   severities: { high: 1, medium: 0, low: 0 },
@@ -76,8 +77,8 @@ vi.mock("@/lib/commands", () => ({
           },
           ...moreRules,
         ],
-        total: 1 + moreRules.length,
-        next: null,
+        total: paged?.total ?? 1 + moreRules.length,
+        next: paged && query.offset === 0 ? paged.next : null,
       });
     },
   },
@@ -88,6 +89,7 @@ const { Audit } = await import("./Audit");
 beforeEach(() => {
   asked.length = 0;
   moreRules.length = 0;
+  paged = null;
   useClusterStore.setState({
     currentContext: "prod",
     isConnected: true,
@@ -174,6 +176,27 @@ describe("the Audit page", () => {
     expect(
       within(row as HTMLElement).getByLabelText("Not checked here")
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A page forward is a page of one question. Fails if picking other
+   * namespaces keeps asking from row 101 of an answer that now has 12, which
+   * reads as no findings under a header that counts them.
+   */
+  it("goes back to the first page when the namespaces change", async () => {
+    paged = { total: 150, next: 100 };
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    const range = await screen.findByText("1-1 / 150");
+    const [, forward] = within(range.parentElement as HTMLElement).getAllByRole(
+      "button"
+    );
+    await userEvent.setup().click(forward);
+    await waitFor(() => expect(asked.at(-1)?.offset).toBe(100));
+    act(() => useClusterStore.setState({ namespaceScope: ["shop"] }));
+    await waitFor(() => expect(asked.at(-1)?.offset).toBe(0));
   });
 
   it("counts the table's rows as rules", async () => {
