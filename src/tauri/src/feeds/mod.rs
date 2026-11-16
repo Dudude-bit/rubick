@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::Result;
 use crate::ownership::slots::{spawn_slot, SlotHost, PAGE_WITHIN};
-use crate::ownership::{KindKey, SlotKey, SlotState};
+use crate::ownership::{KindKey, SlotKey, SlotState, LISTED_FOR};
 
 /// How long a kind nobody follows keeps its watch: a page left and opened
 /// again does not list the cluster twice.
@@ -1323,13 +1323,7 @@ impl ContextFeeds {
                 {
                     continue;
                 }
-                spawn_slot(
-                    &generation,
-                    slot,
-                    resource.clone(),
-                    RELIST_EVERY,
-                    PAGE_WITHIN,
-                );
+                generation.spawn(slot, resource.clone());
             }
         }
     }
@@ -1368,6 +1362,11 @@ impl ContextFeeds {
     /// Lets go of page subscriptions nobody touched, and of kinds nobody
     /// has followed for the linger. `true` once nothing is left.
     fn reap(&self, now: Instant) -> bool {
+        let generations: Vec<Arc<Generation>> =
+            self.inner.lock().generations.values().cloned().collect();
+        for generation in generations {
+            generation.overdue(chrono::Utc::now());
+        }
         let mut stopping: Vec<(Arc<Generation>, KindKey)> = Vec::new();
         let empty = {
             let mut inner = self.inner.lock();
@@ -1496,7 +1495,47 @@ impl Generation {
             kind: kind.clone(),
             namespace: None,
         };
-        spawn_slot(self, slot, resource, RELIST_EVERY, PAGE_WITHIN);
+        self.spawn(slot, resource);
+    }
+
+    /// Starts reading `slot`; one left waiting for a watch says so, rather
+    /// than nothing until its turn comes.
+    fn spawn(self: &Arc<Self>, slot: SlotKey, resource: ApiResource) {
+        spawn_slot(self, slot.clone(), resource, RELIST_EVERY, PAGE_WITHIN);
+        let slots = self.slots.lock();
+        if matches!(slots.get(&slot), Some(SlotState::Queued)) {
+            let id = self.id;
+            self.tell(|inner| {
+                inner.state(id, &slot, FeedState::Queued);
+                Vec::new()
+            });
+        }
+    }
+
+    /// A slot read by its list alone whose next turn is long overdue is no
+    /// longer the kind as it is: it says since when, as the ownership index
+    /// says of the same slot.
+    fn overdue(&self, now: chrono::DateTime<chrono::Utc>) {
+        let slots = self.slots.lock();
+        let id = self.id;
+        for (slot, state) in slots.iter() {
+            let SlotState::Listed { at } = state else {
+                continue;
+            };
+            if now
+                .signed_duration_since(*at)
+                .to_std()
+                .is_ok_and(|age| age > LISTED_FOR)
+            {
+                let blind = FeedState::Blind {
+                    since: at.to_rfc3339(),
+                };
+                self.tell(|inner| {
+                    inner.state(id, slot, blind);
+                    Vec::new()
+                });
+            }
+        }
     }
 
     fn stop_kind(&self, kind: &KindKey) {
@@ -2293,6 +2332,47 @@ mod tests {
         context.end();
     }
 
+    /// A kind left waiting for a watch says so at once. Fails if it reads
+    /// as nothing at all until its turn, which the map drew as not installed.
+    #[tokio::test]
+    async fn a_kind_waiting_for_a_watch_says_it_is_queued() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let slot = whole(&deployments().0);
+        assert!(drain(&mut sub).iter().any(|u| matches!(
+            u,
+            Update::State { slot: at, state: FeedState::Queued } if *at == slot
+        )));
+        context.end();
+    }
+
+    /// A list whose next turn is long overdue says since when, as the
+    /// ownership index says of the same slot. Fails if an old list reads as
+    /// synced for good.
+    #[tokio::test]
+    async fn a_list_long_overdue_says_since_when() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        drain(&mut sub);
+        let slot = whole(&deployments().0);
+        let at = chrono::Utc::now()
+            - chrono::Duration::from_std(LISTED_FOR + Duration::from_secs(1)).expect("a span");
+        context
+            .serving()
+            .slots
+            .lock()
+            .insert(slot, SlotState::Listed { at });
+        context.reap(Instant::now());
+        let since = at.to_rfc3339();
+        assert!(drain(&mut sub).iter().any(|u| matches!(
+            u,
+            Update::State { state: FeedState::Blind { since: said }, .. } if *said == since
+        )));
+        context.end();
+    }
+
     /// A renewed client reads every kind again; the old one serves until the
     /// new one has listed, then the new set is handed over with no gap.
     /// Fails if a change on the old client is lost before the hand-over, or
@@ -2350,6 +2430,7 @@ mod tests {
         let feeds = feeds();
         let context = feeds.context_for("prod", client().await);
         let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        drain(&mut sub);
         feeds.client_replaced("prod", None);
         let ended = tokio::time::timeout(Duration::from_secs(2), sub.updates.recv()).await;
         assert!(matches!(ended, Ok(None)), "{ended:?}");
