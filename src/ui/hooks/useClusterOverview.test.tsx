@@ -373,7 +373,7 @@ const ledgerReadReady = (unread = [refused("Pod", "team-blind")]) => ({
   servedFrom: "list",
   counts: { pods: null },
   deployments: {
-    read: [{ reason: "Ready", count: 1, podsUnread: false }],
+    read: [{ reason: "Ready", count: 1, podsUnread: false, troubled: 0 }],
     complete: true,
   },
   unread,

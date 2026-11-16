@@ -48,7 +48,7 @@ export function HandoffSettings() {
               <span className="flex flex-col">
                 <span>{engine.label}</span>
                 {engine.address ? (
-                  <span className="font-mono text-[11px] text-fg-fnt">
+                  <span className="font-mono text-caption text-fg-fnt">
                     {engine.address}
                   </span>
                 ) : null}

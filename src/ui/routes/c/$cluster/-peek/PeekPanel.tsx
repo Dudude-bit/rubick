@@ -42,7 +42,12 @@ export function PeekPanel() {
   }, [target, previous]);
   // The tab lives above the target, not inside it: clicking down a list of
   // pods with Logs open should stay on Logs rather than resetting each time.
-  const [requestedTab, setRequestedTab] = useState<PeekTabId>("overview");
+  // Kept per kind, so a Deployment does not open on the YAML a Pod last used.
+  const [tabByKind, setTabByKind] = useState<Record<string, PeekTabId>>({});
+  const kind = shown?.crd ?? shown?.kind ?? "";
+  const requestedTab = tabByKind[kind] ?? "overview";
+  const setRequestedTab = (tab: PeekTabId) =>
+    setTabByKind((was) => ({ ...was, [kind]: tab }));
   usePeekEscape(!!target, close);
   useHostUnscrolled();
 
@@ -98,9 +103,9 @@ function PeekLoading({ target }: { target: PeekTarget }) {
       onPointerDownOutside={(event) => event.preventDefault()}
       onInteractOutside={(event) => event.preventDefault()}
       aria-describedby={undefined}
-      style={{ width }}
+      style={{ width, minWidth: width }}
       className={cn(
-        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        "flex max-w-none flex-col gap-0 p-0 transition-transform sm:max-w-none",
         position
       )}
     >

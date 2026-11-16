@@ -30,6 +30,7 @@ import {
 } from "@/lib/share/pod-status";
 import { PodCauseLine } from "../-object/CauseLine";
 import { ReplacedNote } from "../-object/ReplacedNote";
+import { PodListedFindings } from "./peek-listed";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -76,7 +77,7 @@ function images(
           <>
             {container.name}
             {PHASE_LABEL[container.phase] && (
-              <span className="ml-1.5 text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+              <span className="ml-1.5 text-micro uppercase tracking-[0.04em] text-fg-fnt">
                 {PHASE_LABEL[container.phase]}
               </span>
             )}
@@ -132,15 +133,17 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,
-      lead: (cause || pod.status.gone === "replaced") && (
+      lead: (
         <>
-          {cause && (
+          {cause ? (
             <PodCauseLine
               pod={pod}
               cause={cause}
               warnedOnly={!trouble}
               className="mt-3"
             />
+          ) : (
+            <PodListedFindings pod={pod} />
           )}
           <ReplacedNote pod={pod} className="mt-3" />
         </>

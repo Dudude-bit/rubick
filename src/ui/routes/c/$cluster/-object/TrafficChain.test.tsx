@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 
 import { objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 
 import { TrafficChain } from "./TrafficChain";
+import { ObjectUnreadContext } from "./object-unread";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ServiceEdges } from "./useServiceEdge";
 import type {
@@ -84,6 +85,42 @@ const unreadBackend: ObjectRef = {
 } as unknown as ObjectRef;
 
 describe("TrafficChain", () => {
+  /**
+   * On a page whose object read was refused, the traffic part was a bare line
+   * with no heading and its own left edge. Fails if the line loses the
+   * section's heading.
+   */
+  it("keeps its heading over the line that waits on a refused object", async () => {
+    await wrap(
+      <ObjectUnreadContext.Provider
+        value={{
+          kind: "Deployment",
+          name: "api",
+          failure: Object.assign(new Error("deployments.apps is forbidden"), {
+            code: "PERMISSION_DENIED",
+          }),
+        }}
+      >
+        <TrafficChain
+          query={
+            {
+              data: undefined,
+              isPending: false,
+              error: new Error("x"),
+              refetch: vi.fn(),
+            } as unknown as ConnectionsQuery
+          }
+        />
+      </ObjectUnreadContext.Provider>
+    );
+    const line = screen.getByTestId("waits-on-object");
+    expect(
+      within(line.parentElement as HTMLElement).getByRole("heading", {
+        name: "How traffic gets here",
+      })
+    ).toBeInTheDocument();
+  });
+
   /** The pod page said only that no Service selects the pod while one was a
    *  label short. Fails if the near Service is not drawn as a link with the
    *  label it lacks. */

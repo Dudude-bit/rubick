@@ -295,7 +295,7 @@ export function LogQuery({
           {/* The chosen key, standing where a chip would, so the input is
               never asking for a value without saying whose. */}
           {active && (
-            <span className="shrink-0 font-mono text-[11px] text-fg-mut">
+            <span className="shrink-0 font-mono text-caption text-fg-mut">
               {active.key}
               <span className="text-fg-fnt">=</span>
             </span>
@@ -346,7 +346,7 @@ export function LogQuery({
         className="w-72 p-1"
       >
         {active && (
-          <div className="flex items-center gap-1 px-1 pb-1 text-[11px] text-fg-fnt">
+          <div className="flex items-center gap-1 px-1 pb-1 text-caption text-fg-fnt">
             <button
               type="button"
               // Not a tab stop: focus stays in the input throughout, and
@@ -432,7 +432,7 @@ function OptionRow({
       {/* Spelled out rather than left as a bare number: the count is the
           reason to pick one of these over another, and a screen reader
           reads the option's text. */}
-      <span className="shrink-0 tabular-nums text-[11px] text-fg-fnt">
+      <span className="shrink-0 tabular-nums text-caption text-fg-fnt">
         {formatCount(lines)} {t("count", "lineNoun", { n: lines })}
       </span>
     </div>
@@ -481,7 +481,7 @@ function Hint({
 
   if (text === null) return null;
   return (
-    <p className="border-t border-hair px-1.5 pb-0.5 pt-1.5 text-[11px] leading-snug text-fg-fnt">
+    <p className="border-t border-hair px-1.5 pb-0.5 pt-1.5 text-caption leading-snug text-fg-fnt">
       {text}
     </p>
   );
@@ -523,7 +523,7 @@ function Chip({
   const label = termLabel(term);
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded font-mono text-[11px] leading-[18px] ${
+      className={`inline-flex shrink-0 items-center rounded font-mono text-caption leading-[18px] ${
         intake || frozen
           ? "bg-info/16 text-info ring-1 ring-inset ring-info/45"
           : "bg-sel text-fg"

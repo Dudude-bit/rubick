@@ -109,7 +109,7 @@ export function AutoscalerBounds({
             }}
           >
             <div className="space-y-1">
-              <Label htmlFor={`${id}-min`} className="font-mono text-[11px]">
+              <Label htmlFor={`${id}-min`} className="font-mono text-caption">
                 minReplicas
               </Label>
               <Input
@@ -126,7 +126,7 @@ export function AutoscalerBounds({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`${id}-max`} className="font-mono text-[11px]">
+              <Label htmlFor={`${id}-max`} className="font-mono text-caption">
                 maxReplicas
               </Label>
               <Input
@@ -155,13 +155,13 @@ export function AutoscalerBounds({
             </ReasonTip>
           </form>
           {problem ? (
-            <p className="text-[11px] text-err" role="alert">
+            <p className="text-caption text-err" role="alert">
               {t("action", problem)}
             </p>
           ) : (
             tried &&
             unchanged && (
-              <p className="text-[11px] text-fg-mut" role="status">
+              <p className="text-caption text-fg-mut" role="status">
                 {t("action", "hpaBoundsUnchanged", {
                   name: autoscaler.name,
                   ...bounds,

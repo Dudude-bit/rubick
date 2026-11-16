@@ -28,7 +28,6 @@ import type { ReactNode } from "react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { KeyValueList } from "../../-object/detail-kv";
 import { governanceRows } from "./governance";
-import { FindingLine } from "../../-object/FindingLine";
 import type { KeyValue } from "@/components/object/key-values";
 import type { ConnectionsRead } from "@/hooks/useConnections";
 
@@ -116,20 +115,17 @@ export function CountBlock({
   governance,
 }: CountBlockProps) {
   const t = useT();
-  const { rows, findings, sets, guards } = governanceRows(governance?.data, t);
+  const { rows, sets, guards } = governanceRows(governance?.data, t);
 
   return (
     <Section>
       <SectionHeader title={title} count={caption(subject, sets, guards, t)} />
-      <div className="grid gap-x-8 md:grid-cols-2">
+      <div className="grid gap-x-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>{children}</div>
         {rows.length > 0 && (
           <KeyValueList items={rows} className="self-start" />
         )}
       </div>
-      {findings.map((finding) => (
-        <FindingLine key={finding.title} finding={finding} />
-      ))}
     </Section>
   );
 }
@@ -196,7 +192,7 @@ export function FactBlock({ title, count, items }: FactBlockProps) {
       {split === 0 ? (
         <KeyValueList items={items} />
       ) : (
-        <div className="grid gap-x-8 md:grid-cols-2">
+        <div className="grid gap-x-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <KeyValueList items={items.slice(0, split)} />
           <KeyValueList items={items.slice(split)} className="self-start" />
         </div>

@@ -4,6 +4,7 @@
  * YAML parser it needs — loads when it is first opened.
  */
 
+import { useState } from "react";
 import { FileJson } from "lucide-react";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -32,8 +33,10 @@ function useOpenEditor({
   const t = useT();
   const { toast } = useToast();
   const openEditor = useYamlEditorStore((state) => state.openEditor);
+  const [opening, setOpening] = useState(false);
 
-  return async () => {
+  const open = async () => {
+    setOpening(true);
     try {
       await openEditor({ title, resourceKey, fetchYaml, readOnly });
     } catch (error) {
@@ -42,8 +45,11 @@ function useOpenEditor({
         description: errorToShow(error),
         variant: "destructive",
       });
+    } finally {
+      setOpening(false);
     }
   };
+  return { open, opening };
 }
 
 const editorLabel = (
@@ -54,13 +60,14 @@ const editorLabel = (
 // Button-based action for use in headers/toolbars
 export function YamlEditorAction(props: YamlEditorActionProps) {
   const t = useT();
-  const open = useOpenEditor(props);
+  const { open, opening } = useOpenEditor(props);
   const denied = useEditDenied(props.readOnly ? null : props.resourceKey);
   return (
     <ReasonedAction
       label={editorLabel(t, props)}
       icon={FileJson}
       onClick={open}
+      busy={opening}
       className={props.className}
       reason={denied}
     />

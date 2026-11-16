@@ -57,7 +57,8 @@ import {
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
-import { ERROR_CODES, errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorToShow, isUnanswered } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import { credentialsExpired } from "@/lib/credentials";
 import { currentConnection } from "@/lib/refusals";
 
@@ -385,12 +386,12 @@ export function YamlEditorDialog() {
       // The command itself failed: nothing was sent, or the session is over.
       const errorMessage = errorToShow(error);
       if (mine())
-        setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
-      toast({
-        title: t("action", "applyFailed"),
-        description: errorMessage,
-        variant: "destructive",
-      });
+        setApplyResult({
+          verdict: isUnanswered(error) ? "unanswered" : "failed",
+          stdout: "",
+          stderr: errorMessage,
+        });
+      toastWriteError(t("action", "applyFailed"), error);
     } finally {
       if (mine()) setIsApplying(false);
     }
@@ -643,7 +644,7 @@ export function YamlEditorDialog() {
                 </>
               )}
               <p
-                className="text-[11px] text-fg-fnt"
+                className="text-caption text-fg-fnt"
                 role="status"
                 data-testid="dry-run-standing"
               >
@@ -734,7 +735,7 @@ function DryRunSection({
       {outcome.says === "refused" ||
       outcome.says === "liveUnread" ||
       outcome.says === "unanswered" ? (
-        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
           {outcome.said}
         </p>
       ) : null}

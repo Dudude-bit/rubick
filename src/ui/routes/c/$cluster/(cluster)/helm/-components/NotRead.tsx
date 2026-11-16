@@ -4,7 +4,7 @@ import { useT } from "@/i18n/useT";
 export function NotRead({ why }: { why: string }) {
   const t = useT();
   return (
-    <span className="text-[11px] text-warn" title={why}>
+    <span className="text-caption text-warn" title={why}>
       {t("empty", "releaseNotRead")}
     </span>
   );

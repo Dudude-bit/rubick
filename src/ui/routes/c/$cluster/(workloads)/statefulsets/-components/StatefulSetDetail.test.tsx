@@ -17,6 +17,9 @@ vi.mock("@/hooks", async (importOriginal) => ({
   useResourceDetail: vi.fn(),
 }));
 
+// The overview these tests seed holds only `podsWarned`, which the shell's count cannot be built from.
+vi.mock("@/hooks/useAttention", () => ({ useAttention: () => null }));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getStatefulset: vi.fn(async () => buildSet()),
@@ -416,7 +419,9 @@ describe("StatefulSetDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Scale" }));
 
     expect(
-      await screen.findByText(/hpa-stateful will put this number back/)
+      await screen.findByText(
+        /The autoscaler hpa-stateful will put this number back/
+      )
     ).toBeInTheDocument();
     expect(screen.getByText(/keeps this between 1 and 3/)).toBeInTheDocument();
     expect(

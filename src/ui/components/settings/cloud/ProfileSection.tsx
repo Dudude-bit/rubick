@@ -1,7 +1,10 @@
 import * as React from "react";
-import { Loader2, Plus, TestTube, Trash2 } from "lucide-react";
+import { Plus, TestTube, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -15,6 +18,8 @@ export function ProfileSection({
   addLabel,
   onAdd,
   isLoading,
+  error,
+  onRetry,
   isEmpty,
   emptyMessage,
   children,
@@ -23,6 +28,9 @@ export function ProfileSection({
   addLabel: string;
   onAdd: () => void;
   isLoading: boolean;
+  /** The list could not be read; it is never drawn as "no profiles". */
+  error?: unknown;
+  onRetry?: () => unknown;
   isEmpty: boolean;
   emptyMessage: string;
   children: React.ReactNode;
@@ -38,11 +46,23 @@ export function ProfileSection({
         </Button>
       </div>
       {isLoading ? (
-        <p className="py-2 text-[11px] text-fg-mut">
-          {t("settings", "loading")}
-        </p>
+        <div
+          role="status"
+          aria-label={t("action", "reading")}
+          className="mt-1 space-y-2 py-1"
+        >
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      ) : error ? (
+        <Unknown
+          className="mt-1"
+          question={t("settings", "profilesUnread")}
+          error={error}
+          onRetry={onRetry}
+        />
       ) : isEmpty ? (
-        <p className="py-2 text-[11px] text-fg-mut">{emptyMessage}</p>
+        <p className="py-2 text-caption text-fg-mut">{emptyMessage}</p>
       ) : (
         <div className="mt-1">{children}</div>
       )}
@@ -55,6 +75,7 @@ export function ProfileRow({
   detail,
   description,
   onTest,
+  testing,
   onEdit,
   onDelete,
   busy,
@@ -64,20 +85,24 @@ export function ProfileRow({
   detail?: React.ReactNode;
   description?: React.ReactNode;
   onTest?: () => void;
+  testing?: boolean;
   onEdit: () => void;
-  onDelete: () => void;
+  /** A promise keeps the confirmation open and pending until the delete settles. */
+  onDelete: () => unknown;
+  /** Some action on this profile is running: none of them can be pressed again. */
   busy?: boolean;
 }) {
   const t = useT();
+  const [confirming, setConfirming] = React.useState(false);
   return (
     <div className="flex items-center justify-between gap-4 rounded px-1 py-1 transition-colors hover:bg-hover">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="truncate font-mono text-xs text-fg">{name}</span>
-          {detail && <span className="text-[11px] text-fg-fnt">{detail}</span>}
+          {detail && <span className="text-caption text-fg-fnt">{detail}</span>}
         </span>
         {description && (
-          <span className="truncate text-[11px] text-fg-mut">
+          <span className="truncate text-caption text-fg-mut">
             {description}
           </span>
         )}
@@ -89,27 +114,34 @@ export function ProfileRow({
             variant="ghost"
             aria-label={t("settings", "testNamed", { name })}
             onClick={onTest}
+            pending={testing}
             disabled={busy}
           >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <TestTube className="h-3.5 w-3.5" />
-            )}
+            <TestTube className="h-3.5 w-3.5" />
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={onEdit}>
+        <Button variant="ghost" onClick={onEdit} disabled={busy}>
           {t("settings", "edit")}
         </Button>
         <Button
           size="icon"
           variant="ghost"
           aria-label={t("settings", "deleteNamed", { name })}
-          onClick={onDelete}
+          onClick={() => setConfirming(true)}
+          disabled={busy}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("settings", "deleteProfileTitle", { name })}
+        description={t("settings", "deleteProfileBody")}
+        confirmLabel={t("action", "delete")}
+        confirmVariant="destructive"
+        onConfirm={onDelete}
+      />
     </div>
   );
 }

@@ -88,16 +88,18 @@ describe("a CRD's page", () => {
       route: "/c/$cluster/customresourcedefinitions/$name",
     });
     await screen.findByRole("button", { name: "Go back" });
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.getByText(/does not exist/)).toBeInTheDocument();
 
     command("getCrd").mockResolvedValue(widgets);
     act(() => useWindowActivity.setState({ focused: false }));
     act(() => useWindowActivity.setState({ focused: true }));
 
+    // The header names the page either way; the sentence is what changes.
+    await waitFor(() =>
+      expect(screen.queryByText(/does not exist/)).toBeNull()
+    );
     expect(
-      await within(await screen.findByRole("heading", { level: 1 })).findByText(
-        NAME
-      )
+      within(screen.getByRole("heading", { level: 1 })).getByText(NAME)
     ).toBeInTheDocument();
   });
 });

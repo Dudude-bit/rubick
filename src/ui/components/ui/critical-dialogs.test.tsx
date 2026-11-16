@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useWriteLog } from "@/stores/writeLogStore";
 
 const PROD = "prod-eu-1";
 
@@ -38,7 +39,7 @@ describe("a plain confirmation on critical infrastructure", () => {
     });
     expect(confirmButton()).toBeDisabled();
 
-    fireEvent.change(screen.getByPlaceholderText(PROD), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: PROD },
     });
     expect(confirmButton()).toBeEnabled();
@@ -78,7 +79,8 @@ describe("a typed confirmation on critical infrastructure", () => {
       />
     );
 
-    const input = screen.getByPlaceholderText(PROD);
+    expect(screen.getByText(PROD, { selector: "code" })).toBeInTheDocument();
+    const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "payments" } });
     expect(confirmButton()).toBeDisabled();
 
@@ -104,7 +106,7 @@ describe("a typed confirmation on critical infrastructure", () => {
       />
     );
     const { rerender } = render(dialog("redis"));
-    fireEvent.change(screen.getByPlaceholderText(PROD), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: PROD },
     });
     expect(confirmButton()).toBeEnabled();
@@ -112,7 +114,7 @@ describe("a typed confirmation on critical infrastructure", () => {
     rerender(dialog(null));
     rerender(dialog("postgres"));
 
-    expect(screen.getByPlaceholderText(PROD)).toHaveValue("");
+    expect(screen.getByRole("textbox")).toHaveValue("");
     expect(confirmButton()).toBeDisabled();
   });
 
@@ -127,9 +129,41 @@ describe("a typed confirmation on critical infrastructure", () => {
         onConfirm={() => {}}
       />
     );
-    fireEvent.change(screen.getByPlaceholderText("payments"), {
+    expect(
+      screen.getByText("payments", { selector: "code" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "payments" },
     });
     expect(confirmButton()).toBeEnabled();
+  });
+});
+
+describe("a typed-name delete the cluster refused", () => {
+  /** Fails if a refused delete leaves no trace in Activity once its dialog is closed, as the plain confirmation's does. */
+  it("is kept with the writes that did not go through", async () => {
+    useWriteLog.setState({ records: [] });
+    const refusal = Object.assign(new Error("deployments is forbidden"), {
+      code: "PERMISSION_DENIED",
+    });
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Delete payments?"
+        confirmationText="payments"
+        confirmLabel="Delete"
+        onOpenChange={() => {}}
+        onConfirm={() => Promise.reject(refusal)}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "payments" },
+    });
+    fireEvent.click(confirmButton());
+    await waitFor(() =>
+      expect(useWriteLog.getState().records).toMatchObject([
+        { title: "Delete payments", context: PROD, outcome: "refused" },
+      ])
+    );
   });
 });

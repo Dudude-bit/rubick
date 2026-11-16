@@ -1,6 +1,6 @@
 import type { SearchFailureKind } from "@/generated/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
@@ -33,6 +33,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const search = vi.hoisted(() => ({
+  searching: false,
+  status: "done",
   options: {} as { everything?: boolean },
   searched: [] as { kind: string; group: string; plural: string }[],
   loading: [] as { kind: string; group: string; plural: string }[],
@@ -64,7 +66,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
         ...new Set(["k3d-dev", ...search.hits.map((h) => h.context)]),
       ].map((context) => ({
         context,
-        status: "done",
+        status: search.status,
         reason: null,
         message: null,
         matched: search.hits.filter((h) => h.context === context).length,
@@ -73,7 +75,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
         unreadable: search.unreadable,
         loading: search.loading,
       })),
-      isSearching: false,
+      isSearching: search.searching,
       error: null,
     };
   },
@@ -155,6 +157,8 @@ describe("the command palette's hits", () => {
     search.unreadable = [];
     search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
     search.loading = [];
+    search.searching = false;
+    search.status = "done";
     useClusterStore.setState({
       currentContext: "k3d-dev",
       currentNamespace: "",
@@ -306,8 +310,9 @@ describe("the command palette's hits", () => {
 
   /**
    * Marco's hover carried one 403 sentence per kind and ran past the bottom
-   * of a 900px screen. Fails if refusals stop sharing one line, or a failure
-   * that is not a refusal loses its own words.
+   * of a 900px screen. Fails if refusals stop sharing one line, a failure
+   * that is not a refusal loses its own words, or a timeout is counted as
+   * refused beside the lock.
    */
   it("says every refusal on one hover line and keeps other failures' words", async () => {
     search.unreadable = [
@@ -330,7 +335,7 @@ describe("the command palette's hits", () => {
     ];
     await open("access");
     const line = await screen.findByText(
-      /5 kinds could not be read wherever asked: DaemonSet/
+      /4 kinds refused wherever asked, 1 kind could not be read wherever asked: DaemonSet/
     );
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "The cluster refused your account: DaemonSet, Lease, Node, Role",
@@ -403,6 +408,17 @@ describe("the command palette's hits", () => {
     expect(
       screen.getByText("Names searched in 1 of 2 kinds served")
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The coverage line was cut mid-glyph at the bottom of the results. Fails
+   * if the line that closes the results stops being pinned to the scroller's
+   * bottom edge.
+   */
+  it("pins the coverage line to the bottom of the results", async () => {
+    await open("marco");
+    const line = await screen.findByText(/^Names searched in/);
+    expect(line.closest("[data-pinned]")).toHaveClass("sticky");
   });
 
   /**
@@ -562,6 +578,77 @@ describe("the command palette's hits", () => {
     expect(await screen.findByText("lena-sandbox")).toBeInTheDocument();
     expect(screen.getByText("All namespaces")).toBeInTheDocument();
     expect(screen.queryByText("Search all namespaces")).toBeNull();
+  });
+
+  /**
+   * Enter pressed while names were still being read was dropped, and a
+   * second Enter opened the match. Fails if the press is not kept and
+   * acted on the first result once it arrives, or if the field says
+   * nothing about the kept press.
+   */
+  it("keeps an Enter pressed before any name and opens the first match when it arrives", async () => {
+    search.searching = true;
+    search.status = "searching";
+    await open("marco");
+    await screen.findByText(/Still reading names for/);
+
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(await screen.findByText(/Enter is kept/)).toBeInTheDocument();
+    expect(useScopeTabStore.getState().tabs).toHaveLength(1);
+
+    search.hits = [hit({ name: "marco-1", namespace: "shop" })];
+    search.searching = false;
+    search.status = "done";
+    act(() =>
+      useClusterStore.setState({
+        contexts: [...useClusterStore.getState().contexts],
+      })
+    );
+
+    await waitFor(() =>
+      expect(useScopeTabStore.getState().tabs).toHaveLength(2)
+    );
+  });
+
+  /** A kept Enter must not open something the reader has since retyped away from. */
+  it("forgets a kept Enter when the query changes", async () => {
+    search.searching = true;
+    search.status = "searching";
+    await open("marco");
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    await screen.findByText(/Enter is kept/);
+    await userEvent.keyboard("x");
+    expect(screen.queryByText(/Enter is kept/)).toBeNull();
+
+    search.hits = [hit({ name: "marcox", namespace: "shop" })];
+    search.searching = false;
+    search.status = "done";
+    act(() =>
+      useClusterStore.setState({
+        contexts: [...useClusterStore.getState().contexts],
+      })
+    );
+    await screen.findByText(/marcox/);
+    expect(useScopeTabStore.getState().tabs).toHaveLength(1);
+  });
+
+  /**
+   * After a miss the highlight sat on "Search the other kinds too" and
+   * stayed there for the next query, so Enter did not open the match. Fails
+   * if the active row stops resetting to the best match when the text moves.
+   */
+  it("moves the highlight back to the best match when the query changes", async () => {
+    search.hits = [];
+    await open("zzzz");
+    await screen.findByText("Search 1 more kind too");
+    await userEvent.keyboard("{ArrowDown}");
+    const field = screen.getByRole("combobox");
+    expect(field.getAttribute("aria-activedescendant")).toMatch(/search-more/);
+
+    search.hits = [hit({ name: "zzzzy", namespace: "shop" })];
+    await userEvent.keyboard("y");
+    await screen.findByText(/zzzzy/);
+    expect(field.getAttribute("aria-activedescendant")).toMatch(/hit:/);
   });
 
   it("still opens the kinds it does have a page for", async () => {
@@ -828,6 +915,21 @@ describe("the command palette's object actions", () => {
     expect(
       await screen.findByRole("link", { name: "Pod burst-demo" })
     ).toHaveAttribute("href", expect.stringMatching(/^\/c\/k3d-stage\//));
+  });
+
+  /** The object's kind icon wrapped onto a line above its name. Fails if the two stop sharing one flex row. */
+  it("keeps the page object's icon on the line of its name", async () => {
+    await renderWithRouter(<CommandPalette />, {
+      at: "/c/k3d-dev/pods/shop/burst-demo",
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    window.dispatchEvent(new Event("command-palette-open"));
+    await screen.findByText("Actions on");
+    const name = screen.getByTestId("resource-ref-name");
+    expect(name.parentElement).toHaveClass("flex");
+    expect(name.parentElement).toContainElement(
+      screen.getByTestId("resource-ref-icon")
+    );
   });
 
   /** On an object's page its own actions are one word away. */

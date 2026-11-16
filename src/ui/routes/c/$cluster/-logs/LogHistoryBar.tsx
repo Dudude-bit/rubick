@@ -5,6 +5,8 @@ import {
   type CapabilityState,
   type UsageRange,
 } from "@/integrations";
+import { ReadAgain } from "@/components/ui/read-again";
+import { SegmentedControl } from "@/components/ui/states";
 import { pageLink } from "@/lib/links";
 import { formatCount } from "@/lib/count";
 import type { HistoryState } from "./hooks/useLogHistory";
@@ -132,9 +134,10 @@ export function LogHistoryBar({
             reason: history.reason,
           })}
         </p>
-        {selected && (
-          <Act onClick={() => onRead(selected)}>{t("action", "askAgain")}</Act>
-        )}
+        <ReadAgain
+          error={history.reason}
+          onRetry={() => onRead(selected ?? DEFAULT_RANGE)}
+        />
       </Bar>
     );
   }
@@ -243,24 +246,18 @@ function Ranges({
 }) {
   const t = useT();
   return (
-    <span className="ml-auto flex items-center gap-0.5">
-      {USAGE_RANGES.map((range) => (
-        <button
-          key={range}
-          type="button"
-          aria-pressed={selected === range}
-          onClick={() => onSelect(range)}
-          title={t("action", "readTheLast", { range })}
-          className={
-            selected === range
-              ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-              : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
-          }
-        >
-          {range}
-        </button>
-      ))}
-    </span>
+    <SegmentedControl
+      className="ml-auto"
+      label={t("action", "history")}
+      value={selected}
+      onChange={onSelect}
+      onClear={() => selected && onSelect(selected)}
+      segments={USAGE_RANGES.map((range) => ({
+        value: range,
+        label: range,
+        title: t("action", "readTheLast", { range }),
+      }))}
+    />
   );
 }
 
@@ -282,9 +279,9 @@ function Bar({
 }) {
   return (
     <div
-      role="status"
+      role={tone === "err" ? "alert" : "status"}
       data-testid={testId ?? "log-history"}
-      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] ${TONES[tone]}`}
+      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption ${TONES[tone]}`}
     >
       {children}
     </div>

@@ -49,6 +49,7 @@ describe("the Services of a scope as their verdict reads them", () => {
         {
           namespace: "net",
           networks: ["10.42.1.0/24"],
+          unread: [],
           groups: [{ ...SERVING, names: ["api", "web"] }],
         },
       ],

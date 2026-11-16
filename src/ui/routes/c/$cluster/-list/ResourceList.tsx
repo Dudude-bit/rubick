@@ -1,6 +1,6 @@
+import { cn } from "@/lib/utils";
 import { ReactNode, useMemo, useState } from "react";
-import { columnHeader } from "@/i18n/column-header";
-import type { ColumnDef, RowData } from "@/components/ui/table-features";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -9,9 +9,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "./ResourceListHeader";
+import { useCountedAt, useKnownCount } from "./known-count";
+import { useOverviewUnreadOf } from "./overview-unread";
+import { Unknown } from "@/components/ui/unknown";
 import { useResource } from "@/hooks/useResource";
 import { useDeliveries } from "../-delivery/useDelivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useScopeMissing } from "@/hooks/useScopeMissing";
+import { listWords } from "@/i18n/say";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   DELIVERY_FILTER_LABEL,
@@ -25,11 +30,14 @@ import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
 import {
   isReadDeadline,
   LIST_DEADLINE_SECONDS,
+  NOTICE_READ_MS,
   openNamespacePicker,
   SLOW_READ_MS,
 } from "@/lib/read-deadline";
-import { useNowSeconds } from "@/hooks/useNow";
+import { useLastPassed, useNowSeconds } from "@/hooks/useNow";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ReadAgain } from "@/components/ui/read-again";
 import { TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -42,14 +50,13 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import {
-  DeliveryColumnCell,
   DeliveryFilterControl,
   DeliveryRowsProvider,
 } from "../-delivery/delivery-column";
+import { deliveryColumn } from "./delivery-list-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import {
   keepWatched,
   scopeOfList,
@@ -62,35 +69,33 @@ import { UnreadNamespaces } from "./UnreadNamespaces";
 import { ListedHere } from "./ListedHere";
 import { NamedRowsBanner } from "./NamedRows";
 import { useNamedRows } from "./useNamedRows";
+import { useSetSearch } from "@/hooks/useSearchParam";
 import { rowName } from "@/lib/links";
-import { StaleRows } from "./StaleRows";
-import { RefusalWayOut, UnreadList } from "./UnreadList";
+import { StaleRows } from "@/components/ui/stale-rows";
+import { HeldWhilePointed } from "@/components/ui/held-while-pointed";
+import { AskedAgain, RefusalWayOut, UnreadList } from "./UnreadList";
+import { metricsAbsent, recheckMetrics } from "../-metrics";
+import {
+  LIST_NOTICE_WIDTH,
+  ListEmpty,
+  ListNoticeRetries,
+  ListUnread,
+} from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
+import { Reading } from "@/components/ui/states";
+import { HeldLines } from "./HeldLines";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
+import { useRecheckRefusal } from "./useRecheckRefusal";
 import { deleteCommandFor } from "../-peek/peek-actions";
 import type { PeekTarget } from "@/hooks/usePeek";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 const NO_ROWS: never[] = [];
 
-/**
- * The column, built once because every list that has one gets exactly this one
- * — and because `flexRender` treats a cell renderer as a React element type.
- * A renderer rebuilt per render remounts its cell on every watch tick; see
- * `RowActions` in `data-table.tsx` for what that cost the row's buttons.
- */
-const DELIVERY_COLUMN: ColumnDef<never> = {
-  size: 150,
-  id: "delivery",
-  header: columnHeader("columns", "delivery"),
-  enableSorting: false,
-  cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
-};
-
-const deliveryColumn = <Row extends RowData>() =>
-  DELIVERY_COLUMN as ColumnDef<Row>;
+/** What a skeleton draws for a list whose length nothing has told us: the fewest rows that still read as a table. */
+const UNKNOWN_COUNT_ROWS = 3;
 
 export interface ResourceDeleteConfig<Row> {
   /** Function to delete a resource */
@@ -160,7 +165,7 @@ export interface ResourceListProps<
    */
   waitingSince?: number | null;
   /** Re-run the read, for a list whose read this component does not own. */
-  onRetry?: () => void;
+  onRetry?: () => unknown;
   /**
    * Whether picking one namespace would make this read shorter. False for a
    * cluster-scoped kind, where the picker cannot change the answer and
@@ -247,6 +252,28 @@ export interface ResourceListProps<
   listQuery?: ListQuery;
 }
 
+/** The sentences about reading a list, naming the scope only for a kind that has one. */
+function useListReadWords(
+  namespaced: boolean,
+  label: string,
+  emptyLabel: string,
+  scope: string
+) {
+  const t = useT();
+  const seconds = LIST_DEADLINE_SECONDS;
+  return namespaced
+    ? {
+        stillReading: t("empty", "stillReading", { label, scope }),
+        readDeadline: t("empty", "readDeadline", { label, scope, seconds }),
+        couldNotRead: t("empty", "couldNotReadInScope", { label: emptyLabel }),
+      }
+    : {
+        stillReading: t("empty", "stillReadingCluster", { label }),
+        readDeadline: t("empty", "readDeadlineCluster", { label, seconds }),
+        couldNotRead: t("empty", "couldNotReadCluster", { label: emptyLabel }),
+      };
+}
+
 export function ResourceList<
   Row extends { name: string; namespace?: string | null },
 >({
@@ -299,6 +326,7 @@ export function ResourceList<
     [noun, emptyStateLabel]
   );
   const namespaceGroups = useMemo(() => byNamespace<Row>(counted), [counted]);
+  const knownCount = useKnownCount(listKind);
   const screen = useMemo(
     () => ({
       title,
@@ -309,6 +337,7 @@ export function ResourceList<
   );
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [matched, setMatched] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const rowMenu = useRowMenu<Row>({ kind: listKind, getRowHref, getRowPeek });
   // Where the row menu can delete this kind, a row's Delete button asks
@@ -350,35 +379,77 @@ export function ResourceList<
   // a resync follows.
   // Asked of the query, not of `data`: rows from outside are undefined
   // exactly when their read failed, and that error is the caller's.
-  const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
-  // A refusal is about who asks now, so rows an earlier read showed go with it.
+  const lastFailed =
+    (shouldUseQuery ? queryResult.error : externalError) ?? null;
+  const lastRefused = lastFailed !== null && isRefusal(lastFailed);
+  const keptAt = useRefusedAt(lastRefused ? lastFailed : null);
+  // The kept refusal is let go while a visit asks again; the query still
+  // knows when the cluster said it, and the screen says how long ago.
+  const refusalAt = !lastRefused
+    ? null
+    : (keptAt ??
+      (shouldUseQuery && queryResult.errorUpdatedAt > 0
+        ? queryResult.errorUpdatedAt
+        : null));
+  // Asked of the cluster, not answered by the kept refusal as a poll is.
+  const askingAgain =
+    refusalAt !== null && keptAt === null && queryResult.isFetching;
+  const countedAt = useCountedAt(listKind);
+  // The sidebar read this list since it was refused: while it is asked again,
+  // the old refusal is not drawn as this visit's answer.
+  const outlived =
+    askingAgain &&
+    refusalAt !== null &&
+    countedAt !== null &&
+    countedAt > refusalAt;
+  const failed = outlived ? null : lastFailed;
   const refused = failed !== null && isRefusal(failed);
-  const refusedAt = useRefusedAt(refused ? failed : null);
+  const refusedAt = refused ? refusalAt : null;
+  useRecheckRefusal(refused ? keptAt : null, () =>
+    onRetry ? onRetry() : data === undefined && queryResult.refetch()
+  );
 
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
   const scope = useNamespaceScope();
+  const namespacedKind = listKind ? listQueryFor(listKind).namespaced : true;
+  const scopeMissing = useScopeMissing();
+  // Not a quiet namespace: a list of one the cluster does not have read
+  // nothing, and its empty sentence and count would say there is none.
+  const scopeGone = !embedded && narrowingHelps && scopeMissing.whole;
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
   const placeholder = shouldUseQuery
     ? queryResult.isPlaceholderData
     : externalPlaceholder;
+  // A refused re-read keeps the rows it had, said below to be from before it.
   const resources = useMemo(() => {
-    if (refused) return NO_ROWS;
+    if (outlived) return NO_ROWS;
     const rows = data ?? queryResult.data?.rows ?? [];
     // A row the last scope read stands in only where this scope reaches it.
     return placeholder
       ? rows.filter((row) => scope.matches(row.namespace))
       : scope.narrow(rows);
-  }, [refused, data, queryResult.data, scope, placeholder]);
+  }, [outlived, data, queryResult.data, scope, placeholder]);
   const unread = placeholder
     ? NOTHING_UNREAD
     : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
       NOTHING_UNREAD);
-  const loading = isLoading ?? queryResult.isLoading;
-  const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
+  const loading = (isLoading ?? queryResult.isLoading) || outlived;
+  const dataUpdatedAt = outlived
+    ? 0
+    : (externalDataUpdatedAt ?? queryResult.dataUpdatedAt);
   // Every list, whatever feeds it: rows a failed read kept are said to be old.
   const stale = failed !== null && resources.length > 0;
+  // Refused while its watch still streams: the rows are the watch's, as Pods keep them.
+  const watchHolds = stale && refused && !!live && !resyncing;
+  const freshList = useOverviewUnreadOf(listKind);
+  const warm =
+    !!live && !resyncing && !refused && failed === null && !!freshList.unread;
+  const warmRefusedAt =
+    warm && freshList.unread && isRefusal(freshList.unread) && freshList.since
+      ? freshList.since
+      : undefined;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const queries = useMemo(
@@ -401,13 +472,24 @@ export function ResourceList<
           name: (row as Row).name,
         })
       : [];
-  const showDelivery = !!delivery && deliveries.available;
+  const showDelivery =
+    !!delivery &&
+    deliveries.available &&
+    (deliveries.isPending ||
+      deliveries.error !== null ||
+      deliveryFilter !== "all" ||
+      resources.some((row) => deliveriesOf(row).length > 0));
+  const deliveryKnown =
+    deliveries.error !== null ||
+    deliveryFilter !== "all" ||
+    resources.some((row) => deliveriesOf(row).length > 0);
   const delivered = showDelivery
     ? resources.filter((row) =>
         matchesDeliveryFilter(deliveryFilter, deliveriesOf(row))
       )
     : resources;
   const named = useNamedRows();
+  const setSearch = useSetSearch();
   const rows = useMemo(
     () =>
       named ? delivered.filter((row) => named.has(rowName(row))) : delivered,
@@ -419,6 +501,11 @@ export function ResourceList<
       named ? resources.filter((row) => named.has(rowName(row))).length : 0,
     [named, resources]
   );
+
+  const filteredToNone =
+    resources.length > 0 &&
+    rows.length === 0 &&
+    (!!named || (showDelivery && deliveryFilter !== "all"));
 
   const deleteMutation = useMutation({
     mutationFn: async (item: Row) => {
@@ -443,20 +530,16 @@ export function ResourceList<
       }
       setDeleteTarget(null);
     },
-    onError: (error, item) => {
-      if (!toastedUnanswered(error))
-        toast({
-          title: t("action", "error"),
-          description: t("action", "deleteFailed", {
-            kind: deleteConfig?.resourceType ?? t("action", "resourceNoun"),
-            name: item.name,
-            error: errorToShow(error),
-          }),
-          variant: "destructive",
-        });
-      setDeleteTarget(null);
-    },
+    onError: (error, item) =>
+      toastWriteError(
+        t("action", "deleteFailed", {
+          kind: deleteConfig?.resourceType ?? t("action", "resourceNoun"),
+          name: item.name,
+        }),
+        error
+      ),
   });
+  const deleting = deleteMutation.isPending ? deleteMutation.variables : null;
 
   // Both memoised, and both had to be: a fresh array on every render rebuilds
   // TanStack's whole column model on every watch tick, and the table re-reads
@@ -483,26 +566,62 @@ export function ResourceList<
         : quickActions
       )?.map((action) =>
         action.variant === "destructive" && action.label === deleteLabel
-          ? { ...action, reason: deleteDenial }
+          ? {
+              ...action,
+              reason: deleteDenial,
+              pending: (item: Row) => item === deleting,
+            }
           : action
       ),
-    [quickActions, requestDelete, deleteLabel, deleteDenial]
+    [quickActions, requestDelete, deleteLabel, deleteDenial, deleting]
   );
 
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
-  const showSkeleton =
+  const waiting =
     (loading || resyncing || placeholder) && resources.length === 0 && !failed;
+  const [lastFailure, setLastFailure] = useState<Error | null>(null);
+  if (failed && lastFailure !== failed) setLastFailure(failed);
+  if (!failed && lastFailure && (!waiting || outlived)) setLastFailure(null);
+  const unreadError = failed ?? (waiting ? lastFailure : null);
+  const showSkeleton = waiting && !unreadError;
+  const retry =
+    onRetry ?? (data === undefined ? () => queryResult.refetch() : undefined);
+  const retryWithMetrics = (read: () => unknown) =>
+    Promise.all([
+      read(),
+      metricsAbsent(queryClient) ? recheckMetrics(queryClient) : null,
+    ]);
+  const watchNotice = watchHolds
+    ? { error: failed, retry: retry && (() => retryWithMetrics(retry)) }
+    : warm && freshList.unread
+      ? {
+          error: Object.assign(new Error(freshList.unread.message), {
+            code: freshList.unread.code,
+          }),
+          retry: () => retryWithMetrics(freshList.retry),
+        }
+      : null;
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
+  const [skeletonSince, setSkeletonSince] = useState<number | null>(null);
+  if (showSkeleton !== (skeletonSince !== null))
+    setSkeletonSince(showSkeleton ? now : null);
   const waitingSince =
-    externalWaitingSince !== undefined
+    (externalWaitingSince !== undefined
       ? externalWaitingSince
-      : queryResult.freshness.waitingSince;
+      : queryResult.freshness.waitingSince) ?? skeletonSince;
   const waitedMs =
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
-  const slow = waitedMs >= SLOW_READ_MS;
+  // Timed to the deadline itself: the one-second clock above lands them up to a second late.
+  const deadlines =
+    showSkeleton && waitingSince !== null
+      ? [waitingSince + NOTICE_READ_MS, waitingSince + SLOW_READ_MS]
+      : [];
+  const passed = useLastPassed(deadlines);
+  const noticed = deadlines.length > 0 && passed >= deadlines[0];
+  const slow = deadlines.length > 0 && passed >= deadlines[1];
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
@@ -523,17 +642,17 @@ export function ResourceList<
   // What the file says about the read, in the words the screen uses: a list
   // nobody could read, or read only part of, is not an empty or a whole one.
   const label = emptyStateLabel.toLowerCase();
+  const readWords = useListReadWords(
+    namespacedKind,
+    label,
+    emptyStateLabel,
+    scope.inWords
+  );
   const failedWords = failed
     ? ranOutOfTime
-      ? t("empty", "readDeadline", {
-          label,
-          scope: scope.inWords,
-          seconds: LIST_DEADLINE_SECONDS,
-        })
+      ? readWords.readDeadline
       : `${
-          isRefusal(failed)
-            ? refusalWords
-            : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
+          isRefusal(failed) ? refusalWords : readWords.couldNotRead
         } (${verbatim(failed.message)})`
     : null;
   const listUnread =
@@ -582,9 +701,28 @@ export function ResourceList<
     () => tableSection(NO_TABLE, share, t)
   );
 
+  const [noticesWaiting, setNoticesWaiting] = useState(false);
+  const noticesSignature = [
+    stale,
+    warm && freshList.unread?.message,
+    !!unreadError,
+    unread.map((namespace) => namespace.namespace).join(","),
+  ].join("|");
+
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
+  const about = description ?? (listKind && <KindAbout kind={listKind} />);
+  const wholeUnread =
+    !!unreadError && resources.length === 0 && !(failed && ranOutOfTime);
+  const deadlineShown =
+    failed !== null && resources.length === 0 && ranOutOfTime;
+  const aboutBelowAlert = wholeUnread || deadlineShown;
+  const aboutLine = about && (
+    <p className="mb-2 text-xs text-fg-mut">
+      <HeldLines>{about}</HeldLines>
+    </p>
+  );
   const content = (
     <>
       {!embedded && (
@@ -594,10 +732,22 @@ export function ResourceList<
           // derived from a source the app has just said it could not read
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
-          count={partial || nothingRead ? undefined : resources.length}
-          description={
-            description ?? (listKind && <KindAbout kind={listKind} />)
+          count={
+            partial || nothingRead || scopeGone
+              ? undefined
+              : matched !== null && matched < rows.length
+                ? t("readings", "shownOfTotal", {
+                    shown: matched,
+                    total: resources.length,
+                  })
+                : showDelivery && deliveryFilter !== "all"
+                  ? t("readings", "shownOfTotal", {
+                      shown: delivered.length,
+                      total: resources.length,
+                    })
+                  : resources.length
           }
+          countPending={showSkeleton}
           actions={
             <>
               {headerActions}
@@ -610,9 +760,10 @@ export function ResourceList<
           // would otherwise still claim they are current.
           live={live && !resyncing && !refused}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
-          stale={stale || (failed !== null && !isRefusal(failed))}
+          stale={stale || warm || (failed !== null && !isRefusal(failed))}
           slowRead={!live && queryResult.freshness.slowRead}
-          refusedAt={refused ? refusedAt : undefined}
+          refusedAt={refused ? refusedAt : warmRefusedAt}
+          held={noticesWaiting}
         />
       )}
       {!embedded && <ListedHere kind={listKind} />}
@@ -623,48 +774,78 @@ export function ResourceList<
           whole={failed === null && !partial}
         />
       )}
-      {headerContent}
-      {stale && (
-        <StaleRows
+      <HeldWhilePointed
+        signature={noticesSignature}
+        onWaiting={setNoticesWaiting}
+      >
+        <ListNoticeRetries.Provider
+          value={(stale && !!retry) || (warm && !!freshList.unread)}
+        >
+          <ListUnread.Provider value={!!unreadError && resources.length === 0}>
+            <ListEmpty.Provider value={resources.length === 0 && !nothingRead}>
+              {headerContent}
+            </ListEmpty.Provider>
+          </ListUnread.Provider>
+        </ListNoticeRetries.Provider>
+        {stale && !watchHolds && (
+          <StaleRows
+            compact={false}
+            className={cn("mb-2", LIST_NOTICE_WIDTH)}
+            label={emptyStateLabel.toLowerCase()}
+            since={dataUpdatedAt}
+            error={failed}
+            onRetry={retry && (() => retryWithMetrics(retry))}
+          />
+        )}
+        {watchNotice && (
+          <Unknown
+            className={cn("mb-2", LIST_NOTICE_WIDTH)}
+            question={t("empty", "watchLiveListFailing", {
+              label: emptyStateLabel.toLowerCase(),
+            })}
+            error={watchNotice.error}
+            onRetry={watchNotice.retry}
+          />
+        )}
+        {stale && refused && askingAgain && refusedAt !== null && (
+          <div className={cn("-mt-1 mb-2", LIST_NOTICE_WIDTH)}>
+            <AskedAgain since={refusedAt} />
+          </div>
+        )}
+        <UnreadNamespaces
+          unread={unread}
           label={emptyStateLabel.toLowerCase()}
-          since={dataUpdatedAt}
-          error={failed}
-          onRetry={
-            onRetry ??
-            (data === undefined ? () => void queryResult.refetch() : undefined)
-          }
+          // Not the placeholder query's refetch when the rows come from outside:
+          // that asks again under a key the page never reads.
+          onRetry={retry}
         />
-      )}
-      <UnreadNamespaces
-        unread={unread}
-        label={emptyStateLabel.toLowerCase()}
-        // Not the placeholder query's refetch when the rows come from outside:
-        // that asks again under a key the page never reads.
-        onRetry={
-          onRetry ??
-          (data === undefined ? () => void queryResult.refetch() : undefined)
-        }
-      />
-      {showDelivery && (
+      </HeldWhilePointed>
+      {!embedded && !aboutBelowAlert && aboutLine}
+      {showDelivery && !showSkeleton && deliveryKnown && (
         <DeliveryFilterControl
           value={deliveryFilter}
           onChange={setDeliveryFilter}
           deliveries={resources.map(deliveriesOf)}
         />
       )}
+      {showSkeleton && !slow && (
+        <div data-testid="reading-list" className="relative h-0">
+          {noticed && (
+            <div className="absolute left-44 top-0 flex h-7 items-center">
+              <Reading>{readWords.stillReading}</Reading>
+            </div>
+          )}
+        </div>
+      )}
       {slow && (
-        <div
+        <Alert
+          variant="warn"
           role="status"
           data-testid="slow-read"
-          className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
+          className={cn("mb-2", LIST_NOTICE_WIDTH)}
         >
           <p className="flex items-baseline gap-2 text-fg">
-            <span>
-              {t("empty", "stillReading", {
-                label: emptyStateLabel.toLowerCase(),
-                scope: scope.inWords,
-              })}
-            </span>
+            <span>{readWords.stillReading}</span>
             <span className="font-mono tabular-nums text-warn">
               {t("count", "secondsShort", {
                 n: Math.round(waitedMs / 1000),
@@ -687,71 +868,64 @@ export function ResourceList<
               </div>
             </>
           )}
-        </div>
+        </Alert>
       )}
-      {failed && resources.length === 0 && ranOutOfTime ? (
-        <div
-          role="status"
-          data-testid="read-deadline"
-          className="max-w-[68ch] py-6"
-        >
-          <p className="flex items-start gap-2 text-xs text-fg">
-            <TriangleAlert
-              className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
-              aria-hidden="true"
-            />
-            <span>
-              {t("empty", "readDeadline", {
-                label: emptyStateLabel.toLowerCase(),
-                scope: scope.inWords,
-                seconds: LIST_DEADLINE_SECONDS,
-              })}
-            </span>
-          </p>
-          {/* Not a fault to retry into: a deadline on a big cluster is the
+      {deadlineShown ? (
+        <>
+          <Alert
+            variant="warn"
+            role="status"
+            data-testid="read-deadline"
+            className={LIST_NOTICE_WIDTH}
+          >
+            <TriangleAlert aria-hidden="true" />
+            <p className="text-fg">
+              <span>{failedWords}</span>
+            </p>
+            {/* Not a fault to retry into: a deadline on a big cluster is the
               cluster being big, so the narrower question comes first. */}
-          <p className="mt-1 pl-[22px] text-xs text-fg-mut">
-            {t("empty", "readDeadlineHint")}
-          </p>
-          {/* No mono line here. In the branch below it carries the
+            <p className="mt-1 text-fg-mut">{t("empty", "readDeadlineHint")}</p>
+            {/* No mono line here. In the branch below it carries the
               cluster's own words, which is why it is there; this message is
               ours, already said above in the reader's language, and the
               `READ_DEADLINE:` marker in front of it is a wire format. */}
-          <div className="mt-2 flex gap-2 pl-[22px]">
-            {narrowingHelps && (scope.isAll || scope.several) && (
-              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
-                {t("action", "pickOneNamespace")}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              // The caller's, where it owns the read: refetching the
-              // placeholder query here would write `[]` under a key the
-              // page never reads and leave the real list exactly as it was.
-              onClick={() => (onRetry ? onRetry() : void queryResult.refetch())}
-            >
-              {t("action", "retry")}
-            </Button>
-          </div>
-        </div>
-      ) : failed && resources.length === 0 ? (
-        <UnreadList
-          error={failed}
-          // A refusal is not a failure, and saying "could not read" about
-          // one invites a retry that will be refused the same way.
-          words={
-            isRefusal(failed)
-              ? refusalWords
-              : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
-          }
-          onRetry={
-            onRetry ??
-            (data === undefined ? () => void queryResult.refetch() : undefined)
-          }
-        >
-          <RefusalWayOut refusal={refusal} />
-        </UnreadList>
+            <div className="mt-2 flex gap-2">
+              {narrowingHelps && (scope.isAll || scope.several) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openNamespacePicker}
+                >
+                  {t("action", "pickOneNamespace")}
+                </Button>
+              )}
+              <ReadAgain
+                error={failed}
+                // The caller's, where it owns the read: refetching the
+                // placeholder query here would write `[]` under a key the
+                // page never reads and leave the real list exactly as it was.
+                onRetry={() => (onRetry ? onRetry() : queryResult.refetch())}
+              />
+            </div>
+          </Alert>
+          {!embedded && aboutLine}
+        </>
+      ) : unreadError && resources.length === 0 ? (
+        <>
+          <UnreadList
+            error={unreadError}
+            // A refusal is not a failure, and saying "could not read" about
+            // one invites a retry that will be refused the same way.
+            words={
+              isRefusal(unreadError) ? refusalWords : readWords.couldNotRead
+            }
+            onRetry={retry}
+            askedAgainAfter={refused && askingAgain ? refusedAt : null}
+          >
+            <RefusalWayOut refusal={refusal} />
+          </UnreadList>
+          {!embedded && aboutLine}
+        </>
       ) : (
         <DataTable
           columns={resolvedColumns}
@@ -762,6 +936,16 @@ export function ResourceList<
           pageKeys={!embedded}
           onRowMenu={rowMenu.open}
           isLoading={showSkeleton}
+          onMatched={setMatched}
+          loadingRows={knownCount ?? UNKNOWN_COUNT_ROWS}
+          loadingGrouped={
+            grouping === undefined
+              ? !!listKind &&
+                listQueryFor(listKind).namespaced &&
+                namespaceScope.length !== 1 &&
+                (knownCount ?? 0) >= 6
+              : false
+          }
           searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
@@ -772,20 +956,60 @@ export function ResourceList<
           rowLabel={emptyStateLabel.toLowerCase()}
           rowNoun={counted}
           partial={partial}
+          partialWhy={
+            unread.length > 0 || more
+              ? undefined
+              : placeholder
+                ? "previousScope"
+                : ranOutOfTime
+                  ? "deadline"
+                  : undefined
+          }
           more={more}
           widthsKey={widthsKey}
           share={embedded ? undefined : share}
           // "None in the scope" is a claim about the namespaces that did not
           // answer too; with any unread, it names the ones that did.
           emptyMessage={
-            unread.length > 0
-              ? noneWhereAnswered(
-                  t,
-                  emptyStateLabel.toLowerCase(),
-                  scope.scope,
-                  unread
-                )
-              : emptyMessage
+            scopeGone
+              ? t("cluster", "scopeMissingTitle", {
+                  n: scopeMissing.missing.length,
+                  names: listWords(scopeMissing.missing, t),
+                })
+              : filteredToNone
+                ? !named && showDelivery
+                  ? t("empty", "deliveryFilterMatchesNothing", {
+                      filter: t(
+                        "action",
+                        DELIVERY_FILTER_LABEL[deliveryFilter]
+                      ),
+                    })
+                  : t("empty", "filtersMatchNothing")
+                : unread.length > 0
+                  ? noneWhereAnswered(
+                      t,
+                      emptyStateLabel.toLowerCase(),
+                      scope.scope,
+                      unread
+                    )
+                  : (emptyMessage ??
+                    (namespacedKind
+                      ? undefined
+                      : t("empty", "noneInCluster", { label })))
+          }
+          emptyAction={
+            filteredToNone && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDeliveryFilter("all");
+                  if (named) setSearch({ names: undefined });
+                }}
+              >
+                {t("empty", "clearFilters")}
+              </Button>
+            )
           }
         />
       )}
@@ -813,12 +1037,9 @@ export function ResourceList<
           }
           confirmLabel={t("action", "delete")}
           confirmVariant="destructive"
-          confirmDisabled={deleteMutation.isPending}
-          onConfirm={() => {
-            if (deleteTarget) {
-              deleteMutation.mutate(deleteTarget);
-            }
-          }}
+          onConfirm={() =>
+            deleteTarget && deleteMutation.mutateAsync(deleteTarget)
+          }
         />
       )}
     </>

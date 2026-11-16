@@ -168,7 +168,7 @@ export function RelatedResources({
               {/* Unsaid until the neighbourhood answers: only it knows whether
                   an autoscaler sets the count instead. */}
               {setter && (
-                <span className="text-[11px] text-fg-fnt">{setter}</span>
+                <span className="text-caption text-fg-fnt">{setter}</span>
               )}
             </span>
           </KeyValueRow>
@@ -191,7 +191,7 @@ function OwnerName({ hop, namespace }: { hop: Hop; namespace?: string }) {
       <OwnerRef owner={hop} namespace={namespace ?? null} />
       {/* The kind qualifies the name. It is not a state, so it is quiet
        *  text rather than a badge. */}
-      <span className="text-[11px] text-fg-fnt">{hop.kind}</span>
+      <span className="text-caption text-fg-fnt">{hop.kind}</span>
     </span>
   );
 }

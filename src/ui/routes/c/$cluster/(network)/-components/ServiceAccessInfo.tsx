@@ -141,15 +141,15 @@ export function ServiceAccessInfo({
         {waysIn(service, t).map((way, idx) => (
           <div key={idx} className="flex items-center justify-between py-3">
             <div className="flex-1 min-w-0 flex flex-col gap-1">
-              <span className="text-sm font-medium">{way.label}</span>
+              <span className="text-xs font-medium">{way.label}</span>
               {"balancer" in way ? (
                 <BalancerAddress service={service} />
               ) : (
                 <>
                   {way.address === null ? (
-                    <None className="text-sm" />
+                    <None className="text-xs" />
                   ) : (
-                    <code className="text-sm font-mono text-fg-mid break-all">
+                    <code className="text-xs font-mono text-fg-mid break-all">
                       {way.address}
                     </code>
                   )}
@@ -166,7 +166,7 @@ export function ServiceAccessInfo({
 
       {service.type === "ClusterIP" && service.ports.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-fg-mut">
+          <p className="text-xs text-fg-mut">
             {parts(t("empty", "clusterIpOnlyInside"), {
               type: <strong>ClusterIP</strong>,
             })}

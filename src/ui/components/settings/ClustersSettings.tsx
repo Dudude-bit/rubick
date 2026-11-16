@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
+import { Eyebrow } from "@/components/ui/states";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { useClusterStore } from "@/stores/clusterStore";
 import { BindingDialog } from "./clusters/BindingDialog";
 import { CloudProfilesPanel } from "./clusters/CloudProfilesPanel";
@@ -41,14 +44,16 @@ export function ClustersSettings() {
   const live = useClusterStore((state) => state.live);
   const t = useT();
 
-  const { data: contexts, isLoading } = useQuery({
+  const contextsQuery = useQuery({
     queryKey: queryKeys.contexts(),
     queryFn: commands.listContexts,
   });
-  const { data: bindings } = useQuery({
+  const { data: contexts } = contextsQuery;
+  const bindingsQuery = useQuery({
     queryKey: queryKeys.contextBindings(),
     queryFn: commands.listContextBindings,
   });
+  const bindings = bindingsQuery.data;
 
   // One lookup for the whole list: thirty contexts naming three distinct
   // plugins is three stat calls, not thirty.
@@ -104,15 +109,28 @@ export function ClustersSettings() {
     <div>
       <SourceLine />
 
-      {isLoading ? (
-        <p className="py-6 text-[11px] text-fg-fnt">
-          {t("settings", "readingFile")}
-        </p>
+      {contextsQuery.isPending ? (
+        <ContextsSkeleton />
+      ) : contextsQuery.isError ? (
+        <Unknown
+          className="my-3"
+          question={t("settings", "contextsUnread")}
+          error={contextsQuery.error}
+          onRetry={() => contextsQuery.refetch()}
+        />
       ) : ordered.length === 0 ? (
         <NoContexts />
       ) : (
         <>
           <ListCaption count={ordered.length} />
+          {bindingsQuery.isError && (
+            <Unknown
+              className="mb-2"
+              question={t("settings", "bindingsUnread")}
+              error={bindingsQuery.error}
+              onRetry={() => bindingsQuery.refetch()}
+            />
+          )}
           {ordered.map((context) => (
             <ContextRow
               key={context.name}
@@ -155,14 +173,31 @@ function ListCaption({ count }: { count: number }) {
   const t = useT();
   return (
     <div className="flex items-baseline justify-between gap-4 pb-1 pt-3">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-        {t("settings", "contexts")}
-      </h3>
+      <Eyebrow as="h3">{t("settings", "contexts")}</Eyebrow>
       {count > 8 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("settings", "searchFiltersList", { n: count })}
         </span>
       )}
+    </div>
+  );
+}
+
+function ContextsSkeleton() {
+  const t = useT();
+  return (
+    <div
+      role="status"
+      aria-label={t("settings", "readingFile")}
+      className="space-y-3 py-4"
+    >
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center gap-3">
+          <Skeleton className="h-3 w-3 rounded-full" />
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="ml-auto h-3 w-24" />
+        </div>
+      ))}
     </div>
   );
 }

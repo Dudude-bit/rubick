@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { Reading } from "@/components/ui/states";
 import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -43,40 +44,65 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   gone: "storyEndedWithObject",
 };
 
-// `unknown` is drawn neutral, never green: the reassuring colour is the one
+// `done` and `unknown` are drawn neutral, never green: the reassuring colour is the one
 // the reader stops looking at, and nothing here established it.
 const STATE_TONE: Record<StoryState, string> = {
-  stillHappening: "bg-err/15 text-err",
-  settled: "bg-warn/15 text-warn",
-  done: "bg-ok/15 text-ok",
+  stillHappening: "bg-info/15 text-info",
+  settled: "bg-fg-fnt/15 text-fg-mut",
+  done: "bg-fg-fnt/15 text-fg-mut",
   unknown: "bg-fg-fnt/15 text-fg-mut",
   earlier: "bg-fg-fnt/15 text-fg-mut",
   gone: "bg-fg-fnt/15 text-fg-mut",
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
-  stillHappening: "border-err/50",
-  settled: "border-warn/50",
-  done: "border-hair",
-  unknown: "border-hair",
-  earlier: "border-hair",
-  gone: "border-hair",
+  stillHappening: "border-l-2 border-l-info/60",
+  settled: "",
+  done: "",
+  unknown: "",
+  earlier: "",
+  gone: "",
 };
 
 const STATE_LINE: Record<StoryState, string> = {
-  stillHappening: "text-err",
-  settled: "text-warn",
+  stillHappening: "text-fg",
+  settled: "text-fg",
   done: "text-fg",
   unknown: "text-fg-mut",
   earlier: "text-fg-mut",
   gone: "text-fg-mut",
 };
 
+/** What a story nobody could place says it could not place: a routine story is not an unread one. */
+function unknownWords(
+  story: Story,
+  options: StoryOptions
+): { label: keyof typeof en.readings; hint: keyof typeof en.readings } {
+  if (story.warnings > 0)
+    return { label: "storyStateUnknown", hint: "storyUndatedHint" };
+  return {
+    label: "storyNoWarningsRead",
+    hint: options.narrowed
+      ? "storyNoWarningsReadNarrowed"
+      : "storyNoWarningsReadCut",
+  };
+}
+
 /** How many of a story's pods the timeline asks about; the rest is said in words. */
 const STATUS_PODS = 5;
 
+function isToday(ms: number, now: number): boolean {
+  const at = new Date(ms);
+  const today = new Date(now);
+  return (
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate()
+  );
+}
+
 /**
- * A timeline row's own clock, with the date whenever it is not today.
+ * A timeline row's own clock, with the date on every row of a timeline once one row is not today.
  *
  * Time of day alone reads as today: a container that last exited at 14:03
  * three days ago — which the pod still remembers and `withStatusMarks` puts
@@ -86,17 +112,12 @@ const STATUS_PODS = 5;
  * locale, which is why the log viewer built its own 24-hour clock; this is
  * that clock, with a date in front of it where one is needed.
  */
-function clockOf(ms: number, now: number): string {
+function clockOf(ms: number, now: number, dated: boolean): string {
   const at = new Date(ms);
   const time = [at.getHours(), at.getMinutes(), at.getSeconds()]
     .map((part) => String(part).padStart(2, "0"))
     .join(":");
-  const today = new Date(now);
-  const sameDay =
-    at.getFullYear() === today.getFullYear() &&
-    at.getMonth() === today.getMonth() &&
-    at.getDate() === today.getDate();
-  if (sameDay) return time;
+  if (!dated && isToday(ms, now)) return time;
   const day = `${String(at.getDate()).padStart(2, "0")}.${String(at.getMonth() + 1).padStart(2, "0")}`;
   return `${day} ${time}`;
 }
@@ -151,11 +172,17 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
   const lastSeen = useRealtimeAge(
     story.lastAt === null ? null : new Date(story.lastAt).toISOString()
   );
-  const span =
+  const spanWords =
     story.firstAt !== null && story.lastAt !== null
       ? coverWords(story.lastAt - story.firstAt, t, "alone")
       : null;
+  const span =
+    spanWords !== null && story.firstAt! < options.now - options.windowMs
+      ? t("readings", "storyReachesBack", { span: spanWords })
+      : spanWords;
   const { subject } = story;
+  const unknown =
+    story.state === "unknown" ? unknownWords(story, options) : null;
   const pods = t("readings", "podsOf", {
     name: subject.name,
     n: podsAmong(story.members),
@@ -184,7 +211,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         openPeek(peek);
       }}
       className={cn(
-        "rounded border bg-canvas px-3 py-2",
+        "border-b border-hair bg-canvas px-3 py-2",
         peek && "cursor-pointer hover:bg-hover/40",
         STATE_EDGE[story.state]
       )}
@@ -225,7 +252,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         )}
         <span
           className={cn(
-            "rounded px-1.5 py-px text-[10px] font-medium",
+            "rounded px-1.5 py-px text-micro font-medium",
             STATE_TONE[story.state]
           )}
           title={
@@ -237,12 +264,16 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
                     : "storyEndedWithObjectHint",
                   { kind: subject.kind, name: subject.name }
                 )
-              : undefined
+              : unknown
+                ? t("readings", unknown.hint)
+                : undefined
           }
         >
-          {t("readings", STATE_LABEL[story.state])}
+          {unknown
+            ? t("readings", unknown.label)
+            : t("readings", STATE_LABEL[story.state])}
         </span>
-        <span className="ml-auto text-[11px] text-fg-fnt">
+        <span className="ml-auto text-caption text-fg-fnt">
           {[
             t("count", "eventsSeen", { n: story.occurrences }),
             span,
@@ -262,9 +293,10 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
       <Strip
         buckets={densityOf(story, options)}
         title={t("readings", "lastSeenStrip")}
+        unreadTitle={t("readings", "lastSeenStripUnread")}
       />
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
         {story.reasons.map((reason) => (
           <span
             key={`${reason.warning}:${reason.reason}`}
@@ -286,14 +318,14 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
           type="button"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
-          className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+          className="ml-auto rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
         >
           {t("action", open ? "hideTimeline" : "showTimeline")}
         </button>
       </div>
 
       {subject.byName ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "groupedByName")}
         </p>
       ) : null}
@@ -306,16 +338,20 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
 function Strip({
   buckets,
   title,
+  unreadTitle,
 }: {
   buckets: DensityBucket[];
   title: string;
+  unreadTitle: string;
 }) {
   const peak = Math.max(1, ...buckets.map((b) => b.count));
   return (
     <div
       className="mt-1.5 flex h-4 items-end gap-px"
       role="img"
-      aria-label={title}
+      aria-label={
+        buckets.some((b) => !b.read) ? `${title} ${unreadTitle}` : title
+      }
       title={title}
     >
       {buckets.map((bucket, index) => (
@@ -334,6 +370,7 @@ function Strip({
                   ? "bg-warn"
                   : "bg-fg-fnt"
           )}
+          title={bucket.read ? undefined : unreadTitle}
           style={{
             height: !bucket.read
               ? "100%"
@@ -397,23 +434,33 @@ function Timeline({ story }: { story: Story }) {
     );
   });
   const unread = statuses.filter((s) => s.isError).length;
+  const reading = statuses.filter((s) => s.isPending).length;
   const entries = withStatusMarks(timelineOf(story), marks);
   const several = story.members.length > 1;
+  const dated = entries.some(
+    (entry) => entry.at !== null && !isToday(entry.at, now)
+  );
 
   return (
     <div className="mt-2 border-t border-hair pt-1.5">
-      <ol className="flex flex-col gap-0.5 text-[11px]">
+      <ol className="flex flex-col gap-0.5 text-caption">
         {entries.map((entry, index) => (
           <TimelineRow
             key={index}
             entry={entry}
             showAbout={several}
             now={now}
+            dated={dated}
           />
         ))}
       </ol>
+      {reading > 0 ? (
+        <Reading className="mt-1">
+          {t("readings", "podStatusReading", { n: reading })}
+        </Reading>
+      ) : null}
       {unread > 0 ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "podStatusUnread", { n: unread })}
         </p>
       ) : null}
@@ -421,7 +468,7 @@ function Timeline({ story }: { story: Story }) {
           drew five exits and looked complete; the ones nobody asked about
           are said in the same breath as the ones that refused. */}
       {skipped > 0 ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "podStatusNotAsked", { n: skipped })}
         </p>
       ) : null}
@@ -433,10 +480,12 @@ function TimelineRow({
   entry,
   showAbout,
   now,
+  dated,
 }: {
   entry: TimelineEntry;
   showAbout: boolean;
   now: number;
+  dated: boolean;
 }) {
   const t = useT();
   const tone = entry.fromStatus
@@ -447,11 +496,18 @@ function TimelineRow({
       ? "text-warn"
       : "text-fg-fnt";
   return (
-    <li className="grid grid-cols-[64px_8px_minmax(0,1fr)] items-baseline gap-2">
+    <li
+      className={cn(
+        "grid items-baseline gap-2",
+        dated
+          ? "grid-cols-[104px_8px_minmax(0,1fr)]"
+          : "grid-cols-[64px_8px_minmax(0,1fr)]"
+      )}
+    >
       <span className="font-mono text-fg-fnt">
-        {entry.at === null ? "?" : clockOf(entry.at, now)}
+        {entry.at === null ? "?" : clockOf(entry.at, now, dated)}
       </span>
-      <span className={cn("text-[9px]", tone)} aria-hidden="true">
+      <span className={cn("text-micro", tone)} aria-hidden="true">
         {entry.fromStatus ? "◆" : entry.warning ? "▲" : "●"}
       </span>
       <span className="min-w-0">
@@ -484,7 +540,7 @@ function TimelineRow({
           <span className="ml-1 text-fg-fnt">
             ×{entry.count}
             {entry.until !== null
-              ? `, ${clockOf(entry.at ?? entry.until, now)} → ${clockOf(entry.until, now)}`
+              ? `, ${clockOf(entry.at ?? entry.until, now, dated)} → ${clockOf(entry.until, now, dated)}`
               : ""}
           </span>
         ) : null}

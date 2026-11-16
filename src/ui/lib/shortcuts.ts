@@ -207,6 +207,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { id: "newTab", section: "tabs", keys: ["mod+t"], labelKey: "newTab" },
   { id: "closeTab", section: "tabs", keys: ["mod+w"], labelKey: "closeTab" },
+  { id: "goBack", section: "tabs", keys: ["alt+←"], labelKey: "goBack" },
   { id: "nthTab", section: "tabs", keys: ["mod+1…9"], labelKey: "nthTab" },
 
   {
@@ -230,7 +231,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   {
     id: "treeSiblings",
     section: "tree",
-    keys: ["alt+←", "alt+→"],
+    keys: ["alt+shift+←", "alt+shift+→"],
     labelKey: "treeSiblings",
   },
 
@@ -267,7 +268,9 @@ export const SECTIONS: readonly ShortcutSection[] = [
  */
 export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/routes/c/$cluster/-shell/useShortcuts.ts":
-    "the central handler: ?, g-chords, page keys",
+    "the central handler: ?, g-chords, page keys, alt+left for Back",
+  "src/ui/lib/select-all-guard.ts":
+    "not a shortcut: mod+a outside a field, an editor or a region with its own select-all selects nothing",
   "src/ui/routes/c/$cluster/-shell/CommandPalette.tsx": "mod+k",
   "src/ui/components/settings/SettingsOverlay.tsx": "mod+,",
   "src/ui/routes/c/$cluster/-shell/useCopyLink.ts": "mod+shift+c",
@@ -277,13 +280,13 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/components/cluster/ClusterList.tsx":
     "mod+f focuses the cluster filter, on the front door only",
   "src/ui/routes/c/$cluster/-shell/ScopeTabs.tsx":
-    "mod+click and mod+Enter add a namespace instead of replacing it",
+    "not a shortcut: arrows, Home and End walk the tab bar, which takes one tab stop; mod+click and mod+Enter add a namespace instead of replacing it",
   "src/ui/routes/c/$cluster/-logs/LogList.tsx":
     "mod+a selects the rendered window, not the whole buffer",
   "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":
     "mod+s downloads, Backspace goes up",
   "src/ui/routes/c/$cluster/-object/ownership-keys.ts":
-    "alt+arrows move along ownership on an object's page",
+    "alt+up, alt+down and alt+shift+arrows move along ownership on an object's page",
   "src/ui/lib/focus-modality.ts":
     "not a shortcut: notices the reader is on the keyboard, so focus rings show, and wraps Tab inside the window",
   "src/ui/lib/window-activity.ts":
@@ -296,8 +299,12 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: bare arrows, Home and End walk the tab strip; a chord passes through",
   "src/ui/lib/native-menu.ts":
     "Menu and shift+F10 open the focused control's context menu",
+  "src/ui/routes/c/$cluster/-shell/Sidebar.tsx":
+    "not a shortcut: arrows, Home and End walk the sidebar's rows, which take one tab stop",
   "src/ui/components/ui/data-table.tsx":
     "not a shortcut: bare left and right walk the focused row's links; a chord passes through",
+  "src/ui/routes/c/$cluster/-overview/health.tsx":
+    "not a shortcut: a bare down arrow with nothing focused enters the Overview's problem rows, and up and down walk them",
 };
 
 export function chordsOf(): Shortcut[] {

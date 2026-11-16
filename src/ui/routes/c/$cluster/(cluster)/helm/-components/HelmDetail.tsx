@@ -65,7 +65,9 @@ import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { installedObjects } from "@/lib/helm-manifest";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { useHeldOpen } from "../../../-list/useHeldOpen";
+import { toastWriteError } from "@/lib/toast-error";
+import { Reading } from "@/components/ui/states";
 import { None } from "@/components/ui/none";
 import { NotRead } from "./NotRead";
 import {
@@ -103,6 +105,7 @@ function valuesAsYaml(values: unknown, empty: string): string {
   }
 }
 
+const HELM_RELEASE_KIND = "Helm release";
 const NO_HISTORY: HelmRevision[] = [];
 const NOTHING_SAID: string[] = [];
 
@@ -128,6 +131,7 @@ export function HelmDetail() {
 
   const isNative = source === "native";
   const helmCliAvailable = helm?.available ?? false;
+  const helmCliMissing = helm !== null && !helm.available;
   const goBack = () => navigate(pageLink("helm"));
 
   // Nothing watches a release by name, and this page has no timer: one
@@ -138,6 +142,7 @@ export function HelmDetail() {
     isFetching,
     refetch,
     error,
+    freshness,
   } = useLiveQuery({
     queryKey: queryKeys.helm.release(namespace, name),
     queryFn: async () => {
@@ -184,7 +189,7 @@ export function HelmDetail() {
       setRollbackTarget(null);
     },
     onError: (error) => {
-      toastError(t("action", "rollbackFailed"), error);
+      toastWriteError(t("action", "rollbackFailed"), error);
     },
   });
 
@@ -201,9 +206,11 @@ export function HelmDetail() {
       goBack();
     },
     onError: (error) => {
-      toastError(t("action", "uninstallFailed"), error);
+      toastWriteError(t("action", "uninstallFailed"), error);
     },
   });
+
+  const uninstallHeld = useHeldOpen(() => setShowUninstall(false));
 
   const values = useMemo(
     () => valuesAsYaml(release?.values, t("empty", "noValuesSet")),
@@ -318,8 +325,8 @@ export function HelmDetail() {
             items={facts}
             className="max-w-lg"
           />
-          {!helmCliAvailable && (
-            <p className="text-[11px] text-warn">
+          {helmCliMissing && (
+            <p className="text-caption text-warn">
               {t("empty", "helmCliMissing")}
             </p>
           )}
@@ -331,7 +338,7 @@ export function HelmDetail() {
       label: t("action", "history"),
       glyph: viewGlyph(History),
       mark: historyError
-        ? readCountMark(null, t("empty", "helmHistoryUnread"))
+        ? readCountMark(null, t("empty", "helmHistoryUnread"), historyError)
         : readCountMark(historyRead ? historyRead.length : null, null),
       content: (
         <Section>
@@ -353,9 +360,7 @@ export function HelmDetail() {
               onRetry={() => void refetchHistory()}
             />
           ) : historyLoading ? (
-            <p className="text-xs text-fg-fnt">
-              {t("empty", "readingHistory")}
-            </p>
+            <Reading>{t("empty", "readingHistory")}</Reading>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               <T section="empty" k="noHelmHistory" />
@@ -385,7 +390,7 @@ export function HelmDetail() {
                       <TableCell className="font-mono text-fg">
                         {rev.revision}
                         {current && (
-                          <span className="ml-1.5 text-[11px] text-fg-fnt">
+                          <span className="ml-1.5 text-caption text-fg-fnt">
                             {t("empty", "revisionCurrentWord")}
                           </span>
                         )}
@@ -475,7 +480,7 @@ export function HelmDetail() {
                       header already says which namespace the release is in,
                       and printing it on every row also claimed a namespace
                       for the cluster-scoped kinds, which have none. */}
-                  <span className="truncate text-[11px] text-fg-fnt">
+                  <span className="truncate text-caption text-fg-fnt">
                     {object.namespace === release?.namespace
                       ? ""
                       : object.namespace}
@@ -559,8 +564,9 @@ export function HelmDetail() {
         resource={release}
         share={share}
         isLoading={isLoading}
-        error={error}
-        resourceKind={t("readings", "helmRelease")}
+        error={release ? null : error}
+        freshness={freshness}
+        resourceKind={HELM_RELEASE_KIND}
         listLink={pageLink("helm")}
         listLabel="Helm"
         // The Helm list filters by a namespace of its own that this scope does
@@ -574,10 +580,10 @@ export function HelmDetail() {
         badges={
           release && (
             <>
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {release.chart}:{release.chartVersion}
               </span>
-              <span className="text-[11px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("columns", "revisionInline", { n: release.revision })}
               </span>
             </>
@@ -604,7 +610,6 @@ export function HelmDetail() {
                   label={t("action", "uninstall")}
                   icon={Trash2}
                   onClick={() => setShowUninstall(true)}
-                  danger
                 />
               </>
             )}
@@ -627,17 +632,15 @@ export function HelmDetail() {
         })}
         confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
-        confirmDisabled={rollbackMutation.isPending}
-        onConfirm={() => {
-          if (rollbackTarget !== null) {
-            rollbackMutation.mutate(rollbackTarget);
-          }
-        }}
+        onConfirm={() =>
+          rollbackTarget !== null &&
+          rollbackMutation.mutateAsync(rollbackTarget)
+        }
       />
 
       <DangerousConfirmDialog
         open={showUninstall}
-        onOpenChange={setShowUninstall}
+        onOpenChange={uninstallHeld.onOpenChange}
         title={t("action", "uninstallRelease")}
         description={t("action", "uninstallReleaseDetail", {
           name: release?.name ?? "",
@@ -646,7 +649,11 @@ export function HelmDetail() {
         confirmationText={release?.name ?? ""}
         confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}
-        onConfirm={() => uninstallMutation.mutate()}
+        onConfirm={() =>
+          uninstallHeld
+            .hold(uninstallMutation.mutateAsync())
+            .catch(() => undefined)
+        }
       />
     </>
   );

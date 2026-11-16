@@ -21,6 +21,7 @@ export const columns = (): ColumnDef<SecretInfo>[] => [
     id: "type",
     header: columnHeader("columns", "type"),
     meta: {
+      sort: (row: SecretInfo) => row.type,
       share: (row: SecretInfo) => ({
         text: row.type.replace("kubernetes.io/", ""),
         mono: true,

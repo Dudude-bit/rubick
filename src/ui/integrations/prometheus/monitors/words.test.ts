@@ -47,6 +47,12 @@ describe("the headline above the monitor list", () => {
     ).toBe("scrapeUnchecked");
   });
 
+  it("says nothing of scraping when there are no monitors", () => {
+    expect(headlineKey(picture({ state: "notConnected" }), [])).toBe(
+      "noMonitors"
+    );
+  });
+
   it("claims the scrape only once the targets have been read", () => {
     expect(headlineKey(picture(READ), [row(null)])).toBe("allScraped");
   });

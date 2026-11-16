@@ -39,6 +39,7 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useLastPassed } from "@/hooks/useNow";
+import { useAttention } from "@/hooks/useAttention";
 import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
@@ -50,6 +51,7 @@ import {
   type CauseOwner,
   type WorkloadRow,
 } from "./row-cause";
+import { problemOfRow, rowProblems } from "../../-object/row-items";
 
 type Workload = { name: string; namespace: string; uid?: string };
 
@@ -144,7 +146,6 @@ export function createWorkloadListPage<T extends Workload>(
       subscribe,
       queryKey,
       detail,
-      reportFailure: config.title,
     });
 
     // Under a live watch, a namespace this read missed keeps the rows the
@@ -178,6 +179,7 @@ export function createWorkloadListPage<T extends Workload>(
         : read;
     }, [listQuery.data, starts, ranOut]);
 
+    const attention = useAttention();
     const podsFailed = !podsRead && !!podsError;
     const causePods = useMemo(
       () =>
@@ -185,35 +187,48 @@ export function createWorkloadListPage<T extends Workload>(
       [pods, podsRead, podsUnread, podsFailed]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
+    const problems = useMemo(
+      () => rowProblems(attention?.items ?? []),
+      [attention]
+    );
     const refusalsIn = useScopeRefusals(
       scope.wire,
       config.resourceType !== ResourceType.Deployment
     );
     const dataWithMetrics = useMemo(
       () =>
-        attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
-          (row): WorkloadRow<T> => {
-            const owner = ownerOf(row);
-            const refused = rowRefusal(
-              row,
+        attachAggregatedPodMetrics<T>(
+          rows,
+          pods,
+          config.matchPods,
+          podsRead
+        ).map((row): WorkloadRow<T> => {
+          const owner = ownerOf(row);
+          const refused = rowRefusal(
+            row,
+            owner,
+            causePods,
+            refusalsIn(row.namespace)
+          );
+          return {
+            ...row,
+            ...(config.refused?.(row, refused) ?? {}),
+            podsCause: rowCause(
+              row.namespace,
               owner,
               causePods,
-              refusalsIn(row.namespace)
-            );
-            return {
-              ...row,
-              ...(config.refused?.(row, refused) ?? {}),
-              podsCause: rowCause(
-                row.namespace,
-                owner,
-                causePods,
-                causeAt,
-                refused
-              ),
-            };
-          }
-        ),
-      [rows, pods, causePods, causeAt, refusalsIn]
+              causeAt,
+              refused
+            ),
+            problem: problemOfRow(
+              problems,
+              config.resourceType,
+              row.namespace,
+              row.name
+            ),
+          };
+        }),
+      [rows, pods, podsRead, causePods, causeAt, refusalsIn, problems]
     );
 
     const columns = useMemo(() => config.columns(), []);

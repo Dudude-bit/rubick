@@ -133,7 +133,8 @@ export function watchedSection(
   watching: ObservedSpan | undefined,
   spans: readonly ObservedSpan[],
   items: readonly ChangeItem[],
-  t: T
+  t: T,
+  down?: { at: number; why: string }
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
   const refused = watching && unwatchedWords(watching, t);
@@ -141,7 +142,13 @@ export function watchedSection(
     watching && earlierRowsWords(spans, items, watching.from, t, clock);
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
-    : t("changes", "notWatchingNow");
+    : [
+        t("changes", "notWatchingNow"),
+        down &&
+          t("changes", "watchDown", { since: clock(down.at), why: down.why }),
+      ]
+        .filter(Boolean)
+        .join(" ");
   const quiet = quietSince(watching, items);
   const nothing =
     quiet !== null &&

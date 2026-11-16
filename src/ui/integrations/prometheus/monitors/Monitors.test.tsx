@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
@@ -39,7 +39,8 @@ vi.mock("./data", async (original) => ({
   usePicture: () => ({ data: PICTURE, error: null, refetch: () => {} }),
 }));
 vi.mock("./Detail", () => ({ Detail: () => null }));
-vi.mock("../saved-connection", () => ({
+vi.mock("../saved-connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../saved-connection")>()),
   useSavedConnection: () => ({ data: null }),
 }));
 
@@ -138,5 +139,61 @@ describe("a cluster with monitors and no Prometheus object", () => {
     expect(notice.className).not.toContain("text-err");
     expect(screen.queryByText(en.monitors.rowNotPickedUp)).toBeNull();
     expect(screen.getAllByText(en.monitors.rowNotChecked)).toHaveLength(2);
+  });
+});
+
+/** The move/open hint sat under an empty list; fails if it shows with no rows to move over. */
+describe("the keyboard hint under the ladder", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+  });
+
+  it("is shown over rows and gone over none", async () => {
+    const view = await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+    expect(await screen.findByText(en.monitors.keysMove)).toBeInTheDocument();
+    view.unmount();
+    PICTURE = {
+      ...before,
+      serviceMonitors: { state: "read", items: [] },
+    } as unknown as Picture;
+    await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+    expect(screen.queryByText(en.monitors.keysMove)).toBeNull();
+  });
+});
+
+/**
+ * A Prometheus that did not answer for its targets was a bordered amber note
+ * with the reason pasted into a sentence and no way to ask again. Fails if
+ * the page goes back to a bare note, or loses the read-again button.
+ */
+describe("a Prometheus that did not answer for its targets", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+  });
+
+  it("is Unknown with the reason and a way to ask again", async () => {
+    PICTURE = {
+      ...before,
+      targets: { state: "unanswered", reason: "connection refused" },
+    } as unknown as Picture;
+    await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+
+    const unknown = (
+      await screen.findByText(en.monitors.scrapeUnanswered)
+    ).closest("[role=status]")!;
+    expect(unknown).toHaveTextContent("connection refused");
+    expect(
+      within(unknown as HTMLElement).getByRole("button", {
+        name: /again/i,
+      })
+    ).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Activity, TriangleAlert } from "lucide-react";
 
 import {
   Table,
@@ -33,6 +34,10 @@ import { parts } from "@/i18n/parts";
 import { sayWords } from "@/i18n/say";
 import type { en } from "@/i18n/catalogue";
 import { None } from "@/components/ui/none";
+import { Alert } from "@/components/ui/alert";
+import { EmptyState, Reading, SegmentedControl } from "@/components/ui/states";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
 const TREND_RANGES = USAGE_RANGES.filter((range) => range !== "15m");
@@ -47,6 +52,7 @@ interface NodeUtilisationProps {
   nodesKnown?: boolean;
   /** Why the node list could not be read, where that is known. */
   nodesReason?: string | null;
+  onRetryNodes?: () => void;
   range: UsageRange;
   onRange: (range: UsageRange) => void;
 }
@@ -62,6 +68,7 @@ export function NodeUtilisation({
   nodes,
   nodesKnown = true,
   nodesReason = null,
+  onRetryNodes,
   range,
   onRange,
 }: NodeUtilisationProps) {
@@ -131,18 +138,23 @@ export function NodeUtilisation({
   // put a lane against, and an empty table here reads as "this cluster has
   // no nodes" — which is the node list's failure wearing the cluster's face.
   if (!nodesKnown) {
-    return (
-      <p className="px-1 py-6 text-xs text-warn" role="status">
-        {nodesReason
-          ? t("empty", "nodesDidNotList", { reason: nodesReason })
-          : t("action", "reading")}
-      </p>
+    return nodesReason ? (
+      <Unknown
+        question={t("empty", "nodesNotListedForTrends")}
+        error={nodesReason}
+        onRetry={onRetryNodes}
+      />
+    ) : (
+      <div className="space-y-3 px-1 py-2">
+        <Reading>{t("action", "reading")}</Reading>
+        <TextSkeleton lines={6} />
+      </div>
     );
   }
 
   if (power.state === "absent") {
     return (
-      <p className="px-1 py-6 text-xs text-fg-mut">
+      <EmptyState icon={Activity}>
         {parts(t("empty", "trendsNeedPrometheus"), {
           link: (
             <Link
@@ -153,13 +165,13 @@ export function NodeUtilisation({
             </Link>
           ),
         })}
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-2 text-[11px] text-fg-fnt">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-2 text-caption text-fg-fnt">
         <span>{t("empty", "trendsSortNote")}</span>
         {power.state === "ready" && (
           <span>
@@ -167,47 +179,42 @@ export function NodeUtilisation({
             {query.data ? ` · ${sayWords(query.data.resolution, t)}` : ""}
           </span>
         )}
-        <span className="ml-auto flex items-center gap-0.5">
+        <span className="ml-auto flex items-center gap-2">
           {query.isFetching && (
-            <span className="mr-1 text-[10px]">
+            <Reading className="text-micro">
               {t("action", "readingInline")}
-            </span>
+            </Reading>
           )}
-          {TREND_RANGES.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              aria-pressed={candidate === range}
-              onClick={() => onRange(candidate)}
-              className={
-                candidate === range
-                  ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-                  : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
-              }
-            >
-              {candidate}
-            </button>
-          ))}
+          <SegmentedControl
+            label={t("columns", "usage")}
+            value={range}
+            onChange={onRange}
+            mono
+            segments={TREND_RANGES.map((candidate) => ({
+              value: candidate,
+              label: candidate,
+            }))}
+          />
         </span>
       </div>
       {power.state === "unreachable" && (
-        <p className="px-1 pb-2 text-[11px] text-warn" role="status">
+        <Alert variant="warn" role="status" className="mb-2">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.vendor,
             reason: power.reason,
           })}
-        </p>
+        </Alert>
       )}
       {query.error && (
-        <p className="px-1 pb-2 text-[11px] text-warn" role="status">
+        <Alert variant="warn" role="status" className="mb-2">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.state === "ready" ? power.vendor : "",
             reason: errorToShow(query.error),
           })}
-        </p>
+        </Alert>
       )}
       {power.state === "ready" && fromPods && (
-        <p className="px-1 pb-2 text-[11px] text-fg-mut" role="note">
+        <p className="px-1 pb-2 text-caption text-fg-mut" role="note">
           {t("empty", "nodesFromPods", { vendor: power.vendor })}
         </p>
       )}
@@ -272,10 +279,8 @@ function SilentNodes({
   );
   const monitors = `${vendor} › ${t("monitors", "tabMonitors")}`;
   return (
-    <div
-      className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
-      role="status"
-    >
+    <Alert variant="warn" role="status" className="mb-2">
+      <TriangleAlert aria-hidden />
       <p className="text-fg">{t("empty", "nodesSilentTitle", { vendor })}</p>
       <p className="mt-1 text-fg-mut">
         {parts(t("empty", "nodesSilentAsked"), {
@@ -298,7 +303,7 @@ function SilentNodes({
           ),
         })}
       </p>
-    </div>
+    </Alert>
   );
 }
 
@@ -330,12 +335,14 @@ function Row({
         >
           {trend.node.name}
         </Link>
-        {facts && <span className="ml-2 text-[11px] text-fg-fnt">{facts}</span>}
+        {facts && (
+          <span className="ml-2 text-caption text-fg-fnt">{facts}</span>
+        )}
       </TableCell>
       <Lane lane={trend.cpu} blind={trend.blind} quiet={quiet} />
       <Lane lane={trend.memory} blind={trend.blind} quiet={quiet} />
       {note != null && (
-        <TableCell className="text-[11px] text-fg-fnt">{note}</TableCell>
+        <TableCell className="text-caption text-fg-fnt">{note}</TableCell>
       )}
     </TableRow>
   );
@@ -359,7 +366,7 @@ function Lane({
   const t = useT();
   if (lane === null) {
     return (
-      <TableCell className="text-[11px] text-fg-fnt">
+      <TableCell className="text-caption text-fg-fnt">
         {quiet ? <None /> : t("empty", BLIND_SHORT[blind ?? "noSeries"])}
       </TableCell>
     );
@@ -368,7 +375,7 @@ function Lane({
     <TableCell>
       <div className="flex items-center gap-3">
         <Sparkline points={lane.points} />
-        <span className="font-mono text-[11px] tabular-nums text-fg-mut">
+        <span className="font-mono text-caption tabular-nums text-fg-mut">
           {t("readings", "peakAvgPercent", {
             peak: Math.round(lane.peak),
             avg: Math.round(lane.avg),

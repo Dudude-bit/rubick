@@ -10,6 +10,7 @@
  */
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
 import { cn, formatWhen } from "@/lib/utils";
 import {
   expiryOf,
@@ -45,17 +46,13 @@ export function CertificateLine({
 }) {
   const t = useT();
   if (!read) {
-    return (
-      <span className="text-[11px] text-fg-fnt">
-        {t("empty", "readingCertificate")}
-      </span>
-    );
+    return <Reading>{t("empty", "readingCertificate")}</Reading>;
   }
   if (!read.certificate) {
     return (
       <span
         className={cn(
-          "block text-[11px]",
+          "block text-caption",
           read.problem?.says === "noSecret" ? "text-err" : "text-warn"
         )}
       >
@@ -73,9 +70,9 @@ export function CertificateLine({
       <span className={cn("text-xs", toneClass(expiry.tone))}>
         {expiryText(expiry, t)}
       </span>
-      <span className="text-[11px] text-fg-fnt">{issuedBy(cert, t)}</span>
+      <span className="text-caption text-fg-fnt">{issuedBy(cert, t)}</span>
       {uncovered.length > 0 && (
-        <span className="text-[11px] text-err">
+        <span className="text-caption text-err">
           {t("empty", "doesNotCover", { names: uncovered.join(", ") })}
         </span>
       )}

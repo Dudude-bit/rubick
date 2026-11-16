@@ -17,6 +17,14 @@ const answers = vi.hoisted(() => ({
   events: vi.fn((_filter: unknown): Promise<unknown[]> => Promise.resolve([])),
 }));
 
+const shell = vi.hoisted(() => ({
+  attention: null as { items: unknown[] } | null,
+}));
+
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => shell.attention,
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     listApiCatalog: () => answers.catalog(),
@@ -24,6 +32,7 @@ vi.mock("@/lib/commands", () => ({
     getServedObject: (group: string, plural: string) =>
       answers.object(group, plural),
     listEvents: (filter: unknown) => answers.events(filter),
+    forgetDiscovery: () => Promise.resolve(),
     objectLineage: () =>
       Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
   },
@@ -42,6 +51,7 @@ const LEASES: CatalogEntry = {
 };
 
 beforeEach(() => {
+  shell.attention = null;
   useClusterStore.setState({ currentContext: "test", isConnected: true });
 });
 
@@ -497,6 +507,41 @@ describe("an autoscaler's page", () => {
     expect(screen.getByRole("button", { name: /Share/ })).toBeEnabled();
   });
 
+  /**
+   * The api HPA was FailedGetScale on the Overview, "1 problem" in the status
+   * bar and on its own list row, while its page, which draws its own header,
+   * said nothing of it. Fails if the page's header or its findings drop what
+   * the shell counts against this very object.
+   */
+  it("leads with the problem the shell counts against it", async () => {
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+    };
+    shell.attention = {
+      items: [
+        {
+          ...self,
+          key: "hpa",
+          tone: "err",
+          reason: "FailedGetScale",
+          detail: null,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: self,
+        },
+      ],
+    };
+    await page("/c/test/horizontalpodautoscalers/lena-sandbox/hello-web");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    expect(screen.getByTestId("findings-block")).toHaveTextContent(
+      "FailedGetScale"
+    );
+  });
+
   /** The Overview drew scaleTargetRef as three unlinked rows; fails if they come back. */
   it("links the scale target on its Overview", async () => {
     await page("/c/test/horizontalpodautoscalers/lena-sandbox/hello-web");
@@ -578,5 +623,82 @@ describe("a disruption budget's page", () => {
     await page("/c/test/poddisruptionbudgets/k8s-gui-test/pdb-stateful-demo");
     expect(await screen.findByText("disruptionsAllowed")).toBeInTheDocument();
     expect(screen.queryByText(/cannot allow any disruption/)).toBeNull();
+  });
+});
+
+describe("an object of a kind no screen draws, when only one read fails", () => {
+  beforeEach(() => {
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+  });
+
+  /**
+   * The error page needed both reads to fail, so one refused read left the
+   * Overview on a skeleton for ever. Fails if the Overview does not say the
+   * object was not read, with the cause and a retry.
+   */
+  it("says on the Overview that the object was not read, and reads it again", async () => {
+    answers.yaml = () => Promise.resolve("metadata:\n  name: x\n");
+    answers.object = () => Promise.reject(new Error("leases is forbidden"));
+    await open();
+
+    expect(
+      await screen.findByText("Could not read this object")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/leases is forbidden/)).toBeInTheDocument();
+    expect(screen.queryByTestId("detail-skeleton")).toBeNull();
+
+    answers.object = () =>
+      Promise.resolve({
+        metadata: { name: "x" },
+        spec: { holderIdentity: "node-1" },
+      });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+  });
+
+  /** The YAML tab's own read failing must say so rather than wait. */
+  it("says on the YAML tab that the manifest was not read", async () => {
+    answers.object = () => Promise.resolve({ metadata: { name: "x" } });
+    answers.yaml = () => Promise.reject(new Error("manifest is forbidden"));
+    await renderWithRouter(
+      <GenericObjectPage
+        resource="leases.coordination.k8s.io"
+        namespace="kube-node-lease"
+        name="x"
+      />,
+      { at: "/c/test/leases.coordination.k8s.io/kube-node-lease/x?tab=yaml" }
+    );
+    expect(
+      await screen.findByText("Could not read the manifest")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/manifest is forbidden/)).toBeInTheDocument();
+  });
+
+  /** Both reads failing is the page's own error, and it can be asked again. */
+  it("offers to read again when neither read answered", async () => {
+    answers.yaml = () => Promise.reject(new Error("502 Bad Gateway"));
+    answers.object = () => Promise.reject(new Error("502 Bad Gateway"));
+    await open();
+    expect(
+      await screen.findByText("Could not read this object")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The Overview's placeholder was a whole page of its own, a header and a
+   * tab strip, drawn under the real ones. Fails if it carries either.
+   */
+  it("waits on the Overview with a placeholder that has no header or tabs of its own", async () => {
+    answers.yaml = () => new Promise(() => {});
+    answers.object = () => new Promise(() => {});
+    await open();
+    const skeleton = await screen.findByTestId("detail-skeleton");
+    expect(skeleton.children).toHaveLength(1);
+    expect(screen.getAllByRole("tablist")).toHaveLength(1);
   });
 });

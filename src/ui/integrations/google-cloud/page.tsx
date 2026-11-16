@@ -20,6 +20,8 @@
  * verdict's clothes.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { joinSayings, sayWords } from "@/i18n/say";
 import { useMemo } from "react";
 
@@ -39,6 +41,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { backingFrom, stopCellLook } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
@@ -89,7 +92,7 @@ export default function GkeIngressPage() {
     [sources.data]
   );
 
-  if (sources.error) {
+  if (failedWithNothing(sources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadIngresses")}
@@ -113,6 +116,7 @@ export default function GkeIngressPage() {
           <ShareScreenAction screen={{ scope: null, title: "GKE Ingress" }} />
         }
       />
+      <StaleRead read={sources} label="GKE Ingress" />
 
       {sources.data?.unread.map((kind) => (
         <Finding
@@ -155,11 +159,9 @@ export default function GkeIngressPage() {
 
       <Section>
         {sources.isPending ? (
-          <p className="text-xs text-fg-fnt">
-            {t("empty", "readingIngresses")}
-          </p>
+          <Reading>{t("empty", "readingIngresses")}</Reading>
         ) : hosts.length === 0 ? (
-          <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[64ch] text-xs text-fg-mut">
             {t("empty", "noIngressCarries")}{" "}
             <span className="font-mono">kubernetes.io/ingress.class: gce</span>{" "}
             {t("empty", "orInline")}{" "}
@@ -180,7 +182,7 @@ export default function GkeIngressPage() {
             aside={
               <>
                 {backing.isPending && (
-                  <span className="text-[11px] text-fg-fnt">
+                  <span className="text-caption text-fg-fnt">
                     {t("empty", "checkingWhatIsBehind")}
                   </span>
                 )}

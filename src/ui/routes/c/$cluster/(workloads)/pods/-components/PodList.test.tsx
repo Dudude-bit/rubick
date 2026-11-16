@@ -90,7 +90,7 @@ describe("the pod list while a new scope is read", () => {
 
     expect(screen.queryByText("1 Pod")).toBeNull();
     expect(
-      screen.getByText("1 Pod, from the namespaces that answered")
+      screen.getByText("1 Pod, from the previous scope while this one is read")
     ).toBeVisible();
   });
 });

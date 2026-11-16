@@ -39,6 +39,7 @@ export function PersistentVolumeDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<PersistentVolumeInfo>({
     resourceKind: ResourceType.PersistentVolume,
     isClusterScoped: true,
@@ -156,20 +157,21 @@ export function PersistentVolumeDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.PersistentVolume}
       title={pv?.name || name || ""}
       statusBadge={pv && <PhaseBadge phase={pv.status} />}
       badges={
         pv && (
           <>
-            <span className="font-mono text-[11px] text-fg-mut">
+            <span className="font-mono text-caption text-fg-mut">
               {pv.capacity && declaredQuantity("storage", pv.capacity)}
             </span>
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {pv.accessModes.join(" · ") || t("empty", "noAccessModes")}
             </span>
             {!pv.claim && (
-              <span className="text-[11px] text-warn">
+              <span className="text-caption text-warn">
                 {t("action", "unbound")}
               </span>
             )}

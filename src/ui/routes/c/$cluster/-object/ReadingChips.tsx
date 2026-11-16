@@ -7,15 +7,16 @@ import {
   Filter,
   Hourglass,
   ListChecks,
+  Lock,
   Loader2,
   MinusCircle,
-  ShieldOff,
   type LucideIcon,
 } from "lucide-react";
 
 import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { segmentOf } from "@/lib/access-kinds";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 import { cn, formatWhen } from "@/lib/utils";
 import { leftOut, listing } from "./ownership";
@@ -44,9 +45,9 @@ const LOOK: Record<
   syncing: { icon: Loader2, tone: "text-info", spin: true, key: "syncing" },
   queued: { icon: Hourglass, tone: "text-warn", key: "queued" },
   stale: { icon: Clock, tone: "text-warn", key: "stale" },
-  refused: { icon: ShieldOff, tone: "text-err", key: "refused" },
+  refused: { icon: Lock, tone: "text-warn", key: "refused" },
   partial: { icon: Filter, tone: "text-warn", key: "partial" },
-  failed: { icon: AlertTriangle, tone: "text-err", key: "readFailed" },
+  failed: { icon: AlertTriangle, tone: "text-warn", key: "readFailed" },
   unlistable: { icon: Ban, tone: "text-fg-fnt", key: "unlistable" },
   unwatchable: { icon: EyeOff, tone: "text-fg-fnt", key: "unwatchable" },
   skipped: { icon: MinusCircle, tone: "text-fg-fnt", key: "skipped" },
@@ -86,7 +87,7 @@ export function ReadingChips({
         return (
           <li
             key={`${reading.group}/${reading.plural}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-caption"
           >
             <KindIcon
               kind={reading.kind}
@@ -112,7 +113,7 @@ export function ReadingChips({
       {groups?.map((group) => (
         <li
           key={`group/${group.group}`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-caption"
         >
           <span className="font-mono text-fg">{group.group}</span>
           <span className="inline-flex items-center gap-1 text-err">
@@ -191,7 +192,7 @@ export function ReadingProgress({ notRead }: { notRead: NotRead }) {
   return (
     <details className="group text-xs">
       <summary className="inline-flex cursor-pointer select-none flex-wrap items-center gap-x-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         <span className="tabular-nums">
           {t("count", "kindsReadOf", {
             n: total - listing(notRead),

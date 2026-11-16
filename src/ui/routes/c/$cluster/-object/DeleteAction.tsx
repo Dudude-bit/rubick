@@ -45,7 +45,8 @@ export function DeletionDialog({
   served?: ServedResource | null;
   restart?: boolean;
   busy?: boolean;
-  onConfirm: () => void;
+  /** Returns the write's promise, which holds the dialog open until it answers. */
+  onConfirm: () => unknown;
 }) {
   const t = useT();
   const copy = restart
@@ -69,6 +70,7 @@ export function DeletionDialog({
         ) : null
       }
       confirmationText={name}
+      confirmationPlaceholder={t("action", "typeNamePlaceholder")}
       confirmLabel={t("action", restart ? "restart" : "delete")}
       isLoading={busy}
       onConfirm={onConfirm}
@@ -115,7 +117,7 @@ export function DeleteAction({
   if (!mutation) return null;
   const action = restart
     ? podRestartAction(detail as PodInfo | undefined, t)
-    : { label: t("action", "delete"), icon: Trash2, danger: true };
+    : { label: t("action", "delete"), icon: Trash2 };
 
   return (
     <>
@@ -125,7 +127,6 @@ export function DeleteAction({
         onClick={() => setOpen(true)}
         disabled={disabled}
         busy={mutation.isPending}
-        danger={action.danger}
         reason={denied}
       />
       <DeletionDialog
@@ -140,9 +141,9 @@ export function DeleteAction({
         restart={restart}
         busy={mutation.isPending}
         onConfirm={() =>
-          mutation.mutate(undefined, {
-            onSettled: () => setOpen(false),
-            onError: (error) => noteDenied("delete", guarded, error),
+          mutation.mutateAsync().catch((error: unknown) => {
+            noteDenied("delete", guarded, error);
+            throw error;
           })
         }
       />

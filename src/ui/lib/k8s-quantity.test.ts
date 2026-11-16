@@ -121,17 +121,10 @@ describe("formatCPU", () => {
     expect(formatCPU(250)).toBe("250m");
   });
 
-  it("formats >= 1000 millicores as cores", () => {
-    expect(formatCPU(1000)).toBe("1.0");
-    expect(formatCPU(2500)).toBe("2.5");
-  });
-});
-
-describe("formatCPU in the reader's language", () => {
-  /** Fails if a whole-core reading stops following the reader's decimal mark. */
-  it("writes cores with the reader's decimal mark", () => {
-    expect(formatCPU(2500, "ru")).toBe("2,5");
-    expect(formatCPU(250, "ru")).toBe("250m");
+  /** A bare "1.2" in a Jobs cell had no unit beside "41m" in Pods. Fails if a reading of a core or more loses its unit. */
+  it("keeps millicores, with their unit, above a core", () => {
+    expect(formatCPU(1000)).toBe("1000m");
+    expect(formatCPU(2500)).toBe("2500m");
   });
 });
 

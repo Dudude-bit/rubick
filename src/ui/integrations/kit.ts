@@ -325,3 +325,8 @@ export const textOrNone = (
 
 /** `14:22` in the reader's own zone. */
 export const hourMinute = (at: number | string) => formatWhen(at, "hourMinute");
+
+/** A failed read with nothing earlier to show: the only case that replaces a page. */
+export function failedWithNothing(read: { error: unknown; data: unknown }) {
+  return !!read.error && read.data === undefined;
+}

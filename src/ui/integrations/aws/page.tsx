@@ -18,6 +18,8 @@
  * ELB API, one credential up.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { joinSayings } from "@/i18n/say";
 import { useMemo } from "react";
 
@@ -35,6 +37,7 @@ import {
   TroubleRow,
   type RowTone,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { useAlbSources } from "./data";
 import {
@@ -79,7 +82,7 @@ export default function AwsLoadBalancerPage() {
     (read) => read.crd === TARGET_GROUP_BINDING_CRD
   );
 
-  if (sources.error) {
+  if (failedWithNothing(sources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadIngresses")}
@@ -105,6 +108,7 @@ export default function AwsLoadBalancerPage() {
           />
         }
       />
+      <StaleRead read={sources} label="AWS Load Balancer Controller" />
 
       {sources.data?.unread.map((kind) => (
         <Finding
@@ -119,11 +123,9 @@ export default function AwsLoadBalancerPage() {
 
       <Section>
         {sources.isPending ? (
-          <p className="text-xs text-fg-fnt">
-            {t("empty", "readingIngresses")}
-          </p>
+          <Reading>{t("empty", "readingIngresses")}</Reading>
         ) : groups.length === 0 ? (
-          <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[68ch] text-xs text-fg-mut">
             {t("empty", "albNoIngressAsksForClass")}
           </p>
         ) : (

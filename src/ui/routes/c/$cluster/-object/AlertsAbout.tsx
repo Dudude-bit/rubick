@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Bell } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import { errorToShow } from "@/lib/error-utils";
+import { Unknown } from "@/components/ui/unknown";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
@@ -67,15 +67,16 @@ export function AlertsAbout({
   if (!speaks) return null;
   if (alerts.error)
     return (
-      <p className={cn("text-[11.5px] text-warn", className)}>
-        {t("alerts", "aboutUnread", {
-          reason: errorToShow(alerts.error),
-        })}
-      </p>
+      <Unknown
+        className={className}
+        question={t("alerts", "aboutUnread")}
+        error={alerts.error}
+        onRetry={() => alerts.refetch()}
+      />
     );
   if (power.state === "unreachable")
     return (
-      <p className={cn("text-[11.5px] text-fg-fnt", className)}>
+      <p className={cn("text-xs text-fg-fnt", className)}>
         {t("alerts", "aboutUnreachable", { reason: power.reason })}
       </p>
     );
@@ -94,7 +95,7 @@ export function AlertsAbout({
     >
       <p
         className={cn(
-          "flex items-center gap-2 text-[12.5px] font-semibold",
+          "flex items-center gap-2 text-title font-semibold",
           firing.length > 0 ? "text-err" : "text-warn"
         )}
       >
@@ -105,7 +106,7 @@ export function AlertsAbout({
         {page !== null && (
           <Link
             {...page}
-            className="ml-auto text-[11px] font-normal text-info hover:underline"
+            className="ml-auto text-caption font-normal text-info hover:underline"
           >
             {t("alerts", "openAlerts")}
           </Link>
@@ -120,12 +121,12 @@ export function AlertsAbout({
             <span className="min-w-0">
               <span className="font-mono text-fg">{alert.rule}</span>
               {alert.severity && (
-                <span className="ml-1.5 font-mono text-[10.5px] text-fg-fnt">
+                <span className="ml-1.5 font-mono text-caption text-fg-fnt">
                   {alert.severity}
                 </span>
               )}
               {alert.state === "pending" && (
-                <span className="ml-1.5 font-mono text-[10.5px] text-warn">
+                <span className="ml-1.5 font-mono text-caption text-warn">
                   pending
                 </span>
               )}
@@ -133,12 +134,12 @@ export function AlertsAbout({
                 <span className="block text-fg-mut">{alert.summary}</span>
               )}
               {alert.via.label !== "namespace" && alert.via.value !== name && (
-                <span className="block font-mono text-[10.5px] text-fg-fnt">
+                <span className="block font-mono text-caption text-fg-fnt">
                   {alert.via.label}={alert.via.value}
                 </span>
               )}
             </span>
-            <span className="whitespace-nowrap text-[11px] tabular-nums text-fg-fnt">
+            <span className="whitespace-nowrap text-caption tabular-nums text-fg-fnt">
               {alert.activeAt
                 ? t("monitors", "scrapedAgo", {
                     ago: formatSince(Date.parse(alert.activeAt), now),

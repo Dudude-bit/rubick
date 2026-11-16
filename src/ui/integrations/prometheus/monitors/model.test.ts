@@ -601,6 +601,19 @@ describe("a partial install", () => {
     });
     expect(row.pickedUp).toEqual({ state: "judged", by: [] });
     expect(row.findings.map((f) => f.kind)).toEqual(["notPickedUp"]);
+    expect(row.worst).toBe("warn");
+  });
+
+  /** Red needs scraping actually checked; fails if an unchecked scrape paints the row err again. */
+  it("calls an unpicked monitor broken only when the scrape was read", () => {
+    const elsewhere = readPrometheus(
+      cr("Prometheus", "k8s", "monitoring", { serviceMonitorSelector: {} })
+    );
+    const [row] = rowsOf([fine], kind([elsewhere]), services, ok([]), {
+      state: "read",
+      targets: [{ scrapePool: "other" }] as never,
+    });
+    expect(row.worst).toBe("err");
   });
 
   /** Nothing can pick it up and nothing scrapes it: waiting, not fine. */

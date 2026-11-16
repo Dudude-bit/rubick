@@ -107,7 +107,9 @@ describe("the owners above an object", () => {
         served={{ group: "", plural: "pods" }}
         name="api-7f9-x"
         namespace="shop"
-      />
+      >
+        <h1>api-7f9-x</h1>
+      </LineageTrail>
     );
     const links = await screen.findAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
@@ -115,6 +117,38 @@ describe("the owners above an object", () => {
       "ReplicaSet/api-7f9",
     ]);
     expect(links[0]).toHaveAttribute("href", "/c/test/deployments/shop/api");
+  });
+
+  /** The chain is a segment of the breadcrumb row, so the title follows it as a sibling instead of sitting under a strip of its own. */
+  it("draws the chain in the same row as the title it leads to", async () => {
+    answers.lineage = () =>
+      Promise.resolve({
+        uid: "p",
+        ancestors: [
+          {
+            uid: "d",
+            kind: "Deployment",
+            group: "apps",
+            plural: "deployments",
+            name: "api",
+            namespace: "shop",
+          },
+        ],
+        others: [],
+        stop: null,
+      });
+    await renderWithRouter(
+      <LineageTrail
+        served={{ group: "", plural: "pods" }}
+        name="api-7f9-x"
+        namespace="shop"
+      >
+        <h1>api-7f9-x</h1>
+      </LineageTrail>
+    );
+    const chain = await screen.findByRole("navigation");
+    expect(chain.nextElementSibling?.tagName).toBe("H1");
+    expect(chain.className).not.toContain("basis-full");
   });
 
   /** An owner nobody could read must not read as an owner that is gone. */
@@ -137,7 +171,9 @@ describe("the owners above an object", () => {
         served={{ group: "", plural: "pods" }}
         name="api-7f9-x"
         namespace="shop"
-      />
+      >
+        <h1>api-7f9-x</h1>
+      </LineageTrail>
     );
     expect(
       await screen.findByText("ReplicaSet api-7f9 (not read)")

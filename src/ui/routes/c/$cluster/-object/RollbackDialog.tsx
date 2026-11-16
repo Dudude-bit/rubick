@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
+import { Eyebrow } from "@/components/ui/states";
 import { useT } from "@/i18n/useT";
 import { comparisonOf, type Revision } from "@/lib/changes";
 import type { DeliveryIntercept } from "@/lib/delivery";
@@ -65,13 +66,11 @@ export function RollbackDialog({
             </DialogDescription>
           </DialogHeader>
           <div data-testid="rollback-changes">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-              {t("action", "rollbackWhatChanges")}
-            </p>
+            <Eyebrow>{t("action", "rollbackWhatChanges")}</Eyebrow>
             {current ? (
               <Against against={comparisonOf(current, target)} />
             ) : (
-              <p className="text-[11px] text-warn">
+              <p className="text-caption text-warn">
                 {t("action", "rollbackCurrentUnknown")}
               </p>
             )}
@@ -83,11 +82,12 @@ export function RollbackDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={busy}
               data-autofocus
             >
               {t("action", "cancel")}
             </Button>
-            <Button type="submit" disabled={busy || gate.blocked}>
+            <Button type="submit" pending={busy} disabled={gate.blocked}>
               {intercept?.confirmLabel ?? t("action", "rollBack")}
             </Button>
           </DialogFooter>

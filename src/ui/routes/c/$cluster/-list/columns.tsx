@@ -9,11 +9,14 @@ import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import type { T as Translate } from "@/i18n/useT";
-import type { MetricsAbsence } from "@/lib/metrics-absence";
 import { CELL_PADS_PX } from "@/components/ui/column-shares";
 import { widestText, type TextFace } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { MetricValue, UnitValue } from "@/components/ui/metric-value";
+import {
+  MetricValue,
+  NothingRunning,
+  UnitValue,
+} from "@/components/ui/metric-value";
 import {
   Tooltip,
   TooltipContent,
@@ -32,12 +35,15 @@ interface WithCreatedAt {
   createdAt?: string | null;
 }
 
+/** `idle`: nothing of it runs, so there is nothing to measure, said in the nothing-running word rather than as a zero or an unread mark. */
 interface WithCpuUsage {
   cpuMillicores?: number | null;
+  idle?: boolean;
 }
 
 interface WithMemoryUsage {
   memoryBytes?: number | null;
+  idle?: boolean;
 }
 
 interface WithCpuLimits {
@@ -96,6 +102,10 @@ export const nameCellPx = (_t: unknown, rows: readonly { name: string }[]) =>
         longestText(rows, (row) => row.name, 31) * 7.2 + NAME_CHROME_PX
       );
 
+/** The most a name column gives up beside a peek: 20 glyphs, the rest middle-truncated and whole on hover. */
+export const nameFloorPx = (t: unknown, rows: readonly { name: string }[]) =>
+  Math.min(Math.ceil(20 * 7.2 + NAME_CHROME_PX), nameCellPx(t, rows));
+
 /** A column of references as wide as the longest name in it, up to `glyphs`, with the kind's glyph a node's has. */
 export const refCellPx = <Row,>(
   rows: readonly Row[],
@@ -130,28 +140,41 @@ export const causeTextPx = (said: readonly string[]) =>
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 
-/** As wide as what its rows say: a figure where one has one, and the one word the rest say, as `MetricValue` picks it. */
+/** The could-not-look glyph a metric cell draws in place of a figure. */
+const UNREAD_GLYPH_PX = 14;
+
+/** As wide as what its rows say: a figure where one has one, the nothing-running word where nothing runs, and the unread glyph the rest draw. */
 export const metricCellFloor =
   <Row,>(valueOf: (row: Row) => number | null | undefined) =>
-  (t: Translate, rows: readonly Row[], absence: MetricsAbsence | null) => {
+  (t: Translate, rows: readonly Row[]) => {
+    const idle = (row: Row) => (row as { idle?: boolean }).idle === true;
     const figure = rows.some((row) => typeof valueOf(row) === "number");
-    const word = rows.some((row) => typeof valueOf(row) !== "number");
+    const none = rows.some(idle);
+    const glyph = rows.some(
+      (row) => !idle(row) && typeof valueOf(row) !== "number"
+    );
     return Math.max(
       figure ? METRIC_CELL_PX : 0,
-      word
-        ? widestText(
-            [
-              t(
-                "cluster",
-                absence === null ? "metricNoSample" : "metricNotAvailable"
-              ),
-            ],
-            "sans",
-            7.2
-          ) + 20
-        : 0
+      none
+        ? widestText([t("empty", "nothingRunningShort")], "sans", 7) +
+            CELL_PADS_PX
+        : 0,
+      glyph ? UNREAD_GLYPH_PX + CELL_PADS_PX : 0
     );
   };
+
+/** What a shared report says in a metric cell, as the cell draws it. */
+const metricShare = (
+  value: number | null | undefined,
+  idle: boolean | undefined,
+  type: "cpu" | "memory",
+  t: Translate
+) =>
+  idle
+    ? { text: t("empty", "nothingRunning"), quiet: true }
+    : typeof value === "number"
+      ? formatUsage(value, type)
+      : notMeasured(t);
 
 const GLYPH_PX: Record<"sans" | "mono", number> = { sans: 7, mono: 7.2 };
 
@@ -187,7 +210,7 @@ export function createNameColumn<
   return {
     size: 320,
     accessorKey: "name",
-    meta: { floor: nameCellPx },
+    meta: { floor: nameFloorPx, ideal: nameCellPx },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">
@@ -202,6 +225,9 @@ export function createNameColumn<
     ),
   };
 }
+
+/** Where a column every list adds yields: after the ones the list itself hides. */
+export const YIELDS_AFTER_THE_LIST = 100;
 
 /** The column, hidden in that order by a port too narrow for every column's floor. */
 export const yielding = <Row extends RowData>(
@@ -219,7 +245,9 @@ export function createNamespaceColumn<
     size: 190,
     accessorKey: "namespace",
     header: columnHeader("columns", "namespace"),
-    meta: { floor: NAMESPACE_CELL_PX },
+    // Last of all: beside a peek, which names the row's namespace, it is
+    // that or a sideways scroll.
+    meta: { floor: NAMESPACE_CELL_PX, yields: YIELDS_AFTER_THE_LIST + 1 },
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.namespace}</span>
     ),
@@ -268,13 +296,13 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
+      sort: (row: Row) => row.cpuMillicores,
       floor: metricCellFloor((row: Row) => row.cpuMillicores),
       share: (row: Row, t) =>
-        typeof row.cpuMillicores === "number"
-          ? formatUsage(row.cpuMillicores, "cpu")
-          : notMeasured(t),
+        metricShare(row.cpuMillicores, row.idle, "cpu", t),
     },
     cell: ({ row }) => {
+      if (row.original.idle) return <NothingRunning />;
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests
         ? parseCPU(row.original.cpuRequests)
@@ -301,13 +329,13 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
+      sort: (row: Row) => row.memoryBytes,
       floor: metricCellFloor((row: Row) => row.memoryBytes),
       share: (row: Row, t) =>
-        typeof row.memoryBytes === "number"
-          ? formatUsage(row.memoryBytes, "memory")
-          : notMeasured(t),
+        metricShare(row.memoryBytes, row.idle, "memory", t),
     },
     cell: ({ row }) => {
+      if (row.original.idle) return <NothingRunning />;
       const used = row.original.memoryBytes ?? null;
       const request = row.original.memoryRequests
         ? parseMemory(row.original.memoryRequests)
@@ -348,6 +376,7 @@ export function createAccessModesColumn<
     size: 130,
     accessorKey: "accessModes",
     header: columnHeader("columns", "accessModes"),
+    meta: { sort: (row: Row) => row.accessModes.join(" ") },
     cell: ({ row }) => {
       const modes = row.original.accessModes;
       if (modes.length === 0) return <None />;
@@ -378,6 +407,8 @@ export function createCapacityColumn<
     accessorKey: "capacity",
     header: columnHeader("columns", "capacity"),
     meta: {
+      sort: (row: Row) =>
+        row.capacity ? parseMemory(row.capacity) : undefined,
       share: (row: Row) =>
         row.capacity ? declaredQuantity("storage", row.capacity) : null,
     },
@@ -401,6 +432,7 @@ export function createReplicasColumn<
     id: "replicas",
     header: columnHeader("columns", "replicas"),
     meta: {
+      sort: (row: Row) => row.replicas.desired * 2 ** 20 + row.replicas.ready,
       share: (row: Row) => ({
         text: `${row.replicas.ready}/${row.replicas.desired}`,
         mono: true,
@@ -431,6 +463,7 @@ export function createDataKeysColumn<
     id: "dataKeys",
     header: columnHeader("columns", "keys"),
     meta: {
+      sort: (row: Row) => row.dataKeys?.length,
       share: (row: Row, t) => ({
         text: (row.dataKeys ?? []).join(", ") || t("empty", "noneLower"),
         mono: true,
@@ -440,7 +473,7 @@ export function createDataKeysColumn<
       const keys = row.original.dataKeys ?? [];
       if (keys.length === 0) return <None />;
       return (
-        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-caption">
           {keys.slice(0, maxDisplay).map((key) => (
             <span key={key} className="font-mono text-fg-mut">
               {key}

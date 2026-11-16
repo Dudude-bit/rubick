@@ -5,7 +5,8 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Terminal as TerminalIcon } from "lucide-react";
+import { Terminal as TerminalIcon, X } from "lucide-react";
+import { Reading } from "@/components/ui/states";
 import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
 import type { StatusRole } from "@/lib/status-role";
 import { useT } from "@/i18n/useT";
@@ -55,6 +56,8 @@ export interface TerminalProps {
   ownsSession?: boolean;
   /** What the close button does, in the words of whatever the session is. */
   closeLabel?: string;
+  /** The session is being opened and has no id yet. */
+  connecting?: boolean;
 }
 
 /**
@@ -69,6 +72,7 @@ export function Terminal({
   onSize,
   ownsSession = true,
   closeLabel,
+  connecting = false,
 }: TerminalProps) {
   const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -266,7 +270,7 @@ export function Terminal({
     keyof typeof en.action,
     StatusRole,
   ] = (() => {
-    switch (status) {
+    switch (connecting && sessionId === null ? "connecting" : status) {
       case "connecting":
         return ["Connecting", "connecting", "pending"];
       case "connected":
@@ -304,7 +308,10 @@ export function Terminal({
             {t("action", statusLabelKey)}
           </StatusBadge>
           {error && status !== "connected" && (
-            <span className="max-w-[240px] truncate text-xs text-fg-mut">
+            <span
+              className="max-w-[240px] truncate text-xs text-fg-mut"
+              title={error}
+            >
               {error}
             </span>
           )}
@@ -315,7 +322,7 @@ export function Terminal({
               onClick={onClose}
               aria-label={closeLabel ?? t("action", "closeTerminal")}
             >
-              ×
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -323,10 +330,14 @@ export function Terminal({
       {/* xterm sizes itself to whole rows and columns, so the remainder of
        *  this box shows through; without the canvas colour on it the terminal
        *  sits inside a black frame. */}
-      <div
-        ref={terminalRef}
-        className="min-h-0 flex-1 overflow-hidden bg-canvas"
-      />
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-canvas">
+        <div ref={terminalRef} className="absolute inset-0" />
+        {connecting && sessionId === null && (
+          <Reading className="pointer-events-none absolute left-4 top-3">
+            {t("action", "connecting")}
+          </Reading>
+        )}
+      </div>
     </div>
   );
 }

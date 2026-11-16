@@ -1,13 +1,26 @@
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, cleanup, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter, testQueryClient } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
+import { formatWhen } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { unreadLines } from "@/lib/report-parts";
-import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
+import {
+  AttentionPanel,
+  OverviewSkeleton,
+  SchedulerPanel,
+  WarningsPanel,
+  WorkloadsPanel,
+} from "./health";
 import {
   attentionShare,
   uncheckedShare,
@@ -41,6 +54,7 @@ import type {
   NodeSummary,
   PodCause,
   PodComposition,
+  SchedulerPressure,
   ServiceHealthGroup,
   WarningGroup,
 } from "@/generated/types";
@@ -139,6 +153,7 @@ const RUNNING: Census<PodComposition> = {
     terminating: 0,
     stuck: [],
     starting: 0,
+    troubled: 0,
   },
   complete: true,
 };
@@ -177,7 +192,9 @@ describe("the overview's two event panels", () => {
     );
 
     expect(
-      screen.getAllByRole("link", { name: "ReplicaSet meshed-demo-65d47b457f" })
+      screen.getAllByRole("link", {
+        name: "ReplicaSet meshed-demo-65d47b457f",
+      })
     ).toHaveLength(2);
   });
 
@@ -579,7 +596,14 @@ describe("a Service row whose pods share a cause", () => {
   it("draws the cause in red like the rows of its pods, and Share says it", async () => {
     const attention = attentionFrom([], {
       services: {
-        answered: [{ namespace: "create-demo", networks: [], groups: [group] }],
+        answered: [
+          {
+            namespace: "create-demo",
+            networks: [],
+            unread: [],
+            groups: [group],
+          },
+        ],
         unread: [],
       },
     });
@@ -597,6 +621,31 @@ describe("a Service row whose pods share a cause", () => {
     const share = attentionShare(attention, t);
     const items = share.body.type === "findings" ? share.body.items : [];
     expect(JSON.stringify(items)).toContain("Secret web-creds does not exist");
+  });
+});
+
+describe("a problem kept over a read that no longer answers", () => {
+  const AT_LAST = new Date(2026, 0, 1, 21, 4, 5).getTime();
+  /** Fails if Share hands on a last-known problem as a current one, without its time, or in another tone than the screen keeps for it. */
+  it("is shared as last known, since when, in its own severity", () => {
+    const read = attentionFrom([problem]);
+    const kept = {
+      ...read,
+      items: read.items.map((item) => ({
+        ...item,
+        tone: "err" as const,
+        stale: true,
+        lastKnown: { at: AT_LAST, refused: true },
+      })),
+    };
+    const share = attentionShare(kept, t);
+    const items = share.body.type === "findings" ? share.body.items : [];
+    expect(items[0]?.title).toMatch(
+      new RegExp(
+        `· not rechecked · last known at ${formatWhen(AT_LAST, "clock")}$`
+      )
+    );
+    expect(items[0]?.role).toBe("err");
   });
 });
 
@@ -932,9 +981,201 @@ describe("the Needs attention heading", () => {
       />
     );
     expect(
-      screen.getByText("2+ · worst first · not all checked")
+      screen.getByText("2 · worst first · not all checked")
     ).toBeInTheDocument();
     unmount();
+  });
+});
+
+describe("the Needs attention rows while the list changes", () => {
+  const panel = (attention: Attention) => (
+    <AttentionPanel
+      attention={attention}
+      pods={RUNNING}
+      podsUnread={[]}
+      nodes={[]}
+      nodesKnown={true}
+    />
+  );
+  const names = () =>
+    screen
+      .getAllByTestId("attention-said")
+      .map((said) =>
+        ["cart", "web", "api"].find((name) => said.textContent?.includes(name))
+      );
+
+  /**
+   * During an incident the rows reordered every few seconds under a resting
+   * pointer, and the page scrolled after the row it was on. Fails if a new
+   * order is drawn while the pointer is on the list, if the list does not
+   * say it is holding a change, or if it holds one after the pointer leaves.
+   */
+  it("keeps its order while the pointer is on it, says a change is waiting, and takes it when it leaves", async () => {
+    const first = attentionFrom([
+      { ...problem, name: "cart" },
+      {
+        ...problem,
+        name: "web",
+        since: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const next = attentionFrom([
+      {
+        ...problem,
+        name: "cart",
+        since: new Date(Date.now() - 120_000).toISOString(),
+      },
+      { ...problem, name: "web" },
+      { ...problem, name: "api" },
+    ]);
+    const { rerender } = await wrap(panel(first));
+    expect(names()).toEqual(["cart", "web"]);
+
+    fireEvent.pointerMove(screen.getByTestId("attention-rows"));
+    await rerender(
+      panel(
+        attentionFrom([
+          { ...problem, name: "cart" },
+          {
+            ...problem,
+            name: "web",
+            since: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ])
+      )
+    );
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent("");
+
+    await rerender(panel(next));
+    expect(names()).toEqual(["cart", "web"]);
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent(
+      /shown when the pointer leaves the list/
+    );
+
+    fireEvent.pointerMove(document.body);
+    await act(async () => {});
+    expect(names()).toEqual(["web", "api", "cart"]);
+    expect(screen.getByTestId("attention-waiting")).toHaveTextContent("");
+  });
+
+  /**
+   * A column sized by the grid from its cells widened when a row came, and
+   * WebKit kept every other row's height from before: a wrapped sentence
+   * printed over the next row's name. Fails if a column goes back to being
+   * sized by the grid, or if a measured one is narrower than its widest cell.
+   */
+  it("sizes its columns from the widest cell, never from the grid", async () => {
+    const restarting: ClusterProblem = {
+      ...problem,
+      kind: "Pod",
+      name: "api-1",
+      reason: "Init:CreateContainerConfigError",
+      restarts: 3,
+    };
+    const widths: Record<string, number> = { "2": 0, "4": 0, "5": 0, "6": 0 };
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const col = this.dataset.col;
+      if (!col) return original.call(this);
+      const width =
+        col === "2"
+          ? (this.textContent?.length ?? 0) * 7
+          : col === "5"
+            ? 64
+            : 30;
+      widths[col] = Math.max(widths[col], width);
+      return { ...original.call(this), width };
+    };
+    try {
+      await wrap(panel(attentionFrom([problem, restarting])));
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
+    const rows = screen.getByTestId("attention-rows");
+    expect(rows.className).not.toMatch(
+      /grid-cols-\[[^\]]*(auto|fit-content|min-content|max-content)/
+    );
+    for (const col of ["2", "4", "5", "6"])
+      expect(rows.style.getPropertyValue(`--col-${col}`)).toBe(
+        `${widths[col]}px`
+      );
+    expect(widths["2"]).toBeGreaterThan(0);
+  });
+});
+
+describe("the Needs attention rows by keyboard", () => {
+  /**
+   * The footer promises "move". Fails if Down from the page does not land
+   * on the first row, or Down and Up on a row do not reach its neighbours.
+   */
+  it("moves a focus between the rows with the arrow keys", async () => {
+    const attention = attentionFrom([problem, { ...problem, name: "cart" }]);
+    await wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const rows = [...document.querySelectorAll("div[role=link]")];
+    expect(rows.length).toBeGreaterThan(1);
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(rows[1]);
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(rows[0]);
+  });
+
+  /**
+   * A click on the canvas leaves focus on the main scroller, not the body.
+   * Fails if Down from there scrolls the page instead of entering row one.
+   */
+  it("enters the first row from the main scroller too", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem, { ...problem, name: "cart" }])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    main.focus();
+    expect(document.activeElement).toBe(main);
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(
+      document.querySelector("div[role=link]")
+    );
+    main.remove();
+  });
+
+  /** Fails if Down typed into a field steals the focus to a row. */
+  it("leaves Down alone while a control holds the focus", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(input);
+    input.remove();
   });
 });
 
@@ -987,7 +1228,9 @@ describe("a scope one namespace of which refused its pods", () => {
     pods: null,
     jobs: null,
     deployments: {
-      read: [{ reason: "Unavailable", count: 1, podsUnread: true }],
+      read: [
+        { reason: "Unavailable", count: 1, podsUnread: true, troubled: 0 },
+      ],
       complete: true,
     },
     nodes: [],
@@ -1014,14 +1257,15 @@ describe("a scope one namespace of which refused its pods", () => {
         terminating: 0,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
+        troubled: 0,
       },
       complete: false,
     },
     jobs: { read: [{ reason: "Complete", count: 1 }], complete: false },
     deployments: {
       read: [
-        { reason: "Ready", count: 1 },
-        { reason: "Unavailable", count: 2 },
+        { reason: "Ready", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 2, podsUnread: false, troubled: 0 },
       ],
       complete: true,
     },
@@ -1045,7 +1289,8 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(segment).toHaveTextContent("1 Unavailable pods not read");
     expect(segment).toHaveClass("text-fg-fnt");
     expect(segment).not.toHaveClass("text-err");
-    expect(segment.querySelector("svg")).toHaveClass("lucide-eye-off");
+    // The pods were refused, so the mark is the lock every refusal wears.
+    expect(segment.querySelector("svg")).toHaveClass("lucide-lock");
 
     const rows = workloadsShare(overview, t).body;
     const deployments =
@@ -1211,7 +1456,7 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(problems.count).toBe(0);
     expect(problems.body).toEqual({
       type: "text",
-      text: "nothing found in what could be checked",
+      text: "no problems found · not all checked",
     });
 
     const unchecked = uncheckedShare(attention, t)!;
@@ -1240,8 +1485,9 @@ describe("a scope one namespace of which refused its pods", () => {
   /**
    * Marco's team-blind Overview said "nothing found in what could be
    * checked" while ledger's controller had said Unavailable for hours, its
-   * pods refused. Fails if that verdict vanishes from Needs attention, or is
-   * counted as a problem nobody could confirm.
+   * pods refused. Fails if that verdict vanishes from Needs attention, is
+   * counted as a problem nobody could confirm, or draws its kind's mark
+   * twice ("≋≋ api").
    */
   it("names a workload its controller calls Unavailable under Not checked, uncounted", async () => {
     const said = {
@@ -1276,7 +1522,7 @@ describe("a scope one namespace of which refused its pods", () => {
       />
     );
     expect(
-      screen.getByText("nothing found in what could be checked")
+      screen.getByText("no problems found · not all checked")
     ).toBeInTheDocument();
     const row = screen.getByTestId("attention-unconfirmed");
     expect(row).toHaveTextContent("ledger");
@@ -1284,6 +1530,7 @@ describe("a scope one namespace of which refused its pods", () => {
       "its controller has said Unavailable for 3h; its pods were not read"
     );
     expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
+    expect(row.querySelectorAll("svg:not(.lucide-eye-off)")).toHaveLength(1);
   });
 
   /**
@@ -1405,6 +1652,7 @@ describe("a scope one namespace of which refused its pods", () => {
         terminating: 0,
         stuck: [{ reason: "ImagePullBackOff", count: 1 }],
         starting: 0,
+        troubled: 0,
       },
       complete: true,
     });
@@ -1521,13 +1769,13 @@ describe("the Deployments tile", () => {
   it("counts every Deployment under the word the list prints", () => {
     const segments = deploymentSegments(
       [
-        { reason: "Idle", count: 2, podsUnread: false },
-        { reason: "Stalled", count: 1, podsUnread: false },
-        { reason: "Ready", count: 4, podsUnread: false },
-        { reason: "Progressing", count: 1, podsUnread: false },
-        { reason: "Paused", count: 1, podsUnread: false },
-        { reason: "Unavailable", count: 2, podsUnread: false },
-        { reason: "Degraded", count: 1, podsUnread: false },
+        { reason: "Idle", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Stalled", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Ready", count: 4, podsUnread: false, troubled: 0 },
+        { reason: "Progressing", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Paused", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Degraded", count: 1, podsUnread: false, troubled: 0 },
       ],
       t
     );
@@ -1601,11 +1849,11 @@ describe("the census legend in Russian", () => {
     jobs: null,
     deployments: {
       read: [
-        { reason: "Ready", count: 2 },
-        { reason: "Idle", count: 2 },
-        { reason: "Stalled", count: 1 },
-        { reason: "Degraded", count: 2 },
-        { reason: "Unavailable", count: 1 },
+        { reason: "Ready", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Idle", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Stalled", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Degraded", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 1, podsUnread: false, troubled: 0 },
       ],
       complete: true,
     },
@@ -1866,7 +2114,7 @@ describe("what Needs attention says it checked", () => {
   /**
    * Sam's `net`: the Services could not be looked at and the panel said
    * "nothing broken". A refused kind is named with the cluster's reason, and
-   * the empty list is "nothing found in what could be checked", never
+   * the empty list is "no problems found · not all checked", never
    * "nothing needs attention". Fails if the refused branch is folded into read.
    */
   it("never says nothing needs attention beside a kind it was refused", async () => {
@@ -1888,9 +2136,7 @@ describe("what Needs attention says it checked", () => {
     const { container } = await panel(refused);
 
     expect(container).not.toHaveTextContent("nothing needs attention");
-    expect(container).toHaveTextContent(
-      "nothing found in what could be checked"
-    );
+    expect(container).toHaveTextContent("no problems found · not all checked");
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Services");
     expect(unchecked).toHaveTextContent("list is forbidden in net");
@@ -1967,7 +2213,7 @@ describe("what Needs attention says it checked", () => {
     expect(unchecked).toHaveTextContent("PVCs");
     expect(unchecked).toHaveTextContent("still reading");
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
-      "partly checked"
+      "not all checked"
     );
   });
 
@@ -1976,7 +2222,7 @@ describe("what Needs attention says it checked", () => {
    * only by a Warning event. Fails if events read short of their end leave
    * the panel saying everything was checked, or are worded as a failed read.
    */
-  it("names the warning events as not read in full, and is then partly checked", async () => {
+  it("names the warning events as not read in full, and is then not all checked", async () => {
     const { container } = await panel(
       attentionFrom([], {
         overview: {
@@ -1995,7 +2241,7 @@ describe("what Needs attention says it checked", () => {
     expect(unchecked).toHaveTextContent("not read in full");
     expect(unchecked).not.toHaveTextContent("could not be read");
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
-      "partly checked"
+      "not all checked"
     );
   });
 
@@ -2061,6 +2307,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2091,6 +2338,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2118,6 +2366,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 1,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2143,6 +2392,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
@@ -2172,6 +2422,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 2,
+      troubled: 0,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
@@ -2194,7 +2445,7 @@ describe("what Needs attention says it checked", () => {
     ]);
     expect(
       deploymentSegments(
-        [{ reason: "Progressing", count: 1, podsUnread: false }],
+        [{ reason: "Progressing", count: 1, podsUnread: false, troubled: 0 }],
         t
       )[0].tone
     ).toBe("pending");
@@ -2218,6 +2469,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
+      troubled: 0,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
@@ -2240,10 +2492,12 @@ describe("what Needs attention says it checked", () => {
 
   /**
    * Marco: under the Not checked heading sat a red dot with no word beside
-   * it and his pod count, read as one more kind that was not checked. Fails
-   * if the summary goes back under that heading or loses its label.
+   * it and his pod count, read as one more kind that was not checked. The
+   * kinds not read now lead the panel, so a reader meets them before any
+   * verdict. Fails if the heading drops under the summary or the rows, or
+   * the summary loses its label.
    */
-  it("keeps the summary above the kinds not checked, with a label", async () => {
+  it("leads with the kinds not checked, and keeps the summary outside them, with a label", async () => {
     await panel(
       attentionFrom([{ ...problem, severity: "critical" }], {
         services: {
@@ -2264,7 +2518,14 @@ describe("what Needs attention says it checked", () => {
     expect(unchecked).not.toContainElement(summary);
     expect(
       summary.compareDocumentPosition(unchecked) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+        Node.DOCUMENT_POSITION_PRECEDING
+    ).toBeTruthy();
+    const firstRow = screen
+      .getByText("ScalingReplicaSet")
+      .closest('[role="link"]')!;
+    expect(
+      firstRow.compareDocumentPosition(unchecked) &
+        Node.DOCUMENT_POSITION_PRECEDING
     ).toBeTruthy();
     expect(summary).toHaveTextContent(/^overall/);
     expect(summary.querySelector(".bg-err")).not.toBeNull();
@@ -2347,8 +2608,9 @@ describe("what Needs attention says it checked", () => {
   /**
    * Dana read "CreateContainerCon…" in the reason column of Needs attention,
    * the one word she matches against kubectl. jsdom lays nothing out, so this
-   * asserts the column's pixels: fails if the grid stops giving the longest
-   * waiting reason, Init:CreateContainerConfigError, its whole width.
+   * asserts the cell's cap, which the column is measured from: fails if it
+   * stops giving the longest waiting reason, Init:CreateContainerConfigError,
+   * its whole width.
    */
   it("gives a reason the room of the longest waiting status", async () => {
     await panel(
@@ -2356,12 +2618,10 @@ describe("what Needs attention says it checked", () => {
         { ...problem, kind: "Pod", reason: "CreateContainerConfigError" },
       ])
     );
-    const rows = screen
+    const cell = screen
       .getByText("CreateContainerConfigError")
-      .closest('[role="link"]')!.parentElement!;
-    const reasonPx = Number(
-      /grid-cols-\[auto_fit-content\((\d+)px\)_/.exec(rows.className)?.[1]
-    );
+      .closest("[data-col]")!;
+    const reasonPx = Number(/max-w-\[(\d+)px\]/.exec(cell.className)?.[1]);
     expect(reasonPx).toBeGreaterThanOrEqual(
       "Init:CreateContainerConfigError".length * 7.2 + 14
     );
@@ -2504,11 +2764,12 @@ describe("what Needs attention says it checked", () => {
   /**
    * Sam's `web`: the age column said "Unknown" on every Service and Ingress
    * row, and its label was capitalised unlike every verdict beside it. Lena
-   * then read the dots that replaced it as columns squeezed to nothing. A row
-   * nothing dates leaves the cell empty. Fails if "Unknown" or a dot comes
-   * back, or the label leaves the verdicts' case.
+   * then read the dots that replaced it as columns squeezed to nothing, and
+   * "no date" after them as a date missing. A standing condition says
+   * "ongoing". Fails if "Unknown", a dot or "no date" comes back, or the
+   * cell goes blank again.
    */
-  it("leaves an undated row's age empty, in the verdicts' own case", async () => {
+  it("says an undated row is ongoing, in the verdicts' own case", async () => {
     await panel(
       attentionFrom([], {
         services: {
@@ -2516,6 +2777,7 @@ describe("what Needs attention says it checked", () => {
             {
               namespace: "net",
               networks: [],
+              unread: [],
               groups: [
                 {
                   names: ["web"],
@@ -2537,7 +2799,7 @@ describe("what Needs attention says it checked", () => {
 
     const row = screen.getByText("no endpoints").closest('[role="link"]')!;
     expect(row).not.toHaveTextContent("Unknown");
-    expect(row.lastElementChild).toHaveTextContent(/^$/);
+    expect(row.lastElementChild).toHaveTextContent(/^ongoing$/);
     expect(row.lastElementChild?.previousElementSibling).toHaveTextContent(
       /^$/
     );
@@ -2550,17 +2812,39 @@ describe("what Needs attention says it checked", () => {
    * stops being the first to give way on a narrow panel.
    */
   it("gives the width of columns its rows leave empty to the sentence", async () => {
-    await panel(attentionFrom([{ ...problem, since: null }]));
+    await panel(
+      attentionFrom([
+        { ...problem, since: null },
+        { ...problem, kind: "Pod", name: "api-1", restarts: 4 },
+      ])
+    );
     const row = screen
-      .getByText("ScalingReplicaSet")
+      .getAllByText("ScalingReplicaSet")[0]
       .closest('[role="link"]') as HTMLElement;
     expect(row).toHaveClass("grid-cols-subgrid");
     const rows = row.parentElement!;
     expect(rows).toHaveClass("@container");
-    expect(rows.className).toContain("minmax(12rem,1fr)_auto_auto_auto]");
+    expect(rows.className).toContain(
+      "minmax(12rem,1fr)_var(--col-4,0px)_var(--col-5,0px)_var(--col-6,0px)]"
+    );
+    const drawn = screen
+      .getAllByTestId("attention-trend")
+      .map((cell) => cell.querySelector("svg"))
+      .filter((svg) => svg !== null);
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0]).toHaveClass("@max-[56rem]:hidden");
+  });
+
+  /**
+   * A flat line under every row that has not restarted carried no
+   * information and sat beside the one line that did. Fails if a row that
+   * has not climbed draws a line again.
+   */
+  it("draws a trend line only for a pod that is still climbing", async () => {
+    await panel(attentionFrom([{ ...problem }]));
     expect(
-      within(row).getByTestId("attention-trend").querySelector("svg")
-    ).toHaveClass("@max-[56rem]:hidden");
+      screen.getByTestId("attention-trend").querySelector("svg")
+    ).toBeNull();
   });
 
   /**
@@ -2915,6 +3199,7 @@ describe("Services one NetworkPolicy shuts", () => {
           {
             namespace: "k8s-gui-test",
             networks: [],
+            unread: [],
             groups: [
               shut("draining-demo", "k8s-gui-test"),
               shut("headless-demo", "k8s-gui-test"),
@@ -2922,7 +3207,12 @@ describe("Services one NetworkPolicy shuts", () => {
               shut("api", "k8s-gui-test", ["api-only"]),
             ],
           },
-          { namespace: "net", networks: [], groups: [shut("web", "net")] },
+          {
+            namespace: "net",
+            networks: [],
+            unread: [],
+            groups: [shut("web", "net")],
+          },
         ],
         unread: [],
       },
@@ -3009,5 +3299,374 @@ describe("Services one NetworkPolicy shuts", () => {
         "NetworkPolicy deny-all-ingress admits no connection to these pods.",
       ],
     ]);
+  });
+});
+
+describe("the overview's first load", () => {
+  /**
+   * The first load drew a header and two stat bars while the loaded page is
+   * four panels, so everything jumped when data landed. Fails if the
+   * placeholder stops holding a heading for each panel, in the loaded order.
+   */
+  it("holds a place for each panel the loaded page has, in order", async () => {
+    await renderWithRouter(<OverviewSkeleton />);
+    const headings = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual([
+      "Needs attention",
+      "Workloads",
+      "Scheduler headroom",
+      "Nodes",
+    ]);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+});
+
+describe("a read that failed or was refused", () => {
+  const deploymentsFailed = {
+    namespace: null,
+    code: "KUBE_API",
+    message: "etcdserver: request timed out",
+  };
+  const stalled = () =>
+    attentionFrom([problem], {
+      overview: {
+        problems: [problem],
+        problemsTruncated: 0,
+        warningsShort: [],
+        unconfirmed: [],
+        unread: [{ kind: "Deployment", ...deploymentsFailed }],
+      } as unknown as ClusterOverview,
+    });
+  const panelOf = (attention: Attention, refreshFailing = false) =>
+    wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+        refreshFailing={refreshFailing}
+      />
+    );
+
+  /**
+   * Last-known findings stay, and say they are old: a Deployments read that
+   * timed out must not leave the Deployment row drawn as current. Fails if
+   * the row is dropped, or is drawn as current beside the unread kind.
+   */
+  it("keeps the findings of an unread kind and marks them last known", async () => {
+    await panelOf(stalled());
+    const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
+    expect(row).toHaveAttribute("data-stale");
+    expect(row).not.toHaveClass("opacity-60");
+    expect(within(row as HTMLElement).getByText(/not rechecked/)).toBeVisible();
+  });
+
+  /**
+   * Under a Deployments 500 the Deployment's row quoted its controller with
+   * no mark while the tile above said "not read"; then the mark repainted
+   * the red "Unavailable" amber, as if a failed read made it milder. Fails
+   * if a kept row does not say in amber that it was not rechecked and when
+   * it was last known, or loses its severity's mark and colour.
+   */
+  it("says a kept row was not rechecked, since when, in amber, and keeps its severity", async () => {
+    const at = new Date(2026, 0, 1, 20, 57, 44).getTime();
+    const kept = {
+      ...attentionFrom([problem]).items[0]!,
+      tone: "err" as const,
+      stale: true,
+      lastKnown: { at, refused: false },
+    };
+    await panelOf(
+      attentionFrom([], {
+        kept: [kept],
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsShort: [],
+          unconfirmed: [],
+          unread: [{ kind: "Deployment", ...deploymentsFailed }],
+        } as unknown as ClusterOverview,
+      })
+    );
+    const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
+    expect(
+      within(row as HTMLElement).getByTestId("attention-not-rechecked")
+    ).toHaveTextContent("not rechecked · last known at 20:57:44");
+    expect(
+      within(row as HTMLElement).getByTestId("attention-not-rechecked")
+    ).toHaveClass("text-warn");
+    expect(
+      within(row as HTMLElement)
+        .getByText("ScalingReplicaSet")
+        .closest('[data-col="2"]')
+    ).toHaveClass("text-err");
+    expect(row.querySelector("svg.lucide-x.text-err")).not.toBeNull();
+  });
+
+  /**
+   * "none ready · not rechecked" stood with no time under a row that said
+   * "last known at 22:13:52". Fails if a row kept by a failing overview read
+   * does not say when the overview last answered.
+   */
+  it("dates a row kept by a failing overview read by its last answer", async () => {
+    const at = new Date(2026, 0, 1, 22, 13, 52).getTime();
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+        refreshFailing={true}
+        answeredAt={at}
+      />
+    );
+    expect(screen.getByTestId("attention-not-rechecked")).toHaveTextContent(
+      "not rechecked · last known at 22:13:52"
+    );
+  });
+
+  /** Fails if a row with no time it is known at says only "not rechecked", with nothing on why. */
+  it("says why a row not rechecked has no time", async () => {
+    const unseen = { ...attentionFrom([problem]).items[0]!, stale: true };
+    await panelOf(
+      attentionFrom([], {
+        kept: [unseen],
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsShort: [],
+          unconfirmed: [],
+          unread: [{ kind: "Deployment", ...deploymentsFailed }],
+        } as unknown as ClusterOverview,
+      })
+    );
+    expect(screen.getByTestId("attention-not-rechecked")).toHaveTextContent(
+      "not rechecked · no answer seen this session"
+    );
+  });
+
+  /**
+   * A row of a kind that was read is current even when another kind was not.
+   * Fails if staleness spreads to every row.
+   */
+  it("leaves the rows of a kind that was read as current", async () => {
+    await panelOf(
+      attentionFrom([{ ...problem, kind: "Job", name: "migrate" }], {
+        overview: {
+          problems: [{ ...problem, kind: "Job", name: "migrate" }],
+          problemsTruncated: 0,
+          warningsShort: [],
+          unconfirmed: [],
+          unread: [{ kind: "Deployment", ...deploymentsFailed }],
+        } as unknown as ClusterOverview,
+      })
+    );
+    const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
+    expect(row).not.toHaveAttribute("data-stale");
+  });
+
+  /**
+   * The row for the unread kind says what was not read and the cluster's own
+   * words, and it comes before the findings. Fails if it sits under them.
+   */
+  it("names the unread kind above the rows with the cluster's words", async () => {
+    await panelOf(stalled());
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("Deployments");
+    expect(unchecked).toHaveTextContent("etcdserver: request timed out");
+    const row = screen.getByText("ScalingReplicaSet").closest('[role="link"]')!;
+    expect(
+      row.compareDocumentPosition(unchecked) & Node.DOCUMENT_POSITION_PRECEDING
+    ).toBeTruthy();
+  });
+
+  /**
+   * "Healthy" over a failing refresh is the page claiming it checked what it
+   * could not. Fails if the summary says Healthy while the overview's own
+   * read is failing, or stops saying it once the read answers.
+   */
+  it("is not healthy while the overview's own read is failing", async () => {
+    await panelOf(attentionFrom([]), true);
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      /^not all checked/
+    );
+    expect(screen.getByTestId("attention-summary")).not.toHaveTextContent(
+      "Healthy"
+    );
+    cleanup();
+    await panelOf(attentionFrom([]), false);
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      /^Healthy/
+    );
+  });
+
+  /**
+   * A kind some namespaces refused has a count that is part of the truth, not
+   * the whole of it. Fails if the Pods tile is drawn as current beside the
+   * refusal, or a tile that read everything is greyed.
+   */
+  it("draws the tile of an unread kind grey and leaves the others", async () => {
+    await wrap(
+      <WorkloadsPanel
+        overview={
+          {
+            counts: { pods: null, deployments: 1, nodes: null, jobs: null },
+            pods: null,
+            jobs: null,
+            deployments: {
+              read: [
+                { reason: "Ready", count: 1, podsUnread: false, troubled: 0 },
+              ],
+              complete: true,
+            },
+            nodes: [],
+            problems: [],
+            problemsTruncated: 0,
+            warningsShort: [],
+            unconfirmed: [],
+            unread: [{ kind: "Pod", ...deploymentsFailed }],
+          } as unknown as ClusterOverview
+        }
+        scope="all"
+      />
+    );
+    const pods = screen.getByText("Pods").closest("[data-unread]");
+    expect(pods).not.toBeNull();
+    expect(pods?.className).toContain("grayscale");
+    const deployments = screen.getByText("Deployment").closest("div")!
+      .parentElement!.parentElement!;
+    expect(deployments).not.toHaveAttribute("data-unread");
+    expect(deployments.className).not.toContain("grayscale");
+  });
+});
+
+describe("the scheduler headroom", () => {
+  const scheduler = {
+    cpu: { requested: 1, allocatable: 4, usage: null },
+    memory: { requested: 1, allocatable: 4, usage: null },
+  } as unknown as SchedulerPressure;
+
+  /**
+   * Inside a namespace scope the bars still count the whole cluster, and the
+   * header said nothing of it. Fails if an active scope stops saying
+   * cluster-wide, or a whole-cluster view starts to.
+   */
+  it("says it is cluster-wide only where a scope is active", async () => {
+    await wrap(
+      <SchedulerPanel scheduler={scheduler} metricsAvailable={true} scoped />
+    );
+    expect(screen.getByText(/cluster-wide/)).toBeInTheDocument();
+    cleanup();
+    await wrap(
+      <SchedulerPanel scheduler={scheduler} metricsAvailable={true} />
+    );
+    expect(screen.queryByText(/cluster-wide/)).toBeNull();
+  });
+});
+
+describe("a Needs attention row", () => {
+  const crashing: ClusterProblem = {
+    ...problem,
+    kind: "Pod",
+    name: "api-7d9f",
+    severity: "critical",
+    reason: "CrashLoopBackOff",
+  };
+  const shown = (attention: Attention) =>
+    wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+  /**
+   * Rows lit on hover and the status bar said "↵ open", and a click, a
+   * double-click and Enter all did nothing. Fails if a click on a row, away
+   * from the name inside it, or Enter on the focused row stops opening the
+   * object's page.
+   */
+  it("opens its object's page on a click and on Enter", async () => {
+    const at = "/c/prod/pods/k8s-gui-test/api-7d9f";
+    const clicked = await shown(attentionFrom([crashing]));
+    const row = () =>
+      screen.getByTestId("attention-said").closest("[role=link]")!;
+    await userEvent.click(screen.getByText("CrashLoopBackOff"));
+    expect(clicked.router.state.location.pathname).toBe(at);
+    cleanup();
+
+    const typed = await shown(attentionFrom([crashing]));
+    (row() as HTMLElement).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(typed.router.state.location.pathname).toBe(at);
+  });
+});
+
+describe("the name inside a Needs attention row", () => {
+  const crashing: ClusterProblem = {
+    ...problem,
+    kind: "Pod",
+    name: "api-7d9f",
+    severity: "critical",
+    reason: "CrashLoopBackOff",
+  };
+
+  /**
+   * Clicking the object's name did nothing while the row's empty part opened
+   * the page. Fails if a full pointer sequence on the name stops opening the
+   * same page the row opens.
+   */
+  it("opens the row's page on a full pointer sequence", async () => {
+    const shown = await wrap(
+      <AttentionPanel
+        attention={attentionFrom([crashing])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const name = screen.getByRole("link", { name: "Pod api-7d9f" });
+    await userEvent.pointer([
+      { target: name, keys: "[MouseLeft>]" },
+      { keys: "[/MouseLeft]" },
+    ]);
+    expect(shown.router.state.location.pathname).toBe(
+      "/c/prod/pods/k8s-gui-test/api-7d9f"
+    );
+  });
+});
+
+describe("a Needs attention row with no date", () => {
+  /**
+   * Four Service rows said "no date" in the age column, as if a date were
+   * missing. Fails if a standing condition reads as a missing date rather
+   * than as ongoing, or if a dated row loses its age.
+   */
+  it("says ongoing where a standing condition has no moment it began", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([
+          { ...problem, since: null },
+          { ...problem, name: "dated", reason: "Stalled" },
+        ])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    expect(screen.getAllByTestId("attention-ongoing")).toHaveLength(1);
+    expect(screen.getByTestId("attention-ongoing")).toHaveTextContent(
+      "ongoing"
+    );
+    expect(screen.queryByText("no date")).toBeNull();
   });
 });

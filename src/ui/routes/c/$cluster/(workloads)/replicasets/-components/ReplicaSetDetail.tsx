@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useAttention } from "@/hooks/useAttention";
+import { problemOfItems } from "../../../-object/problem";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { AlignLeft, BadgeCheck, Info, Layers2 } from "lucide-react";
 
@@ -107,6 +110,21 @@ export function ReplicaSetDetail() {
   const owner = replicaSet?.ownerReferences.find(
     (ref) => ref.controller && ref.kind === ResourceType.Deployment
   );
+  // Its pods' rows are filed under the Deployment, so the revision that runs
+  // them carries them itself, as its Deployment's chip does.
+  const attention = useAttention({ enabled: !!replicaSet });
+  const trouble = useMemo(() => {
+    if (!attention || !replicaSet) return null;
+    const names = new Set(pods.map((pod) => pod.name));
+    return problemOfItems(
+      attention.items.filter(
+        (item) =>
+          item.kind === ResourceType.Pod &&
+          item.namespace === replicaSet.namespace &&
+          names.has(item.name)
+      )
+    );
+  }, [attention, replicaSet, pods]);
 
   // Only to say how many other revisions the Deployment is holding on to.
   // Without it a page that is empty because it was superseded looks exactly
@@ -347,6 +365,7 @@ export function ReplicaSetDetail() {
       freshness={freshness}
       resource={replicaSet}
       delivery={deliveryOfKind(ResourceType.ReplicaSet, replicaSet)}
+      trouble={trouble}
       share={share}
       isLoading={isLoading}
       error={error}
@@ -389,7 +408,7 @@ export function ReplicaSetDetail() {
       badges={
         replicaSet &&
         standing !== "unversioned" && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {emptyPods
               ? t("empty", "scaledToZero")
               : t("count", "slashReady", { n: ready, total: desired })}

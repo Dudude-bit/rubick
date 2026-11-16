@@ -4,6 +4,10 @@ import { keptByName } from "@/lib/kept-by-name";
 import { currentConnection } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ManifestResult } from "@/generated/types";
+import { toast } from "@/components/ui/use-toast";
+import { translate } from "@/i18n";
+import { errorToShow } from "@/lib/error-utils";
+import { currentLocale } from "@/stores/localeStore";
 
 export interface HistoryEntry {
   timestamp: number;
@@ -153,7 +157,10 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
             history: { ...state.history, [key]: history },
           }));
         } catch (error) {
-          console.error("Failed to load YAML history:", error);
+          toast({
+            title: translate(currentLocale(), "action", "historyUnread"),
+            description: errorToShow(error),
+          });
         }
       }
 

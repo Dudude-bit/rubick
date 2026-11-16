@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,13 +18,12 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { errorToShow } from "@/lib/error-utils";
 import { targetColor } from "@/lib/share-targets";
 import { useT } from "@/i18n/useT";
 import type { ShareTargetInfo } from "@/generated/types";
 
 import { SettingRow, SettingsGroup } from "./settings-row";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 
 interface Draft {
   id: string | null;
@@ -68,7 +70,7 @@ export function SharingSettings() {
   });
 
   const failed = (title: string) => (error: unknown) =>
-    toastError(title, error);
+    toastWriteError(title, error);
 
   const saved = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.shareTargets() });
@@ -142,16 +144,16 @@ export function SharingSettings() {
         keywords={t("settings", "searchSharingWords")}
       >
         <div className="flex flex-col gap-2">
-          {targets.error ? (
-            // The same distinction the dialog makes: a list nobody could
-            // read is not a list with nothing in it.
-            <p className="text-[11px] text-warn">
-              {t("share", "targetsUnread", {
-                reason: errorToShow(targets.error),
-              })}
-            </p>
-          ) : (targets.data ?? []).length === 0 && !draft ? (
-            <p className="text-[11px] text-fg-fnt">
+          {targets.isError ? (
+            <Unknown
+              question={t("share", "targetsUnread")}
+              error={targets.error}
+              onRetry={() => targets.refetch()}
+            />
+          ) : targets.isPending ? (
+            <Reading>{t("share", "targetsReading")}</Reading>
+          ) : targets.data.length === 0 && !draft ? (
+            <p className="text-caption text-fg-fnt">
               {t("share", "targetsEmpty")}
             </p>
           ) : null}
@@ -172,8 +174,9 @@ export function SharingSettings() {
                 })
               }
               onVerify={() => verify.mutate(target.id)}
-              onRemove={() => remove.mutate(target.id)}
+              onRemove={() => remove.mutateAsync(target.id)}
               verifying={verify.isPending}
+              removing={remove.isPending}
             />
           ))}
           {draft ? (
@@ -226,7 +229,7 @@ export function SharingSettings() {
                   {t("share", "targetPublic")}
                 </label>
               </div>
-              <p className="text-[11px] text-fg-fnt">
+              <p className="text-caption text-fg-fnt">
                 {t("share", "targetPublicHint")}
               </p>
               <Input
@@ -254,7 +257,8 @@ export function SharingSettings() {
                 <Button
                   size="sm"
                   onClick={() => save.mutate(draft)}
-                  disabled={save.isPending || draft.apiUrl.trim() === ""}
+                  pending={save.isPending}
+                  disabled={draft.apiUrl.trim() === ""}
                 >
                   {t("action", "save")}
                 </Button>
@@ -262,7 +266,7 @@ export function SharingSettings() {
                   size="sm"
                   variant="outline"
                   onClick={() => importKey.mutate()}
-                  disabled={importKey.isPending}
+                  pending={importKey.isPending}
                 >
                   {t("share", "importPostplan")}
                 </Button>
@@ -298,14 +302,17 @@ function TargetRow({
   onVerify,
   onRemove,
   verifying,
+  removing,
 }: {
   target: ShareTargetInfo;
   onEdit: () => void;
   onVerify: () => void;
-  onRemove: () => void;
+  onRemove: () => unknown;
   verifying: boolean;
+  removing: boolean;
 }) {
   const t = useT();
+  const [confirming, setConfirming] = useState(false);
   return (
     <div
       className="flex items-center gap-2 rounded border border-hair px-2 py-1.5 text-xs"
@@ -322,14 +329,16 @@ function TargetRow({
         className="min-w-0 flex-1 rounded px-0.5 text-left hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
       >
         <span className="text-fg">{target.label}</span>{" "}
-        <span className="font-mono text-[11px] text-fg-fnt">{target.host}</span>
+        <span className="font-mono text-caption text-fg-fnt">
+          {target.host}
+        </span>
         {target.public ? (
-          <span className="ml-1.5 text-[11px] text-err">
+          <span className="ml-1.5 text-caption text-err">
             {t("share", "targetPublic")}
           </span>
         ) : null}
         {!target.hasKey ? (
-          <span className="ml-1.5 text-[11px] text-warn">
+          <span className="ml-1.5 text-caption text-warn">
             {t("share", "targetNoKey")}
           </span>
         ) : null}
@@ -338,7 +347,8 @@ function TargetRow({
         size="sm"
         variant="outline"
         onClick={onVerify}
-        disabled={!target.hasKey || verifying}
+        pending={verifying}
+        disabled={!target.hasKey || removing}
       >
         <Check aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
         {t("share", "verify")}
@@ -347,10 +357,20 @@ function TargetRow({
         size="sm"
         variant="outline"
         aria-label={t("share", "removeTarget")}
-        onClick={onRemove}
+        onClick={() => setConfirming(true)}
+        disabled={removing || verifying}
       >
         <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
       </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("share", "removeTargetTitle", { name: target.label })}
+        description={t("share", "removeTargetBody")}
+        confirmLabel={t("share", "removeTarget")}
+        confirmVariant="destructive"
+        onConfirm={onRemove}
+      />
     </div>
   );
 }

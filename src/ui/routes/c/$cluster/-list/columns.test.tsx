@@ -8,7 +8,15 @@ import { columns as storageClassColumns } from "../(storage)/storageclasses/-com
 import { columns as namespaceColumns } from "../(cluster)/namespaces/-components/NamespaceList";
 import { columns as nodeColumns } from "../(cluster)/nodes/-components/NodeList";
 import { DataTable } from "@/components/ui/data-table";
-import { createAgeColumn, createDataKeysColumn } from "./columns";
+import {
+  createAgeColumn,
+  createCpuColumn,
+  createDataKeysColumn,
+  createMemoryColumn,
+  createReplicasColumn,
+} from "./columns";
+import type { ReactNode } from "react";
+import type { T as Translate } from "@/i18n/useT";
 import { PortsDisplay } from "../(network)/-components/PortsDisplay";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -198,5 +206,88 @@ describe("sorting a list by age", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Age/ }));
     expect(order()).toEqual(["old", "new", "unstamped"]);
+  });
+});
+
+describe("the Replicas column's order", () => {
+  /**
+   * It ranked by the ready fraction, so 0/0, 1/1, 2/2 and 5/5 all tied and
+   * the column looked unsorted. Fails if it stops sorting by the desired
+   * count, then the ready count.
+   */
+  it("sorts by desired count, then ready count", () => {
+    const sort = (
+      createReplicasColumn().meta as { sort: (row: never) => number }
+    ).sort;
+    const rank = (ready: number, desired: number) =>
+      sort({ replicas: { ready, desired } } as never);
+    expect(rank(0, 0)).toBeLessThan(rank(1, 1));
+    expect(rank(1, 1)).toBeLessThan(rank(2, 2));
+    expect(rank(2, 2)).toBeLessThan(rank(5, 5));
+    expect(rank(1, 3)).toBeLessThan(rank(2, 3));
+    expect(rank(3, 3)).toBeLessThan(rank(0, 4));
+  });
+});
+
+describe("a metric cell for something with nothing running", () => {
+  const cellOf = (column: ColumnDef<never>, original: object) =>
+    (column.cell as (context: { row: { original: object } }) => ReactNode)({
+      row: { original },
+    });
+
+  /**
+   * A Deployment at 0/0 read "0m" and "0 B",
+   * and a Completed pod drew the could-not-look triangle "no sample yet".
+   * Fails if nothing running is drawn as a measured zero or as unread, or if
+   * a measured zero and an unread reading stop being drawn as such.
+   */
+  it.each([
+    ["CPU", createCpuColumn() as ColumnDef<never>],
+    ["Memory", createMemoryColumn() as ColumnDef<never>],
+  ])(
+    "says nothing running in %s, apart from a zero and an unread reading",
+    (_, column) => {
+      const idle = renderWithProviders(
+        <>
+          {cellOf(column, {
+            cpuMillicores: null,
+            memoryBytes: null,
+            idle: true,
+          })}
+        </>
+      );
+      expect(idle.container).toHaveTextContent("nothing running");
+      expect(idle.container.querySelector("[title]")).toHaveAttribute(
+        "title",
+        "nothing running"
+      );
+      expect(idle.container.querySelector("[role=img]")).toBeNull();
+      idle.unmount();
+
+      const zero = renderWithProviders(
+        <>{cellOf(column, { cpuMillicores: 0, memoryBytes: 0 })}</>
+      );
+      expect(zero.container).toHaveTextContent(/^0/);
+      zero.unmount();
+
+      const unread = renderWithProviders(
+        <>{cellOf(column, { cpuMillicores: null, memoryBytes: null })}</>
+      );
+      expect(unread.container.querySelector("[role=img]")).not.toBeNull();
+    }
+  );
+
+  /** Fails if a shared report says "not measured" for a workload with nothing running. */
+  it("says nothing running in a shared report too", () => {
+    const share = (
+      createCpuColumn().meta as {
+        share: (row: never, t: Translate) => unknown;
+      }
+    ).share;
+    const t = ((_: string, key: string) => key) as Translate;
+    expect(share({ cpuMillicores: null, idle: true } as never, t)).toEqual({
+      text: "nothingRunning",
+      quiet: true,
+    });
   });
 });

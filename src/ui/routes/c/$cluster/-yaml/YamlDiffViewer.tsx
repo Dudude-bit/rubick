@@ -1,7 +1,8 @@
-import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, TriangleAlert } from "lucide-react";
 
 import { useLineDiff } from "./useLineDiff";
 import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 
 export interface YamlDiffViewerProps {
@@ -33,7 +34,7 @@ export function YamlDiffViewer({
         role="status"
         className="flex h-full items-center justify-center gap-1.5 py-8 text-xs text-fg-mut"
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         {t("empty", "diffComputing")}
       </div>
     );

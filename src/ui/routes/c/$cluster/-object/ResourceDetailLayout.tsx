@@ -17,12 +17,19 @@
 import { segmentOf } from "@/lib/access-kinds";
 import { builtInKindOf, type AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, Network, RefreshCw } from "lucide-react";
+import { ObjectUnreadContext } from "./object-unread";
+import { ArrowLeft, Network, RefreshCw } from "lucide-react";
+import { useParams } from "@tanstack/react-router";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
-import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  isResourceNotFoundError,
+  rereadFailedParts,
+} from "@/hooks/useResourceDetail";
 import { useLastOwners, type KnownOwners } from "@/hooks/useLastOwners";
 import { GoneNotice } from "./gone";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
@@ -40,7 +47,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { OwnsPanel } from "./Owns";
-import { StaleRows } from "../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { servedOfKind, useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
 import type { ServedResource } from "./served";
@@ -48,6 +55,18 @@ import { useDelivery } from "../-delivery/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { useClusterStore } from "@/stores/clusterStore";
+import type { Finding } from "@/lib/governance";
+import type { StatusRole } from "@/lib/status-role";
+import { FindingsBlock, WithProblem } from "./ProblemTone";
+import { itemFinding } from "./item-finding";
+import {
+  listedKindOf,
+  problemOf,
+  useListedItems,
+  useListedProblem,
+  type Problem,
+} from "./problem";
 import { ShareObjectAction } from "@/components/share/ShareAction";
 import type {
   ShareContribution,
@@ -70,6 +89,8 @@ interface DetailErrorProps {
   additionalMessage?: string;
   /** What else ended with an object that is gone. */
   goneNote?: ReactNode;
+  /** Asks the read again, for an object that could not be read at all. */
+  onRetry?: () => unknown;
 }
 
 export function DetailError({
@@ -82,6 +103,7 @@ export function DetailError({
   isSearching,
   additionalMessage,
   goneNote,
+  onRetry,
 }: DetailErrorProps) {
   const t = useT();
   const isNotFound = isResourceNotFoundError(error);
@@ -97,19 +119,10 @@ export function DetailError({
           error={error}
         />
       ) : (
-        <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-          <h2 className="text-[13px] font-semibold tracking-tight text-err">
-            {t("empty", "kindCouldNotRead", { kind: resourceKind })}
-          </h2>
-        </div>
-      )}
-      {!isNotFound && (
         <Unknown
-          // The heading already says "could not read this kind"; the box asks
-          // the question the read was, so the same sentence is not stacked twice.
-          question={t("empty", "whatIsThisKind", { kind: resourceKind })}
+          question={t("empty", "kindCouldNotRead", { kind: resourceKind })}
           error={error ?? t("empty", "clusterDidNotAnswer")}
+          onRetry={onRetry}
         />
       )}
       {isNotFound && goneNote}
@@ -159,6 +172,20 @@ interface ResourceDetailLayoutProps {
   namespaceLink?: AppLink | null;
   createdAt?: string | null;
   statusBadge?: ReactNode;
+  /** The role `statusBadge` is drawn in, so a problem is never drawn in a quieter tone than the badge beside it. */
+  statusRole?: StatusRole;
+  /**
+   * What is live-wrong with the object, worst first. Drawn directly under the
+   * header, and carried by the status chip as its tone and a count, so no
+   * page prints a green word above an amber cause.
+   */
+  findings?: readonly Finding[];
+  /** A page that already prints its own cause (a pod's summary) passes only the chip's part of it. */
+  trouble?: Problem | null;
+  /** The page's summary already states the cause the shell's list row would repeat as a second block. */
+  tellsCause?: boolean;
+  /** Reads beside the object that failed or were refused, by name: the header then says the page is partly unread instead of live. */
+  unread?: readonly string[];
   /** Qualifiers shown beside the name. */
   badges?: ReactNode;
   /**
@@ -201,6 +228,8 @@ interface ResourceDetailLayoutProps {
   isSearchingReplacement?: boolean;
   /** What else ended with the object, said under the gone notice. */
   goneNote?: ReactNode;
+  /** Reads the object again; without it the page refetches `queryKeys.detail`. */
+  onRetry?: () => unknown;
 
   /**
    * What is wrong with the object, in the two or three lines that say it.
@@ -254,6 +283,10 @@ export function ResourceDetailLayout({
   namespaceLink,
   createdAt,
   statusBadge,
+  statusRole = "ok",
+  findings = [],
+  trouble,
+  unread,
   badges,
   delivery,
   actions,
@@ -262,7 +295,9 @@ export function ResourceDetailLayout({
   onFindReplacement,
   isSearchingReplacement,
   goneNote,
+  onRetry,
   summary,
+  tellsCause = false,
   headerNote,
   freshness,
   tabs: pageTabs,
@@ -272,6 +307,17 @@ export function ResourceDetailLayout({
   served,
 }: ResourceDetailLayoutProps) {
   const t = useT();
+  const queryClient = useQueryClient();
+  // One retry of the object asks every part read through it again as well.
+  const retry = () => {
+    const asked = onRetry
+      ? onRetry()
+      : queryClient.refetchQueries({
+          queryKey: queryKeys.detail(resourceKind, namespace, title),
+        });
+    if (title) void rereadFailedParts(queryClient, namespace, title);
+    return asked;
+  };
   const lineage = useLineage(
     served ?? servedOfKind(resourceKind),
     title,
@@ -279,17 +325,20 @@ export function ResourceDetailLayout({
   );
   const uid = lineage.data?.uid ?? null;
   useOwnershipKeys(served ?? servedOfKind(resourceKind), title, namespace);
+  const connected = useClusterStore((state) => state.isConnected);
+  const owning = connected && !lineage.data && !lineage.error;
   const tabs = useMemo(
     () =>
-      uid
+      uid || owning
         ? withOwns(pageTabs, {
             id: "owns",
             label: t("owns", "tab"),
             glyph: viewGlyph(Network),
-            content: <OwnsPanel uid={uid} namespace={namespace} />,
+            reading: !uid,
+            content: uid ? <OwnsPanel uid={uid} namespace={namespace} /> : null,
           })
         : pageTabs,
-    [pageTabs, uid, namespace, t]
+    [pageTabs, uid, owning, namespace, t]
   );
   const { deliveries } = useDelivery(delivery ?? null);
   // A page handed where its kind is served is not the registry's page of
@@ -325,6 +374,44 @@ export function ResourceDetailLayout({
   // No object and no failure is a read still to come, as the peek draws it:
   // a read reset or called off sits there with nothing fetching.
   const reading = isLoading || (!resource && !error);
+  const found = trouble ?? problemOf(findings);
+  // The chip never says less than the list's row: a findings read that
+  // failed, or has not caught up after the object came back, finds nothing.
+  const listed = useListedProblem(
+    listedKindOf({ kind: resourceKind, crd }),
+    namespace ?? null,
+    title,
+    !found && !!resource
+  );
+  // What the shell holds against this very object, said on its page when its
+  // own reads found nothing to say: an autoscaler the shell counted for
+  // TooManyReplicas had a header and a page that said nothing of it.
+  const subjectOf = useListedItems(
+    listedKindOf({ kind: resourceKind, crd }),
+    namespace ?? null,
+    title,
+    findings.length === 0 && !!resource && !tellsCause
+  );
+  const shown =
+    findings.length > 0
+      ? findings
+      : (subjectOf ?? [])
+          .filter((item) => item.kind === resourceKind && item.name === title)
+          .map((item) => itemFinding(item, t));
+  // A page names its object from what it read, which an unread one has not.
+  const route = useParams({ strict: false });
+  const bare = (
+    <ResourceDetailHeader
+      name={title || route.name || ""}
+      kind={resourceKind}
+      served={served}
+      listLink={listLink}
+      listLabel={listLabel}
+      namespace={namespace ?? route.namespace}
+      namespaceLink={namespaceLink}
+      onBack={onBack}
+    />
+  );
 
   // The banner belongs above these returns, not below them. An alert that
   // names an object this cluster does not have lands on exactly the error
@@ -348,16 +435,18 @@ export function ResourceDetailLayout({
 
   if (reading) {
     return (
-      <>
+      <div className="flex flex-col gap-3">
+        {bare}
         {banner}
-        <DetailSkeleton />
-      </>
+        <DetailSkeleton showHeader={false} tabCount={tabs.length} />
+      </div>
     );
   }
 
   if (error || !resource) {
     return (
-      <>
+      <div className="flex flex-col gap-3">
+        {bare}
         {banner}
         <DetailError
           error={error}
@@ -368,8 +457,9 @@ export function ResourceDetailLayout({
           onFindReplacement={onFindReplacement}
           isSearching={isSearchingReplacement}
           goneNote={goneNote}
+          onRetry={retry}
         />
-      </>
+      </div>
     );
   }
 
@@ -378,84 +468,98 @@ export function ResourceDetailLayout({
   // this object is worth its two lines on a log as much as on the Overview,
   // and it is the tab's own content that grows into what is left.
   const surface = surfaceIsOpen(tabs, activeTab);
+  const problem = found ?? listed;
+  const unreadObject = freshness?.stale
+    ? { kind: resourceKind, name: title, failure: freshness.failure }
+    : null;
 
   return (
-    <CaptionScope kind={resourceKind}>
-      <div
-        className={cn(
-          // 12px rather than the page's 22px: what is left in this column is
-          // chrome — identity, then the strip — and the mock's whole gain is
-          // that the two read as one band. The 22px rhythm still belongs to
-          // the blocks, which the open tab's panel now owns.
-          "flex flex-col gap-3",
-          surface && "h-full min-h-0"
-        )}
-      >
-        <ResourceDetailHeader
-          name={title}
-          kind={resourceKind}
-          served={served}
-          listLink={listLink}
-          listLabel={listLabel}
-          namespace={namespace}
-          namespaceLink={namespaceLink}
-          createdAt={createdAt}
-          status={statusBadge}
-          meta={
-            <>
-              {badges}
-              <DeliveryMarks deliveries={deliveries} />
-              <HelmMark object={resource} />
-            </>
-          }
-          note={headerNote}
-          onBack={onBack}
-          dataUpdatedAt={freshness?.dataUpdatedAt}
-          live={freshness?.live}
-          slowed={freshness?.slowed}
-          stale={freshness?.stale}
-          slowRead={freshness?.slowRead}
-        />
+    <ObjectUnreadContext.Provider value={unreadObject}>
+      <CaptionScope kind={resourceKind}>
+        <div
+          className={cn(
+            // 12px rather than the page's 22px: what is left in this column is
+            // chrome — identity, then the strip — and the mock's whole gain is
+            // that the two read as one band. The 22px rhythm still belongs to
+            // the blocks, which the open tab's panel now owns.
+            "flex flex-col gap-3",
+            surface && "h-full min-h-0"
+          )}
+        >
+          <ResourceDetailHeader
+            name={title}
+            kind={resourceKind}
+            served={served}
+            listLink={listLink}
+            listLabel={listLabel}
+            namespace={namespace}
+            namespaceLink={namespaceLink}
+            createdAt={createdAt}
+            status={
+              statusBadge ? (
+                <WithProblem problem={problem} role={statusRole}>
+                  {statusBadge}
+                </WithProblem>
+              ) : (
+                problem && <WithProblem problem={problem} role={null} />
+              )
+            }
+            meta={
+              <>
+                {badges}
+                <DeliveryMarks deliveries={deliveries} />
+                <HelmMark object={resource} />
+              </>
+            }
+            note={headerNote}
+            onBack={onBack}
+            dataUpdatedAt={freshness?.dataUpdatedAt}
+            live={freshness?.live}
+            slowed={freshness?.slowed}
+            stale={freshness?.stale}
+            failure={freshness?.failure}
+            slowRead={freshness?.slowRead}
+            unread={unread}
+          />
 
-        {/* Above the strip, and so on every tab: both say something about the
-            object rather than about a view of it. Usually neither is there at
-            all — the delivery line is earned per object, never per managed
-            object, and a summary is what a healthy object does not have. */}
-        <DeliveryBanner deliveries={deliveries} />
-        {/* One mount for every kind that has a page. An alert names objects
+          {/* One mount for every kind that has a page. An alert names objects
             this app draws through six different components, and a banner
             copied into each is how five of them come to say something the
             sixth does not. */}
-        {banner}
-        {freshness?.stale && (
-          <StaleRows
-            object
-            label={`${resourceKind} ${title}`}
-            since={freshness.dataUpdatedAt}
-            error={freshness.failure}
-          />
-        )}
-        {summary}
+          {banner}
+          {freshness?.stale && (
+            <StaleRows
+              object
+              label={`${resourceKind} ${title}`}
+              since={freshness.dataUpdatedAt}
+              error={freshness.failure}
+              onRetry={retry}
+            />
+          )}
+          {summary}
+          <FindingsBlock findings={shown} />
+          <DeliveryBanner deliveries={deliveries} />
 
-        <DetailTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          onTabAgain={onTabAgain}
-          subject={`${resourceKind}/${namespace ?? ""}/${title}`}
-          actions={
-            <>
-              <ShareObjectAction
-                subject={subject}
-                resource={resource}
-                contribute={share}
-              />
-              {actions}
-            </>
-          }
-        />
-      </div>
-    </CaptionScope>
+          <DetailTabs
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            onTabAgain={onTabAgain}
+            subject={`${resourceKind}/${namespace ?? ""}/${title}`}
+            actions={
+              <>
+                <ShareObjectAction
+                  subject={subject}
+                  resource={resource}
+                  contribute={share}
+                />
+                {actions}
+              </>
+            }
+          />
+        </div>
+      </CaptionScope>
+    </ObjectUnreadContext.Provider>
   );
 }
 

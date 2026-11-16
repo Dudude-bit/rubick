@@ -79,8 +79,10 @@ describe("clusterColor", () => {
 
 describe("a colour chosen by hand", () => {
   it("beats the one derived from the name", () => {
-    expect(clusterColor("k3d-dev", 224)).toBe(clusterHueColor(224));
-    expect(clusterColor("k3d-dev", 224)).not.toBe(clusterColor("k3d-dev"));
+    const derived = clusterColor("k3d-dev");
+    const other = [184, 224].find((hue) => clusterHueColor(hue) !== derived)!;
+    expect(clusterColor("k3d-dev", other)).toBe(clusterHueColor(other));
+    expect(clusterColor("k3d-dev", other)).not.toBe(derived);
   });
 
   it("beats the danger colour, because the derivation cannot read", () => {
@@ -105,6 +107,19 @@ describe("the hues on offer", () => {
     for (let i = 1; i < CLUSTER_HUES.length; i++) {
       expect(CLUSTER_HUES[i] - CLUSTER_HUES[i - 1]).toBeGreaterThanOrEqual(40);
     }
+  });
+
+  /** Fails if a cluster's identity borrows a state colour, so a dev cluster wears green and reads as healthy. */
+  it("derives a cluster's colour from the identity hues, never from a state", () => {
+    const states = ["--ok", "--warn", "--err", "--info"];
+    for (let i = 0; i < 200; i++) {
+      const colour = clusterColor(`cluster-${i}`);
+      for (const state of states) expect(colour).not.toContain(state);
+    }
+  });
+
+  it("offers no green, which reads as healthy beside --ok", () => {
+    for (const hue of CLUSTER_HUES) expect(hue < 90 || hue > 170).toBe(true);
   });
 
   it("offers nothing that could be mistaken for the danger colour", () => {

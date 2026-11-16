@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -77,15 +77,18 @@ describe("a release its page found gone", () => {
     detail.answer = null;
     await open("overview");
     await screen.findByRole("button", { name: "Go back" });
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(
+      screen.getByText("This Helm release does not exist.")
+    ).toBeInTheDocument();
 
     detail.answer = web;
     act(() => useWindowActivity.setState({ focused: false }));
     act(() => useWindowActivity.setState({ focused: true }));
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
-      "web"
+    await waitFor(() =>
+      expect(screen.queryByText("This Helm release does not exist.")).toBeNull()
     );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("web");
   });
 });
 

@@ -113,6 +113,28 @@ describe("telling a refusal from a fault", () => {
     }
   });
 
+  /**
+   * A subject looked up in a list that was refused arrives as LIST_UNREAD, and
+   * the peek drew "The read failed" under a warning triangle for a 403. Fails
+   * if the cluster's refusal inside it is read as a fault again.
+   */
+  it("reads a refusal that arrives as an unread list as a refusal", () => {
+    const refused = Object.assign(
+      new Error(
+        'Could not read the Pod list, so whether web is there is unknown: pods is forbidden: User "dev" cannot list resource "pods"'
+      ),
+      { code: "LIST_UNREAD" }
+    );
+    const broken = Object.assign(
+      new Error(
+        "Could not read the Pod list, so whether web is there is unknown: connection reset"
+      ),
+      { code: "LIST_UNREAD" }
+    );
+    expect(isRefusal(refused)).toBe(true);
+    expect(isRefusal(broken)).toBe(false);
+  });
+
   it("still calls an authentication failure what it is", () => {
     for (const message of [
       "Unauthorized",

@@ -11,7 +11,7 @@ export function HeldUpdates({ n, onShow }: { n: number; onShow: () => void }) {
       type="button"
       onClick={onShow}
       title={t("hints", "eventsHeld")}
-      className="inline-flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] text-info transition-colors hover:bg-hover"
+      className="inline-flex h-6 items-center gap-1.5 rounded px-1.5 text-caption text-info transition-colors hover:bg-hover"
     >
       <ArrowUpToLine className="h-3 w-3" aria-hidden="true" />
       {t("count", "eventsWaiting", { n })}

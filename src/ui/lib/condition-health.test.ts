@@ -3,7 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   cautioningCondition,
   conditionRole as roleAmong,
+  conditionSaid,
   failingCondition,
+  spokenCondition,
 } from "./condition-health";
 import { autoscalerVerdict, type AutoscalerFacts } from "./governance";
 import type { ConditionInfo } from "@/generated/types";
@@ -77,8 +79,11 @@ describe("failingCondition", () => {
   });
 
   it("skips the types the caller says it can describe better", () => {
-    const conditions = [condition("Ready", "False"), condition("Foo", "False")];
-    expect(failingCondition(conditions, ["Ready"])?.type).toBe("Foo");
+    const conditions = [
+      condition("Ready", "False"),
+      condition("Available", "False"),
+    ];
+    expect(failingCondition(conditions, ["Ready"])?.type).toBe("Available");
   });
 
   it("returns nothing when everything is satisfied", () => {
@@ -265,5 +270,69 @@ describe("a condition its reason settles", () => {
     expect(said("Progressing", "False", "ProgressDeadlineExceeded")).toBe(
       "err"
     );
+  });
+});
+
+describe("a condition by whether its type's sense is known", () => {
+  /**
+   * An Argo Rollout's `Paused=False`, its healthy value, was a
+   * red cross, because every type nobody listed was read as a Ready. Fails
+   * if a type of known sense is read by the wrong value, or a type of
+   * unknown sense is drawn as health or as trouble.
+   */
+  it("reads a known type by its own healthy value and an unknown one as neither", () => {
+    expect(conditionRole(condition("Paused", "False"))).toBe("ok");
+    expect(conditionRole(condition("Paused", "True"))).toBe("neutral");
+    expect(conditionRole(condition("InvalidSpec", "True"))).toBe("err");
+    expect(conditionRole(condition("KernelDeadlock", "False"))).toBe("ok");
+    expect(conditionRole(condition("Synced", "False"))).toBe("err");
+    expect(conditionRole(condition("Degraded", "True"))).toBe("neutral");
+    expect(conditionRole(condition("Degraded", "False"))).toBe("neutral");
+    expect(conditionRole(condition("Degraded", "Unknown"))).toBe("warn");
+    expect(failingCondition([condition("Degraded", "False")])).toBeNull();
+  });
+
+  /**
+   * Argo Rollouts holds `Healthy=False` for as long as a rollout waits on
+   * its pause. Fails if a rollout somebody paused reads as broken, or one
+   * that is not paused stops reading so.
+   */
+  it("does not call a rollout held by its pause unhealthy", () => {
+    const unhealthy = condition("Healthy", "False");
+    expect(roleAmong(unhealthy, [unhealthy, condition("Paused", "True")])).toBe(
+      "neutral"
+    );
+    expect(
+      roleAmong(unhealthy, [unhealthy, condition("Paused", "False")])
+    ).toBe("err");
+  });
+});
+
+describe("the words a condition is spoken in", () => {
+  const rollout = (status: string, reason: string, message: string) =>
+    condition("Paused", status, { reason, message });
+
+  /**
+   * "Paused False (RolloutPaused): Rollout is paused". Argo
+   * writes those words whichever value the condition holds, so beside False
+   * they said the opposite of it. Fails if they are spoken beside False, or
+   * dropped beside True where they are true.
+   */
+  it("drops the words a controller writes whatever the value, beside the value they deny", () => {
+    const resumed = spokenCondition(
+      rollout("False", "RolloutPaused", "Rollout is paused")
+    );
+    expect(resumed.reason).toBeNull();
+    expect(resumed.message).toBeNull();
+    const paused = rollout("True", "RolloutPaused", "Rollout is paused");
+    expect(spokenCondition(paused)).toBe(paused);
+    expect(
+      conditionSaid(
+        condition("Healthy", "False", {
+          reason: "RolloutHealthy",
+          message: "Rollout is not healthy",
+        })
+      )
+    ).toBe("Rollout is not healthy");
   });
 });

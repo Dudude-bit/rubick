@@ -32,7 +32,7 @@ import {
   type IngressClaim,
 } from "./ingress-health";
 import type { RouteTls } from "./ingress-tls";
-import { clusterIpText } from "./cluster-ip";
+import { clusterIpOf, clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import {
@@ -333,6 +333,20 @@ export function describeExistence(
   if (ref.existence === "notChecked" && verifiable)
     return t("nav", "notChecked");
   return null;
+}
+
+/** A row's word on its object's existence, and whether that absence is a fault: one drawn on only optionally stops nothing. */
+export function rowExistence(
+  row: Pick<ConnRow, "object" | "optionalOnly" | "verifiable">,
+  t: T
+): { existence: string | null; missing: boolean } {
+  if (!row.object) return { existence: null, missing: false };
+  if (row.object.existence === "missing" && row.optionalOnly)
+    return { existence: t("nav", "optionalNotPresent"), missing: false };
+  return {
+    existence: describeExistence(row.object, t, row.verifiable ?? false),
+    missing: row.object.existence === "missing",
+  };
 }
 
 export type HopTone = "on" | "info" | "unknown" | "warn" | "bad";
@@ -817,6 +831,15 @@ export function chainStopHop(
     };
   }
   const said = describeStop(stop, t);
+  if (
+    subject.facts?.kind === "service" &&
+    clusterIpOf(subject.facts.clusterIp).state === "headless"
+  ) {
+    if (said.note === t("nav", "connectionRefusedNothingBehind"))
+      said.note = t("nav", "headlessNothingBehind");
+    else if (said.note === t("nav", "stopMakersUnreadNote"))
+      said.note = t("nav", "headlessMakersUnreadNote");
+  }
   if (stop.reason === "podsRefused") {
     const others = stop.workloads.filter(
       (workload) => !sameObject(workload, subject)
@@ -1750,6 +1773,10 @@ export interface ConnRow {
   unasked?: boolean;
   /** Keys this row reads that the subject was read and found not to hold. */
   missingKeys?: { key: string; optional: boolean; from: string }[];
+  /** How many keys of the object this row's usages name, for a summary of the missing ones. */
+  keysReferenced?: number;
+  /** Every way the subject draws on the object is optional: its absence stops nothing. */
+  optionalOnly?: boolean;
 }
 
 export interface ConnGroup {
@@ -2048,6 +2075,11 @@ function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
       ...rowFor(needLabel(edge, t), edge.to, t),
       ways: describeUsages(edge.relation.usages, t),
       missingKeys: missingKeysOf(edge.relation.usages, edge.to.kind),
+      keysReferenced: edge.relation.usages.filter((use) => use.how === "env")
+        .length,
+      optionalOnly:
+        edge.relation.usages.length > 0 &&
+        edge.relation.usages.every((use) => "optional" in use && use.optional),
       verifiable: true,
       rank: needRank(edge),
     }));

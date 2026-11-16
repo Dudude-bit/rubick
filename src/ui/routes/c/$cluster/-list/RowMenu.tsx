@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Link2,
   PanelRight,
+  RefreshCw,
   SquareChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +53,7 @@ export function RowMenu<Row extends Listed>({
   peek,
   actions,
   quickActions,
+  read,
   at,
   onClose,
 }: {
@@ -61,6 +63,8 @@ export function RowMenu<Row extends Listed>({
   peek: PeekTarget | null;
   actions: ObjectActions;
   quickActions: QuickAction<Row>[];
+  /** The read the actions are planned from: until it answers they know less than the peek's. */
+  read?: { pending: boolean; error: unknown; onRetry: () => void };
   at: { x: number; y: number };
   onClose: () => void;
 }) {
@@ -177,10 +181,31 @@ export function RowMenu<Row extends Listed>({
       run: () => action.onClick(row),
     }));
   const acts = [...planned, ...own];
+  const unreadActions: Entry[] = read?.pending
+    ? [
+        {
+          key: "reading",
+          label: t("action", "readingActions"),
+          icon: RefreshCw,
+          run: () => undefined,
+          disabled: true,
+        },
+      ]
+    : read?.error
+      ? [
+          {
+            key: "read-again",
+            label: t("action", "actionsNeedRead"),
+            icon: RefreshCw,
+            run: read.onRetry,
+          },
+        ]
+      : [];
 
   const groups = [
     opens,
     copies,
+    unreadActions,
     acts.filter((entry) => !entry.danger),
     acts.filter((entry) => entry.danger),
   ].filter((group) => group.length > 0);
@@ -213,7 +238,7 @@ export function RowMenu<Row extends Listed>({
                 <span className="flex min-w-0 flex-col">
                   {entry.label}
                   {entry.reason && (
-                    <span className="text-[11px] text-fg-fnt">
+                    <span className="text-caption text-fg-fnt">
                       {entry.reason}
                     </span>
                   )}

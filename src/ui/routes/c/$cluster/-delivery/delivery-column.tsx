@@ -1,14 +1,14 @@
 /**
  * The `Delivery` column, and the filter that is the real reason it exists.
  *
- * There is deliberately **no "managed" mark**: on a cluster Argo or Flux runs
- * every row would carry one, and the column earns its width by being empty
- * for the ordinary row. The filter is where being delivered pays off instead
- * — *show me what Argo does not own* is how you find the thing somebody
- * applied by hand and never wrote down, and it costs nothing on screen until
- * it is used.
+ * A delivered row names its controller in the faintest tone, so the cell is
+ * never blank over a peek that names it, and a problem still outshouts it.
+ * The filter is where being delivered pays off — *show me what Argo does not
+ * own* is how you find the thing somebody applied by hand and never wrote
+ * down.
  */
 
+import { Eyebrow, SegmentedControl } from "@/components/ui/states";
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { Delivery } from "@/integrations";
@@ -17,7 +17,6 @@ import {
   DELIVERY_FILTER_LABEL,
   type DeliveryFilter,
 } from "@/lib/delivery";
-import { cn } from "@/lib/utils";
 import { DeliveryCell } from "./delivery";
 import { useT } from "@/i18n/useT";
 
@@ -78,24 +77,18 @@ export function DeliveryFilterControl({
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
-        {t("columns", "delivery")}
-      </span>
-      {OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          onClick={() => onChange(option.id)}
-          className={cn(
-            "text-[11px] transition-colors",
-            option.id === value ? "text-fg" : "text-fg-fnt hover:text-fg-mut"
-          )}
-        >
-          {t("action", option.label)}
-        </button>
-      ))}
+      <Eyebrow as="span">{t("columns", "delivery")}</Eyebrow>
+      <SegmentedControl
+        label={t("columns", "delivery")}
+        value={value}
+        onChange={onChange}
+        segments={OPTIONS.map((option) => ({
+          value: option.id,
+          label: t("action", option.label),
+        }))}
+      />
       {value === "trouble" && blind.length > 0 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("empty", "blindReconcilers", {
             n: blind.length,
             vendors: blind.join(` ${t("empty", "listAnd")} `),

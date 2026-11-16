@@ -2246,3 +2246,21 @@ describe("the notice of a stream that broke while intake is set", () => {
     expect(notice).not.toHaveTextContent(RESUMES_FROM_NOW);
   });
 });
+
+describe("LogViewer before its first attach", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * The first frames said "Not streaming" and then streamed. Fails if a pane
+   * that has not yet tried to attach claims to be stopped, or if the claim
+   * does not come back once the reader stops it.
+   */
+  it("says connecting, not stopped, until a stream has been tried", async () => {
+    await mount(<LogViewer {...props} />);
+    expect(screen.queryByText(/Not streaming/)).toBeNull();
+    expect(screen.getByTestId("log-skeleton")).toHaveTextContent("Connecting");
+  });
+});

@@ -21,7 +21,11 @@ export function RowCauseText({
       <RefusedLine said={cause.said} className="min-w-0 truncate text-xs" />
     );
   if (cause.says !== "read" || !cause.shared)
-    return <span className="min-w-0 truncate text-xs text-fg-fnt">{text}</span>;
+    return (
+      <span className="min-w-0 truncate text-xs text-fg-fnt" title={text}>
+        {text}
+      </span>
+    );
   const { shared } = cause;
   return (
     <span
@@ -49,7 +53,7 @@ export function VerdictWithCause({
 }) {
   return (
     <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
-      <span className="flex-none">{children}</span>
+      <span className="min-w-0 shrink-0">{children}</span>
       <RowCauseText cause={cause} verdict={verdict} />
     </span>
   );

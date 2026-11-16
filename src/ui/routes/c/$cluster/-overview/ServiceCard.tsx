@@ -18,6 +18,8 @@ import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { ROLE_TEXT } from "@/lib/status-role";
 import { cn } from "@/lib/utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
 import {
@@ -131,11 +133,11 @@ export function ServiceCard({
           kind={pin.kind}
           name={pin.name}
           namespace={pin.namespace}
-          className="truncate text-[13px] font-medium text-fg hover:underline"
+          className="truncate text-title font-medium text-fg hover:underline"
         >
           {pin.name}
         </ObjectLink>
-        <span className="truncate font-mono text-[11px] text-fg-fnt">
+        <span className="truncate font-mono text-caption text-fg-fnt">
           {pin.namespace}
         </span>
         <StateWords state={state} verdict={waysVerdict(ways)} t={t} />
@@ -143,19 +145,30 @@ export function ServiceCard({
           type="button"
           aria-label={t("services", "unpin")}
           onClick={onUnpin}
-          className="ml-auto rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className="-my-1 -mr-1.5 ml-auto flex h-6 w-6 flex-none items-center justify-center rounded text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <PinOff aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
       </div>
 
+      {state.state === "unread" && (
+        <Unknown
+          className="mt-1.5"
+          question={t("services", "couldNotRead")}
+          error={connections.error ?? state.why}
+          onRetry={() => void connections.refetch()}
+        />
+      )}
+
       {/* The same label track every other block in this app uses, so the
           values line up with the page around the card rather than being
           pushed out by the longest label in it. */}
-      <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
+      <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
         <dt className="text-fg-fnt">{t("services", "wayIn")}</dt>
         <dd className="min-w-0 text-fg-mut">
-          {!ways.known ? (
+          {connections.isPending ? (
+            <Reading>{t("services", "reading")}</Reading>
+          ) : !ways.known ? (
             <span className="text-fg-fnt">{t("services", "notReadYet")}</span>
           ) : ways.entries.length === 0 ? (
             <span>{t("services", "nothingPublishes")}</span>
@@ -268,14 +281,14 @@ function StateWords({
 }) {
   if (state.state === "gone") {
     return (
-      <span className="flex-none font-mono text-[11px] text-err">
+      <span className="flex-none font-mono text-caption text-err">
         {t("services", "gone")}
       </span>
     );
   }
   if (state.state === "reading") {
     return (
-      <span className="flex-none text-[11px] text-fg-fnt">
+      <span className="flex-none text-caption text-fg-fnt">
         {t("services", "reading")}
       </span>
     );
@@ -283,7 +296,7 @@ function StateWords({
   if (state.state === "unread") {
     return (
       <span
-        className="flex-none text-[11px] text-fg-fnt"
+        className="flex-none text-caption text-fg-fnt"
         title={state.why || undefined}
       >
         {t("services", "couldNotRead")}
@@ -293,7 +306,7 @@ function StateWords({
   const count = (
     <span
       className={cn(
-        "flex-none font-mono text-[11px] tabular-nums",
+        "flex-none font-mono text-caption tabular-nums",
         verdict && verdict.says !== "some"
           ? "text-fg-mut"
           : state.state === "ready"
@@ -313,7 +326,7 @@ function StateWords({
       {verdict ? (
         <span
           className={cn(
-            "truncate text-[11px]",
+            "truncate text-caption",
             ROLE_TEXT[VERDICT_ROLE[verdict.says]]
           )}
         >

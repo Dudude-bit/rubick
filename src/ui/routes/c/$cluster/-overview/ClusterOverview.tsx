@@ -1,6 +1,7 @@
-import { AlertCircle, LayoutDashboard, Lock } from "lucide-react";
+import { LayoutDashboard, Lock, TriangleAlert } from "lucide-react";
 
-import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { ERROR_CODES, isRefusal } from "@/lib/error-utils";
+import { getDisplayPlural } from "@/lib/resource-registry";
 import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -11,18 +12,20 @@ import {
 } from "@/hooks/useClusterOverview";
 import { DataFreshness } from "@/components/ui/realtime/data-freshness";
 import { useAttention } from "@/hooks/useAttention";
-import { attentionFigure, unreadWhere, type Attention } from "@/lib/attention";
+import { attentionWords, unreadWhere, type Attention } from "@/lib/attention";
+import { PartlyUnread } from "../-object/ResourceDetailHeader";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
-import { ReadAgain } from "@/components/ui/read-again";
-import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import {
   AttentionPanel,
   AttentionPending,
   NodesPanel,
+  OverviewSkeleton,
   SchedulerPanel,
   WarningsPanel,
   WorkloadsPanel,
@@ -41,6 +44,22 @@ const PODS: ListQuery = { group: "", resource: "pods", namespaced: true };
 const holdsScroll = (page: HTMLDivElement | null) =>
   page ? holdScroll(page) : undefined;
 
+/** The kinds the page could not check, by the plural Not checked names them in. */
+function uncheckedReads(
+  overview: ClusterOverviewData,
+  attention: Attention | null
+): string[] {
+  const kinds = [
+    ...overview.unread.map((entry) => entry.kind),
+    ...(overview.nodePodsUnread ? [overview.nodePodsUnread.kind] : []),
+    ...(attention?.checks ?? [])
+      .filter((check) => check.state === "unread")
+      .map((check) => check.kind),
+    ...(attention && attention.unconfirmed.length > 0 ? ["Pod"] : []),
+  ];
+  return [...new Set(kinds)].map(getDisplayPlural);
+}
+
 /** The headline numbers for Share: what is broken, and what is serving. */
 function overviewStats(
   overview: ClusterOverviewData,
@@ -52,7 +71,7 @@ function overviewStats(
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
-      value: attentionFigure(attention),
+      value: attentionWords(attention, t),
       role: attention.worst ?? (attention.complete ? "ok" : "neutral"),
     },
     {
@@ -95,13 +114,7 @@ export function ClusterOverview() {
   const { isConnected, namespaceScope } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
-  const {
-    data: overview,
-    isLoading,
-    error,
-    refetch,
-    freshness,
-  } = useScopedOverview();
+  const { data: overview, error, refetch, freshness } = useScopedOverview();
   const following = useOverviewFollowed(overview);
   const attention = useAttention({ refresh: "slow" });
   // The list pages name where a refused list can be read; the page that
@@ -125,66 +138,46 @@ export function ClusterOverview() {
 
   // Skeleton only on the first load — a refetch keeps the previous state on
   // screen so the layout never flashes empty while polling.
-  if (isLoading && !overview) {
+  if (!overview && !error) {
     return (
       <div className="flex flex-col gap-[22px]">
         {pinned}
-        <div className="space-y-6">
-          <HeaderSkeleton />
-          <StatsSkeleton count={2} />
-        </div>
+        <OverviewSkeleton />
       </div>
     );
   }
 
-  if (error && !overview) {
+  if (!overview && error) {
     // A refusal is not a failure: point at the fix, since the scoped overview
     // reads each namespace on its own. Rights change, so it may be asked again.
     const refused = isRefusal(error);
     return (
-      <div className="flex flex-col gap-[22px]">
+      <div className="flex flex-col items-start gap-[22px]">
         {pinned}
-        {/* The section arrives after the first render, so a reader who
-            cannot see it is told; `status` rather than `alert`, which is
-            what `Unknown` wears for the same kind of news. */}
-        <Section role="status">
-          <div className="flex items-center gap-2">
-            {refused ? (
-              <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-            )}
-            <h2
-              className={`text-[13px] font-semibold tracking-tight ${
-                refused ? "text-fg" : "text-err"
-              }`}
-            >
-              {!refused
-                ? t("empty", "couldNotReadClusterState")
-                : namespaceScope.length === 0
-                  ? readableIn.length > 0
-                    ? t("empty", "noClusterOverviewAccessIn", {
-                        n: readableIn.length,
-                        namespaces: readableIn.join(", "),
-                      })
-                    : t("empty", "noClusterOverviewAccess")
-                  : t("empty", "noScopeOverviewAccess", {
-                      scope: scopeIn(namespaceScope, t),
-                    })}
-            </h2>
-          </div>
-          <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {errorToShow(error)}
-          </p>
-          <div className="flex items-center gap-2 pt-2">
-            {refused && (
-              <Button variant="outline" size="sm" onClick={openNamespacePicker}>
-                {t("action", "chooseNamespace")}
-              </Button>
-            )}
-            <ReadAgain error={error} onRetry={() => void refetch()} />
-          </div>
-        </Section>
+        <Unknown
+          className="w-full"
+          question={
+            !refused
+              ? t("empty", "couldNotReadClusterState")
+              : namespaceScope.length === 0
+                ? readableIn.length > 0
+                  ? t("empty", "noClusterOverviewAccessIn", {
+                      n: readableIn.length,
+                      namespaces: readableIn.join(", "),
+                    })
+                  : t("empty", "noClusterOverviewAccess")
+                : t("empty", "noScopeOverviewAccess", {
+                    scope: scopeIn(namespaceScope, t),
+                  })
+          }
+          error={error}
+          onRetry={() => void refetch()}
+        />
+        {refused && (
+          <Button variant="outline" size="sm" onClick={openNamespacePicker}>
+            {t("action", "chooseNamespace")}
+          </Button>
+        )}
       </div>
     );
   }
@@ -192,6 +185,11 @@ export function ClusterOverview() {
   if (!overview) return pinned;
 
   const scope = scopeLabel(namespaceScope, t);
+  const refreshFailing = freshness.stale || !!error;
+  const unchecked = uncheckedReads(overview, attention);
+  const nodePods = overview.nodePodsUnread;
+  const NodePodsIcon =
+    nodePods?.code === ERROR_CODES.PERMISSION ? Lock : TriangleAlert;
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
@@ -201,16 +199,37 @@ export function ClusterOverview() {
 
   return (
     <div ref={holdsScroll} className="flex flex-col gap-[22px]">
-      <div className="flex items-center justify-end gap-3">
-        <DataFreshness
-          dataUpdatedAt={freshness.dataUpdatedAt}
-          live={following}
-          slowed={freshness.slowed}
-          stale={freshness.stale}
-          slowRead={freshness.slowRead}
+      <SectionHeader
+        title={t("nav", "overview")}
+        actions={
+          <div className="flex items-center gap-3">
+            {unchecked.length > 0 && !refreshFailing ? (
+              <PartlyUnread
+                reads={unchecked}
+                note="freshPartlyUnreadChecksNote"
+              />
+            ) : (
+              <DataFreshness
+                dataUpdatedAt={freshness.dataUpdatedAt}
+                live={following}
+                slowed={freshness.slowed}
+                stale={refreshFailing}
+                slowRead={freshness.slowRead}
+              />
+            )}
+            <ShareScreenAction screen={screen} />
+          </div>
+        }
+      />
+      {refreshFailing && (
+        <StaleRows
+          label={t("nav", "overview").toLowerCase()}
+          shared={false}
+          since={freshness.dataUpdatedAt}
+          error={error}
+          onRetry={() => void refetch()}
         />
-        <ShareScreenAction screen={screen} />
-      </div>
+      )}
       {pinned}
       {attention ? (
         <AttentionPanel
@@ -220,6 +239,8 @@ export function ClusterOverview() {
           podsUnread={overview.unread.filter((entry) => entry.kind === "Pod")}
           nodes={overview.nodes}
           nodesKnown={overview.nodesKnown}
+          refreshFailing={refreshFailing}
+          answeredAt={freshness.dataUpdatedAt}
         />
       ) : (
         <AttentionPending />
@@ -227,10 +248,34 @@ export function ClusterOverview() {
       <WorkloadsPanel overview={overview} scope={scope} />
       {overview.nodesKnown ? (
         <>
-          <SchedulerPanel
-            scheduler={overview.scheduler}
-            metricsAvailable={overview.metricsAvailable}
-          />
+          {nodePods ? (
+            // The nodes were read and the pods they hold were not: the
+            // headroom is a sum over those pods, so it is unknown, not zero.
+            <Section>
+              <SectionHeader title={t("cluster", "schedulerHeadroom")} />
+              <div
+                className="flex items-center gap-2 py-1"
+                data-testid="headroom-unread"
+                title={nodePods.message}
+              >
+                <NodePodsIcon
+                  className="h-4 w-4 text-warn"
+                  aria-hidden="true"
+                />
+                <p className="text-xs text-fg-mut">
+                  {t("empty", "headroomNeedsReads", {
+                    kinds: getDisplayPlural(nodePods.kind),
+                  })}
+                </p>
+              </div>
+            </Section>
+          ) : (
+            <SchedulerPanel
+              scheduler={overview.scheduler}
+              metricsAvailable={overview.metricsAvailable}
+              scoped={namespaceScope.length > 0}
+            />
+          )}
           <NodesPanel
             nodes={overview.nodes}
             version={clusterInfo?.server_version}
@@ -243,7 +288,7 @@ export function ClusterOverview() {
         <Section>
           <SectionHeader title="Nodes" />
           <div className="flex items-center gap-2 py-1">
-            <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
+            <Lock className="h-4 w-4 text-warn" aria-hidden="true" />
             <p className="text-xs text-fg-mut">{t("empty", "noNodeAccess")}</p>
           </div>
         </Section>

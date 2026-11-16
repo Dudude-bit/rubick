@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NodeBudget, NodeInfo, PodInfo } from "@/generated/types";
+import { useWriteLog } from "@/stores/writeLogStore";
 
 // ----- Mocks -----
 //
@@ -19,6 +20,12 @@ vi.mock("@/hooks/useMetrics", () => ({
     podMetrics: [],
     nodeStatus: { isLoading: false, error: null, available: true },
     podStatus: { isLoading: false, error: null, available: true },
+    nodeMetricsQuery: {
+      isPending: false,
+      data: {},
+      error: null,
+      refetch: vi.fn(),
+    },
   })),
 }));
 
@@ -717,6 +724,28 @@ describe("the header actions", () => {
       expect(commands.uncordonNode).toHaveBeenCalledWith("test-node-1")
     );
     expect(commands.cordonNode).toHaveBeenCalledTimes(1);
+  });
+
+  /** Fails if a refused cordon, sent with no dialog, lives only in a toast and leaves nothing in Activity. */
+  it("keeps a refused cordon with the writes that did not go through", async () => {
+    useWriteLog.setState({ records: [] });
+    vi.mocked(commands.checkAccess).mockResolvedValue([]);
+    vi.mocked(commands.cordonNode).mockRejectedValueOnce(
+      Object.assign(new Error("nodes is forbidden"), {
+        code: "PERMISSION_DENIED",
+      })
+    );
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Cordon" }));
+    await waitFor(() =>
+      expect(useWriteLog.getState().records).toMatchObject([
+        { title: "Could not cordon test-node-1" },
+      ])
+    );
+    vi.mocked(commands.checkAccess).mockReset();
   });
 
   /**

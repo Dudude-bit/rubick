@@ -21,9 +21,11 @@ import {
   FindingList,
   TroubleList,
   TroubleRow,
+  StaleRead,
   VendorReadFailure,
   type Severity,
 } from "./page-kit";
+import { failedWithNothing } from "./kit";
 
 /** Reads whatever the screen has registered, on demand rather than on mount,
  * since the registration itself only lands after the first commit's effects. */
@@ -656,5 +658,88 @@ describe("a finding's own words", () => {
         "failed to clone 'https://…@git.example.com/acme/infra.git?access_token=…': 401"
       )
     ).toBeInTheDocument();
+  });
+});
+
+describe("a vendor page whose re-read failed over data it already has", () => {
+  const failed = new Error("connection reset");
+
+  /**
+   * One failed poll replaced a page that had data with the failure card, then
+   * the next poll snapped it back. Fails if a read that failed with data in
+   * hand is treated as having nothing to show.
+   */
+  it("keeps the page when data is in hand and replaces it only when there is none", () => {
+    expect(failedWithNothing({ error: failed, data: [] })).toBe(false);
+    expect(failedWithNothing({ error: failed, data: undefined })).toBe(true);
+    expect(failedWithNothing({ error: null, data: undefined })).toBe(false);
+  });
+
+  /**
+   * The page stays, and one line says it is from the last read that answered.
+   * Fails if the stale line is not drawn, or is drawn when nothing failed.
+   */
+  it("says the page is from the last read that answered, with a retry", async () => {
+    const refetch = vi.fn();
+    const { rerender } = render(
+      <StaleRead
+        label="Flux"
+        read={{ error: failed, data: [], dataUpdatedAt: Date.now(), refetch }}
+      />
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Could not read Flux."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+
+    rerender(
+      <StaleRead
+        label="Flux"
+        read={{ error: null, data: [], dataUpdatedAt: Date.now(), refetch }}
+      />
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  /** The failure card owns the no-data case; a stale line on top of it would say it twice. */
+  it("draws nothing of its own when there is no data, so the failure card has it alone", () => {
+    render(
+      <StaleRead
+        label="Flux"
+        read={{
+          error: failed,
+          data: undefined,
+          dataUpdatedAt: 0,
+          refetch: vi.fn(),
+        }}
+      />
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("a finding", () => {
+  /**
+   * A finding drew a left rule while every other notice drew the frame
+   * Unknown draws. Fails if a warning stops being the dashed frame, an error
+   * stops being red, or either keeps the left rule.
+   */
+  it("is drawn in the notice frame, dashed for a warning and red for an error", () => {
+    render(
+      <>
+        <Finding tone="warn" title="Could not be listed" verbatim="403" />
+        <Finding tone="err" title="Wrong class field" />
+      </>
+    );
+    const warn = screen
+      .getByText("Could not be listed")
+      .closest("[role=alert]")!;
+    const err = screen.getByText("Wrong class field").closest("[role=alert]")!;
+    expect(warn).toHaveClass("border-dashed", "rounded-md");
+    expect(err).toHaveClass("border-err");
+    expect(err).not.toHaveClass("border-dashed");
+    for (const notice of [warn, err])
+      expect(notice.className).not.toMatch(/border-l-2/);
   });
 });

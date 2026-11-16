@@ -15,11 +15,14 @@
 
 import { create } from "zustand";
 
-export type ActivityTab = "ports" | "terminals" | "watching";
+export type ActivityTab = "ports" | "terminals" | "watching" | "writes";
 
 interface ActivityPanelState {
   open: boolean;
   tab: ActivityTab;
+  /** The tab with the newest entry nobody has opened yet. */
+  unseen: ActivityTab | null;
+  markUnseen: (tab: ActivityTab) => void;
   setOpen: (open: boolean) => void;
   /** Open the panel with a tab already chosen. */
   openOn: (tab: ActivityTab) => void;
@@ -28,6 +31,14 @@ interface ActivityPanelState {
 export const useActivityPanelStore = create<ActivityPanelState>((set) => ({
   open: false,
   tab: "ports",
+  unseen: null,
+  markUnseen: (unseen) =>
+    set((state) => (state.open && state.tab === unseen ? state : { unseen })),
   setOpen: (open) => set({ open }),
-  openOn: (tab) => set({ open: true, tab }),
+  openOn: (tab) =>
+    set((state) => ({
+      open: true,
+      tab,
+      unseen: state.unseen === tab ? null : state.unseen,
+    })),
 }));

@@ -24,6 +24,11 @@ const attentions = vi.hoisted(() => ({
   askedCluster: 0,
 }));
 
+const podLocks = vi.hoisted(() => ({ lock: undefined as unknown }));
+vi.mock("@/hooks/useListAccess", () => ({
+  useListLocks: () => (podLocks.lock ? { Pod: podLocks.lock } : {}),
+}));
+
 vi.mock("@/hooks/useAttention", () => ({
   useAttention: ({ scope }: { scope?: readonly string[] } = {}) => {
     if (scope) attentions.askedCluster += 1;
@@ -91,6 +96,13 @@ const overviewOf = (
   };
 };
 
+/** The reads on screen whose latest answer was refused or failed. */
+const onScreen = vi.hoisted(() => ({ reads: [] as unknown[] }));
+vi.mock("./unread-on-screen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./unread-on-screen")>()),
+  useUnreadOnScreen: () => onScreen.reads,
+}));
+
 let renewal = "scheduled";
 vi.mock("@/hooks/useCredentialRenewal", () => ({
   useRenewal: () => renewal,
@@ -104,6 +116,7 @@ import { StatusBar } from "./StatusBar";
 
 beforeEach(() => {
   renewal = "scheduled";
+  onScreen.reads = [];
   whole.podCount = 3;
   whole.refused = false;
   attentions.askedCluster = 0;
@@ -211,6 +224,36 @@ describe("the strip at the narrowest window", () => {
     const counts = screen.getByTestId("scope-counts");
     expect(controls).not.toContainElement(counts);
     expect(screen.getByTestId("status-hints")).not.toContainElement(counts);
+  });
+
+  /**
+   * The controls moved about 140 px sideways whenever the summary beside them
+   * grew, because they sat left of it. Fails if the controls stop being the
+   * last thing in the strip, where nothing after them can push them.
+   */
+  it("keeps the controls at the edge, after the counts", () => {
+    const footer = strip();
+    expect(footer.lastElementChild).toBe(screen.getByTestId("status-controls"));
+    expect(
+      screen
+        .getByTestId("scope-counts")
+        .compareDocumentPosition(screen.getByTestId("status-controls")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  /**
+   * The theme menu listed three choices and marked none, and its modal
+   * scrim swallowed the click that closed it. Fails if the current choice
+   * is not marked, or the menu stops being non-modal.
+   */
+  it("marks the current theme in its menu", async () => {
+    strip();
+    await userEvent.click(screen.getByRole("button", { name: /theme/i }));
+    const checked = await screen.findAllByRole("menuitemradio", {
+      checked: true,
+    });
+    expect(checked).toHaveLength(1);
   });
 });
 
@@ -454,6 +497,28 @@ describe("what the problem count counts", () => {
   });
 
   /**
+   * A refused Pods list left "90 pods" drawn as current. Fails if a refusal
+   * leaves the count undimmed or without the sentence saying the last read
+   * failed.
+   */
+  it("dims the counts and says the read failed while the Pods list is refused", async () => {
+    podLocks.lock = { says: "refused" };
+    try {
+      bar();
+      const counts = screen.getByTestId("scope-counts");
+      expect(counts).toHaveClass("opacity-60");
+      await userEvent.hover(counts);
+      await waitFor(() =>
+        expect(
+          screen.getAllByText(/last read of this was refused or failed/)
+        ).not.toHaveLength(0)
+      );
+    } finally {
+      podLocks.lock = undefined;
+    }
+  });
+
+  /**
    * The previous scope's answer stands in while this one is read; under this
    * scope's name it would count the wrong namespaces. Fails if it is shown.
    */
@@ -504,7 +569,7 @@ describe("what the problem count counts", () => {
 
     const counts = screen.getByTestId("scope-counts");
     expect(counts).toHaveTextContent("pods not counted in team-blind");
-    expect(counts).toHaveTextContent("2+ problems");
+    expect(counts).toHaveTextContent("2 problems · not all checked");
     expect(counts).toHaveTextContent("in team-blind, team-checkout");
     expect(counts).not.toHaveTextContent(/\d+ pods/);
   });
@@ -530,8 +595,33 @@ describe("what the problem count counts", () => {
     bar();
 
     expect(screen.getByTestId("scope-counts")).toHaveTextContent(
-      /^4 pods·pods not counted in team-blind·2\+ problems/
+      /^4 pods·pods not counted in team-blind·2 problems · not all checked/
     );
+  });
+
+  /**
+   * "Pods not counted in argocd" and "in argocd" a few words
+   * later on one strip. Fails if the namespace the whole strip is scoped to
+   * is said again beside the refusal.
+   */
+  it("says the scope once when the refusal is the whole scope", () => {
+    scoped.data = overviewOf(null, 0, [
+      {
+        kind: "Pod",
+        namespace: "argocd",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(1, false);
+    useClusterStore.setState({ namespaceScope: ["argocd"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent(
+      /^pods not counted·1 problem · not all checkedin argocd$/
+    );
+    expect(counts.textContent?.match(/argocd/g)).toHaveLength(1);
   });
 
   /**
@@ -545,5 +635,45 @@ describe("what the problem count counts", () => {
     const counts = screen.getByTestId("scope-counts");
     expect(counts).toHaveTextContent("not all checked");
     expect(counts).not.toHaveTextContent("0 problems");
+  });
+
+  /**
+   * A Deployment page refused and Argo CD timing out,
+   * and the strip said "1 problem in api" and "0 problems in argocd". Fails
+   * if a read on screen that was refused or failed leaves the count whole,
+   * or the hover does not say which reads they were.
+   */
+  it("is not all checked while a read on screen was refused or failed, and names them", async () => {
+    attentions.here = attentionOf(1);
+    onScreen.reads = [
+      { key: ["deployment", "api", "api"], refused: true, at: Date.now() },
+      {
+        key: ["prod", "argocd", "applications"],
+        refused: false,
+        at: Date.now(),
+      },
+    ];
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("1 problem · not all checked");
+    await userEvent.hover(counts);
+    const named = await screen.findAllByTestId("unread-on-screen");
+    expect(named[0]).toHaveTextContent(
+      /Deployment api: refused .* ago, asked again by/
+    );
+    expect(named[0]).toHaveTextContent(
+      /argocd applications: the read failed .* ago/
+    );
+  });
+
+  /** Fails if the strip says "not all checked" with every read on screen answered. */
+  it("stays whole while every read on screen answered", () => {
+    attentions.here = attentionOf(1);
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("1 problem");
+    expect(counts).not.toHaveTextContent("not all checked");
   });
 });

@@ -82,7 +82,7 @@ export function StatusBadge({
         // decides how tall a table row is.
         // A block of its own, not a flex row, so a cut word ends in an
         // ellipsis instead of mid-letter.
-        "inline-block max-w-full truncate align-middle font-mono text-[11px] font-medium leading-4",
+        "inline-block max-w-full truncate align-middle font-mono text-caption font-medium leading-4",
         ROLE_TEXT[resolved],
         className
       )}

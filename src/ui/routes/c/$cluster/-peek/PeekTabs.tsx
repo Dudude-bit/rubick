@@ -4,6 +4,8 @@ import { Copy } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
+import { Reading } from "@/components/ui/states";
 import { YamlEditor } from "../-yaml";
 import { WithheldCopies } from "../-yaml/WithheldCopies";
 import { LogViewer } from "../-logs/LogViewer";
@@ -12,8 +14,6 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
 import { isRunOf } from "@/lib/cron-runs";
-import { errorToShow } from "@/lib/error-utils";
-import { ReadAgain } from "@/components/ui/read-again";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { builtInKindOf } from "@/lib/links";
@@ -62,6 +62,9 @@ export interface PeekTabBodyProps {
    */
   detail: unknown;
   isDetailLoading: boolean;
+  /** Why the object could not be read, for the tabs that wait on it. */
+  detailError?: Error | null;
+  onRetryDetail?: () => unknown;
 }
 
 export function PeekTabBody({
@@ -69,6 +72,8 @@ export function PeekTabBody({
   target,
   detail,
   isDetailLoading,
+  detailError = null,
+  onRetryDetail,
 }: PeekTabBodyProps) {
   switch (tab) {
     case "logs":
@@ -77,6 +82,8 @@ export function PeekTabBody({
           target={target}
           pod={detail as PodInfo | undefined}
           isLoading={isDetailLoading}
+          error={detailError}
+          onRetry={onRetryDetail}
         />
       );
     case "containers":
@@ -84,6 +91,8 @@ export function PeekTabBody({
         <PeekContainersTab
           pod={detail as PodInfo | undefined}
           isLoading={isDetailLoading}
+          error={detailError}
+          onRetry={onRetryDetail}
         />
       );
     case "data":
@@ -92,7 +101,12 @@ export function PeekTabBody({
       return builtInKindOf(target) === "CronJob" ? (
         <PeekJobsTab target={target} />
       ) : (
-        <PeekPodsTab target={target} detail={detail} />
+        <PeekPodsTab
+          target={target}
+          detail={detail}
+          detailError={detailError}
+          onRetryDetail={onRetryDetail}
+        />
       );
     case "connections":
       return target.crd ? (
@@ -132,7 +146,9 @@ function TabNote({
         {title}
       </p>
       {detail && (
-        <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">{detail}</p>
+        <p className="mt-1 wrap-break-word text-caption text-fg-mut">
+          {detail}
+        </p>
       )}
     </div>
   );
@@ -145,15 +161,11 @@ function TabError({
 }: {
   what: string;
   error: Error;
-  onRetry: () => void;
+  onRetry?: () => unknown;
 }) {
   return (
     <div className="px-3.5 py-4">
-      <p className="text-xs text-warn">{what}</p>
-      <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
-        {errorToShow(error)}
-      </p>
-      <ReadAgain error={error} onRetry={onRetry} className="mt-2" />
+      <Unknown question={what} error={error} onRetry={onRetry} />
     </div>
   );
 }
@@ -166,9 +178,7 @@ function TabError({
 function Refreshing({ busy }: { busy: boolean }) {
   const t = useT();
   if (!busy) return null;
-  return (
-    <span className="text-[11px] text-fg-fnt">{t("action", "updating")}</span>
-  );
+  return <Reading>{t("action", "updating")}</Reading>;
 }
 
 function RowsSkeleton({ rows = 6 }: { rows?: number }) {
@@ -242,12 +252,25 @@ function PeekLogsTab({
   target,
   pod,
   isLoading,
+  error,
+  onRetry,
 }: {
   target: PeekTarget;
   pod: PodInfo | undefined;
   isLoading: boolean;
+  error: Error | null;
+  onRetry?: () => unknown;
 }) {
   const t = useT();
+  if (!pod && error) {
+    return (
+      <TabError
+        what={t("empty", "kindCouldNotRead", { kind: target.kind })}
+        error={error}
+        onRetry={onRetry}
+      />
+    );
+  }
   if (isLoading || !pod) {
     return <RowsSkeleton rows={8} />;
   }
@@ -275,11 +298,24 @@ function PeekLogsTab({
 function PeekContainersTab({
   pod,
   isLoading,
+  error,
+  onRetry,
 }: {
   pod: PodInfo | undefined;
   isLoading: boolean;
+  error: Error | null;
+  onRetry?: () => unknown;
 }) {
   const t = useT();
+  if (!pod && error) {
+    return (
+      <TabError
+        what={t("empty", "kindCouldNotRead", { kind: "Pod" })}
+        error={error}
+        onRetry={onRetry}
+      />
+    );
+  }
   if (isLoading || !pod) return <RowsSkeleton rows={5} />;
   if (podContainers(pod).length === 0) {
     return (
@@ -290,7 +326,7 @@ function PeekContainersTab({
     );
   }
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <ContainerRows pod={pod} namespace={pod.namespace} logPod={pod.name} />
     </div>
   );
@@ -341,7 +377,12 @@ function PeekDataTab({
   }
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
+      {isFetching && data && (
+        <div className="flex justify-end pb-1">
+          <Refreshing busy />
+        </div>
+      )}
       <DataSection
         data={data?.values ?? {}}
         withheld={data?.withheld}
@@ -360,9 +401,13 @@ function PeekDataTab({
 function PeekPodsTab({
   target,
   detail,
+  detailError,
+  onRetryDetail,
 }: {
   target: PeekTarget;
   detail: unknown;
+  detailError: Error | null;
+  onRetryDetail?: () => unknown;
 }) {
   const t = useT();
   const { data, error, isPending, isFetching, refetch } = usePeekOwnedPods(
@@ -379,11 +424,20 @@ function PeekPodsTab({
       />
     );
   }
+  if (isPending && !data && detailError) {
+    return (
+      <TabError
+        what={t("empty", "kindCouldNotRead", { kind: target.kind })}
+        error={detailError}
+        onRetry={onRetryDetail}
+      />
+    );
+  }
   if (isPending || !data) return <RowsSkeleton />;
 
   return (
     <ChildrenSection
-      title="Pods"
+      title={t("columns", "pods")}
       count={data.length}
       busy={isFetching}
       empty={data.length === 0}
@@ -432,7 +486,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
 
   return (
     <ChildrenSection
-      title="Jobs"
+      title={t("activity", "jobs")}
       count={data.length}
       busy={isFetching}
       empty={data.length === 0}
@@ -456,7 +510,7 @@ function ChildrenSection({
   children: ReactNode;
 }) {
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-2">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] py-3 pl-2">
       <Section>
         <SectionHeader
           className="px-1.5"
@@ -497,7 +551,7 @@ function PeekRelatedTab({
   );
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <RelatedPanel query={related} kind={target.kind} />
     </div>
   );
@@ -514,7 +568,7 @@ function PeekScalesTab({
   isLoading: boolean;
 }) {
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <AutoscalerScales
         object={detail}
         namespace={target.namespace ?? null}
@@ -576,7 +630,7 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-none items-center gap-2 px-2 py-1">
-        <span className="text-[11px] text-fg-mut">
+        <span className="text-caption text-fg-mut">
           {t("action", "kindManifest", { kind: target.kind })}
         </span>
         <Refreshing busy={isFetching} />

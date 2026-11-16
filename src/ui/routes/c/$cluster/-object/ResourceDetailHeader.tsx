@@ -3,6 +3,11 @@ import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ResourceName } from "@/components/object/ResourceName";
 import { CopyName } from "./CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
@@ -11,6 +16,8 @@ import { segmentOf } from "@/lib/access-kinds";
 import { getDisplayPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { isRefusal } from "@/lib/error-utils";
+import { useRefusedAt } from "@/lib/refusals";
 import { useT } from "@/i18n/useT";
 import { LineageTrail } from "./Lineage";
 import { servedOfKind } from "./ownership";
@@ -60,10 +67,45 @@ export interface ResourceDetailHeaderProps {
   slowed?: boolean;
   /** The last read failed, and the object on screen is from the one before it. */
   stale?: boolean;
+  /** Why that read failed: a refusal is said as one, dated when it was refused. */
+  failure?: unknown;
   /** A re-read has waited on the cluster past the slow-read grace. */
   slowRead?: boolean;
+  /** What the page could not read besides the object: the reads that failed or were refused, by name. */
+  unread?: readonly string[];
   /** Where a kind the registry does not hold is served, for its owners. */
   served?: ServedResource | null;
+}
+
+/** In the freshness chip's place while a read beside the object failed: the object may be live, the page is not. */
+export function PartlyUnread({
+  reads,
+  note = "freshPartlyUnreadNote",
+}: {
+  reads: readonly string[];
+  note?: "freshPartlyUnreadNote" | "freshPartlyUnreadChecksNote";
+}) {
+  const t = useT();
+  const names = reads.join(", ");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          data-testid="partly-unread"
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-caption text-warn"
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full border border-warn"
+            aria-hidden="true"
+          />
+          {t("cluster", "freshPartlyUnread")}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {t("cluster", note, { reads: names })}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** Both segments of the trail, so the reader's eye reads one path. */
@@ -181,10 +223,14 @@ export function ResourceDetailHeader({
   live,
   slowed,
   stale,
+  failure,
   slowRead,
+  unread,
   served,
 }: ResourceDetailHeaderProps) {
   const t = useT();
+  const refused = stale && isRefusal(failure);
+  const refusedAt = useRefusedAt(refused ? failure : null);
   const segment = {
     link: given === null ? null : (given ?? listLink(kind)),
     label: listLabel ?? getDisplayPlural(kind),
@@ -241,18 +287,18 @@ export function ResourceDetailHeader({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-      <LineageTrail
-        served={served ?? servedOfKind(kind)}
-        name={name}
-        namespace={namespace}
-      />
       {/* Tighter than the row around it: the trail and the name are one path,
           and 10px between a slash and its segment breaks that path into
-          separate words. */}
-      <div className="flex min-w-0 items-center gap-x-1.5 text-[11px] text-fg-fnt">
+          separate words. The owner chain is a segment of it, not a strip. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-caption text-fg-fnt">
         {trail}
-        <span aria-hidden="true">/</span>
-        {title}
+        <LineageTrail
+          served={served ?? servedOfKind(kind)}
+          name={name}
+          namespace={namespace}
+        >
+          {title}
+        </LineageTrail>
       </div>
       {status}
       {meta}
@@ -263,21 +309,27 @@ export function ResourceDetailHeader({
       >
         {createdAt && (
           <span
-            className="text-[11px] text-fg-fnt"
+            className="text-caption text-fg-fnt"
             title={formatDate(createdAt) ?? undefined}
           >
             <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}
             {t("action", "ageOldSuffix")}
           </span>
         )}
-        <DataFreshness
-          dataUpdatedAt={dataUpdatedAt}
-          live={live}
-          slowed={slowed}
-          stale={stale}
-          slowRead={slowRead}
-          reserve={false}
-        />
+        {/* The object's own failure first: its parts fail with it. */}
+        {unread && unread.length > 0 && !stale ? (
+          <PartlyUnread reads={unread} />
+        ) : (
+          <DataFreshness
+            dataUpdatedAt={dataUpdatedAt}
+            live={live}
+            slowed={slowed}
+            stale={stale}
+            slowRead={slowRead}
+            refusedAt={refused ? refusedAt : undefined}
+            reserve={false}
+          />
+        )}
       </span>
       <div data-header-note className="flex min-w-0 grow basis-0">
         {note}

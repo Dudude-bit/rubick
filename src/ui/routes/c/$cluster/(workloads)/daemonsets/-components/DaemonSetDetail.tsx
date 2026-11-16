@@ -27,7 +27,11 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
+import { PodsTroubleLines } from "../../../-object/PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../../../-object/pods-trouble";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   kindGlyph,
@@ -130,6 +134,8 @@ export function DaemonSetDetail() {
 
   const chain = useChainAnswer(ResourceType.DaemonSet, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
+  const podsTrouble = usePodsTrouble(ResourceType.DaemonSet, namespace, name);
 
   // The DaemonSet publishes its own selector, in the API's own text form —
   // so a set-based one reaches the API server as written, where rebuilding
@@ -311,6 +317,7 @@ export function DaemonSetDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     desired === 0
                       ? t("empty", "daemonSetNoNodeMatches")
@@ -396,6 +403,7 @@ export function DaemonSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
+        reading: podsPending,
         mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
@@ -496,10 +504,17 @@ export function DaemonSetDetail() {
         title={daemonSet?.name || name || ""}
         namespace={daemonSet?.namespace || namespace}
         createdAt={daemonSet?.createdAt}
+        findings={findings}
+        trouble={withPodsTrouble(findings, podsTrouble)}
+        statusRole={daemonSet && workloadRole(daemonSet.rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+        ])}
         statusBadge={daemonSet && <RolloutBadge rollout={daemonSet.rollout} />}
         badges={
           daemonSet && (
-            <span className="text-[11px] text-fg-mut">
+            <span className="text-caption text-fg-mut">
               {readyBesideBadge(ready, desired, daemonSet.rollout, t)}
             </span>
           )
@@ -523,6 +538,7 @@ export function DaemonSetDetail() {
                 refused={refused}
                 className="mb-1"
               />
+              <PodsTroubleLines pods={podsTrouble} />
               <RolloutSummary
                 rollout={daemonSet.rollout}
                 subject={{ kind: ResourceType.DaemonSet, name, namespace }}

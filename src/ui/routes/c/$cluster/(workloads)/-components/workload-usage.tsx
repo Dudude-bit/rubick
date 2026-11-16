@@ -11,11 +11,17 @@
  * Node and a Deployment must not disagree about what a chart of CPU looks
  * like. What is here is only the summing and the honesty about zero.
  */
-import type { EmptyKey } from "../../-usage/usage-chart";
+import type { NoLimitNote } from "../../-usage/usage-chart";
 import { useMemo } from "react";
-import { EyeOff } from "lucide-react";
+
+import { Lock, TriangleAlert } from "lucide-react";
+import { isRefusal } from "@/lib/error-utils";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "../../-object/object-unread";
+import { WaitsOnObject } from "../../-object/WaitsOnObject";
+import { UsageNote, UsageRowsSkeleton } from "../../-usage/usage-chart";
 import { UsageBlock } from "../../-usage/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -35,6 +41,12 @@ function runningPods(pods: readonly PodInfo[]): PodInfo[] {
   return pods.filter((pod) => !hasTerminated(pod));
 }
 
+/** The pods a workload asks for, where its kind counts them: a Deployment's or StatefulSet's replicas, a DaemonSet's nodes. */
+type AsksFor = { replicas?: { desired: number } | null; desired?: number };
+
+const asksForNone = (workload: AsksFor | null | undefined) =>
+  (workload?.replicas?.desired ?? workload?.desired) === 0;
+
 export interface WorkloadUsageProps {
   kind: string;
   uid: string | null | undefined;
@@ -48,14 +60,15 @@ export interface WorkloadUsageProps {
    */
   name?: string | null;
   namespace: string | null | undefined;
-  /** The pod template, which is where a controller's limits are declared. */
-  template: WorkloadTemplate | null | undefined;
+  /** The workload as read: its pod template, where its limits are declared, and how many pods it asks for. */
+  template: (WorkloadTemplate & AsksFor) | null | undefined;
   /** Every pod the page found, exited ones included. */
   pods: readonly PodInfo[];
   /** The pod read failed; with no pods left from an earlier read, whether any runs is not known. */
   podsError?: unknown;
   /** The pod read has not answered yet. */
   podsPending?: boolean;
+  onRetryPods?: () => unknown;
   /**
    * Why there is nothing to measure, in this kind's own words — a Job that
    * finished and a CronJob between runs are both at zero for reasons a reader
@@ -63,7 +76,7 @@ export interface WorkloadUsageProps {
    */
   idle: string;
   connections?: ResourceConnections | null;
-  noLimitNote?: EmptyKey;
+  noLimitNote?: NoLimitNote;
 }
 
 export function WorkloadUsage({
@@ -75,6 +88,7 @@ export function WorkloadUsage({
   pods,
   podsError,
   podsPending = false,
+  onRetryPods,
   idle,
   connections,
   noLimitNote,
@@ -85,12 +99,12 @@ export function WorkloadUsage({
   // its missing limits are not "none declared".
   const replica = template?.replica?.known ? template.replica : null;
   // The key travels; the chart is what turns it into words.
-  const limitNote: EmptyKey = replica
+  const limitNote: NoLimitNote = replica
     ? (noLimitNote ?? "noLimitsDeclared")
     : "limitsNotKnown";
   const running = useMemo(() => runningPods(pods), [pods]);
 
-  const { podMetrics, podStatus, podSampledAt } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt, podMetricsQuery } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     enabled: running.length > 0,
@@ -121,15 +135,28 @@ export function WorkloadUsage({
       ? { kind: "workload", namespace, owner: name, ownerKind: kind }
       : undefined;
 
-  if (unread || podsPending) {
-    return <PodsUnknownUsage kind={kind} unread={unread} />;
+  // Asked for none, nothing runs, and that is known before its pods are read.
+  const waiting = podsPending && !(asksForNone(template) && pods.length === 0);
+  if (unread || waiting) {
+    return (
+      <PodsUnknownUsage
+        kind={kind}
+        error={unread ? podsError : null}
+        onRetry={onRetryPods}
+      />
+    );
   }
 
   // The one case metrics-server and a Prometheus disagree about. Both are
   // right that nothing is running; only one of them still holds what ran.
-  if (running.length === 0) {
+  const noneRuns =
+    withMetrics.length > 0 && withMetrics.every((pod) => pod.idle);
+  if (running.length === 0 || noneRuns) {
+    const note = noneRuns
+      ? t("empty", "usageWorkloadNotRunningNote")
+      : `${idle} ${t("empty", pods.length > 0 ? "usageIdleNote" : "usageNoPodsNote")}`;
     if (past.state !== "ready" || scope === undefined) {
-      return <IdleUsage says={idle} exited={pods.length > 0} />;
+      return <IdleUsage note={note} />;
     }
     return (
       <UsageBlock
@@ -149,7 +176,7 @@ export function WorkloadUsage({
         connections={connections}
         history={scope}
         live={false}
-        idleNote={idle}
+        idleNote={noneRuns ? note : idle}
       />
     );
   }
@@ -173,6 +200,11 @@ export function WorkloadUsage({
       restarts={withMetrics.reduce((total, pod) => total + pod.restartCount, 0)}
       sampledAt={podSampledAt}
       status={podStatus}
+      reading={{
+        pending: podMetricsQuery.isPending,
+        error: podMetricsQuery.data ? null : podMetricsQuery.error,
+        retry: podMetricsQuery.refetch,
+      }}
       connections={connections}
       history={scope}
     />
@@ -187,7 +219,7 @@ export function WorkloadUsage({
  * the difference is the whole point: a line along the floor invites someone
  * to ask why the workload is idle, when the answer is that it is not there.
  */
-function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
+function IdleUsage({ note }: { note: string }) {
   const t = useT();
   return (
     <Section>
@@ -195,24 +227,48 @@ function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
         title={t("columns", "usage")}
         count={t("empty", "nothingRunning")}
       />
-      <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-        {says} {t("empty", exited ? "usageIdleNote" : "usageNoPodsNote")}
+      <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
+        {note}
       </p>
     </Section>
   );
 }
 
 /** The pods were not read, or not yet: whether any run is not known, so nothing is said to. */
-function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
+function PodsUnknownUsage({
+  kind,
+  error,
+  onRetry,
+}: {
+  kind: string;
+  error: unknown;
+  onRetry?: () => unknown;
+}) {
   const t = useT();
+  const history = useCapabilityState("usage.history");
+  const unreadObject = useObjectUnread();
+  if (error && unreadObject)
+    return (
+      <Section>
+        <SectionHeader title={t("columns", "usage")} />
+        <WaitsOnObject className="mx-1.5 my-1" unread={unreadObject} />
+      </Section>
+    );
   return (
     <Section>
       <SectionHeader
         title={t("columns", "usage")}
         count={
-          unread ? (
+          error ? (
             <span className="inline-flex items-center gap-1">
-              <EyeOff className="h-3 w-3" aria-hidden="true" />
+              {isRefusal(error) ? (
+                <Lock className="h-3 w-3 text-warn" aria-hidden="true" />
+              ) : (
+                <TriangleAlert
+                  className="h-3 w-3 text-warn"
+                  aria-hidden="true"
+                />
+              )}
               {t("empty", "podsNotRead")}
             </span>
           ) : (
@@ -220,10 +276,24 @@ function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
           )
         }
       />
-      {unread && (
-        <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-          {t("empty", "usagePodsNotRead", { kind })}
-        </p>
+      {error ? (
+        <Unknown
+          className="mx-1.5 my-1"
+          question={t("empty", "usagePodsNotRead", { kind })}
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : (
+        <>
+          <UsageRowsSkeleton />
+          {history.state !== "ready" && (
+            // The chart lands with a line under it where no history supplier
+            // answers; held here, the block does not grow when it arrives.
+            <div data-held-note aria-hidden="true" className="invisible">
+              <UsageNote>.</UsageNote>
+            </div>
+          )}
+        </>
       )}
     </Section>
   );

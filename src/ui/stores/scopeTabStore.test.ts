@@ -645,6 +645,8 @@ describe("titles", () => {
     ["/c/prod/pods/web/api-7f9", "api-7f9"],
     ["/c/prod/nodes/k3d-agent-0", "k3d-agent-0"],
     ["/c/prod/helm/native/web/redis", "redis"],
+    ["/c/prod/integrations/argocd", "Argo CD"],
+    ["/c/prod/integrations/not-a-vendor", "not-a-vendor"],
     [
       "/c/prod/horizontalpodautoscalers.autoscaling",
       "HorizontalPodAutoscalers",

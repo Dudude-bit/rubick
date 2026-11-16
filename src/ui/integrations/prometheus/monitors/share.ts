@@ -151,7 +151,9 @@ function factsSection(
                 // Not judged is nobody's fault: no role, as on the screen.
                 role:
                   row.pickedUp.state === "judged"
-                    ? ("err" as const)
+                    ? row.scrape.state === "read"
+                      ? ("err" as const)
+                      : ("warn" as const)
                     : row.pickedUp.state === "unknown"
                       ? ("warn" as const)
                       : undefined,

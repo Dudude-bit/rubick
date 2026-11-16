@@ -84,6 +84,7 @@ export function JobDetail() {
     data: pods = [],
     error: podsError,
     isPending: podsPending,
+    refetch: refetchPods,
   } = useLiveQuery({
     queryKey: podsKey,
     queryFn: async () => {
@@ -222,6 +223,7 @@ export function JobDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     job?.completionTime
                       ? t("empty", "jobFinished")
@@ -336,6 +338,7 @@ export function JobDetail() {
       job,
       pods,
       podsError,
+      refetchPods,
       podsPending,
       yaml,
       copyYaml,
@@ -372,14 +375,14 @@ export function JobDetail() {
       }
       badges={
         job?.failure?.reason ? (
-          <span className="font-mono text-[11px] text-err">
+          <span className="font-mono text-caption text-err">
             {job.failure.reason}
           </span>
         ) : (
           failed > 0 && (
             // A failed pod the Job is still retrying is a warning; only the
             // controller's Failed condition is a failure.
-            <span className="text-[11px] text-warn">
+            <span className="text-caption text-warn">
               {t("count", "failedPods", { n: failed })}
             </span>
           )

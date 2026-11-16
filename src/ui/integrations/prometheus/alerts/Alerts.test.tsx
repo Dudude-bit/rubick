@@ -39,7 +39,8 @@ vi.mock("../monitors/data", async (original) => ({
   ...(await original<typeof import("../monitors/data")>()),
   usePicture: () => ({ data: PICTURE, error: null, refetch: () => {} }),
 }));
-vi.mock("../saved-connection", () => ({
+vi.mock("../saved-connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../saved-connection")>()),
   useSavedConnection: () => ({ data: null }),
 }));
 

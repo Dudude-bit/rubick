@@ -624,6 +624,29 @@ function changesSaid({
   return rollouts > 0 ? r : scales > 0 ? s : null;
 }
 
+const POD_COUNT_KEYS = [
+  ["scheduled", "storyScheduled"],
+  ["pulled", "storyPulled"],
+  ["started", "storyStarted"],
+  ["stopped", "storyStopped"],
+] as const;
+
+/** Only the counts that are not zero, joined; null when every one is. */
+function podCountsSaid(
+  counts: Record<(typeof POD_COUNT_KEYS)[number][0], number>
+): Saying | null {
+  const clauses = POD_COUNT_KEYS.flatMap(([field, key]) =>
+    counts[field] > 0 ? [{ key, values: { n: counts[field] } } as Saying] : []
+  );
+  return clauses.reduceRight<Saying | null>(
+    (rest, clause) =>
+      rest
+        ? { key: "storyCountsJoin", values: { first: clause, rest } }
+        : clause,
+    null
+  );
+}
+
 function sentenceOf(
   activity: Activity,
   events: EventInfo[],
@@ -636,17 +659,26 @@ function sentenceOf(
     const when = whenOf(events, since);
     switch (activity) {
       case "rollout": {
-        const pods = {
-          when,
+        const counts = podCountsSaid({
           scheduled: countReason(events, "Scheduled"),
           pulled: countReason(events, "Pulled"),
           started: countReason(events, "Started"),
           stopped: countReason(events, "Killing"),
-        };
+        });
         const changes = changesSaid(rolloutsAndScales(events));
-        return changes
-          ? { key: "storyChanged", values: { ...pods, changes } }
-          : { key: onePod ? "storyPod" : "storyPods", values: pods };
+        if (changes)
+          return counts
+            ? { key: "storyChanged", values: { when, changes, counts } }
+            : { key: "storyChangedOnly", values: { when, changes } };
+        return counts
+          ? {
+              key: onePod ? "storyPod" : "storyPods",
+              values: { when, counts },
+            }
+          : {
+              key: onePod ? "storyPodQuiet" : "storyPodsQuiet",
+              values: { when },
+            };
       }
       case "job": {
         const runs = jobRuns(events);

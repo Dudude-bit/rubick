@@ -54,6 +54,7 @@ vi.mock("@/lib/commands", () => ({
     listCrds: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
+    listNamespaces: vi.fn(async () => [{ name: "team-checkout" }]),
     getObjectMetadata: vi.fn(async () => ({
       uid: null,
       labels: {},
@@ -267,9 +268,10 @@ describe("a feed a watch keeps", () => {
 
   /**
    * Dana's All events re-read the latest 500 every second, 350 KB each
-   * time. Fails if the feed is polled once its watch has its rows, if the
-   * newest are not on top of a burst that arrived in the API's order, or if
-   * the cut stops saying which 500 these are.
+   * time. Fails if the feed is polled once its watch has its rows (its
+   * one-row probe aside), if the newest are not on top of a burst that
+   * arrived in the API's order, or if the cut stops saying which 500 these are,
+   * or says it in a phrase that can wrap mid-way ("of / the latest 500").
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
     layOutRows();
@@ -283,11 +285,171 @@ describe("a feed a watch keeps", () => {
     expect(
       await screen.findByText("500 normal events · of the latest 500")
     ).toBeInTheDocument();
+    expect(screen.getByText("of the latest 500")).toHaveClass(
+      "whitespace-nowrap"
+    );
     expect(rowAt(0)?.textContent).toContain("prod-pod-0");
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
     expect(screen.getByText("live")).toBeInTheDocument();
+  }, 30_000);
+
+  /**
+   * Under an events list answering 500 the page read "live" for 25 to 60
+   * seconds, waiting on the overview's cached probe. Fails if the page's own
+   * one-row read is not asked while the watch is live, or if its failure does
+   * not take the live mark away with no help from the overview.
+   */
+  it("says a fresh list fails from its own one-row read, without the overview", async () => {
+    await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(asked().some((filters) => filters.limit === 1)).toBe(true)
+    );
+
+    listEvents.mockRejectedValue(
+      Object.assign(new Error("etcdserver: request timed out"), {
+        code: "NO_ANSWER",
+      })
+    );
+    expect(
+      await screen.findByText(
+        /A fresh list of events is failing/,
+        {},
+        { timeout: 3000 }
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/etcdserver: request timed out/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /**
+   * While every events list failed, "last answer" read 0s ago
+   * again at each watch event, as if the failing read had answered. Fails if
+   * a watch event resets the age of a read that has not answered since it
+   * began to fail.
+   */
+  it("keeps counting the last answer of the failing read while the watch delivers", async () => {
+    await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(asked().some((filters) => filters.limit === 1)).toBe(true)
+    );
+    listEvents.mockRejectedValue(
+      Object.assign(new Error("etcdserver: request timed out"), {
+        code: "NO_ANSWER",
+      })
+    );
+    await screen.findByText(
+      /A fresh list of events is failing/,
+      {},
+      { timeout: 3000 }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    burst([dated("prod", 1)]);
+    expect(
+      await screen.findByText(/^last answer [1-9]\d*s ago$/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("last answer 0s ago")).toBeNull();
+  }, 30_000);
+
+  // As the overview answers it: a failed events list sits with the cut ones
+  // in `warningsShort`, never in `unread`.
+  const overviewCannotListEvents = (
+    client: { setQueryData: (key: unknown[], data: unknown) => void },
+    why: "failed" | "capped" = "failed"
+  ) =>
+    act(() =>
+      client.setQueryData(queryKeys.clusterOverview(null, []), {
+        warnings: [],
+        unread: [],
+        warningsShort: [
+          why === "failed"
+            ? {
+                why,
+                namespace: null,
+                code: "NO_ANSWER",
+                message: "500 Internal Server Error",
+              }
+            : { why, namespace: null },
+        ],
+      })
+    );
+
+  /** Fails if a refused events list the watch outlives is called "read failing" on the pill beside "refused" words. */
+  it("says refused on the pill when the overview's events list was refused", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    act(() =>
+      client.setQueryData(queryKeys.clusterOverview(null, []), {
+        warnings: [],
+        unread: [],
+        warningsShort: [
+          {
+            why: "failed",
+            namespace: null,
+            code: "PERMISSION_DENIED",
+            message: "events is forbidden",
+          },
+        ],
+      })
+    );
+    expect(await screen.findByText("refused")).toBeInTheDocument();
+    expect(screen.queryByText("read failing")).toBeNull();
+  });
+
+  /** A list cut at the page cap was read, only not to its end: fails if that is drawn as a failing read. */
+  it("keeps the live mark when the overview's events were only cut short", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    overviewCannotListEvents(client, "capped");
+    expect(screen.queryByText(/A fresh list of events/)).toBeNull();
+    expect(screen.getByText("live")).toBeInTheDocument();
+  });
+
+  /**
+   * Under an events list answering 500 the page wore "live" while the
+   * Overview said it could not read them. Fails if the notice goes, drops
+   * the cluster's reason, or the chip still says live.
+   */
+  it("says the rows come from the watch and a fresh list fails when the overview cannot list events", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/A fresh list of events/)
+    ).not.toBeInTheDocument();
+
+    overviewCannotListEvents(client);
+    expect(
+      await screen.findByText(/A fresh list of events is failing/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/500 Internal Server Error/)).toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The cap is not a failure: a live feed cut at its limit with a failing
+   * overview read shows one notice, and the table's own cap line is left
+   * to the header. Fails if the footer cap is drawn beside the notice.
+   */
+  it("leaves the cut to the header while the notice speaks", async () => {
+    layOutRows();
+    const { client } = await watched();
+    burst(Array.from({ length: 600 }, (_, index) => dated("prod", index)));
+    await screen.findByText("500 normal events · of the latest 500");
+    overviewCannotListEvents(client);
+    await screen.findByText(/A fresh list of events is failing/);
+    expect(
+      screen.queryByText(/Only the latest 500 were read/)
+    ).not.toBeInTheDocument();
   }, 30_000);
 
   /**
@@ -310,7 +472,7 @@ describe("a feed a watch keeps", () => {
     expect(screen.getByText("live")).toBeInTheDocument();
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
   });
 
   /**
@@ -366,7 +528,7 @@ describe("a feed a watch keeps", () => {
     burst(Array.from({ length: 5 }, (_, index) => dated("prod", index + 1)));
     await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-1"));
 
-    const header = screen.getByRole("tab", { name: "All events" });
+    const header = screen.getByRole("button", { name: "All events" });
     await userEvent.hover(header);
     send([{ op: "applied", resource: dated("prod", 0) }]);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1328,9 +1490,18 @@ describe("a feed a watch keeps", () => {
       expect(document.body.textContent).toContain("staging-pod-0")
     );
     expect(document.body.textContent).toContain("prod-pod-1");
+    await waitFor(() =>
+      expect(
+        new Set(
+          asked()
+            .filter((filters) => filters.limit === 1)
+            .map((filters) => filters.namespace)
+        )
+      ).toEqual(new Set(["prod", "staging"]))
+    );
     listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(listEvents).not.toHaveBeenCalled();
+    expect(asked().filter((filters) => filters.limit !== 1)).toEqual([]);
   });
 
   /**
@@ -1351,7 +1522,7 @@ describe("a feed a watch keeps", () => {
     // The read that drew the page ahead of the watch is still fresh, so the
     // poll that replaces the watch comes on its own beat.
     expect(
-      await screen.findByText(/Could not read events just now/, undefined, {
+      await screen.findByText(/Could not read events\./, undefined, {
         timeout: 3000,
       })
     ).toBeInTheDocument();
@@ -1378,7 +1549,7 @@ describe("a feed a watch keeps", () => {
     );
     listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
     send([{ op: "failed", resource: null }], "connection reset by peer");
-    await screen.findByText(/Could not read events just now/, undefined, {
+    await screen.findByText(/Could not read events\./, undefined, {
       timeout: 3000,
     });
 
@@ -1395,9 +1566,7 @@ describe("a feed a watch keeps", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.getByText("read failing")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Could not read events just now/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Could not read events\./)).toBeInTheDocument();
 
     await act(async () => answer([dated("prod", 0)]));
     await waitFor(() =>
@@ -1475,7 +1644,7 @@ describe("a feed whose re-read fails", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read events just now/)
+      await screen.findByText(/Could not read events\./)
     ).toBeInTheDocument();
     expect(document.body.textContent).toContain("prod-pod-0");
     expect(screen.getByText("read failing")).toBeInTheDocument();
@@ -1559,7 +1728,7 @@ describe("a feed across namespaces whose re-read fails", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read events just now/)
+      await screen.findByText(/Could not read events\./)
     ).toBeInTheDocument();
     expect(document.body.textContent).toContain("staging-pod-1");
     expect(document.body.textContent).toContain("prod-pod-1");
@@ -1582,7 +1751,7 @@ describe("a feed across namespaces whose re-read fails", () => {
     expect(
       await screen.findByText(/Could not read the events in/)
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Could not read events just now/)).toBeNull();
+    expect(screen.queryByText(/Could not read events\./)).toBeNull();
   });
 });
 
@@ -1887,8 +2056,8 @@ describe("stories", () => {
     expect(card.textContent).toContain("still happening");
     // Folded by name and honest about it.
     expect(card.textContent).toContain("Grouped by the generated suffix");
-    expect(screen.getByRole("tab", { name: "Stories" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Stories" })).toHaveAttribute(
+      "aria-pressed",
       "true"
     );
   });
@@ -1953,7 +2122,7 @@ describe("stories", () => {
     expect(card.textContent).not.toMatch(/278 events/);
     expect(
       screen.getByText(
-        "1 story in the 1h window · 1 warning event · 2 normal events"
+        "1 story with events in the last 1h · 1 warning event · 2 normal events · in those stories"
       )
     ).toBeInTheDocument();
   });
@@ -2010,7 +2179,7 @@ describe("stories", () => {
     await mount("stories");
     await screen.findByText(/across the whole cluster was refused/);
 
-    expect(screen.queryByRole("tab", { name: "Stories" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stories" })).toBeNull();
     expect(screen.queryByPlaceholderText(/filter events/i)).toBeNull();
     expect(
       screen.queryByRole("combobox", { name: "Events fetched" })
@@ -2088,13 +2257,15 @@ describe("stories", () => {
         within(list).getByText("3 предупреждения · 30 обычных событий")
       ).toHaveClass("sr-only");
 
-      await userEvent.click(screen.getByRole("tab", { name: "Истории" }));
+      await userEvent.click(screen.getByRole("button", { name: "Истории" }));
       const stories = await screen.findByTitle(
-        /^1 история за 1\sч · 3 предупреждения$/
+        /^1 история с событиями за последние 1\sч · 3 предупреждения · в этих историях$/
       );
       expect(
         within(stories).getByTestId("events-count-drawn").textContent
-      ).toMatch(/^1 история за 1\sч · ▲ 3$/);
+      ).toMatch(
+        /^1 история с событиями за последние 1\sч · ▲ 3 · в этих историях$/
+      );
     } finally {
       useLocaleStore.setState({ choice: null });
     }
@@ -2124,7 +2295,7 @@ describe("stories", () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
     await mount("stories");
     await screen.findByRole("article", { name: /api/ });
-    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    await userEvent.click(screen.getByRole("button", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("BackOff");
   });
@@ -2137,16 +2308,16 @@ describe("stories", () => {
   it("opens on the view the reader chose last when the address names none", async () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
     const selected = () =>
-      screen
-        .getAllByRole("tab")
-        .find((tab) => tab.getAttribute("aria-selected") === "true")
+      within(screen.getByRole("group", { name: "View" }))
+        .getAllByRole("button")
+        .find((tab) => tab.getAttribute("aria-pressed") === "true")
         ?.textContent;
     const first = await renderWithRouter(<Events />, {
       at: "/c/prod/events",
       route: "/c/$cluster/events",
     });
     await screen.findByRole("article", { name: /api/ });
-    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    await userEvent.click(screen.getByRole("button", { name: "All events" }));
     first.unmount();
 
     const again = await renderWithRouter(<Events />, {
@@ -2304,11 +2475,14 @@ describe("a feed beside a peek", () => {
    * jsdom lays nothing out: the page alone is `width` pixels wide, and its
    * toolbar in one row is `bar`, about what English list controls take.
    */
-  function pageOf(width: number, bar = 620, count = 0) {
+  function pageOf(width: number, bar = 620, count = 0, countRoom = count) {
     const sizes: Array<
       ["clientWidth" | "scrollWidth", Record<string, number>]
     > = [
-      ["clientWidth", { "data-events-page": width }],
+      [
+        "clientWidth",
+        { "data-events-page": width, "data-events-count": countRoom },
+      ],
       ["scrollWidth", { "data-events-bar": bar, "data-events-count": count }],
     ];
     for (const [property, owners] of sizes) {
@@ -2350,9 +2524,9 @@ describe("a feed beside a peek", () => {
     expect(
       screen.queryByRole("combobox", { name: "Events fetched" })
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Share this screen" })
-    ).not.toHaveTextContent("Share");
+    expect(screen.getByRole("button", { name: /Share/ })).toHaveTextContent(
+      "Share"
+    );
 
     await userEvent.click(
       screen.getByRole("button", { name: "Feed settings" })
@@ -2490,15 +2664,17 @@ describe("a feed beside a peek", () => {
   /**
    * Dana's header read "103 warning events · 897 normal events · of the
    * latest" with "1000" on a line of its own, and the toolbar under it moved
-   * down a row whenever the limit's digits changed. Fails if the count can
-   * take a second line, or still states the cut the notice under it states.
+   * down a row whenever the limit's digits changed. Fails if the cut is
+   * still stated in the header beside the notice that states it, or if a
+   * count with no room is cut instead of wrapped whole.
    */
-  it("keeps its header count on one line and leaves the cut to the notice", async () => {
+  it("leaves the cut to the notice and never cuts the count mid-phrase", async () => {
     pageOf(300);
     listEvents.mockResolvedValue(feed("prod", 500));
     await mount("list");
     const count = await screen.findByTitle("500 normal events");
-    expect(count).toHaveClass("truncate");
+    expect(count).not.toHaveClass("truncate");
+    expect(count).not.toHaveTextContent("of the latest");
     expect(
       screen.getByText(/^Only the latest 500 were read\./)
     ).toBeInTheDocument();
@@ -2530,6 +2706,34 @@ describe("a feed beside a peek", () => {
     expect(
       await screen.findByRole("button", { name: "Feed settings" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The Stories header was cut mid-phrase ("of t...") on a page the fit sum
+   * called wide enough, because the toolbar's own width shrinks as the count
+   * squeezes it. Fails if a count that is drawn cut does not fold the toolbar.
+   */
+  it("folds when the count is drawn cut although the sum fits", async () => {
+    pageOf(1600, 300, 700, 400);
+    await mount("list");
+    expect(
+      await screen.findByRole("button", { name: "Feed settings" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * At 1280 the Stories header was still cut "in those stories · of t..."
+   * after the toolbar folded, because the folded toolbar alone left the count
+   * less room than its words. Fails if a folded toolbar's count keeps
+   * truncating instead of wrapping whole.
+   */
+  it("wraps the count whole once the toolbar has folded and still leaves it no room", async () => {
+    pageOf(980, 300, 700, 400);
+    await mount("stories");
+    await screen.findByRole("button", { name: "Feed settings" });
+    const count = document.querySelector("[data-events-count]");
+    expect(count).not.toHaveClass("truncate");
+    expect(count).toHaveAttribute("data-wrapped");
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */

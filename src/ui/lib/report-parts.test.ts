@@ -330,6 +330,7 @@ describe("what the graph says about objects it could not check", () => {
       subPath: null,
       volume: "cfg",
       projected: false,
+      optional: false,
     };
     const { sections } = graphSections(
       {

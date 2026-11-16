@@ -75,6 +75,7 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     id: "completions",
     header: columnHeader("columns", "completions"),
     meta: {
+      sort: (row: JobInfoWithMetrics) => row.succeeded,
       share: (row: JobInfoWithMetrics) =>
         `${row.succeeded}/${row.completions || "∞"}`,
     },
@@ -86,6 +87,7 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
+      sort: (row: JobInfoWithMetrics) => row.status,
       floor: statusFloor,
       ideal: (t, rows: readonly JobInfoWithMetrics[]) =>
         statusFloor(t, rows) +

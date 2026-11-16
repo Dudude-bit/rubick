@@ -11,6 +11,8 @@
  */
 import * as React from "react";
 
+import { Unknown } from "@/components/ui/unknown";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -39,6 +41,8 @@ import type {
 import { errorWords, sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { isUnanswered } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import type { ServiceInfo } from "@/generated/types";
 import {
   Select,
@@ -124,19 +128,57 @@ function ConnectForm({
     insecureTls: insecure,
   });
 
+  const [acting, setActing] = React.useState<"save" | "forget" | null>(null);
+  const [failure, setFailure] = React.useState<{
+    words: string;
+    unanswered: boolean;
+  } | null>(null);
+
   const test = async () => {
     setTesting(true);
     try {
       setTested(await editor.test(draft()));
+    } catch (error) {
+      setTested({
+        ok: false,
+        at: Date.now(),
+        reason: {
+          key: "verbatimLine",
+          values: { said: errorWords(error, t) },
+        },
+      });
     } finally {
       setTesting(false);
     }
   };
 
-  const save = async () => {
-    await editor.save(draft());
-    onDone();
+  const write = async (
+    kind: "save" | "forget",
+    title: string,
+    run: () => Promise<void>
+  ) => {
+    setActing(kind);
+    setFailure(null);
+    try {
+      await run();
+      onDone();
+    } catch (error) {
+      toastWriteError(title, error);
+      setFailure({
+        words: errorWords(error, t),
+        unanswered: isUnanswered(error),
+      });
+    } finally {
+      setActing(null);
+    }
   };
+
+  const save = () =>
+    write("save", t("settings", "couldNotSaveConnection"), () =>
+      editor.save(draft())
+    );
+  const forget = () =>
+    write("forget", t("settings", "couldNotDisconnect"), editor.forget);
 
   return (
     <>
@@ -148,6 +190,13 @@ function ConnectForm({
       </DialogHeader>
 
       <div className="flex flex-col gap-3 py-1">
+        {editor.readError && (
+          <Unknown
+            question={t("settings", "couldNotReadSavedConnection")}
+            error={editor.readError}
+            onRetry={editor.reread}
+          />
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="integration-url" className="text-xs text-fg-mut">
             {t("columns", "address")}
@@ -165,7 +214,7 @@ function ConnectForm({
               request is made by this app, on this machine — so a Service name
               that works from inside the cluster resolves to nothing here, and
               that is the commonest way to get this field wrong. */}
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {/* One sentence in the catalogue, split here rather than there:
                 a translator moves the example wherever their word order wants
                 it, and the monospace still lands on it. */}
@@ -214,7 +263,7 @@ function ConnectForm({
             />
             <span>
               {t("settings", "openTunnelOnSwitch")}
-              <span className="mt-0.5 block text-[11px] text-fg-fnt">
+              <span className="mt-0.5 block text-caption text-fg-fnt">
                 {parts(t("settings", "forwardingTunnelNote"), {
                   target: (
                     <span className="font-mono">
@@ -260,7 +309,7 @@ function ConnectForm({
             />
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
-            <p className="text-[11px] leading-snug text-fg-fnt">
+            <p className="text-caption leading-snug text-fg-fnt">
               {t("settings", "credentialStorageNote")}
             </p>
           </div>
@@ -275,6 +324,16 @@ function ConnectForm({
         </label>
 
         {tested && <TestResult result={tested} />}
+        {failure && (
+          <Alert variant={failure.unanswered ? "warn" : "destructive"}>
+            {failure.unanswered
+              ? t("action", "writeUnanswered")
+              : failure.words}
+            {failure.unanswered && (
+              <span className="block text-fg-mut">{failure.words}</span>
+            )}
+          </Alert>
+        )}
       </div>
 
       <DialogFooter className="gap-2 sm:justify-between">
@@ -283,13 +342,14 @@ function ConnectForm({
             <Button
               variant="ghost"
               size="sm"
-              onClick={async () => {
-                await editor.forget();
-                onDone();
-              }}
+              onClick={() => void forget()}
+              pending={acting === "forget"}
+              disabled={acting !== null}
               className="text-err hover:text-err"
             >
-              {t("action", "disconnect")}
+              {acting === "forget"
+                ? t("action", "disconnecting")
+                : t("action", "disconnect")}
             </Button>
           )}
         </div>
@@ -298,16 +358,18 @@ function ConnectForm({
             variant="outline"
             size="sm"
             onClick={test}
-            disabled={testing || url.trim() === ""}
+            pending={testing}
+            disabled={acting !== null || url.trim() === ""}
           >
             {testing ? t("action", "testing") : t("action", "test")}
           </Button>
           <Button
             size="sm"
-            onClick={save}
-            disabled={editor.isSaving || url.trim() === ""}
+            onClick={() => void save()}
+            pending={acting === "save"}
+            disabled={acting !== null || testing || url.trim() === ""}
           >
-            {t("action", "save")}
+            {acting === "save" ? t("action", "saving") : t("action", "save")}
           </Button>
         </div>
       </DialogFooter>
@@ -376,7 +438,7 @@ export function InCluster({
         variant="outline"
         size="sm"
         onClick={look}
-        disabled={looking}
+        pending={looking}
         className="self-start text-xs"
       >
         {looking
@@ -385,7 +447,7 @@ export function InCluster({
       </Button>
 
       {found !== null && found.length === 0 && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("settings", "noServiceForVendor", { vendor: vendorName })}
         </p>
       )}
@@ -404,7 +466,7 @@ export function InCluster({
               {candidate.service.namespace}/{candidate.service.name}
               <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
             </span>
-            <span className="flex-none text-[11px] text-fg-fnt">
+            <span className="flex-none text-caption text-fg-fnt">
               {busy === key
                 ? t("settings", "forwardingEllipsis")
                 : sayWords(candidate.because, t)}
@@ -415,7 +477,7 @@ export function InCluster({
 
       <ByHand hint={hint} onPicked={onPicked} onFailed={setFailed} />
 
-      {failed && <p className="text-[11px] text-err">{failed}</p>}
+      {failed && <p className="text-caption text-err">{failed}</p>}
     </div>
   );
 }
@@ -450,6 +512,7 @@ function ByHand({
   const [port, setPort] = React.useState("");
   const [subpath, setSubpath] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [loadingServices, setLoadingServices] = React.useState(false);
 
   const service = services?.find(
     (candidate) => `${candidate.namespace}/${candidate.name}` === chosen
@@ -459,10 +522,13 @@ function ByHand({
     setOpen(true);
     onFailed(null);
     if (services !== null) return;
+    setLoadingServices(true);
     try {
       setServices(await commands.listServices(null));
     } catch (error) {
       onFailed(errorWords(error, t));
+    } finally {
+      setLoadingServices(false);
     }
   };
 
@@ -486,7 +552,7 @@ function ByHand({
       <button
         type="button"
         onClick={() => void reveal()}
-        className="self-start text-[11px] text-fg-fnt underline underline-offset-2 hover:text-fg"
+        className="self-start text-caption text-fg-fnt underline underline-offset-2 hover:text-fg"
       >
         {t("settings", "pointAtServiceYourself")}
       </button>
@@ -495,7 +561,7 @@ function ByHand({
 
   return (
     <div className="flex flex-col gap-1.5 rounded border border-hair p-2">
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("settings", "pointAtServiceHint")}
       </p>
 
@@ -505,13 +571,20 @@ function ByHand({
         </Label>
         <Select
           value={chosen}
+          disabled={loadingServices}
           onValueChange={(value) => {
             setChosen(value);
             setPort("");
           }}
         >
           <SelectTrigger id="integration-service" className="h-7 text-xs">
-            <SelectValue placeholder={t("settings", "chooseService")} />
+            <SelectValue
+              placeholder={
+                loadingServices
+                  ? t("settings", "readingServices")
+                  : t("settings", "chooseService")
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             {(services ?? []).map((candidate) => (
@@ -558,7 +631,7 @@ function ByHand({
           placeholder={hint.subpathExample ?? "/prometheus"}
           className="h-7 font-mono text-xs"
         />
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("settings", "subpathHint")}
         </span>
       </div>
@@ -566,7 +639,8 @@ function ByHand({
       <Button
         size="sm"
         onClick={() => void go()}
-        disabled={!service || !port || busy}
+        pending={busy}
+        disabled={!service || !port}
         className="self-start text-xs"
       >
         {busy
@@ -581,14 +655,14 @@ function TestResult({ result }: { result: ProbeResult }) {
   const t = useT();
   if (result.ok) {
     return (
-      <p className="text-[11px] text-ok" role="status">
+      <p className="text-caption text-ok" role="status">
         {t("settings", "probeAnswered", { ms: result.latencyMs })}
         {result.version ? ` · ${result.version}` : ""}
       </p>
     );
   }
   return (
-    <p className="text-[11px] text-err" role="status">
+    <p className="text-caption text-err" role="status">
       {t("settings", "probeDidNotAnswer", {
         reason: sayWords(result.reason, t),
       })}

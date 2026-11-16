@@ -9,12 +9,13 @@
  * - Copy to clipboard
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   useMutation,
   useQueryClient,
   keepPreviousData,
+  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
@@ -26,12 +27,14 @@ import { useRereadWith } from "./useRereadWith";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
-import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch, watchedByName } from "./useObjectWatch";
-import { useStaleNotFound } from "./useStaleNotFound";
+import { useHeldRow } from "./useHeldRow";
+import { asksAgainOnMount, useStaleNotFound } from "./useStaleNotFound";
 import { backInTab } from "@/stores/scopeTabStore";
+import { askAgain, askedAgainFirst } from "@/lib/refusals";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -65,7 +68,7 @@ export interface UseResourceDetailResult<T> {
   resource: T | undefined;
   isLoading: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
   /** What the header's freshness reading is drawn from. */
   freshness: Freshness;
   /** The object the page's own watch last delivered, while it feeds the page: built from the object alone, in the shape `subscribe_object_watch` gives the kind. */
@@ -74,6 +77,7 @@ export interface UseResourceDetailResult<T> {
   // YAML data
   yaml: string | undefined;
   isLoadingYaml: boolean;
+  yamlError: Error | null;
   copyYaml: () => void;
   refetchYaml: () => Promise<unknown>;
 
@@ -135,6 +139,14 @@ export function useResourceDetail<T>(
     [setSearch, defaultTab]
   );
 
+  // Opening the page asks the cluster once more, as a list visit does: a
+  // refusal kept from minutes before is not this look's answer.
+  const visit = useMemo(
+    () => askedAgainFirst(),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one visit per object
+    [resourceKind, namespace, name]
+  );
+
   // Fetch resource data
   const {
     data: held,
@@ -149,13 +161,16 @@ export function useResourceDetail<T>(
     queryKey: queryKeys.detail(resourceKind, namespace, name),
     queryFn: async () => {
       if (!name) throw new Error("Name is required");
-      const result = await fetchResource(name, namespace || null);
+      const result = await visit(() => fetchResource(name, namespace || null));
       onResourceFetched?.(result);
       return result;
     },
     enabled: !!name,
     placeholderData: placeholderData ? keepPreviousData : undefined,
     staleTime,
+    retryOnMount: asksAgainOnMount(
+      queryClient.getQueryState(queryKeys.detail(resourceKind, namespace, name))
+    ),
     refresh,
     // A kind the watch does not follow by name has only its own read to say
     // that an object made again under its name is back.
@@ -183,17 +198,33 @@ export function useResourceDetail<T>(
     errorUpdatedAt,
     isFetching,
   });
-  const resource = reappearing ? undefined : held;
+  const kept = reappearing ? undefined : held;
   const isLoading = reading || reappearing;
-  const holdsThisObject = resource !== undefined && !isPlaceholderData;
+  const holdsThisObject = kept !== undefined && !isPlaceholderData;
+  // The peek's rule: a read that failed with nothing of this object held
+  // draws the list's row of it, said to be from that list's read.
+  const listed = useHeldRow(
+    resourceKind,
+    namespace ?? null,
+    name,
+    !reappearing &&
+      !holdsThisObject &&
+      !!readError &&
+      !isResourceNotFoundError(readError)
+  );
+  const resource = listed ? (listed.row as T) : kept;
   const error =
-    reappearing || (holdsThisObject && !isResourceNotFoundError(readError))
+    reappearing ||
+    listed ||
+    (holdsThisObject && !isResourceNotFoundError(readError))
       ? null
       : readError;
   useRememberOwners(
     { kind: resourceKind, name: name ?? "", namespace },
-    holdsThisObject ? resource : undefined
+    holdsThisObject ? kept : undefined
   );
+
+  usePartsReadAgainOnAnswer(!!readError, holdsThisObject, namespace, name);
 
   useRereadWith(
     queryKeys.detail(resourceKind, namespace, name),
@@ -208,6 +239,7 @@ export function useResourceDetail<T>(
   const {
     data: yaml,
     isLoading: isLoadingYaml,
+    error: yamlError,
     refetch: refetchYaml,
   } = useResourceYaml(resourceKind, name, namespace, activeTab);
 
@@ -241,18 +273,14 @@ export function useResourceDetail<T>(
         goBack();
       }
     },
-    onError: (err) => {
-      if (toastedUnanswered(err)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "deleteFailed", {
-          kind: resourceKind,
+    onError: (err) =>
+      toastWriteError(
+        t("action", "couldNotDo", {
+          action: t("action", "delete").toLowerCase(),
           name: name ?? "",
-          error: errorToShow(err),
         }),
-        variant: "destructive",
-      });
-    },
+        err
+      ),
   });
 
   return {
@@ -262,10 +290,22 @@ export function useResourceDetail<T>(
     isLoading,
     error,
     refetch,
-    freshness: live ? { ...freshness, live } : freshness,
+    freshness:
+      listed || live
+        ? {
+            ...freshness,
+            ...(listed && {
+              dataUpdatedAt: listed.at,
+              stale: true,
+              failure: readError,
+            }),
+            ...(live && { live }),
+          }
+        : freshness,
     watched,
     yaml,
     isLoadingYaml,
+    yamlError,
     copyYaml,
     refetchYaml,
     activeTab,
@@ -286,4 +326,48 @@ export function useResourceDetail<T>(
 export function isResourceNotFoundError(error: Error | null | string): boolean {
   if (!error) return false;
   return errorCode(error) === ERROR_CODES.NOT_FOUND;
+}
+
+/**
+ * Asks again, afresh, every failed read on screen about one object but the
+ * object's own: its pods, its connections, its revisions. A part refused or
+ * failed while the object could not be read keeps that answer otherwise.
+ */
+export function rereadFailedParts(
+  client: QueryClient,
+  namespace: string | null | undefined,
+  name: string
+): Promise<void> {
+  return askAgain(() =>
+    client.refetchQueries(
+      {
+        type: "active",
+        predicate: ({ queryKey, state }) =>
+          state.status === "error" &&
+          queryKey.includes(name) &&
+          (!namespace || queryKey.includes(namespace)),
+      },
+      { cancelRefetch: false }
+    )
+  );
+}
+
+/**
+ * When the object's own read answers again after failing, every failed part
+ * read through it is asked again: nothing else would soon, since a failing
+ * read backs off and a refused one is kept.
+ */
+export function usePartsReadAgainOnAnswer(
+  failing: boolean,
+  answered: boolean,
+  namespace: string | null | undefined,
+  name: string | undefined
+): void {
+  const client = useQueryClient();
+  const wasFailing = useRef(failing);
+  useEffect(() => {
+    const recovered = wasFailing.current && !failing && answered;
+    wasFailing.current = failing;
+    if (recovered && name) void rereadFailedParts(client, namespace, name);
+  }, [failing, answered, client, namespace, name]);
 }

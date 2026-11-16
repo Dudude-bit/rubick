@@ -11,6 +11,8 @@ import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { groupNamed } from "@/lib/event-incarnation";
 import { drawnCrd } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
+import { ERROR_CODES } from "@/lib/error-utils";
+import { probeFailureHeadline } from "@/lib/probe-failure";
 import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import {
@@ -33,6 +35,7 @@ import {
   checkSaid,
   eventsChecks,
   foldedWords,
+  notRecheckedWords,
   reasonWord,
   shuttingPolicy,
   unreadWhere,
@@ -111,6 +114,8 @@ export function composedDetail(
         .join(" · ");
     case "podsRefused":
       return refusalText(detail.said, t);
+    case "probe":
+      return `${probeFailureHeadline(detail.failure, t)}: ${detail.failure.said}`;
   }
 }
 
@@ -221,8 +226,12 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
     const marked = line.under === "class" ? item.unservedClass : undefined;
     const shut = line.under === "policy" ? item.shutBy : undefined;
     const tag = marked?.name ?? shut?.policies.join(", ");
+    const said = tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t);
     return {
-      title: tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t),
+      // Kept over a read that no longer answers: last known, as the screen says.
+      title: item.stale
+        ? `${said} · ${notRecheckedWords(t, item.lastKnown?.at)}`
+        : said,
       detail:
         [
           foldedWords(item, t),
@@ -360,12 +369,19 @@ export function readyBetweenCrashes(pods: PodComposition): number {
  * while they serve nothing, or drain. A pod held in an error that waiting will not clear is carved out
  * of Pending under that error, the word the Pods list prints for it. One
  * still inside its wait stays Pending, as its row says, and is qualified as
- * starting in blue, which its workload says too.
+ * starting in blue, which its workload says too. One serving that a row of
+ * Needs attention names all the same is Running with a problem, in amber.
  */
 export function podSegments(pods: PodComposition, t: T): Segment[] {
   const stuck = pods.stuck.reduce((n, held) => n + held.count, 0);
   return [
-    { label: "Running", count: podsServing(pods), tone: "ok" },
+    { label: "Running", count: podsServing(pods) - pods.troubled, tone: "ok" },
+    {
+      label: "Running",
+      qualifier: t("statusWords", "troubledCounted", { n: pods.troubled }),
+      count: pods.troubled,
+      tone: "warn",
+    },
     { label: "NotReady", count: pods.notReady, tone: "warn" },
     { label: "Terminating", count: pods.terminating, tone: "warn" },
     {
@@ -452,7 +468,9 @@ const rolloutCounted =
  */
 export function deploymentSegments(
   deployments: RolloutCount[] | null,
-  t: T
+  t: T,
+  /** The pod read behind the unread words was refused, not failed: they wear the lock. */
+  podsRefused = false
 ): Segment[] {
   const read = (deployments ?? []).filter((entry) => !entry.podsUnread);
   const unread = (deployments ?? [])
@@ -463,9 +481,24 @@ export function deploymentSegments(
       count,
       tone: "neutral",
       unread: true,
+      refused: podsRefused,
+    }));
+  // Apart, amber where the word itself is not an error: "Ready" alone said nothing of its pods failing a probe, and an Unavailable one is red as its row in Needs attention is.
+  const troubled = read
+    .filter((entry) => entry.troubled > 0)
+    .map(({ reason, troubled: count }): Segment => ({
+      label: rolloutCounted(t)(reason, count) ?? reason,
+      qualifier: t("statusWords", "troubledCounted", { n: count }),
+      count,
+      tone: statusRole(reason) === "err" ? "err" : "warn",
     }));
   return [
-    ...wordSegments(read, DEPLOYMENT_ORDER, rolloutCounted(t)),
+    ...wordSegments(
+      read.map((entry) => ({ ...entry, count: entry.count - entry.troubled })),
+      DEPLOYMENT_ORDER,
+      rolloutCounted(t)
+    ),
+    ...troubled,
     ...unread,
   ];
 }
@@ -544,7 +577,11 @@ export function workloadCards(overview: ClusterOverview, t: T): WorkloadCard[] {
     {
       kind: "Deployment",
       total: deployments && sum(deployments.read),
-      segments: deploymentSegments(deployments?.read ?? null, t),
+      segments: deploymentSegments(
+        deployments?.read ?? null,
+        t,
+        missed("Pod").some((entry) => entry.code === ERROR_CODES.PERMISSION)
+      ),
       unread: missed("Deployment"),
     },
     {

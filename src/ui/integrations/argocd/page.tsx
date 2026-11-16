@@ -19,9 +19,13 @@
  * answers through the `service.routes` capability.
  */
 
+import { DataFreshness } from "@/components/ui/realtime";
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { applicationsNeedAttention } from "@/lib/two-counts";
 import { useCallback, useMemo } from "react";
-import { Box, GitBranch, Layers, Shield } from "lucide-react";
+import { Box, CircleAlert, GitBranch, Layers, Shield } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -40,7 +44,7 @@ import type { CustomResourceInfo } from "@/generated/types";
 import { crdInGroup, crdInstancesLink } from "@/lib/links";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
-import { getValueByPath, troubleMark } from "../kit";
+import { getValueByPath, troubleMark, failedWithNothing } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -51,6 +55,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
@@ -129,7 +134,7 @@ export default function ArgoCdPage() {
   const ui = shown.url;
   const readingUi = controller.isPending || routed.isPending;
 
-  if (applications.error) {
+  if (failedWithNothing(applications)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadApplications")}
@@ -238,21 +243,26 @@ export default function ArgoCdPage() {
               })
         }
         description={t("empty", "argoPageDescription")}
-      />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={setTab}
         actions={
-          <ShareScreenAction
-            screen={{
-              scope: null,
-              title: `Argo CD · ${activeTab.label}`,
-              icon: activeTabIcon,
-            }}
-          />
+          <>
+            <DataFreshness
+              dataUpdatedAt={applications.freshness.dataUpdatedAt}
+              slowed={applications.freshness.slowed}
+              stale={applications.freshness.stale}
+              slowRead={applications.freshness.slowRead}
+            />
+            <ShareScreenAction
+              screen={{
+                scope: null,
+                title: `Argo CD · ${activeTab.label}`,
+                icon: activeTabIcon,
+              }}
+            />
+          </>
         }
       />
+      <StaleRead read={applications} label="Argo CD" />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -286,16 +296,14 @@ function ApplicationsTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingApplications")}</p>
-    );
+    return <Reading>{t("empty", "readingApplications")}</Reading>;
   }
 
   if (apps.length === 0) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">{t("empty", "argoOwnsNothing")}</p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           <>
             {parts(t("empty", "argoNoApplicationsBody"), {
               kind: <span className="font-mono">Application</span>,
@@ -485,7 +493,7 @@ function SourceLine({ app }: { app: ArgoApp }) {
       {app.sources.map((source) => (
         <div
           key={source.repoUrl + (source.path ?? source.chart ?? "")}
-          className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut"
+          className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-xs text-fg-mut"
         >
           <span className="truncate font-mono text-fg-mid">
             {t("empty", "fromGit")}
@@ -506,7 +514,7 @@ function SourceLine({ app }: { app: ArgoApp }) {
               ({lastSyncWords(app, "syncedAgo", t)})
             </span>
           </span>
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {app.autoSync
               ? t("empty", "autoSyncOn")
               : t("empty", "autoSyncOff")}
@@ -574,7 +582,7 @@ function Manages({ app }: { app: ArgoApp }) {
 
   if (groups.length === 0) {
     return (
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("empty", "argoNotComparedYet")}
       </p>
     );
@@ -583,7 +591,7 @@ function Manages({ app }: { app: ArgoApp }) {
   return (
     <div className="flex flex-col gap-2">
       {!where.here && (
-        <p className="max-w-[80ch] text-[11px] text-fg-mut">
+        <p className="max-w-[80ch] text-caption text-fg-mut">
           {where.name === null
             ? t("empty", "argoManagedNoCluster")
             : parts(t("empty", "argoManagedElsewhere"), {
@@ -601,7 +609,7 @@ function Manages({ app }: { app: ArgoApp }) {
         const hidden = group.resources.length - shown.length;
         return (
           <div key={group.kind} className="flex flex-col gap-0.5">
-            <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
+            <Eyebrow as="span">
               {group.kind}
               <span className="ml-1.5 normal-case tracking-normal">
                 {group.resources.length}
@@ -612,7 +620,7 @@ function Manages({ app }: { app: ArgoApp }) {
                   </span>
                 )}
               </span>
-            </span>
+            </Eyebrow>
             {shown.map((resource) => (
               <ResourceLine
                 key={`${resource.kind}/${resource.namespace}/${resource.name}`}
@@ -622,7 +630,7 @@ function Manages({ app }: { app: ArgoApp }) {
               />
             ))}
             {hidden > 0 && (
-              <span className="text-[11px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("count", "andMoreSynced", { n: hidden })}
               </span>
             )}
@@ -668,7 +676,7 @@ function ResourceLine({
               : null;
 
   return (
-    <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+    <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-3 text-xs text-fg-mut">
       <span className="truncate">
         <ResourceRef
           kind={resource.kind}
@@ -703,7 +711,7 @@ function GeneratedNote({ app }: { app: ArgoApp }) {
   const t = useT();
   if (!app.generatedBy) return null;
   return (
-    <p className="text-[11px] text-fg-fnt">
+    <p className="text-caption text-fg-fnt">
       {t("empty", "generatedByApplicationSet")}{" "}
       <ResourceRef
         kind="ApplicationSet"
@@ -938,7 +946,7 @@ function AppSetsTab({
         onRetry={onRetry}
       />
     ) : (
-      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+      <Reading>{t("action", "readingEllipsis")}</Reading>
     );
   }
   if (sets.length === 0) {
@@ -967,7 +975,7 @@ function AppSetsTab({
               key={`${set.namespace}/${set.name}`}
               className="border-b border-hair py-1.5"
             >
-              <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px]">
+              <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-xs">
                 <span className="min-w-0 truncate">
                   <ResourceRef
                     kind="ApplicationSet"
@@ -982,7 +990,7 @@ function AppSetsTab({
                     ? t("empty", "generatedNothing")
                     : generated.map((app) => app.name).join(", ")}
                 </span>
-                <span className="text-[11px] text-fg-fnt">
+                <span className="text-caption text-fg-fnt">
                   {t("readings", "kindCount", {
                     n: generated.length,
                     kind: "Application",
@@ -990,9 +998,10 @@ function AppSetsTab({
                 </span>
               </div>
               {failing && (
-                <p className="mt-1 border-l-2 border-err pl-2.5 font-mono text-[11px] text-err">
-                  {failing.message}
-                </p>
+                <Alert variant="destructive" className="mt-1 py-1">
+                  <CircleAlert aria-hidden />
+                  <p className="font-mono text-caption">{failing.message}</p>
+                </Alert>
               )}
             </div>
           );
@@ -1024,7 +1033,7 @@ function ProjectsTab({
         onRetry={onRetry}
       />
     ) : (
-      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+      <Reading>{t("action", "readingEllipsis")}</Reading>
     );
   }
   if (projects.length === 0) {
@@ -1056,7 +1065,7 @@ function ProjectsTab({
           return (
             <div
               key={`${project.namespace}/${project.name}`}
-              className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+              className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
             >
               <span className="min-w-0 truncate">
                 <ResourceRef
@@ -1073,7 +1082,7 @@ function ProjectsTab({
               <span className="truncate text-fg-mut">
                 {projectDestinationsWords(destinations, t)}
               </span>
-              <span className="text-[11px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("readings", "kindCount", {
                   n: members.length,
                   kind: "Application",
@@ -1132,11 +1141,7 @@ function ControllerTab({
   const t = useT();
   useShareSection("argocd-controller", () => controllerSection(controller, t));
   if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingArgoWorkloads")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingArgoWorkloads")}</Reading>;
   }
 
   return (
@@ -1163,7 +1168,7 @@ function ControllerTab({
         )}
         {controller.components.length === 0 ? (
           controller.problem && (
-            <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+            <p className="max-w-[64ch] text-caption text-fg-fnt">
               {sayWords(controller.problem, t)}
             </p>
           )
@@ -1172,7 +1177,7 @@ function ControllerTab({
             {controller.components.map((component) => (
               <div
                 key={`${component.namespace}/${component.name}`}
-                className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+                className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
               >
                 <span className="truncate">
                   <ResourceRef
@@ -1182,14 +1187,14 @@ function ControllerTab({
                     showKind={false}
                   />
                 </span>
-                <span className="truncate font-mono text-[11px] text-fg-fnt">
+                <span className="truncate font-mono text-caption text-fg-fnt">
                   {component.image ?? ""}
                 </span>
                 <span
                   className={
                     component.ready < component.desired
-                      ? "text-[11px] text-err"
-                      : "text-[11px] text-fg-fnt"
+                      ? "text-caption text-err"
+                      : "text-caption text-fg-fnt"
                   }
                 >
                   {t("count", "ofTotalReady", {
@@ -1209,7 +1214,7 @@ function ControllerTab({
           description={t("empty", "argoUiDescription")}
         />
         {ui ? (
-          <p className="text-[11.5px] text-fg-mut">
+          <p className="text-xs text-fg-mut">
             {routed.via ? (
               <>
                 {parts(
@@ -1228,7 +1233,7 @@ function ControllerTab({
             {t("empty", "soEveryApplicationOffersWayIn")}
           </p>
         ) : routes.isPending ? (
-          <p className="text-[11.5px] text-fg-fnt">
+          <p className="text-xs text-fg-fnt">
             <>
               {parts(t("empty", "readingWhatRoutes"), {
                 service: <span className="font-mono">{SERVER_SERVICE}</span>,
@@ -1239,7 +1244,7 @@ function ControllerTab({
           // The middle state, and the whole reason `tls` may be `null`: the
           // host is known and the scheme is not, so the host is named and the
           // link withheld rather than guessed at.
-          <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[80ch] text-xs text-fg-mut">
             <>
               {parts(
                 t("empty", "kindNameServes", {
@@ -1258,7 +1263,7 @@ function ControllerTab({
             {t("empty", "hostNotKnownTls")}
           </p>
         ) : (
-          <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[80ch] text-xs text-fg-mut">
             {/* Says what was read, not what the cluster contains: neither
                 the Ingresses nor the routing capability named a host. */}
             <>
@@ -1293,7 +1298,7 @@ function ControllerTab({
           title={t("nav", "itsObjects")}
           description={t("empty", "itsObjectsDescription")}
         />
-        <div className="flex flex-col gap-0.5 text-[11.5px]">
+        <div className="flex flex-col gap-0.5 text-xs">
           {[APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD].map((crd) => (
             <Link
               key={crd}

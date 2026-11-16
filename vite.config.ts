@@ -115,6 +115,7 @@ export default defineConfig({
       "rubick/status-is-a-code": "error",
       "rubick/no-native-select": "error",
       "rubick/no-overlay-scrollbar": "error",
+      "rubick/type-scale": "error",
     },
     overrides: [
       {
@@ -213,9 +214,13 @@ export default defineConfig({
         rules: { "rubick/no-refetch-interval": "off" },
       },
       {
-        // Tests name the old class to say it is gone; they draw no scroller.
+        // Tests name the old class to say it is gone; they draw no scroller,
+        // and a size off the scale is how a test proves a size is not inherited.
         files: ["src/ui/**/*.test.{ts,tsx}"],
-        rules: { "rubick/no-overlay-scrollbar": "off" },
+        rules: {
+          "rubick/no-overlay-scrollbar": "off",
+          "rubick/type-scale": "off",
+        },
       },
     ],
     jsPlugins: [

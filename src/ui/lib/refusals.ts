@@ -1,11 +1,13 @@
 /**
  * What the cluster refused on this connection. A refusal is a verdict on who
- * asks, so a refused read is answered from here until the next connect or
- * credential renewal, not asked again on every poll and every page visit.
+ * asks, so a refused read is answered from here rather than asked again on
+ * every poll and every page visit, until {@link KEPT_FOR} passes, a read of
+ * the same resource answers, or the connection or credentials change.
  * Imports nothing that reaches `commands` or `clusterStore`, which both use it.
  */
 
 import { useMemo } from "react";
+import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 
 let connectionOf: () => number = () => 0;
@@ -19,11 +21,22 @@ export function currentConnection(): number {
   return connectionOf();
 }
 
+/**
+ * How long a refused read is answered from here. A webhook timeout or a grant
+ * still propagating refuses for seconds; at a list's two-second poll this is
+ * one request where there would be sixty.
+ */
+export const KEPT_FOR = 120_000;
+
 interface Refused {
   connection: number;
   error: unknown;
   /** When the cluster said it, which is the last time it was asked. */
   at: number;
+  /** The resource the cluster named in refusing, as {@link stemOf} spells it. */
+  of: string | null;
+  /** Whether another read of {@link of} answering lets it go; once per {@link KEPT_FOR}. */
+  healable: boolean;
 }
 
 const useRefusals = create<{
@@ -48,12 +61,121 @@ export function isRead(command: string): boolean {
   return /^(list|get|detect|read)[A-Z]/.test(command);
 }
 
-/** The refusal this read got on this connection, if it got one. */
+const isAction = (read: string) => read.startsWith(`${MAY} `);
+
+const kept = (read: string, refused: Refused, now: number) =>
+  isAction(read) || now - refused.at < KEPT_FOR;
+
+/** The refusal this read got on this connection, if it got one and still keeps it. */
 export function refusalOf(read: string): unknown {
   const refused = useRefusals.getState().reads.get(read);
-  return refused?.connection === currentConnection()
+  return refused?.connection === currentConnection() &&
+    kept(read, refused, Date.now())
     ? refused.error
     : undefined;
+}
+
+/** "Pods", "pod" and "pods" are one resource; "ingresses" and "Ingress" too. */
+export function stemOf(word: string): string {
+  const lower = word.toLowerCase();
+  if (lower.endsWith("sses")) return lower.slice(0, -2);
+  if (lower.endsWith("ies")) return `${lower.slice(0, -3)}y`;
+  if (lower.endsWith("s") && !lower.endsWith("ss")) return lower.slice(0, -1);
+  return lower;
+}
+
+function wordsOf(error: unknown): string {
+  const said: string[] = [];
+  for (let at = error, depth = 0; at != null && depth < 4; depth++) {
+    said.push(
+      typeof at === "string"
+        ? at
+        : String((at as { message?: unknown }).message ?? "")
+    );
+    at = at instanceof Error ? at.cause : undefined;
+  }
+  return said.join(" ");
+}
+
+/** The resource a refusal names in the cluster's own words: `cannot list resource "pods"`, or `deployments.apps is forbidden`. */
+export function refusedResource(error: unknown): string | null {
+  const said = wordsOf(error);
+  const named =
+    /cannot \w+ resource "([^"]+)"/.exec(said) ??
+    /([a-z0-9/-]+)(?:\.[a-z0-9.-]+)?(?: "[^"]*")? is forbidden/.exec(said);
+  return named ? stemOf(named[1]) : null;
+}
+
+/** Every resource a read can be about: each run of words in its command's name, and each word among its arguments, so `listPodRows` and `listResourceTable("Pod")` both read pods. */
+function resourcesOf(command: string, args: readonly unknown[]): Set<string> {
+  const words = command.match(/[A-Z][a-z0-9]*/g) ?? [];
+  const named = new Set<string>();
+  words.forEach((_, from) => {
+    for (let to = from + 1; to <= words.length; to++)
+      named.add(stemOf(words.slice(from, to).join("")));
+  });
+  for (const arg of args.flatMap((arg) =>
+    arg !== null && typeof arg === "object" ? Object.values(arg) : [arg]
+  ))
+    if (typeof arg === "string") named.add(stemOf(arg));
+  return named;
+}
+
+const lettingGo = new Set<(errors: readonly unknown[]) => void>();
+let healedAt = new Map<string, { connection: number; at: number }>();
+
+/** Drops the kept reads `which` picks and tells whoever shows their refusals to ask again. */
+function letGo(which: (read: string, refused: Refused) => boolean): string[] {
+  const reads = new Map(useRefusals.getState().reads);
+  const dropped = [...reads].filter(([read, refused]) => which(read, refused));
+  if (dropped.length === 0) return [];
+  for (const [read] of dropped) reads.delete(read);
+  useRefusals.setState({ reads });
+  const errors = dropped.map(([, refused]) => refused.error);
+  for (const listener of lettingGo) listener(errors);
+  return dropped.map(([read]) => read);
+}
+
+/**
+ * A read answered: the refusals of its resource kept from before it was asked
+ * are let go. Once per {@link KEPT_FOR} each, or a role that lists pods in one
+ * namespace and not another would be one 403 per poll.
+ */
+export function noteAnswer(
+  command: string,
+  args: readonly unknown[],
+  askedAt: number,
+  connection: number
+): void {
+  const { reads } = useRefusals.getState();
+  if (reads.size === 0 || connection !== currentConnection()) return;
+  const about = resourcesOf(command, args);
+  const healed = letGo(
+    (read, refused) =>
+      refused.connection === connection &&
+      refused.healable &&
+      refused.of !== null &&
+      refused.at <= askedAt &&
+      !isAction(read) &&
+      about.has(refused.of)
+  );
+  for (const read of healed) healedAt.set(read, { connection, at: Date.now() });
+}
+
+/** Drops the kept refusal `error` carries, so whoever shows it asks the cluster again. */
+export function letGoOf(error: unknown): void {
+  letGo((read, refused) => !isAction(read) && carries(error, refused.error));
+}
+
+/** Asks `client` again for every query showing a refusal let go of here; returns the unsubscribe. */
+export function askAgainWhenLetGo(client: QueryClient): () => void {
+  const listener = (errors: readonly unknown[]) =>
+    void client.invalidateQueries({
+      predicate: (query) =>
+        errors.some((error) => carries(query.state.error, error)),
+    });
+  lettingGo.add(listener);
+  return () => lettingGo.delete(listener);
 }
 
 /**
@@ -70,9 +192,21 @@ export function noteRefusal(
   const reads = new Map(useRefusals.getState().reads);
   for (const [key, refused] of reads)
     if (refused.connection !== connection) reads.delete(key);
-  useRefusals.setState({
-    reads: reads.set(read, { connection, error, at: Date.now() }),
-  });
+  const now = Date.now();
+  const healed = healedAt.get(read);
+  const refused: Refused = {
+    connection,
+    error,
+    at: now,
+    of: refusedResource(error),
+    healable: !(
+      healed?.connection === connection && now - healed.at < KEPT_FOR
+    ),
+  };
+  useRefusals.setState({ reads: reads.set(read, refused) });
+  // Let go on time, so a screen showing it asks again with nothing polling it.
+  if (!isAction(read))
+    setTimeout(() => letGo((_, entry) => entry === refused), KEPT_FOR);
 }
 
 /**
@@ -142,8 +276,9 @@ export const MAY = "may";
  * back a second later with every renewal.
  */
 export function forgetRefusals(): void {
+  healedAt = new Map();
   useRefusals.setState((s) => ({
-    reads: new Map([...s.reads].filter(([read]) => read.startsWith(`${MAY} `))),
+    reads: new Map([...s.reads].filter(([read]) => isAction(read))),
     forgotten: s.forgotten + 1,
   }));
 }

@@ -125,7 +125,7 @@ function StepDetail({ step }: { step: TraceStep }) {
       </p>
       {step.detail.scaffold && (
         <>
-          <pre className="mt-2 overflow-x-auto rounded-md border border-hair bg-canvas px-3 py-2 font-mono text-[11px] leading-relaxed text-fg-mut">
+          <pre className="mt-2 overflow-x-auto rounded-md border border-hair bg-canvas px-3 py-2 font-mono text-caption leading-relaxed text-fg-mut">
             {step.detail.scaffold}
           </pre>
           <div className="mt-2">
@@ -208,7 +208,7 @@ function StepRow({
           own centring lines all three up — no hand-tuned offsets to drift. */}
       <div className="flex min-h-[26px] flex-wrap items-center gap-2 pb-2">
         <span
-          className={`z-[1] flex h-5 w-5 flex-none items-center justify-center rounded-full border bg-raise text-[11px] ${MARK_TONE[step.state]}`}
+          className={`z-[1] flex h-5 w-5 flex-none items-center justify-center rounded-full border bg-raise text-caption ${MARK_TONE[step.state]}`}
         >
           {MARKS[step.state] ?? index + 1}
         </span>
@@ -237,14 +237,14 @@ function StepRow({
           />
         )}
         {step.freshness && (
-          <span className="rounded-full border border-warn/45 px-1.5 text-[10px] text-warn">
+          <span className="rounded-full border border-warn/45 px-1.5 text-micro text-warn">
             {t("empty", "gwAboutGeneration", {
               observed: step.freshness.observed,
               current: step.freshness.current,
             })}
           </span>
         )}
-        <span className="ml-auto whitespace-nowrap rounded-full border border-hair px-1.5 text-[10px] uppercase tracking-wide text-fg-fnt">
+        <span className="ml-auto whitespace-nowrap rounded-full border border-hair px-1.5 text-micro uppercase tracking-wide text-fg-fnt">
           {off ? t("empty", "gwNotReached") : whoLabel(step.who, t)}
         </span>
       </div>
@@ -283,7 +283,7 @@ function BackendPolicyNote({
         return (
           <p
             key={policy.name}
-            className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+            className="flex flex-wrap items-baseline gap-x-1.5 text-caption text-fg-fnt"
           >
             <span>{t("empty", "gwTlsToBackend")}</span>
             <ResourceRef
@@ -446,7 +446,7 @@ function ProbePanel({
         <span className="text-xs font-semibold text-fg">
           {t("nav", "fromThisMachine")}
         </span>
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("empty", "gwProbeDisclaimer")}
         </span>
         {probeable && (
@@ -646,7 +646,7 @@ function TraceCard({
   const [tcp, setTcp] = useState<ProbeStep<TcpProbe>>({ status: "idle" });
   return (
     <div>
-      <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-sm">
+      <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-xs">
         {/* Three readings, not two: a trace that could not read a source
             has no verdict to give, and a green dot there is a claim nobody
             checked. The halo reads its colour from the theme's own token —
@@ -675,7 +675,7 @@ function TraceCard({
             })})`}
         </span>
         {named && (
-          <span className="ml-auto inline-flex items-baseline gap-1 text-[11px] text-fg-fnt">
+          <span className="ml-auto inline-flex items-baseline gap-1 text-caption text-fg-fnt">
             {t("action", "viaGateway")}
             <ResourceRef
               kind="Gateway"

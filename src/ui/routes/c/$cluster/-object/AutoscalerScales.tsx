@@ -1,7 +1,7 @@
 import { EyeOff } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TextSkeleton } from "@/components/ui/skeleton";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { useT } from "@/i18n/useT";
 import { autoscalerRange } from "@/lib/governance";
@@ -47,8 +47,8 @@ export function AutoscalerScales({
   const t = useT();
   if (isLoading)
     return (
-      <div aria-hidden="true" className="py-[7px]">
-        <Skeleton className="h-2.5 w-48" />
+      <div className="py-[7px]">
+        <TextSkeleton lines={1} />
       </div>
     );
   if (!object)

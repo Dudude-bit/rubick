@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
@@ -19,6 +19,7 @@ vi.mock("@/lib/commands", () => ({
       apiKeyName: "k",
     })),
     importPostplanKey: vi.fn(async () => "…4d2e"),
+    forgetDiscovery: vi.fn(async () => undefined),
   },
 }));
 
@@ -96,5 +97,67 @@ describe("the row under the Sharing heading", () => {
         "Where a report may be published, and the key that lets it."
       )
     ).toBeNull();
+  });
+});
+
+describe("the list of share targets", () => {
+  /**
+   * A list still being read, and one that failed, both drew "No targets
+   * yet", which sends the reader to add a target they already have. Fails if
+   * either is said as an empty list.
+   */
+  it("says reading while it reads and could not read when it failed, never that there are none", async () => {
+    let answer: (targets: unknown[]) => void = () => {};
+    vi.mocked(commands.listShareTargets).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve as (targets: unknown[]) => void;
+      }) as never
+    );
+    wrap();
+    expect(
+      await screen.findByText("Reading the list of targets…")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No targets yet/)).toBeNull();
+    await act(async () => answer([]));
+    expect(await screen.findByText(/No targets yet/)).toBeInTheDocument();
+  });
+
+  it("offers to read the list again when it could not be read", async () => {
+    vi.mocked(commands.listShareTargets).mockRejectedValueOnce(
+      new Error("refused")
+    );
+    wrap();
+    expect(
+      await screen.findByText("Could not read the list of targets.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No targets yet/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+  });
+
+  /** Remove fired on the first click, so a double click removed twice. Fails if it runs before the confirmation. */
+  it("removes a target only after it is confirmed", async () => {
+    vi.mocked(commands.listShareTargets).mockResolvedValue([
+      {
+        id: "t1",
+        label: "internal",
+        host: "plans.example.com",
+        kind: "postplan",
+        public: false,
+        hasKey: true,
+        apiUrl: "https://plans.example.com",
+      },
+    ] as never);
+    const user = userEvent.setup();
+    wrap();
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(commands.removeShareTarget).not.toHaveBeenCalled();
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Remove",
+      })
+    );
+    expect(commands.removeShareTarget).toHaveBeenCalledWith("t1");
   });
 });

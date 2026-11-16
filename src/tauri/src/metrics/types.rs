@@ -10,8 +10,12 @@ use crate::commands::helpers::UnreadNamespace;
 #[serde(rename_all = "camelCase")]
 pub enum MetricsStatusKind {
     Available,
+    /// No metrics API is registered with the API server.
     NotInstalled,
     Forbidden,
+    /// A registered metrics API that gave no answer: a 404 or 503 while its
+    /// server moves, a gateway's 502 or 504, a read that ran out of time.
+    NotAnswering,
     Error,
 }
 

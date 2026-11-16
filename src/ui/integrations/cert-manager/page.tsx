@@ -23,6 +23,7 @@
  * place.
  */
 
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { ShieldCheck, Stamp } from "lucide-react";
 
 import { expiryText, overdueBy } from "@/lib/certificates";
@@ -47,6 +48,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { usePicture } from "./data";
 import { issuersSection } from "./share";
@@ -63,7 +65,7 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import { troubleMark, summariseNames } from "../kit";
+import { troubleMark, summariseNames, failedWithNothing } from "../kit";
 import { parts } from "@/i18n/parts";
 
 /** Past this many troubled certificates, nothing opens itself. */
@@ -72,9 +74,10 @@ const AUTO_OPEN = 8;
 export default function CertManagerPage() {
   const t = useT();
   const [tab, setTab] = useSearchParam("tab", "certificates");
-  const { data, isPending, error, refetch } = usePicture();
+  const picture = usePicture();
+  const { data, isPending, error, refetch } = picture;
 
-  if (error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadCertificates")}
@@ -147,6 +150,7 @@ export default function CertManagerPage() {
         }
         description={t("empty", "certManagerPageHint")}
       />
+      <StaleRead read={picture} label="cert-manager" />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}
@@ -223,7 +227,7 @@ function Unread({ kinds, cost }: { kinds: UnreadKind[]; cost: string }) {
           verbatim={kind.reason}
         />
       ))}
-      <p className="text-[11px] text-fg-fnt">{cost}</p>
+      <p className="text-caption text-fg-fnt">{cost}</p>
     </div>
   );
 }
@@ -246,9 +250,7 @@ function CertificatesTab({
   const t = useT();
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingCertificates")}</p>
-    );
+    return <Reading>{t("empty", "readingCertificates")}</Reading>;
   }
 
   if (rows.length === 0) {
@@ -257,7 +259,7 @@ function CertificatesTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "nothingAskedForCertificate")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {parts(t("empty", "noCertificateObjectAnywhere"), {
             annotation: (
               <span className="font-mono">cert-manager.io/cluster-issuer</span>
@@ -382,14 +384,14 @@ function ServingLine({ row }: { row: CertRow }) {
 
   if (!row.use.checked) {
     return (
-      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+      <p className="max-w-[68ch] text-caption text-fg-fnt">
         {t("empty", "servingNotChecked")}
       </p>
     );
   }
   if (row.use.hosts.length === 0) {
     return (
-      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+      <p className="max-w-[68ch] text-caption text-fg-fnt">
         {t("empty", "noIngressMountsSecret")
           .split(/(\{namespace\}|\{secret\})/)
           .map((part, i) =>
@@ -412,7 +414,7 @@ function ServingLine({ row }: { row: CertRow }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
+      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
         <span className="text-fg-fnt">{t("empty", "servingLabel")}</span>
         <span className="flex min-w-0 flex-col gap-0.5">
           {row.use.hosts.map((entry) => (
@@ -474,7 +476,7 @@ function ServingLine({ row }: { row: CertRow }) {
 function Facts({ row }: { row: CertRow }) {
   const t = useT();
   return (
-    <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
+    <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
       <span className="text-fg-fnt">Certificate</span>
       <span className="min-w-0">
         <ResourceRef
@@ -507,7 +509,7 @@ function Facts({ row }: { row: CertRow }) {
           <span className="text-err">{t("empty", "noneNamed")}</span>
         )}
         {row.neverIssued && (
-          <span className="ml-2 text-[11px] text-err">
+          <span className="ml-2 text-caption text-err">
             {t("empty", "secretDoesNotExistYet")}
           </span>
         )}
@@ -579,9 +581,9 @@ function Walk({ steps }: { steps: CertStep[] }) {
   const t = useT();
   return (
     <div className="flex flex-col">
-      <span className="mb-1 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
+      <Eyebrow as="span" className="mb-1">
         {t("empty", "whatItIsWaitingOn")}
-      </span>
+      </Eyebrow>
       {steps.map((step, index) => (
         <div
           key={`${step.kind}/${step.name}`}
@@ -609,9 +611,7 @@ function Walk({ steps }: { steps: CertStep[] }) {
             className={index < steps.length - 1 ? "min-w-0 pb-2" : "min-w-0"}
           >
             <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
-                {step.kind}
-              </span>
+              <Eyebrow as="span">{step.kind}</Eyebrow>
               <span className="min-w-0 truncate">
                 <ResourceRef
                   kind={step.kind}
@@ -622,13 +622,13 @@ function Walk({ steps }: { steps: CertStep[] }) {
                 />
               </span>
               <span
-                className={`text-[11px] ${step.failed ? "text-err" : "text-fg-mut"}`}
+                className={`text-caption ${step.failed ? "text-err" : "text-fg-mut"}`}
               >
                 {step.state}
               </span>
             </span>
             {step.note && (
-              <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+              <p className="mt-0.5 select-text wrap-break-word font-mono text-caption text-fg-mut">
                 {step.note}
               </p>
             )}
@@ -698,10 +698,7 @@ function IssuersTab({
   useShareSection("cert-manager-issuers", () =>
     issuersSection(rows, loading, unread, t)
   );
-  if (loading)
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingIssuers")}</p>
-    );
+  if (loading) return <Reading>{t("empty", "readingIssuers")}</Reading>;
 
   // "This cluster has no issuer" is the strongest claim on the page and the
   // only one that would send somebody off to create an object they already
@@ -716,7 +713,7 @@ function IssuersTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "noIssuerNoClusterIssuer")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {t("empty", "certManagerNeedsIssuer")}
         </p>
       </div>
@@ -769,7 +766,7 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
       openByDefault={row.ready === false}
       last={last}
     >
-      <p className="text-[11.5px]">
+      <p className="text-xs">
         <ResourceRef
           kind={row.kind}
           name={row.name}
@@ -789,7 +786,7 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
             t("count", "nothingSignsCanRenew", { n: row.serves })}
         </Finding>
       ) : (
-        <p className="text-[11.5px] text-fg-mut">
+        <p className="text-xs text-fg-mut">
           {row.serves === 0
             ? t("empty", "healthySigningNothing")
             : t("count", "healthyAndSigns", { n: row.serves })}

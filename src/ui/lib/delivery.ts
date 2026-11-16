@@ -17,11 +17,12 @@
  *   than blocks: scaling a managed object by hand during an incident is
  *   legitimate, and the app's business is only that nobody does it believing
  *   it will stick.
- * - **In a list** — {@link deliveryCell}, empty for the ordinary case,
- *   because a problem earns a mark and inventory does not.
+ * - **In a list** — {@link deliveryCell}: the controller's name, faint, for
+ *   the ordinary case, so a blank never has to mean "delivered and fine"
+ *   beside a peek that names the controller.
  */
 
-import { sayWords } from "@/i18n/say";
+import { sayWords, type Saying } from "@/i18n/say";
 import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 
@@ -60,12 +61,13 @@ export function deliveryOf(
         namespace?: string | null;
         labels?: Record<string, string> | null;
         annotations?: Record<string, string> | null;
+        ownerReferences?: readonly ControllerRef[] | null;
       }
     | null
     | undefined
 ): DeliveryQuery | null {
   if (!object) return null;
-  return {
+  const query = {
     group,
     kind,
     name: object.name,
@@ -73,6 +75,28 @@ export function deliveryOf(
     labels: object.labels ?? {},
     annotations: object.annotations ?? {},
   };
+  // A ReplicaSet wears its Deployment's tracking label and is in no
+  // inventory itself: asked as itself, it read "nothing will put it back".
+  const maker = object.ownerReferences?.find((ref) => ref.controller);
+  if (!maker) return query;
+  const version = maker.apiVersion ?? maker.api_version ?? "";
+  const slash = version.indexOf("/");
+  return {
+    ...query,
+    group: slash === -1 ? "" : version.slice(0, slash),
+    kind: maker.kind,
+    name: maker.name,
+    through: { kind: maker.kind, name: maker.name },
+  };
+}
+
+/** An owner reference as either wire spelling carries it. */
+interface ControllerRef {
+  kind: string;
+  name: string;
+  controller?: boolean | null;
+  apiVersion?: string;
+  api_version?: string;
 }
 
 /**
@@ -152,13 +176,20 @@ export interface DeliveryMark {
  */
 export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
   return deliveries.map((entry) => {
+    const via =
+      entry.through && t("readings", "delThroughMark", { ...entry.through });
     if (entry.state === "claimed") {
       return {
         vendorId: entry.vendorId,
-        text: t("readings", "delUnconfirmedMark", {
-          vendor: entry.vendor,
-          claim: entry.claim,
-        }),
+        text: [
+          t("readings", "delUnconfirmedMark", {
+            vendor: entry.vendor,
+            claim: entry.claim,
+          }),
+          via,
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join(" · "),
         to: entry.owner?.to ?? null,
         tone: "warn" as const,
       };
@@ -169,6 +200,7 @@ export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
       text: [
         source.vendor,
         source.owner.name,
+        via,
         source.warning && sayWords(source.warning, t),
       ]
         .filter((part): part is string => Boolean(part))
@@ -211,6 +243,48 @@ export function deliveryLine(
   deliveries: Delivery[],
   t: T
 ): DeliveryLine | null {
+  const through = deliveries.find((entry) => entry.through)?.through;
+  const line = lineOf(
+    through ? wordedThrough(deliveries, through) : deliveries,
+    t
+  );
+  if (!line || !through) return line;
+  // A label a controller's object inherited says nothing of the object, and
+  // what happens on a delete is that controller's to say.
+  if (delivered(deliveries).length === 0) return null;
+  return {
+    ...line,
+    detail: [line.detail, t("readings", "delThroughRemade", { ...through })]
+      .filter(Boolean)
+      .join(" "),
+  };
+}
+
+/** A note about the owner's own object, said of the owner that delivers this one's maker. */
+const NOTE_THROUGH: Partial<Record<Saying["key"], Saying["key"]>> = {
+  argoSelfHeals: "argoSelfHealsThrough",
+};
+
+function wordedThrough(
+  deliveries: Delivery[],
+  through: NonNullable<Delivery["through"]>
+): Delivery[] {
+  return deliveries.map((entry) => {
+    const key = entry.state === "delivered" && entry.source.note?.key;
+    const worded = key && NOTE_THROUGH[key];
+    return entry.state === "delivered" && worded
+      ? {
+          ...entry,
+          source: {
+            ...entry.source,
+            note: { key: worded, values: { ...through } },
+          },
+        }
+      : entry;
+  });
+}
+
+function lineOf(deliveries: Delivery[], t: T): DeliveryLine | null {
   const sources = delivered(deliveries);
   const unconfirmed = claimedOnly(deliveries);
 
@@ -315,7 +389,8 @@ export interface DeliveryCell {
 }
 
 /**
- * The `Delivery` column, which is empty for the ordinary case on purpose.
+ * The `Delivery` column. A delivered row says who delivers it, as the peek's
+ * mark does; the tone is faint, so a problem still outshouts it.
  *
  * `null` renders nothing at all. `not delivered` is faint rather than a
  * warning: on a cluster where most things are delivered it is worth knowing
@@ -351,7 +426,7 @@ export function deliveryCell(
       text: sayWords(source.warning, t),
       tone: "warn",
     };
-  return null;
+  return { text: source.vendor, tone: "faint" };
 }
 
 /** The list filter's three answers. `all` draws every row. */
@@ -361,7 +436,7 @@ export type DeliveryFilter = "all" | "notDelivered" | "trouble";
 export const DELIVERY_FILTER_LABEL = {
   all: "all",
   notDelivered: "notDelivered",
-  trouble: "needsAttention",
+  trouble: "outOfSync",
 } as const satisfies Record<DeliveryFilter, string>;
 
 export function matchesDeliveryFilter(
@@ -466,7 +541,7 @@ export function deliveryApplyIntercept(
   if (reverting) return reverting;
 
   const claim = claimedOnly(deliveries)[0];
-  if (!claim || delivered(deliveries).length > 0) return null;
+  if (!claim || claim.through || delivered(deliveries).length > 0) return null;
 
   const disowned = claim.owner !== null;
   return {

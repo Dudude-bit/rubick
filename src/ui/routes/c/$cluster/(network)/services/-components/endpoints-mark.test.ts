@@ -86,6 +86,7 @@ describe("the Endpoints tab's mark", () => {
     ).toEqual({
       shows: "unchecked",
       says: "Could not read what this Service publishes.",
+      refused: true,
     });
     expect(endpointsMark(read([]), t)).toBeUndefined();
   });

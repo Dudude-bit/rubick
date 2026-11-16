@@ -333,7 +333,6 @@ function useDeploymentsFollowed(overview: ClusterOverview | undefined) {
     subscribe,
     queryKey,
     detail: noDetail,
-    reportFailure: ignoreFailure,
     recount: false,
     onChange,
   });
@@ -341,4 +340,3 @@ function useDeploymentsFollowed(overview: ClusterOverview | undefined) {
 
 const SETTLE_MS = 250;
 const noDetail = () => [];
-const ignoreFailure = () => {};

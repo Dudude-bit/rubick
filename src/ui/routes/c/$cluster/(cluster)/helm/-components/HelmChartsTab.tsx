@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +15,20 @@ import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmChartSearchResult } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { Reading } from "@/components/ui/states";
+import { EmptyState } from "@/components/ui/states";
+import { Spinner } from "@/components/ui/spinner";
+import { Unknown } from "@/components/ui/unknown";
 
 export interface HelmChartsTabProps {
   searchKeyword: string;
   onSearchKeywordChange: (next: string) => void;
-  results: HelmChartSearchResult[];
+  /** The last search and what came of it; `null` before any, and while one is running. */
+  search: {
+    keyword: string;
+    results: HelmChartSearchResult[] | null;
+    error: unknown;
+  } | null;
   isSearching: boolean;
   onSearch: () => void;
   onInstall: (chart: HelmChartSearchResult) => void;
@@ -28,12 +37,13 @@ export interface HelmChartsTabProps {
 export function HelmChartsTab({
   searchKeyword,
   onSearchKeywordChange,
-  results,
+  search,
   isSearching,
   onSearch,
   onInstall,
 }: HelmChartsTabProps) {
   const t = useT();
+  const results = search?.results ?? null;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -54,18 +64,29 @@ export function HelmChartsTab({
           onClick={onSearch}
           disabled={isSearching || !searchKeyword.trim()}
         >
-          {isSearching ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            t("action", "search")
-          )}
+          {isSearching && <Spinner size="xs" aria-hidden="true" />}
+          {t("action", "search")}
         </Button>
       </div>
 
-      {results.length === 0 ? (
-        <p className="py-8 text-center text-xs text-fg-fnt">
+      {isSearching ? (
+        <Reading>{t("empty", "searchingCharts")}</Reading>
+      ) : search?.error ? (
+        <Unknown
+          question={t("empty", "couldNotSearchCharts", {
+            keyword: search.keyword,
+          })}
+          error={search.error}
+          onRetry={onSearch}
+        />
+      ) : results === null ? (
+        <EmptyState icon={Search}>
           {t("empty", "addRepositoryThenSearch")}
-        </p>
+        </EmptyState>
+      ) : results.length === 0 ? (
+        <EmptyState icon={Search}>
+          {t("empty", "noChartsMatch", { keyword: search?.keyword ?? "" })}
+        </EmptyState>
       ) : (
         <Table>
           <TableHeader>

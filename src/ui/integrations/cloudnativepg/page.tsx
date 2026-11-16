@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Reading } from "@/components/ui/states";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Box, Database, Network } from "lucide-react";
@@ -15,6 +16,7 @@ import {
 import { crdInstancesLink, objectLink } from "@/lib/links";
 import { errorToShow } from "@/lib/error-utils";
 import { toastedUnanswered } from "@/lib/toast-error";
+import { recordWriteFailure } from "@/stores/writeLogStore";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatAge, formatSince } from "@/lib/utils";
@@ -23,8 +25,20 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
-import { getValueByPath, troubleMark, reachWord } from "../kit";
-import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
+import {
+  failedWithNothing,
+  getValueByPath,
+  troubleMark,
+  reachWord,
+} from "../kit";
+import {
+  Cell,
+  Finding,
+  TroubleRow,
+  VendorReadFailure,
+  StaleRead,
+  ReadingMark,
+} from "../page-kit";
 import {
   BACKUP_REFUSED,
   actionsFor,
@@ -93,7 +107,7 @@ export default function CloudNativePgPage() {
   // "no" to the wider question, and every button on their own went dead.
   const operator = useOperator(clusters);
 
-  if (clustersQuery.error) {
+  if (failedWithNothing(clustersQuery)) {
     return (
       <VendorReadFailure
         title={t("operators", "couldNotReadClusters")}
@@ -168,6 +182,7 @@ export default function CloudNativePgPage() {
         }
         description={t("operators", "cnpgPageDescription")}
       />
+      <StaleRead read={clustersQuery} label="CloudNativePG" />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
       <DetailTabs
         tabs={tabs}
@@ -199,6 +214,12 @@ export default function CloudNativePgPage() {
  * version, and whether the reader may act. Each a checked fact, and each
  * with the word "unknown" where the check did not answer.
  */
+const sameAction = (a: PgAction | null, b: PgAction) =>
+  a !== null &&
+  a.id === b.id &&
+  a.instance === b.instance &&
+  a.label === b.label;
+
 export function OperatorStrip({
   operator,
   pending,
@@ -219,7 +240,7 @@ export function OperatorStrip({
             reason={operator.controllerReason}
           />
         ) : pending ? (
-          <span className="text-fg-fnt">{t("action", "readingInline")}</span>
+          <ReadingMark words />
         ) : (
           // The read that would say whether a controller runs did not
           // answer; "no Deployment carries the label" would be a claim
@@ -272,7 +293,7 @@ export function OperatorStrip({
             </span>
           </>
         ) : (
-          <span className="text-fg-fnt">{t("action", "readingInline")}</span>
+          <ReadingMark words />
         )}
       </Fact>
     </div>
@@ -340,9 +361,7 @@ function ClustersTab({
     };
   });
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
-    );
+    return <Reading>{t("action", "readingInline")}</Reading>;
   }
   if (clusters.length === 0) {
     return (
@@ -416,15 +435,18 @@ function ClusterRow({
         predicate: (query) => query.queryKey.includes("cloudnativepg"),
       });
     } catch (error) {
-      if (!toastedUnanswered(error))
+      const title = t("operators", "actionFailed", {
+        action: t("operators", action.label),
+        cluster: cluster.name,
+      });
+      if (!toastedUnanswered(error, title)) {
+        recordWriteFailure(title, error);
         toast({
-          title: t("operators", "actionFailed", {
-            action: t("operators", action.label),
-            cluster: cluster.name,
-          }),
+          title,
           description: sentenceFor(error, t),
           variant: "destructive",
         });
+      }
     } finally {
       setBusy(false);
       setPending(null);
@@ -546,7 +568,7 @@ function ClusterRow({
               ))}
             </div>
           )}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
             {actions
               .filter((a) => a.id !== "fence" && a.id !== "unfence")
               .map((action) => (
@@ -556,6 +578,7 @@ function ClusterRow({
                   label={labelOf(action, cluster.backupMethods.length > 1, t)}
                   explained={explain(action, t)}
                   busy={busy}
+                  running={busy && sameAction(pending, action)}
                   onPick={setPending}
                 />
               ))}
@@ -567,6 +590,7 @@ function ClusterRow({
                   action={action}
                   label={labelOf(action, false, t)}
                   busy={busy}
+                  running={busy && sameAction(pending, action)}
                   onPick={setPending}
                 />
               ))}
@@ -716,7 +740,7 @@ function BackupsLine({
 }) {
   const t = useT();
   if (backups === null) {
-    return <span className="text-fg-fnt">{t("action", "readingInline")}</span>;
+    return <ReadingMark words />;
   }
   if (backups.state === "unknown") {
     return (
@@ -761,9 +785,7 @@ function BackupsTab({ companions }: { companions: Companions | undefined }) {
   const t = useT();
   useShareSection("cloudnativepg-backups", () => backupsSection(companions, t));
   if (!companions) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
-    );
+    return <Reading>{t("action", "readingInline")}</Reading>;
   }
   if (!companions.backups.ok) {
     return (
@@ -790,7 +812,7 @@ function BackupsTab({ companions }: { companions: Companions | undefined }) {
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         <Link
           {...crdInstancesLink(BACKUPS_CRD)}
           className="text-info hover:underline"
@@ -827,7 +849,7 @@ function BackupLine({ backup }: { backup: CustomResourceInfo }) {
       </span>
       <span className="text-fg-fnt">{formatAge(backup.createdAt, t)}</span>
       {typeof error === "string" && error && (
-        <span className="font-mono text-[11px] text-err">{error}</span>
+        <span className="font-mono text-caption text-err">{error}</span>
       )}
     </li>
   );
@@ -836,9 +858,7 @@ function BackupLine({ backup }: { backup: CustomResourceInfo }) {
 function PoolersTab({ companions }: { companions: Companions | undefined }) {
   const t = useT();
   if (!companions) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
-    );
+    return <Reading>{t("action", "readingInline")}</Reading>;
   }
   if (!companions.poolers.ok) {
     return (
@@ -946,7 +966,7 @@ function OperatorTab({
     <div className="flex max-w-[64ch] flex-col gap-3 text-xs text-fg-mut">
       <p>{t("operators", "cnpgOperatorExplained")}</p>
       {pending ? (
-        <p className="text-fg-fnt">{t("action", "readingInline")}</p>
+        <ReadingMark words />
       ) : operator?.controller ? (
         <p>
           <Link

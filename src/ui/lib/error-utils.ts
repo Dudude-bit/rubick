@@ -161,7 +161,13 @@ export function errorCode(error: unknown): ErrorCode {
  * is broken and invites a retry; a refusal is neither.
  */
 export function isRefusal(error: unknown): boolean {
-  return errorCode(error) === ERROR_CODES.PERMISSION;
+  const code = errorCode(error);
+  // A list the subject was looked up in keeps no code of its cause, only the cluster's words.
+  return (
+    code === ERROR_CODES.PERMISSION ||
+    (code === ERROR_CODES.LIST_UNREAD &&
+      /\bis forbidden\b/.test(errorToShow(error)))
+  );
 }
 
 /**

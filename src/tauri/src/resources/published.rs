@@ -376,7 +376,8 @@ impl ServicePublished {
     }
 
     /// A selector matching no pod, said as [`ChainStop::ScaledToZero`] where
-    /// [`scaled_to_zero`] finds every workload behind it asking for none, as
+    /// [`scaled_to_zero`] finds every workload behind it asking for none and
+    /// `all_read` says no unread one could ask for more, as
     /// [`ChainStop::PodsRefused`] where [`refused_behind`] finds one refused
     /// its pods, and as [`ChainStop::PodsBeingMade`] where [`being_made`]
     /// finds one making them. A stop still selecting nothing carries
@@ -395,7 +396,7 @@ impl ServicePublished {
         }) = &self.stop
         {
             let (service_at, selector) = (at.clone(), selector.clone());
-            if let Some(workloads) = scaled_to_zero(service, makers) {
+            if let Some(workloads) = scaled_to_zero(service, makers).filter(|_| all_read) {
                 self.stop = Some(ChainStop::ScaledToZero {
                     service: service_at,
                     selector,
@@ -422,14 +423,15 @@ impl ServicePublished {
         self
     }
 
-    /// None of its addresses ready, or none published with its pods unread,
-    /// said as [`waiting_on`] reads the workloads behind it; any other stop
-    /// stands.
+    /// None of its addresses ready, said as [`waiting_on`] reads the
+    /// workloads behind it, or none published with its pods unread, said as
+    /// [`pods_could_excuse`] reads them; any other stop stands.
     #[must_use]
     pub fn with_workloads(
         mut self,
         service: &Service,
         makers: &[PodMaker<'_>],
+        makers_read: bool,
         pods: Option<&[&Pod]>,
         now: DateTime<Utc>,
     ) -> Self {
@@ -440,8 +442,7 @@ impl ServicePublished {
                 }
             }
             Some(ChainStop::PublishesNothingYet { pods_unread, .. }) if pods.is_none() => {
-                *pods_unread =
-                    waiting_on(service, makers, None, now) == Some(NotServing::PodsUnread);
+                *pods_unread = pods_could_excuse(service, makers, makers_read, now);
             }
             _ => {}
         }
@@ -1395,6 +1396,22 @@ pub fn waiting_on(
         )
     });
     (starting && coming).then_some(NotServing::ComingUp)
+}
+
+/// Whether the pods of a Service publishing nothing, had they been read,
+/// could have made it no fault: idle, being made or coming up, as
+/// [`ServicePublished::with_makers`] and [`waiting_on`] read them, or not
+/// ruled out where the workloads went unread.
+fn pods_could_excuse(
+    service: &Service,
+    makers: &[PodMaker<'_>],
+    makers_read: bool,
+    now: DateTime<Utc>,
+) -> bool {
+    !makers_read
+        || scaled_to_zero(service, makers).is_some()
+        || being_made(service, makers).is_some()
+        || waiting_on(service, makers, None, now) == Some(NotServing::PodsUnread)
 }
 
 /// The pods that carry the most of a Service's selector without carrying all
@@ -3109,7 +3126,7 @@ mod tests {
             pods.unwrap_or_default(),
         )
         .with_stop(&svc, pods)
-        .with_workloads(&svc, &makers, pods, chrono::Utc::now());
+        .with_workloads(&svc, &makers, true, pods, chrono::Utc::now());
         match published.stop {
             Some(ChainStop::NoneReady { why, .. }) => Some(why),
             _ => None,
@@ -3167,6 +3184,14 @@ mod tests {
     /// The stop of a Service whose slices list no address at all, behind
     /// these Deployments, with these pods where they were read.
     fn empty_stop(deployments: &[Deployment], pods: Option<&[&Pod]>) -> Option<ChainStop> {
+        empty_stop_read(deployments, true, pods)
+    }
+
+    fn empty_stop_read(
+        deployments: &[Deployment],
+        makers_read: bool,
+        pods: Option<&[&Pod]>,
+    ) -> Option<ChainStop> {
         let svc = selecting("web");
         let makers: Vec<PodMaker> = deployments
             .iter()
@@ -3174,7 +3199,7 @@ mod tests {
             .collect();
         from_slices(&svc, svc_ref("web"), &[], pods.unwrap_or_default())
             .with_stop(&svc, pods)
-            .with_workloads(&svc, &makers, pods, chrono::Utc::now())
+            .with_workloads(&svc, &makers, makers_read, pods, chrono::Utc::now())
             .stop
     }
 
@@ -3201,6 +3226,66 @@ mod tests {
         assert!(unread(&[starving(false)]));
         assert!(!unread(&[starving(true)]));
         assert!(!unread(&[]));
+    }
+
+    /// `api` on the GKE rig, scaled to zero, read "nothing published yet" in
+    /// red on the Overview once its pods were refused, where reading them
+    /// says idle. Fails if a Service with nothing published and its pods
+    /// unread is called a fault while a workload behind it is at zero or
+    /// making pods, or while the workloads went unread; or if one no read
+    /// could excuse is let off.
+    #[test]
+    fn a_service_with_nothing_published_is_no_fault_its_unread_pods_could_excuse() {
+        let unread = |deployments: &[Deployment], makers_read: bool| match empty_stop_read(
+            deployments,
+            makers_read,
+            None,
+        ) {
+            Some(ChainStop::PublishesNothingYet { pods_unread, .. }) => pods_unread,
+            other => panic!("{other:?}"),
+        };
+        let mut at_zero = starving(false);
+        at_zero.spec.as_mut().expect("spec").replicas = Some(0);
+        let mut rolling = starving(false);
+        rolling.status = serde_json::from_value(serde_json::json!({
+            "observedGeneration": 1, "replicas": 2, "updatedReplicas": 1, "availableReplicas": 1
+        }))
+        .expect("status parses");
+        assert!(matches!(
+            crate::resources::deployment_rollout(&rolling),
+            Rollout::RollingOut { .. }
+        ));
+        assert!(unread(&[at_zero], true));
+        assert!(unread(&[rolling], true));
+        assert!(unread(&[], false));
+        assert!(unread(&[starving(true)], false));
+        assert!(!unread(&[], true));
+        assert!(!unread(&[starving(true)], true));
+    }
+
+    /// Every Deployment read at zero says nothing of a `StatefulSet` nobody
+    /// could list. Fails if a selector matching no pod is called idle while
+    /// a workload list behind it went unread, or no longer idle once all are.
+    #[test]
+    fn a_service_is_idle_only_when_every_workload_list_behind_it_was_read() {
+        let svc = selecting("web");
+        let mut at_zero = starving(false);
+        at_zero.spec.as_mut().expect("spec").replicas = Some(0);
+        let makers: Vec<PodMaker> = PodMaker::deployment(&at_zero, None).into_iter().collect();
+        let stop = |all_read: bool| {
+            from_slices(&svc, svc_ref("web"), &[], &[])
+                .with_stop(&svc, Some(&[]))
+                .with_makers(&svc, &makers, all_read)
+                .stop
+        };
+        assert!(matches!(stop(true), Some(ChainStop::ScaledToZero { .. })));
+        assert!(matches!(
+            stop(false),
+            Some(ChainStop::SelectsNothing {
+                makers_read: false,
+                ..
+            })
+        ));
     }
 
     /// A pending pod has no IP yet. Would break if its row went back to a

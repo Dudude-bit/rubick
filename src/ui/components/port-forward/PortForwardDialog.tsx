@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import { forwardsTo, usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { usePodDenied } from "@/lib/access";
@@ -126,6 +127,7 @@ function ForwardForm({
   const [autoStart, setAutoStart] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [problem, setProblem] = useState<LocalPortProblem | null>(null);
   const [noPod, setNoPod] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -175,7 +177,7 @@ function ForwardForm({
           autoReconnect,
           autoStart,
         }).catch((error) =>
-          toastError(t("activity", "saveForwardFailed"), error)
+          toastWriteError(t("activity", "saveForwardFailed"), error)
         );
       }
       onDone();
@@ -183,18 +185,18 @@ function ForwardForm({
       const local = localPortProblem(error, localPort, taken, t);
       if (local) setProblem(local);
       else if (errorCode(error) === ERROR_CODES.NO_READY_POD) setNoPod(true);
-      else toastError(t("activity", "startForwardFailed"), error);
+      else toastWriteError(t("activity", "startForwardFailed"), error);
     } finally {
       setBusy(false);
     }
   };
 
-  const fieldError = "text-[11px] text-err";
+  const fieldError = "text-caption text-err";
 
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 rounded-md border border-hair p-3 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-hair p-3 text-xs">
           <span className="text-fg-mut">{t("columns", "target")}</span>
           <span className="min-w-0 truncate">
             <span className="text-fg-fnt">{target.namespace}/</span>
@@ -279,7 +281,7 @@ function ForwardForm({
               className={
                 checked && (localPort === null || localMissingForSave)
                   ? fieldError
-                  : "text-[11px] text-fg-fnt"
+                  : "text-caption text-fg-fnt"
               }
             >
               {checked && localPort === null
@@ -292,14 +294,8 @@ function ForwardForm({
         </div>
 
         {problem ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 border-l-2 border-err py-1.5 pl-2.5 text-xs text-err"
-          >
-            <AlertTriangle
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
-            />
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
             <div className="min-w-0 space-y-1.5">
               <p>{problem.says}</p>
               <Button
@@ -316,18 +312,12 @@ function ForwardForm({
                 })}
               </Button>
             </div>
-          </div>
+          </Alert>
         ) : noPod ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 border-l-2 border-err py-1.5 pl-2.5 text-xs text-err"
-          >
-            <AlertTriangle
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
-            />
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
             <p>{t("empty", "gwNoReadyPodBehind", { name: target.name })}</p>
-          </div>
+          </Alert>
         ) : (
           localPort !== null &&
           remotePort !== null && (
@@ -404,14 +394,14 @@ function ForwardForm({
               return (
                 <div
                   key={session.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-hair p-2.5 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-md border border-hair p-2.5 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-mono text-xs">
                       localhost:{session.localPort} → {session.pod}:
                       {session.remotePort}
                     </div>
-                    <div className="truncate text-[11px] text-fg-mut">
+                    <div className="truncate text-caption text-fg-mut">
                       {forwardNoteWords(status?.note, t) ??
                         t("activity", "activeFallback")}
                     </div>
@@ -420,11 +410,24 @@ function ForwardForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      stopSession(session.id).catch((error) =>
-                        toastError(t("activity", "stopForwardFailed"), error)
-                      )
-                    }
+                    pending={stopping.has(session.id)}
+                    onClick={() => {
+                      setStopping((prev) => new Set(prev).add(session.id));
+                      stopSession(session.id)
+                        .catch((error) =>
+                          toastWriteError(
+                            t("activity", "stopForwardFailed"),
+                            error
+                          )
+                        )
+                        .finally(() =>
+                          setStopping((prev) => {
+                            const next = new Set(prev);
+                            next.delete(session.id);
+                            return next;
+                          })
+                        );
+                    }}
                   >
                     <Square className="mr-1 h-3 w-3" aria-hidden="true" />
                     {t("action", "stop")}
@@ -443,7 +446,7 @@ function ForwardForm({
           <Button
             type="button"
             onClick={() => !denied && submit()}
-            disabled={!denied && busy}
+            pending={!denied && busy}
             aria-disabled={denied ? true : undefined}
             className={cn(denied && "cursor-default opacity-40")}
           >
@@ -471,7 +474,7 @@ function ToggleRow({
   return (
     <label className="flex items-center justify-between gap-3">
       <span>
-        <span className="block text-sm font-medium">{label}</span>
+        <span className="block text-xs font-medium">{label}</span>
         <span className="block text-xs text-fg-mut">{hint}</span>
       </span>
       <Switch

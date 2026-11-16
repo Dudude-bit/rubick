@@ -14,6 +14,7 @@ import {
   deliveryIntercept,
   deliveryLine,
   deliveryMarks,
+  deliveryOf,
   deliveryScopeOf,
   matchesDeliveryFilter,
 } from "./delivery";
@@ -199,9 +200,86 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
   });
 });
 
-describe("the list column is empty for the rule and marks the exception", () => {
-  it("draws nothing for a delivered, in-sync row", () => {
-    expect(deliveryCell([delivered()], t)).toBe(null);
+describe("an object a controller makes", () => {
+  const replicaSet = {
+    name: "api-794978b95b",
+    namespace: "lab",
+    labels: { app: "api" },
+    annotations: {
+      "argocd.argoproj.io/tracking-id": "shop:apps/Deployment:lab/api",
+    },
+    ownerReferences: [
+      {
+        api_version: "apps/v1",
+        kind: "Deployment",
+        name: "api",
+        uid: "u",
+        controller: true,
+      },
+    ],
+  };
+  const through = { kind: "Deployment", name: "api" };
+
+  /** A ReplicaSet asked as itself is in no inventory. Fails if it is not asked about as the Deployment that makes it. */
+  it("is asked about as the controller that makes it", () => {
+    expect(deliveryOf("apps", "ReplicaSet", replicaSet)).toEqual({
+      group: "apps",
+      kind: "Deployment",
+      name: "api",
+      namespace: "lab",
+      labels: replicaSet.labels,
+      annotations: replicaSet.annotations,
+      through,
+    });
+  });
+
+  /**
+   * RS api-794978b95b said "nothing will put it back if it is deleted" while
+   * its Deployment would. Fails if an inherited label nothing confirms earns
+   * a line, or a line about a delivered one does not name what remakes it.
+   */
+  it("never says nothing puts it back, and names the controller that does", () => {
+    expect(deliveryLine([{ ...claimed(), through }], t)).toBe(null);
+    expect(deliveryApplyIntercept([{ ...claimed(), through }], t)).toBe(null);
+    const line = deliveryLine(
+      [{ ...delivered({ drift: "reverted" }), through }],
+      t
+    );
+    expect(line?.detail).toContain(
+      "Deployment api makes this object, and makes it again if it is deleted."
+    );
+    expect(deliveryMarks([{ ...delivered(), through }], t)[0]?.text).toBe(
+      "Argo CD · shop · via Deployment api"
+    );
+  });
+
+  /**
+   * The ReplicaSet's notice opened "Argo self-heals this Application", which
+   * describes the Deployment. Fails if a notice judged through the owner
+   * stops naming the owner in its first sentence, or an object delivered
+   * directly loses its own wording.
+   */
+  it("opens by naming the owner when delivery is judged through it", () => {
+    const self = delivered({
+      drift: "reverted",
+      note: { key: "argoSelfHeals" },
+    });
+    expect(deliveryLine([{ ...self, through }], t)?.detail).toMatch(
+      /^Argo self-heals the Application that delivers Deployment api: /
+    );
+    expect(deliveryLine([self], t)?.detail).toMatch(
+      /^Argo self-heals this Application: /
+    );
+  });
+});
+
+describe("the list column names the controller for the rule and marks the exception", () => {
+  /** A blank cell beside a peek that names Argo CD; fails if the cell goes empty again. */
+  it("names the controller, faintly, for a delivered, in-sync row", () => {
+    expect(deliveryCell([delivered()], t)).toEqual({
+      text: "Argo CD",
+      tone: "faint",
+    });
   });
 
   it("draws `not delivered` quietly, because it is not a fault", () => {
@@ -228,7 +306,7 @@ describe("the list column is empty for the rule and marks the exception", () => 
         [delivered({ vendor: "Flux", vendorId: "flux", sync: null })],
         t
       )
-    ).toBe(null);
+    ).toEqual({ text: "Flux", tone: "faint" });
   });
 
   it("filters to what nothing delivers, and to what needs attention", () => {

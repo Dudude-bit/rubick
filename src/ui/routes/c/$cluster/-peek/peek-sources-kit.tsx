@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
-import { conditionRole } from "@/lib/condition-health";
+import { conditionRole, spokenCondition } from "@/lib/condition-health";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { ROLE_TONE, type KeyValue } from "@/components/object/key-values";
@@ -115,16 +115,14 @@ export function conditionItem(
   among: readonly ConditionInfo[]
 ): KeyValue {
   const role = conditionRole(condition, among);
+  const { reason, message } = spokenCondition(condition);
   const spoken =
-    condition.reason && condition.reason !== condition.type
-      ? `${condition.status} (${condition.reason})`
+    reason && reason !== condition.type
+      ? `${condition.status} (${reason})`
       : condition.status;
   return {
     label: condition.type,
-    value:
-      role !== "ok" && condition.message
-        ? `${spoken}: ${condition.message}`
-        : spoken,
+    value: role !== "ok" && message ? `${spoken}: ${message}` : spoken,
     mono: true,
     tone: ROLE_TONE[role],
   };

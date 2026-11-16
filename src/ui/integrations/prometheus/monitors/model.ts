@@ -547,7 +547,7 @@ export type MonitorFinding =
   | { kind: "selectsNothing"; severity: "err" }
   | { kind: "selectionUnread"; severity: "warn"; reason: string }
   | { kind: "selectorUnevaluable"; severity: "warn" }
-  | { kind: "notPickedUp"; severity: "err" }
+  | { kind: "notPickedUp"; severity: "err" | "warn" }
   | { kind: "pickedUpUnknown"; severity: "warn"; why: Unknowable }
   | {
       kind: "targetsDown";
@@ -601,7 +601,10 @@ function findingsOf(
   if (selected.kind === "unevaluable")
     findings.push({ kind: "selectorUnevaluable", severity: "warn" });
   if (pickedUp.state === "judged" && pickedUp.by.length === 0)
-    findings.push({ kind: "notPickedUp", severity: "err" });
+    findings.push({
+      kind: "notPickedUp",
+      severity: scrape.state === "read" ? "err" : "warn",
+    });
   if (pickedUp.state === "unknown" && pickedUp.by.length === 0)
     findings.push({
       kind: "pickedUpUnknown",

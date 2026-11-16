@@ -158,9 +158,12 @@ impl From<&Event> for EventInfo {
             // fallbacks those rows arrive undated, and undated sorts
             // last — so the newest events from anything modern landed at
             // the bottom of a feed whose whole promise is "newest first".
-            count: event
-                .count
-                .or_else(|| event.series.as_ref().and_then(|s| s.count)),
+            // `events.k8s.io` leaves `series` unset on an event seen once.
+            count: event.count.or(match (&event.series, &event.event_time) {
+                (Some(series), _) => series.count,
+                (None, Some(_)) => Some(1),
+                (None, None) => None,
+            }),
             first_timestamp: event
                 .first_timestamp
                 .as_ref()
@@ -242,6 +245,20 @@ mod tests {
             "a series' latest occurrence is newer than the first sighting"
         );
         assert_eq!(info.count, Some(7));
+    }
+
+    /// A singleton written through `events.k8s.io` has no `series`, and its
+    /// row said "none" in the Count column while its story counted it once.
+    /// Fails if a singleton is not counted once, or if an event that says
+    /// nothing of how often it happened is given a count.
+    #[test]
+    fn a_new_api_event_seen_once_counts_once_and_an_unsaid_count_stays_unknown() {
+        let once = Event {
+            event_time: Some(MicroTime(stamp("2026-08-13T10:00:00Z"))),
+            ..Default::default()
+        };
+        assert_eq!(EventInfo::from(&once).count, Some(1));
+        assert_eq!(EventInfo::from(&Event::default()).count, None);
     }
 
     /// The core-v1 fields still win where a controller sets them.

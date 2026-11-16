@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { recheckMetrics: vi.fn(async () => undefined) },
+  commands: {
+    recheckMetrics: vi.fn(async () => undefined),
+    forgetDiscovery: vi.fn(async () => undefined),
+  },
 }));
 
 import { commands } from "@/lib/commands";
@@ -12,7 +15,10 @@ import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
+import { queryKeys } from "@/lib/query-keys";
+import { formatWhen } from "@/lib/utils";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
+import { LIST_NOTICE_WIDTH, ListEmpty, ListUnread } from "../-list/list-unread";
 
 const available = { status: "available" as const, message: null };
 const notInstalled = {
@@ -24,6 +30,7 @@ const bannerOf = (title: string) =>
   screen.getByText(title).closest('[role="status"]') as HTMLElement;
 
 beforeEach(() => {
+  vi.mocked(commands.recheckMetrics).mockClear();
   useMetricsNoticeStore.setState({ hidden: {} });
   useClusterStore.setState({ currentContext: "acme-staging" });
 });
@@ -76,6 +83,41 @@ describe("MetricsStatusBanner", () => {
     expect(banner.className).not.toContain("border-err");
   });
 
+  /**
+   * Metrics-server's pod moved off a node going down and
+   * its registered API stopped answering, which the Nodes page said as "not
+   * installed", in the blue a fact about the cluster wears. Fails if a metrics
+   * API that is not answering is told as missing, put away as information, or
+   * offered no read again.
+   */
+  it("says a metrics API that is not answering is being asked again, in the failed frame", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner
+        status={{ status: "notAnswering", message: "404 page not found" }}
+      />
+    );
+    const banner = bannerOf(
+      "The metrics API is not answering, so CPU and memory are not shown"
+    );
+    expect(banner).toHaveTextContent(
+      "Its server may be restarting or moving to another node. The app is asking again."
+    );
+    expect(banner).not.toHaveTextContent(/not installed/);
+    expect(banner.className).toContain("border-dashed");
+    expect(banner.querySelector("svg")).toHaveClass("text-warn");
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        /^Not answering since \d/
+      )
+    );
+  });
+
   /** Fails if a refusal goes back to the error tone it cannot be fixed from. */
   it("draws a refusal calmly, not as an error", async () => {
     await renderWithRouter(
@@ -84,8 +126,79 @@ describe("MetricsStatusBanner", () => {
     const banner = bannerOf(
       "Metrics are not readable with this access, so CPU and memory are not shown"
     );
-    expect(banner.className).toContain("border-info");
+    expect(banner.className).toContain("border-dashed");
     expect(banner.className).not.toContain("border-err");
+    expect(banner.querySelector("svg")).toHaveClass("lucide-lock");
+  });
+
+  /**
+   * The metrics notice was the one refusal with no age and no rule to ask
+   * for. Fails if either is missing from a refusal whose message names a rule.
+   */
+  it("says since when a refusal stands and offers the rule to ask for", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner
+        status={{
+          status: "forbidden",
+          message:
+            'pods.metrics.k8s.io is forbidden: User "jane@example.com" cannot list resource "pods" in API group "metrics.k8s.io" at the cluster scope',
+        }}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        /^Refused since \d/
+      )
+    );
+    expect(
+      screen.getByRole("button", { name: "Copy the rule to ask for" })
+    ).toBeInTheDocument();
+  });
+
+  /** The notice spanned the whole column while the list's own read notices stopped at 68ch; fails if it takes a width other than theirs. */
+  it("keeps to the one width every list notice has", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    const banner = bannerOf(
+      "Metrics are not readable with this access, so CPU and memory are not shown"
+    );
+    expect(banner.className).toContain(LIST_NOTICE_WIDTH);
+  });
+
+  /**
+   * The notice said "Refused since 17:17" when the first refused answer came
+   * a minute later: the time was the banner's mount. Fails if the time is not
+   * the arrival of the first refused answer.
+   */
+  it("dates a refusal by when its first answer arrived, not by when the notice mounted", async () => {
+    useClusterStore.setState({ currentContext: "acme-dated" });
+    const client = new QueryClient();
+    const arrived = new Date(2026, 10, 15, 9, 41, 7).getTime();
+    client.setQueryData(
+      queryKeys.metrics.pods("ns"),
+      { status: { status: "forbidden", message: null }, data: [], unread: [] },
+      { updatedAt: arrived }
+    );
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />,
+      { client }
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        formatWhen(arrived, "clock")
+      )
+    );
+  });
+
+  /** Fails if a refusal with no parseable rule invents a copy action. */
+  it("offers no rule when the refusal names none", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: "nope" }} />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Copy the rule to ask for" })
+    ).toBeNull();
   });
 
   /**
@@ -118,22 +231,71 @@ describe("MetricsStatusBanner", () => {
   });
 
   /**
-   * The backend now answers every metrics read from its five-minute memory,
-   * so Check again that only refetched would read the memory back: a
-   * metrics-server installed a minute ago would still say "not installed".
+   * Hiding is remembered per cluster for good, so a metrics failure put away
+   * stayed silent while rows kept showing reduced data. Fails if a failing
+   * metrics read can be hidden, or an old hidden mark still hides it.
    */
-  it("makes Check again forget the remembered answer before it reads", async () => {
+  it("cannot be put away while the metrics read is failing", async () => {
+    useMetricsNoticeStore.setState({ hidden: { "acme-staging": ["error"] } });
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "error", message: "502" }} />
+    );
+    expect(
+      screen.getByText(
+        "The metrics API is failing, so CPU and memory may be missing"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+  });
+
+  /**
+   * The backend now answers every metrics read from its five-minute memory,
+   * so a retry that only refetched would read the memory back: a
+   * metrics-server installed a minute ago would still say "not installed".
+   * The retry is every could-not-look notice's, in its words.
+   */
+  it("makes its retry forget the remembered answer before it reads", async () => {
     const client = new QueryClient();
     const refetch = vi.spyOn(client, "refetchQueries");
     await renderWithRouter(<MetricsStatusBanner status={notInstalled} />, {
       client,
     });
-    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
     expect(commands.recheckMetrics).toHaveBeenCalledTimes(1);
     expect(
       vi.mocked(commands.recheckMetrics).mock.invocationCallOrder[0]
     ).toBeLessThan(refetch.mock.invocationCallOrder[0]);
+  });
+
+  /**
+   * The banner drew "Checking…" above a list and then vanished once the
+   * read answered, moving every row 70px twice. Fails if a notice takes room
+   * while the first read is still running, or never comes once it ends.
+   */
+  it("takes no room while the metrics read is still on its way, and says so once it has answered", async () => {
+    const client = new QueryClient();
+    let answer: () => void = () => {};
+    const reading = client.fetchQuery({
+      queryKey: queryKeys.metrics.all(),
+      queryFn: () => new Promise<null>((done) => (answer = () => done(null))),
+    });
+    const { container } = await renderWithRouter(
+      <MetricsStatusBanner status={notInstalled} />,
+      { client }
+    );
+    expect(container).toBeEmptyDOMElement();
+    answer();
+    await reading;
+    expect(
+      await screen.findByText(
+        "metrics-server is not installed, so CPU and memory are not shown"
+      )
+    ).toBeInTheDocument();
   });
 
   /**
@@ -161,5 +323,79 @@ describe("MetricsStatusBanner", () => {
         .style.webkitLineClamp
     ).toBe("1");
     rects.mockRestore();
+  });
+
+  /**
+   * A refusal had a close X its neighbour, the list's own refusal, did not,
+   * and once put away the lock cells under it went unexplained. Fails if a
+   * refused metrics read can be put away.
+   */
+  it("cannot put away a refusal", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+  });
+
+  /**
+   * The Deployments list kept "Metrics are not readable" for minutes while
+   * the object page opened from it read live usage. Fails if another
+   * reader's answer does not have the remembered refusal asked again.
+   */
+  it("asks again once another reader of the metrics got an answer", async () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.metrics.pods("argocd"), {
+      status: available,
+      data: [],
+      unread: [],
+    });
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />,
+      { client }
+    );
+    await waitFor(() =>
+      expect(commands.recheckMetrics).toHaveBeenCalledTimes(1)
+    );
+  });
+
+  /** Fails if a remembered refusal is asked again with no reader having answered. */
+  it("keeps the remembered refusal while no reader has answered", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    expect(commands.recheckMetrics).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Over a list that was refused, the metrics frame stacked full width over
+   * the list's own: two notices for one empty page. Fails if the metrics
+   * notice is drawn where the list under it was not read.
+   */
+  it("says nothing over a list that was not read", async () => {
+    const { container } = await renderWithRouter(
+      <ListUnread.Provider value>
+        <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+      </ListUnread.Provider>
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  /**
+   * Over "No resources of this type in the current scope" the CPU and memory
+   * notice sat full width with nothing to measure. Fails if it is drawn over
+   * a list that was read and has no rows.
+   */
+  it("says nothing over a list that was read and is empty", async () => {
+    const { container } = await renderWithRouter(
+      <ListEmpty.Provider value>
+        <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+      </ListEmpty.Provider>
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });

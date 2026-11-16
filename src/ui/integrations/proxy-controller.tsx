@@ -101,7 +101,7 @@ export function ProxyControllerTab({
       <Section>
         <SectionHeader title={words.title} description={words.description} />
         {controller.workload ? (
-          <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
+          <div className="flex flex-col gap-1 text-xs text-fg-mut">
             <span className="flex flex-wrap items-baseline gap-x-2">
               <ResourceRef
                 kind={controller.workload.kind}
@@ -118,18 +118,18 @@ export function ProxyControllerTab({
               </span>
             </span>
             {controller.workload.image && (
-              <span className="font-mono text-[11px] text-fg-fnt">
+              <span className="font-mono text-caption text-fg-fnt">
                 {controller.workload.image}
               </span>
             )}
             {controller.problem && (
-              <p className="text-[11px] text-warn">
+              <p className="text-caption text-warn">
                 {sayWords(controller.problem, t)}
               </p>
             )}
           </div>
         ) : (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+          <p className="max-w-[64ch] text-caption text-fg-fnt">
             {controller.problem && sayWords(controller.problem, t)}
           </p>
         )}
@@ -142,21 +142,21 @@ export function ProxyControllerTab({
           description={t("empty", "classesItClaimsDescription")}
         />
         {classes.length === 0 ? (
-          <p className="text-[11px] text-warn">{words.claimsNoClass}</p>
+          <p className="text-caption text-warn">{words.claimsNoClass}</p>
         ) : (
           <div className="flex flex-col">
             {classes.map((entry) => (
               <div
                 key={entry.name}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
+                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-xs"
               >
                 <span className="font-mono text-fg-mid">{entry.name}</span>
                 {entry.isDefault && (
-                  <span className="text-[11px] text-fg-fnt">
+                  <span className="text-caption text-fg-fnt">
                     {t("empty", "clustersDefault")}
                   </span>
                 )}
-                <span className="ml-auto font-mono text-[11px] text-fg-fnt">
+                <span className="ml-auto font-mono text-caption text-fg-fnt">
                   {entry.controller}
                 </span>
               </div>
@@ -173,7 +173,7 @@ export function ProxyControllerTab({
             count={controller.args.length}
             description={t("empty", "staticConfigurationDescription")}
           />
-          <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
+          <div className="flex flex-col gap-0.5 font-mono text-caption text-fg-mut">
             {controller.args.map((arg, index) => (
               <span key={index} className="select-text break-all">
                 {arg}

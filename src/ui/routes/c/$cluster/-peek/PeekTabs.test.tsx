@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -117,5 +118,77 @@ describe("an autoscaler's peek, its Connections tab", () => {
       screen.getByText(/could not be read, so what it scales is not known/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/names nothing to scale/)).toBeNull();
+  });
+});
+
+describe("a pod's peek when the pod could not be read", () => {
+  const target = { kind: "Pod", name: "api-1", namespace: "shop" };
+  const refused = new Error("pods api-1 is forbidden");
+
+  /**
+   * Logs and Containers waited on a pod that never came and drew a skeleton
+   * for ever. Fails if either tab does not say the pod was not read, with the
+   * cause and a way to ask again.
+   */
+  it.each(["logs", "containers"] as const)(
+    "says on the %s tab that the pod was not read, and asks again",
+    async (tab) => {
+      const retry = vi.fn();
+      await renderWithRouter(
+        <PeekTabBody
+          tab={tab}
+          target={target}
+          detail={undefined}
+          isDetailLoading={false}
+          detailError={refused}
+          onRetryDetail={retry}
+        />
+      );
+      expect(screen.getByText("Could not read this Pod")).toBeInTheDocument();
+      expect(screen.getByText(/pods api-1 is forbidden/)).toBeInTheDocument();
+      expect(screen.queryByTestId("peek-rows-skeleton")).toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Try the read again" })
+      );
+      expect(retry).toHaveBeenCalled();
+    }
+  );
+
+  /** The control: while the pod read is still on its way the tab is a skeleton and says nothing failed. */
+  it("stays a skeleton while the pod is still being read", async () => {
+    await renderWithRouter(
+      <PeekTabBody
+        tab="logs"
+        target={target}
+        detail={undefined}
+        isDetailLoading
+        detailError={null}
+      />
+    );
+    expect(screen.getByTestId("peek-rows-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("Could not read this Pod")).toBeNull();
+  });
+});
+
+describe("a DaemonSet's peek when the DaemonSet could not be read", () => {
+  /**
+   * Its pods are found by the selector the DaemonSet names, so the pods read
+   * never starts and the tab waited for ever. Fails if the Pods tab draws a
+   * skeleton instead of the cause of the unread DaemonSet.
+   */
+  it("says the Pods tab cannot be read instead of waiting on it", async () => {
+    await renderWithRouter(
+      <PeekTabBody
+        tab="children"
+        target={{ kind: "DaemonSet", name: "agent", namespace: "kube-system" }}
+        detail={undefined}
+        isDetailLoading={false}
+        detailError={new Error("daemonsets is forbidden")}
+      />
+    );
+    expect(
+      await screen.findByText("Could not read this DaemonSet")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/daemonsets is forbidden/)).toBeInTheDocument();
   });
 });

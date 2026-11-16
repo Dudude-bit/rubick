@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import type { ContainerInfo } from "@/generated/types";
 import { Button } from "@/components/ui/button";
+import { StreamFailure } from "@/components/terminal/StreamFailure";
 import { useNowSeconds } from "@/hooks/useNow";
 import { lastTermination, terminationAt } from "@/lib/pod-status";
 import { ExitAgo, ExitWords } from "../-object/ExitAgo";
@@ -21,12 +22,13 @@ import { formatCount } from "@/lib/count";
  * The tone each way a stream stops is said in. Total over the kinds, so a new
  * one is a compile error here rather than another kind's colour.
  */
-const FAILURE_TONE: Record<StreamFailureKind, "text-warn" | "text-err"> = {
-  gone: "text-warn",
-  broken: "text-err",
-  "no-previous-run": "text-warn",
-  "log-not-kept": "text-warn",
-  "follow-stopped": "text-warn",
+const FAILURE_TONE: Record<StreamFailureKind, "warn" | "err"> = {
+  gone: "warn",
+  broken: "err",
+  "no-previous-run": "warn",
+  "log-not-kept": "warn",
+  "follow-stopped": "warn",
+  refused: "warn",
 };
 
 /**
@@ -99,115 +101,105 @@ export function StreamFailureNotice({
       : restarting
         ? "text-warn"
         : "text-ok";
-  const headline: Record<StreamFailureKind, () => string> = {
+  const headlines: Record<StreamFailureKind, () => string> = {
     gone: () => t("empty", "streamEndedGone", { pod: podName, container }),
     broken: () => t("empty", "streamLost", { pod: podName, container }),
     "no-previous-run": () => t("empty", "noPreviousRunOf", { container }),
     "log-not-kept": () => t("empty", "logNotKept", { container }),
     "follow-stopped": () =>
       t("empty", "nodeStoppedFollowing", { pod: podName, container }),
+    refused: () => t("empty", "streamRefused", { pod: podName, container }),
   };
+  const action =
+    absent || offerCurrent ? (
+      <NoticeAction onClick={onShowCurrentRun}>
+        {t("action", "showCurrentRun")}
+      </NoticeAction>
+    ) : followsAgain(failure.kind, reading, info) ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        onClick={onRetry}
+      >
+        <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+        {t(
+          "action",
+          restarting ? "followNewRun" : unfollowed ? "followAgain" : "reconnect"
+        )}
+      </Button>
+    ) : (
+      !restarting && (
+        <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
+          {t("empty", "nothingToReconnectTo")}
+        </span>
+      )
+    );
   return (
-    <div
-      role="alert"
-      data-testid="log-stream-failure"
-      className="flex flex-none items-start justify-between gap-3 border-b border-hair px-3 py-1.5"
+    <StreamFailure
+      testId="log-stream-failure"
+      tone={notStarted ? "warn" : FAILURE_TONE[failure.kind]}
+      headline={
+        notStarted
+          ? t("empty", "containerNotStarted", { container })
+          : restarting
+            ? t("empty", "streamEndedRestarting", { pod: podName, container })
+            : headlines[failure.kind]()
+      }
+      action={action}
     >
-      <div className="min-w-0">
+      {(unstarted || restarting) &&
+        info?.state.type === "waiting" &&
+        info.state.reason && (
+          <p className="mt-0.5 text-caption text-fg-mut">
+            {t("empty", "kubeletHoldingAt")}{" "}
+            <span className="font-mono">{info.state.reason}</span>.
+          </p>
+        )}
+      {termination && (
         <p
-          className={`text-xs ${notStarted ? "text-warn" : FAILURE_TONE[failure.kind]}`}
+          className={`mt-0.5 text-caption ${exitTone}`}
+          data-testid="log-stream-termination"
+          title={terminationAt(termination)}
         >
-          {notStarted
-            ? t("empty", "containerNotStarted", { container })
-            : restarting
-              ? t("empty", "streamEndedRestarting", { pod: podName, container })
-              : headline[failure.kind]()}
+          {t("empty", "itExited")}{" "}
+          <ExitWords termination={termination} between=", " />
+          {info && info.restartCount > 0
+            ? ` · ${t("count", "restartsSoFar", { n: info.restartCount })}`
+            : ""}
+          .
         </p>
-        {(unstarted || restarting) &&
-          info?.state.type === "waiting" &&
-          info.state.reason && (
-            <p className="mt-0.5 text-[11px] text-fg-mut">
-              {t("empty", "kubeletHoldingAt")}{" "}
-              <span className="font-mono">{info.state.reason}</span>.
+      )}
+      {unfollowed ? (
+        <>
+          <p className="mt-0.5 text-caption text-fg-mut">
+            {t("empty", "stillRunningUnfollowed", { container })}
+          </p>
+          {failure.message && (
+            <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
+              {parts(t("empty", "nodeSaid"), {
+                said: <span className="font-mono">{failure.message}</span>,
+              })}
             </p>
           )}
-        {termination && (
-          <p
-            className={`mt-0.5 text-[11px] ${exitTone}`}
-            data-testid="log-stream-termination"
-            title={terminationAt(termination)}
-          >
-            {t("empty", "itExited")}{" "}
-            <ExitWords termination={termination} between=", " />
-            {info && info.restartCount > 0
-              ? ` · ${t("count", "restartsSoFar", { n: info.restartCount })}`
-              : ""}
-            .
-          </p>
-        )}
-        {unfollowed ? (
-          <>
-            <p className="mt-0.5 text-[11px] text-fg-mut">
-              {t("empty", "stillRunningUnfollowed", { container })}
-            </p>
-            {failure.message && (
-              <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
-                {parts(t("empty", "nodeSaid"), {
-                  said: <span className="font-mono">{failure.message}</span>,
-                })}
-              </p>
-            )}
-          </>
-        ) : (
-          !unstarted &&
-          !restarting && (
-            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
-              {failure.message}
-            </p>
-          )
-        )}
-        {/* A stream that died under intake leaves two gaps, not one: the
-            minutes it was down, and everything intake dropped before
-            that. Reconnecting closes neither. */}
-        {intake && !gone && !absent && !notKept && (
-          <p className="mt-0.5 text-[11px] text-fg-fnt">
-            {t("empty", "intakeStillSet")}
-          </p>
-        )}
-      </div>
-      {/* Not a retry: asking again cannot conjure a run that never
-          happened. The way out is the run that does exist, and where only
-          the earlier run is known to be gone, the current one is a read
-          that has not been tried. */}
-      {absent || offerCurrent ? (
-        <NoticeAction onClick={onShowCurrentRun}>
-          {t("action", "showCurrentRun")}
-        </NoticeAction>
-      ) : followsAgain(failure.kind, reading, info) ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={onRetry}
-        >
-          <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-          {t(
-            "action",
-            restarting
-              ? "followNewRun"
-              : unfollowed
-                ? "followAgain"
-                : "reconnect"
-          )}
-        </Button>
+        </>
       ) : (
+        !unstarted &&
         !restarting && (
-          <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-            {t("empty", "nothingToReconnectTo")}
-          </span>
+          <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
+            {failure.message}
+          </p>
         )
       )}
-    </div>
+      {/* A stream that died under intake leaves two gaps, not one: the
+            minutes it was down, and everything intake dropped before
+            that. Reconnecting closes neither. */}
+      {intake && !gone && !absent && !notKept && (
+        <p className="mt-0.5 text-caption text-fg-fnt">
+          {t("empty", "intakeStillSet")}
+        </p>
+      )}
+    </StreamFailure>
   );
 }
 
@@ -237,7 +229,7 @@ export function DroppedNotice({
     <div
       role="status"
       data-testid="log-dropped-notice"
-      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px]"
+      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-caption"
     >
       <p className="text-warn">
         {t(
@@ -286,7 +278,7 @@ export function GroupedNotice({
     <div
       role="status"
       data-testid="log-grouped-notice"
-      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
     >
       <p>
         {t("count", "rowsStandFor", { n: rows })}{" "}
@@ -343,7 +335,7 @@ export function IntakeQuietNotice({
     <div
       role="status"
       data-testid="log-intake-quiet"
-      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex-none border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
     >
       <span aria-hidden="true" className="text-info">
         ⇣{" "}
@@ -387,7 +379,7 @@ export function FocusNotice({
     <div
       role="status"
       data-testid="log-focus-notice"
-      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] ${
+      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption ${
         split ? "text-fg-mut" : "text-warn"
       }`}
     >
@@ -449,7 +441,7 @@ export function FinishedNotice({ container }: { container: ContainerInfo }) {
     <div
       role="status"
       data-testid="log-finished-notice"
-      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex-none border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
       title={termination ? terminationAt(termination) : undefined}
     >
       {t("empty", "reading")}{" "}
@@ -488,7 +480,7 @@ export function NoEarlierRunNotice({
     <div
       role="status"
       data-testid="log-no-earlier-run"
-      className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] text-warn"
+      className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption text-warn"
     >
       <p>
         {t("empty", "noEarlierRunOf")}{" "}
@@ -512,12 +504,8 @@ function NoticeAction({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-info hover:bg-hover"
-    >
+    <Button variant="outline" size="sm" className="shrink-0" onClick={onClick}>
       {children}
-    </button>
+    </Button>
   );
 }

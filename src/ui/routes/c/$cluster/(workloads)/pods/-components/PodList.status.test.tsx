@@ -13,6 +13,7 @@ import {
 import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 import { WORKLOAD_SOURCES } from "../../../-peek/peek-sources-workloads";
 import { podSegments, podsServing } from "../../../-overview/health-share";
+import { PROBLEM_STALE_PX } from "../../../-object/problem";
 import { columns } from "./PodList";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -29,6 +30,12 @@ type Row = {
   initContainers?: RowContainer[];
   nodeSilence?: unknown;
   kubeletWarned?: boolean;
+  problem?: {
+    tone: "err" | "warn";
+    n: number;
+    title: string;
+    stale?: { at: number | null; refused: boolean };
+  };
 };
 
 function statusCell(original: Row) {
@@ -43,6 +50,68 @@ function statusCell(original: Row) {
 }
 
 const RUNNING = { display: "Running", phase: "Running" };
+
+describe("a Running pod whose probe fails", () => {
+  /**
+   * The Overview listed argocd-repo-server's failing readiness probe while
+   * its row in Pods said only Running. Fails if the row drops the problem,
+   * its cause on hover, or puts the mark after the word where a narrow
+   * column cuts it.
+   */
+  it("leads its status with the problem and says the cause on hover", () => {
+    const { container } = render(
+      <>
+        {statusCell({
+          status: RUNNING,
+          problem: {
+            tone: "err",
+            n: 1,
+            title: "Readiness probe failing on repo-server: HTTP 503",
+          },
+        })}
+      </>
+    );
+    const mark = screen.getByText("1 problem");
+    expect(mark.closest("[title]")?.getAttribute("title")).toBe(
+      "Readiness probe failing on repo-server: HTTP 503"
+    );
+    expect(container.textContent?.indexOf("1 problem")).toBeLessThan(
+      container.textContent?.indexOf("Running") ?? -1
+    );
+  });
+});
+
+describe("a pod whose problem the read of pods could not check again", () => {
+  const kept = {
+    tone: "err" as const,
+    n: 1,
+    title: "Unhealthy: Readiness probe failed",
+    stale: { at: 1000, refused: true },
+  };
+
+  /**
+   * Pods refused, and node-5skbg's row lost its mark and read
+   * green "Running". Fails if the row drops the kept problem, does not say
+   * it was not rechecked, or its column asks for room for those words while
+   * the port has it, or needs any more room for them than a fresh problem.
+   */
+  it("says not rechecked, and its column asks for the words only as an ideal", () => {
+    render(<>{statusCell({ status: RUNNING, problem: kept })}</>);
+    expect(screen.getByText("not rechecked")).toBeInTheDocument();
+
+    const column = (columns as ColumnDef<Row>[]).find((c) => c.id === "status");
+    const floor = column?.meta?.floor as (t: T, rows: readonly Row[]) => number;
+    const fresh = { ...kept, stale: undefined };
+    expect(floor(t, [{ status: RUNNING, problem: kept }])).toBe(
+      floor(t, [{ status: RUNNING, problem: fresh }])
+    );
+    const ideal = column?.meta?.ideal as (t: T, rows: readonly Row[]) => number;
+    expect(
+      ideal(t, [{ status: RUNNING, problem: kept }]) -
+        ideal(t, [{ status: RUNNING, problem: fresh }])
+    ).toBe(PROBLEM_STALE_PX);
+  });
+});
 
 describe("a pod its controller replaced", () => {
   /**
@@ -62,8 +131,11 @@ describe("a pod its controller replaced", () => {
     };
     render(<>{statusCell(evicted)}</>);
     const badge = screen.getByText("Evicted");
-    expect(badge.closest(".flex-none")).not.toBeNull();
-    expect(screen.getByText("already replaced")).toHaveClass("truncate");
+    expect(badge.closest(".flex-none")).toBeNull();
+    expect(screen.getByText("already replaced")).toHaveClass(
+      "truncate",
+      "shrink-[10]"
+    );
     expect(badge.closest("[title]")?.getAttribute("title")).toMatch(
       /Already replaced: its controller started another pod/
     );
@@ -235,6 +307,7 @@ describe("a pod up and failing its readiness probe", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     };
 
     expect(podsServing(composition)).toBe(
@@ -426,5 +499,39 @@ describe("a pod Pending past the wait it is given", () => {
     );
     expect(podRole(pod, null)).toBe("warn");
     expect(podRole(neverPlaced(30), null)).toBe("pending");
+  });
+});
+
+describe("a status longer than the column gives it", () => {
+  /**
+   * "Init:CrashLoopBackOff" was cut mid-glyph and, with "not rechecked" beside
+   * it, ran into Restarts: the wrapper around the badge could not shrink, so
+   * the badge never reached its own ellipsis. Fails if any ancestor between
+   * the cell and the badge is flex-none.
+   */
+  it("lets the badge shrink to its own ellipsis", () => {
+    render(
+      <>
+        {statusCell({
+          status: { display: "Init:CrashLoopBackOff", phase: "Running" },
+          problem: {
+            tone: "err",
+            n: 1,
+            title: "x",
+            stale: { at: 1000, refused: true },
+          },
+        })}
+      </>
+    );
+    const word = screen.getByText("Init:CrashLoopBackOff");
+    for (
+      let el: HTMLElement | null = word;
+      el && !el.className.includes("@container");
+      el = el.parentElement
+    ) {
+      expect(el.className).not.toContain("flex-none");
+    }
+    expect(word.className).toContain("truncate");
+    expect(word.getAttribute("title")).toContain("Init:CrashLoopBackOff");
   });
 });

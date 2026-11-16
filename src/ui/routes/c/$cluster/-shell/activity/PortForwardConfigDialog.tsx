@@ -12,13 +12,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/components/ui/use-toast";
 import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "@/stores/portForwardStore";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { parts } from "@/i18n/parts";
 
 /**
@@ -43,7 +42,6 @@ export function PortForwardConfigDialog({
   onClose: () => void;
 }) {
   const t = useT();
-  const { toast } = useToast();
   const addConfig = usePortForwardStore((state) => state.addConfig);
   const updateConfig = usePortForwardStore((state) => state.updateConfig);
 
@@ -61,6 +59,7 @@ export function PortForwardConfigDialog({
   );
   const [autoStart, setAutoStart] = useState(config?.autoStart ?? false);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   const parsePort = (value: string): number | null => {
     const parsed = Number(value);
@@ -68,26 +67,14 @@ export function PortForwardConfigDialog({
     return parsed;
   };
 
-  const save = async () => {
-    const local = parsePort(localPort);
-    const remote = parsePort(remotePort);
+  const local = parsePort(localPort);
+  const remote = parsePort(remotePort);
+  const missingTarget = !pod.trim() || !namespace.trim();
+  const fieldError = "text-caption text-err";
 
-    if (!pod.trim() || !namespace.trim()) {
-      toast({
-        title: t("activity", "missingTarget"),
-        description: t("activity", "missingTargetDetail"),
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!local || !remote) {
-      toast({
-        title: t("activity", "invalidPort"),
-        description: t("activity", "invalidPortDetail"),
-        variant: "destructive",
-      });
-      return;
-    }
+  const save = async () => {
+    setChecked(true);
+    if (missingTarget || !local || !remote) return;
 
     const fields = {
       name: name.trim() || `${pod.trim()}:${remote}`,
@@ -108,7 +95,7 @@ export function PortForwardConfigDialog({
       }
       onClose();
     } catch (error) {
-      toastError(
+      toastWriteError(
         config
           ? t("activity", "saveForwardFailed")
           : t("activity", "createForwardFailed"),
@@ -151,6 +138,8 @@ export function PortForwardConfigDialog({
               <Input
                 id="pfc-pod"
                 value={pod}
+                aria-invalid={checked && !pod.trim()}
+                aria-describedby="pfc-target-note"
                 onChange={(event) => setPod(event.target.value)}
                 placeholder="my-pod-123"
                 className="font-mono"
@@ -161,12 +150,19 @@ export function PortForwardConfigDialog({
               <Input
                 id="pfc-namespace"
                 value={namespace}
+                aria-invalid={checked && !namespace.trim()}
+                aria-describedby="pfc-target-note"
                 onChange={(event) => setNamespace(event.target.value)}
                 placeholder="default"
                 className="font-mono"
               />
             </div>
           </div>
+          {checked && missingTarget && (
+            <p id="pfc-target-note" className={fieldError}>
+              {t("activity", "missingTargetDetail")}
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="pfc-local">{t("activity", "localPort")}</Label>
@@ -177,6 +173,8 @@ export function PortForwardConfigDialog({
                 min={1}
                 max={65535}
                 value={localPort}
+                aria-invalid={checked && !local}
+                aria-describedby="pfc-port-note"
                 onChange={(event) => setLocalPort(event.target.value)}
                 placeholder="8080"
               />
@@ -190,17 +188,25 @@ export function PortForwardConfigDialog({
                 min={1}
                 max={65535}
                 value={remotePort}
+                aria-invalid={checked && !remote}
+                aria-describedby="pfc-port-note"
                 onChange={(event) => setRemotePort(event.target.value)}
                 placeholder="80"
               />
             </div>
           </div>
 
+          {checked && (!local || !remote) && (
+            <p id="pfc-port-note" className={fieldError}>
+              {t("activity", "invalidPortDetail")}
+            </p>
+          )}
+
           <div className="flex flex-col gap-4 border-t border-hair pt-4">
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-reconnect" className="font-normal">
                 {t("activity", "autoReconnect")}
-                <span className="mt-0.5 block text-[11px] text-fg-mut">
+                <span className="mt-0.5 block text-caption text-fg-mut">
                   {t("activity", "autoReconnectHint")}
                 </span>
               </Label>
@@ -213,7 +219,7 @@ export function PortForwardConfigDialog({
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-autostart" className="font-normal">
                 {t("activity", "autoStartLabel")}
-                <span className="mt-0.5 block text-[11px] text-fg-mut">
+                <span className="mt-0.5 block text-caption text-fg-mut">
                   {t("activity", "autoStartHint")}
                 </span>
               </Label>
@@ -230,7 +236,7 @@ export function PortForwardConfigDialog({
           <Button variant="outline" onClick={onClose}>
             {t("action", "cancel")}
           </Button>
-          <Button onClick={save} disabled={busy}>
+          <Button onClick={save} pending={busy}>
             {config
               ? t("action", "saveChanges")
               : t("action", "savePortForward")}

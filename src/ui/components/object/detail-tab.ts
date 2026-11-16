@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import { isRefusal } from "@/lib/error-utils";
 import { failingCondition } from "@/lib/condition-health";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "@/lib/status-role";
@@ -49,7 +50,7 @@ export type DetailTabMark =
    * count: a tab whose page says "nobody looked" wore a plain number, which
    * is the page's third state collapsing into its second on the way out.
    */
-  | { shows: "unchecked"; says: string }
+  | { shows: "unchecked"; says: string; refused?: boolean }
   /** A session is attached inside. The only animated mark in the strip, so it means one thing. */
   | { shows: "live"; says: string };
 
@@ -60,6 +61,8 @@ export interface DetailTab {
   /** Required: a strip where some tabs carry a glyph and others do not is worse than none. */
   glyph: DetailTabGlyph;
   mark?: DetailTabMark | null;
+  /** Its mark is still being read: the strip holds the mark's width so the labels after it do not move when it lands. */
+  reading?: boolean;
   /**
    * What the tab is made of, which decides the space above it and who owns
    * the page's height.
@@ -112,10 +115,17 @@ export const countMark = (
  */
 export function readCountMark(
   count: number | null,
-  unread: string | null
+  unread: string | null,
+  error?: unknown
 ): DetailTabMark | undefined {
   if (unread === null) return count === null ? undefined : countMark(count);
-  return count ? countMark(`${count}+`) : { shows: "unchecked", says: unread };
+  return count
+    ? countMark(`${count}+`)
+    : {
+        shows: "unchecked",
+        says: unread,
+        ...(isRefusal(error) && { refused: true }),
+      };
 }
 
 export const severityMark = (
@@ -165,7 +175,11 @@ export function podsMark(
 ): DetailTabMark | undefined {
   // The tab's body says the read failed exactly when it has no rows to show.
   if (read.error && pods.length === 0)
-    return { shows: "unchecked", says: t("empty", "couldNotReadWorkloadPods") };
+    return {
+      shows: "unchecked",
+      says: t("empty", "couldNotReadWorkloadPods"),
+      ...(isRefusal(read.error) && { refused: true }),
+    };
   if (read.pending) return undefined;
   const failing = pods.filter(
     (pod) =>

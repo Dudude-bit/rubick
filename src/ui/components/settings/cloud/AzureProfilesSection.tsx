@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ProfileRow, ProfileSection } from "./ProfileSection";
@@ -20,7 +19,7 @@ import type { AzureProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastError, toastWriteError } from "@/lib/toast-error";
 import { shownPath } from "@/lib/hide-paths";
 
 const EMPTY_PROFILE: AzureProfile = {
@@ -43,10 +42,11 @@ export function AzureProfilesSection() {
     useState<AzureProfile>(EMPTY_PROFILE);
   const [newProfileName, setNewProfileName] = useState("");
 
-  const { data: profiles, isLoading } = useQuery({
+  const profilesQuery = useQuery({
     queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
   });
+  const { data: profiles, isLoading } = profilesQuery;
 
   const saveMutation = useMutation({
     mutationFn: async ({
@@ -64,7 +64,7 @@ export function AzureProfilesSection() {
       toast({ title: t("settings", "azureProfileSaved") });
     },
     onError: (error) => {
-      toastError(t("action", "error"), error);
+      toastWriteError(t("action", "error"), error);
     },
   });
 
@@ -78,7 +78,7 @@ export function AzureProfilesSection() {
       toast({ title: t("settings", "azureProfileDeleted") });
     },
     onError: (error) => {
-      toastError(t("action", "error"), error);
+      toastWriteError(t("action", "error"), error);
     },
   });
 
@@ -93,6 +93,7 @@ export function AzureProfilesSection() {
         variant: result.includes("successful") ? "default" : "destructive",
       });
     },
+    onError: (error) => toastError(t("settings", "failed"), error),
   });
 
   const openEditDialog = (name: string, profile: AzureProfile) => {
@@ -116,6 +117,8 @@ export function AzureProfilesSection() {
         addLabel={t("settings", "addProfile")}
         onAdd={openCreateDialog}
         isLoading={isLoading}
+        error={profilesQuery.isError ? profilesQuery.error : undefined}
+        onRetry={() => profilesQuery.refetch()}
         isEmpty={!profiles || profiles.length === 0}
         emptyMessage={t("empty", "noProfilesAzure")}
       >
@@ -133,7 +136,10 @@ export function AzureProfilesSection() {
             description={item.profile.description}
             onTest={() => testMutation.mutate(item.name)}
             onEdit={() => openEditDialog(item.name, item.profile)}
-            onDelete={() => deleteMutation.mutate(item.name)}
+            testing={
+              testMutation.isPending && testMutation.variables === item.name
+            }
+            onDelete={() => deleteMutation.mutateAsync(item.name)}
             busy={testMutation.isPending || deleteMutation.isPending}
           />
         ))}
@@ -236,11 +242,9 @@ export function AzureProfilesSection() {
                   profile: editingProfile,
                 })
               }
-              disabled={!newProfileName || saveMutation.isPending}
+              pending={saveMutation.isPending}
+              disabled={!newProfileName}
             >
-              {saveMutation.isPending && (
-                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-              )}
               {t("action", "save")}
             </Button>
           </DialogFooter>

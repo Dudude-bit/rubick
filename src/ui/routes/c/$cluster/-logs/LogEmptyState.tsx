@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { PauseCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Reading } from "@/components/ui/states";
 import { errorToShow } from "@/lib/error-utils";
 
 import { useT } from "@/i18n/useT";
@@ -20,15 +22,15 @@ const SKELETON_WIDTHS = [
 ];
 
 function LogSkeleton() {
+  const t = useT();
   return (
-    <div
-      className="space-y-1.5 p-2"
-      aria-hidden="true"
-      data-testid="log-skeleton"
-    >
-      {SKELETON_WIDTHS.map((width, index) => (
-        <Skeleton key={index} className={`h-2.5 ${width}`} />
-      ))}
+    <div data-testid="log-skeleton">
+      <Reading className="px-2 pt-2">{t("action", "connecting")}</Reading>
+      <div className="space-y-1.5 p-2" aria-hidden="true">
+        {SKELETON_WIDTHS.map((width, index) => (
+          <Skeleton key={index} className={`h-2.5 ${width}`} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -244,12 +246,10 @@ function Action({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-2 block w-full text-center text-xs text-info hover:underline"
-    >
-      {children}
-    </button>
+    <div className="mt-2 flex justify-center">
+      <Button variant="outline" size="sm" onClick={onClick}>
+        {children}
+      </Button>
+    </div>
   );
 }

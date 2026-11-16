@@ -25,11 +25,3 @@ export const SEVERITY_BANNER: Record<Tone, { box: string; head: string }> = {
   info: { box: "border-info/40 bg-info/[0.07]", head: "text-info" },
   neutral: { box: "border-hair bg-raised", head: "text-fg-mut" },
 };
-
-/** The quote's rule, which follows the header rather than the frame. */
-export const SEVERITY_QUOTE: Record<Tone, string> = {
-  err: "border-err/40",
-  warn: "border-warn/40",
-  info: "border-info/40",
-  neutral: "border-hair",
-};

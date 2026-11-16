@@ -257,6 +257,26 @@ describe("UsageChart before there is a line", () => {
     // And no empty band where a chart would go.
     expect(container.querySelector("svg")).toBeNull();
   });
+
+  /**
+   * A pod that had finished said "not reporting", a fault's
+   * wording. Fails if an idle object keeps that word, or a running one with
+   * no reading loses it.
+   */
+  it("says nothing is running, not that it is not reporting, where nothing runs", async () => {
+    await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[]}
+        limit={null}
+        current={null}
+        idle
+      />
+    );
+    expect(screen.getByText("nothing running")).toBeInTheDocument();
+    expect(screen.queryByText("not reporting")).toBeNull();
+  });
 });
 
 describe("UsageChart gaps", () => {
@@ -454,5 +474,94 @@ describe("UsageChart motion", () => {
       ".recharts-area-area"
     )!;
     expect(area.style.transition).toBe("");
+  });
+});
+
+describe("UsageChart where a sample was missed", () => {
+  const holed = (): UsageSample[] =>
+    [0, 1000, 2000, 3000, 100_000].map((offset, index) => ({
+      t: 1_700_000_000_000 + offset,
+      cpuMillicores: index === 4 ? 60 : 40,
+      memoryBytes: null,
+      restarts: null,
+    }));
+
+  /**
+   * A hole mid-line and lone end dots were drawn with nothing saying a sample
+   * was missed. Fails if buckets nothing was sampled in are not marked as a
+   * gap, or if hovering one does not say which span has no sample.
+   */
+  it("marks the hole and says which span has no sample", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={holed()}
+        limit={200}
+        current={60}
+      />
+    );
+    expect(
+      container.querySelectorAll(".recharts-reference-area").length
+    ).toBeGreaterThan(0);
+    const tip = await hover(container, 300, /No sample between/);
+    expect(tip.textContent).toMatch(/No sample between \S+ and \S+/);
+  });
+});
+
+describe("UsageChart before it has a line", () => {
+  /** At 32 s the band was two dots in an unlabelled shaded box. Fails if the shaded span has no caption. */
+  it("captions the shaded span", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[
+          {
+            t: 1_000_000,
+            cpuMillicores: 40,
+            memoryBytes: null,
+            restarts: null,
+          },
+          {
+            t: 1_090_000,
+            cpuMillicores: null,
+            memoryBytes: null,
+            restarts: null,
+          },
+          {
+            t: 1_120_000,
+            cpuMillicores: 46,
+            memoryBytes: null,
+            restarts: null,
+          },
+        ]}
+        limit={200}
+        current={46}
+      />
+    );
+    expect(container.querySelector(".recharts-reference-area")).not.toBeNull();
+    expect(container.textContent).toContain("not sampled");
+  });
+
+  /** A lone reading says when watching began, not just that it began. Fails if the clock leaves the sentence. */
+  it("says when watching began beside a lone reading", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[
+          {
+            t: 1_000_000,
+            cpuMillicores: 40,
+            memoryBytes: null,
+            restarts: null,
+          },
+        ]}
+        limit={200}
+        current={40}
+      />
+    );
+    expect(container.textContent).toMatch(/Watching since \d{1,2}:\d{2}/);
   });
 });

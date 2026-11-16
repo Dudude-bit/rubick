@@ -93,7 +93,7 @@ export function HelmUpgradeDialog({
               placeholder="repo/chart"
               autoComplete="off"
             />
-            <p className="text-[11px] text-fg-fnt">
+            <p className="text-caption text-fg-fnt">
               {t("action", "upgradeChartHint")}
             </p>
           </div>
@@ -117,7 +117,7 @@ export function HelmUpgradeDialog({
               value={values}
               onChange={(e) => onValuesChange(e.target.value)}
               placeholder={t("action", "valuesPlaceholder")}
-              className="font-mono text-sm h-32"
+              className="font-mono text-xs h-32"
             />
             {carriesWithheld && (
               <p role="status" className="text-xs text-warn">
@@ -131,7 +131,7 @@ export function HelmUpgradeDialog({
               checked={wait}
               onCheckedChange={(checked) => onWaitChange(checked === true)}
             />
-            <Label htmlFor="upgrade-wait" className="text-sm">
+            <Label htmlFor="upgrade-wait" className="text-xs">
               {t("action", "waitForReady")}
             </Label>
           </div>

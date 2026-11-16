@@ -173,6 +173,36 @@ afterEach(() => {
   useClusterStore.setState({ currentContext: null, isConnected: false });
 });
 
+describe("a pod page opened on a pod already gone", () => {
+  /**
+   * Opened from an event about a pod deleted 44 minutes before, the page
+   * said "does not exist" and then flipped back to the full skeleton for 9
+   * of every 10 frames, reading the pod again and again. Fails if the
+   * answer does not hold or the pod is asked for more than the page's own
+   * slow re-check of a gone object.
+   */
+  it("says so once and holds it, without reading the pod in a loop", async () => {
+    gone = true;
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}?tab=events&via=events/shop/${NAME}.18e79a07f17740b9`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(
+      screen.getByText(/This Pod (does not exist|no longer exists)/)
+    ).toBeInTheDocument();
+    const first = calls("get_pod");
+    for (let step = 0; step < 10; step++) {
+      await advance(700);
+      expect(
+        screen.getByText(/This Pod (does not exist|no longer exists)/)
+      ).toBeInTheDocument();
+    }
+    expect(calls("get_pod") - first).toBeLessThanOrEqual(1);
+  });
+});
+
 describe("a pod page whose pod is deleted while it is open", () => {
   /**
    * The page held its last read over the 404 as if a poll had dropped, and
@@ -1091,6 +1121,103 @@ describe("the pod page's Events", () => {
     expect(
       screen.getByRole("tab", { name: "Events: Could not read events." })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The header said "live" over a page whose events were refused. Fails if
+   * the freshness chip keeps its reading while a read beside the pod failed.
+   */
+  it("says the page is partly unread in the header where the events were refused", async () => {
+    await openEvents(async () => {
+      throw { code: "KUBE_API_ERROR", message: "events is forbidden" };
+    });
+
+    expect(screen.getByTestId("partly-unread")).toHaveTextContent(
+      "partly unread"
+    );
+  });
+});
+
+describe("a running pod that restarts while its probe fails", () => {
+  /**
+   * Two restarts and a failing liveness probe opened on Placement with no
+   * cause. Fails if the overview does not lead with the probe and the last
+   * exit, label the link between them as a guess, and carry the problem in
+   * the status chip.
+   */
+  it("leads with the probe failure and the last exit, and marks the chip", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          containers: [
+            {
+              ...RUNNING,
+              name: "app",
+              restartCount: 2,
+              lastTerminated: {
+                exitCode: 137,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: null,
+                finishedAt: "2026-10-07T06:20:00Z",
+              },
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events")
+        return [
+          {
+            ...podEvent("Unhealthy", "Warning", 4),
+            // Inside the window a probe failure counts for.
+            firstTimestamp: new Date(Date.now() - 20 * 60_000).toISOString(),
+            lastTimestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
+            message:
+              "Liveness probe failed: HTTP probe failed with statuscode: 500",
+          },
+        ];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(
+      screen.getByText("app fails its liveness probe")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Most likely why it restarts/)).toBeInTheDocument();
+    expect(screen.getByText(/2 restarts so far/)).toBeInTheDocument();
+    expect(document.querySelector('[data-problem="warn"]')).toHaveTextContent(
+      "Running"
+    );
+  });
+
+  /** No probe event, no claim: a pod with old restarts and nothing read about why stays unaccused. */
+  it("says nothing of a probe when the events name none", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          containers: [{ ...RUNNING, name: "app", restartCount: 2 }],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return [podEvent("Pulled", "Normal", 1)];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(screen.queryByText(/probe/)).toBeNull();
+    expect(document.querySelector("[data-problem]")).toBeNull();
   });
 });
 
@@ -2051,5 +2178,48 @@ describe("what a pod page's Restart and a debug pod's Delete Now call", () => {
       podName: "cart-debug",
       namespace: "shop",
     });
+  });
+});
+
+describe("the Usage of a pod with no container running", () => {
+  const waiting = {
+    ...RUNNING,
+    ready: false,
+    started: false,
+    state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
+    restartCount: 70,
+  };
+  const open = async (container: typeof RUNNING) => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return { ...POD, containers: [container] };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+  };
+
+  /**
+   * A pod crash-looping between runs said "not reporting" under Usage, the
+   * words for a read that failed, while its row in the list said nothing
+   * runs. Fails if the page and the list disagree, or a running pod is
+   * told it runs nothing.
+   */
+  it("says nothing is running, as its row does, and why there is no line", async () => {
+    await open(waiting as unknown as typeof RUNNING);
+    expect(screen.getAllByText("nothing running").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/None of its containers is running now/)
+    ).toBeVisible();
+  });
+
+  /** Fails if a pod whose container runs loses its live line to "nothing running". */
+  it("does not say so of a pod whose container runs", async () => {
+    await open(RUNNING);
+    expect(screen.queryByText("nothing running")).toBeNull();
   });
 });

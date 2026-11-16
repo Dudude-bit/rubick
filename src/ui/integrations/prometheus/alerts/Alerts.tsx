@@ -9,8 +9,18 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { hourMinute } from "../../kit";
-import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
+import { hourMinute, failedWithNothing } from "../../kit";
+import {
+  FilterBox,
+  Finding,
+  OutLink,
+  StaleRead,
+  VendorReadFailure,
+} from "../../page-kit";
+import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { Alert } from "@/components/ui/alert";
+import { NoneHere } from "../NoneHere";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { usePicture, type Picture } from "../monitors/data";
@@ -157,7 +167,7 @@ export default function Alerts() {
     }
   };
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("alerts", "couldNotRead")}
@@ -166,7 +176,9 @@ export default function Alerts() {
       />
     );
   }
-  if (!picture.data) return <p className="text-[11px] text-fg-fnt">…</p>;
+  if (!picture.data) {
+    return <Reading>{t("action", "readingEllipsis")}</Reading>;
+  }
   if (picture.data.rules.state === "unread") {
     return (
       <Finding
@@ -181,7 +193,12 @@ export default function Alerts() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <Header picture={picture.data} rows={rows} />
+      <Header
+        picture={picture.data}
+        rows={rows}
+        onRetry={() => void picture.refetch()}
+      />
+      <StaleRead read={picture} label="Prometheus" />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
           rows={rows}
@@ -205,7 +222,7 @@ export default function Alerts() {
           ) : (
             // The list beside this already says why it is empty. Saying it
             // again here put the same sentence on the screen twice.
-            <p className="text-[11.5px] text-fg-mut">
+            <p className="text-xs text-fg-mut">
               {rows.length === 0 ? null : t("alerts", "pickOne")}
             </p>
           )}
@@ -215,7 +232,15 @@ export default function Alerts() {
   );
 }
 
-function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
+function Header({
+  picture,
+  rows,
+  onRetry,
+}: {
+  picture: Picture;
+  rows: RuleRow[];
+  onRetry: () => void;
+}) {
   const t = useT();
   const read = picture.alertRules;
   const firing = rows.filter((row) => row.group === "firing").length;
@@ -235,7 +260,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
       <div className="min-w-0 max-w-[60ch]">
-        <p className="text-[13px] font-semibold tracking-tight text-fg">
+        <p className="text-title font-semibold tracking-tight text-fg">
           {alerts === null
             ? t("alerts", "objects", { n: rows.length })
             : alerts > 0
@@ -250,7 +275,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
         <p className="mt-0.5 text-xs text-fg-mut">{t("alerts", "pageHint")}</p>
       </div>
       {read.state === "notConnected" ? (
-        <Note tone="info">
+        <Note>
           {t("alerts", "notConnected")}{" "}
           <Link
             {...pageLink("integrations", { vendor: "prometheus" })}
@@ -260,11 +285,14 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
           </Link>
         </Note>
       ) : read.state === "unanswered" ? (
-        <Note tone="warn">
-          {t("alerts", "unanswered", { reason: read.reason })}
-        </Note>
+        <Unknown
+          className="max-w-[52ch]"
+          question={t("alerts", "rulesUnanswered")}
+          error={read.reason}
+          onRetry={onRetry}
+        />
       ) : (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("alerts", "rulesLoaded", { n: read.rules.length })}
         </p>
       )}
@@ -272,24 +300,11 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
   );
 }
 
-function Note({
-  tone,
-  children,
-}: {
-  tone: "info" | "warn";
-  children: React.ReactNode;
-}) {
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className={cn(
-        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-[11.5px] leading-relaxed text-fg-mut",
-        tone === "warn"
-          ? "border-warn/45 bg-warn/5"
-          : "border-info/40 bg-info/5"
-      )}
-    >
+    <Alert variant="info" className="max-w-[52ch]">
       {children}
-    </p>
+    </Alert>
   );
 }
 
@@ -358,7 +373,7 @@ function Ladder({
             onClick={() => onOnly(group)}
             aria-pressed={only === group}
             className={cn(
-              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-[11px] whitespace-nowrap",
+              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-caption whitespace-nowrap",
               only === group
                 ? "border-transparent bg-sel text-fg"
                 : "border-hair text-fg-mut hover:bg-hover"
@@ -388,20 +403,20 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-lane rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => row.group === group);
           if (members.length === 0) return null;
           return (
             <div key={group} className="flex flex-col">
-              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              <Eyebrow className="flex items-center gap-2 px-2 pb-0.5 pt-2.5">
                 {t("alerts", GROUP_KEY[group])}
                 <b className="font-mono font-medium normal-case tracking-normal text-fg-mut">
                   {members.length}
                 </b>
                 <i className="h-px flex-1 bg-hair" />
-              </p>
+              </Eyebrow>
               {members.map((row) => (
                 <Row
                   key={row.object.uid}
@@ -415,16 +430,24 @@ function Ladder({
             </div>
           );
         })}
-        {shown.length === 0 && (
-          <p className="px-2 py-3 text-[11.5px] text-fg-mut">
-            {rows.length === 0 ? t("alerts", "none") : t("alerts", "noneMatch")}
-          </p>
-        )}
+        {shown.length === 0 &&
+          (rows.length === 0 ? (
+            <NoneHere
+              inCluster={t("alerts", "none")}
+              inScope={t("alerts", "noneInScope")}
+            />
+          ) : (
+            <p className="px-2 py-3 text-xs text-fg-mut">
+              {t("alerts", "noneMatch")}
+            </p>
+          ))}
       </div>
-      <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-[10.5px] text-fg-fnt">
-        <span>{t("monitors", "keysMove")}</span>
-        <span>{t("monitors", "keysOpen")}</span>
-      </p>
+      {shown.length > 0 && (
+        <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
+          <span>{t("monitors", "keysMove")}</span>
+          <span>{t("monitors", "keysOpen")}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -462,7 +485,7 @@ function Row({
         "relative mx-1 grid cursor-pointer grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-[5px] py-1.5 pl-2.5 pr-2 transition-colors",
         on ? SELECTED[tone] : "hover:bg-hover",
         on &&
-          "after:absolute after:-right-[17px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
+          "after:absolute after:-right-[5px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
       )}
     >
       <i
@@ -472,17 +495,17 @@ function Row({
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-mono text-[12px] leading-4",
+            "truncate font-mono text-xs leading-4",
             on ? "text-fg" : "text-fg-mid"
           )}
           title={row.object.name}
         >
           {shortName}
         </p>
-        <p className="truncate text-[11px] leading-[15px] text-fg-fnt">
+        <p className="truncate text-caption leading-[15px] text-fg-fnt">
           {row.object.namespace}
           {folded && (
-            <span className="font-mono text-[10px] opacity-70">
+            <span className="font-mono text-micro opacity-70">
               {" · "}
               {prefix.replace(/-$/, "")}
             </span>
@@ -491,12 +514,12 @@ function Row({
       </div>
       <div
         className={cn(
-          "whitespace-nowrap text-right font-mono text-[11px] leading-4",
+          "whitespace-nowrap text-right font-mono text-caption leading-4",
           WORDS[tone]
         )}
       >
         {rowWords(row, t)}
-        <span className="block font-sans text-[10px] leading-[14px] text-fg-fnt">
+        <span className="block font-sans text-micro leading-[14px] text-fg-fnt">
           {t("alerts", "ruleCount", { n: row.object.rules.length })}
         </span>
       </div>
@@ -551,10 +574,10 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="break-all font-mono text-[15px] font-medium tracking-tight text-fg">
+          <span className="break-all font-mono text-display font-medium tracking-tight text-fg">
             {object.name}
           </span>
-          <span className="text-[11.5px] text-fg-fnt">
+          <span className="text-xs text-fg-fnt">
             PrometheusRule ·{" "}
             <span className="font-mono text-fg-mut">{object.namespace}</span>
             {object.recording > 0 &&
@@ -593,7 +616,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[13px] font-semibold leading-snug",
+              "text-title font-semibold leading-snug",
               tone === "mut" ? "text-fg" : TONE_TEXT[tone]
             )}
           >
@@ -811,7 +834,7 @@ function RuleCard({
         </span>
         <span
           className={cn(
-            "font-mono text-[11px]",
+            "font-mono text-caption",
             state ? (STATE_TONE[state] ?? "text-fg-fnt") : "text-fg-fnt"
           )}
         >
@@ -821,12 +844,12 @@ function RuleCard({
               : t("monitors", "notChecked"))}
         </span>
         {spec.for && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             <Sub>for</Sub> {spec.for}
           </span>
         )}
         {(spec.labels.severity ?? loaded?.labels.severity) && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             <Sub>severity</Sub>{" "}
             {spec.labels.severity ?? loaded?.labels.severity}
           </span>
@@ -835,7 +858,7 @@ function RuleCard({
           <button
             type="button"
             onClick={() => onCopy(spec.expr)}
-            className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover"
+            className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover"
           >
             <Copy className="size-3" aria-hidden />
             {t("monitors", "copyQuery")}
@@ -844,7 +867,7 @@ function RuleCard({
             <OutLink
               href={`${base}/graph?g0.expr=${encodeURIComponent(spec.expr)}&g0.tab=0`}
               site="Prometheus"
-              className="h-6 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover hover:no-underline"
+              className="h-6 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover hover:no-underline"
             >
               {t("monitors", "openInPrometheus")}
             </OutLink>
@@ -852,18 +875,18 @@ function RuleCard({
         </span>
       </div>
       {loaded?.health === "err" && loaded.lastError && (
-        <p className="mt-1 select-text break-all font-mono text-[11px] text-err">
+        <p className="mt-1 select-text break-all font-mono text-caption text-err">
           {loaded.lastError}
         </p>
       )}
       {(spec.annotations.summary ?? spec.annotations.description) && (
         // The rule's template, `{{ $labels.job }}` and all — source, like
         // the expression under it; each alert below carries it filled in.
-        <p className="mt-1 select-text font-mono text-[11px] text-fg-mut">
+        <p className="mt-1 select-text font-mono text-caption text-fg-mut">
           {spec.annotations.summary ?? spec.annotations.description}
         </p>
       )}
-      <code className="mt-1.5 block select-text break-all font-mono text-[11px] text-fg-mid">
+      <code className="mt-1.5 block select-text break-all font-mono text-caption text-fg-mid">
         {spec.expr}
       </code>
       {active.length > 0 && (
@@ -877,7 +900,7 @@ function RuleCard({
               >
                 <span
                   className={cn(
-                    "font-mono text-[11px]",
+                    "font-mono text-caption",
                     STATE_TONE[alert.state] ?? "text-fg-fnt"
                   )}
                 >
@@ -917,7 +940,7 @@ function RuleCard({
                     </span>
                   )}
                 </span>
-                <span className="text-[11px] tabular-nums text-fg-fnt">
+                <span className="text-caption tabular-nums text-fg-fnt">
                   {alert.activeAt
                     ? t("alerts", "since", {
                         time: hourMinute(alert.activeAt),
@@ -929,7 +952,7 @@ function RuleCard({
             );
           })}
           {active.length > 8 && (
-            <p className="px-2.5 py-1.5 text-[11px] text-fg-fnt">
+            <p className="px-2.5 py-1.5 text-caption text-fg-fnt">
               {t("alerts", "moreAlerts", { n: active.length - 8 })}
             </p>
           )}

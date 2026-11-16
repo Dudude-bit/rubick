@@ -1,15 +1,16 @@
 import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
-import { EyeOff, type LucideIcon } from "lucide-react";
+import { Lock, TriangleAlert, type LucideIcon } from "lucide-react";
 
-import { UnitValue } from "@/components/ui/metric-value";
+import { UnitValue, UnreadMetric } from "@/components/ui/metric-value";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
-import { conditionRole } from "@/lib/condition-health";
+import { Spinner } from "@/components/ui/spinner";
+import { conditionRole, spokenCondition } from "@/lib/condition-health";
 import { involvedNamespace } from "@/lib/event-incarnation";
 import { withoutCredentials } from "@/lib/hints";
 import { eventReasonMark } from "@/lib/event-reason";
@@ -29,7 +30,6 @@ import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { ABSENCE_SHORT, useMetricsAbsence } from "@/lib/metrics-absence";
 import { TONE_TEXT } from "@/lib/tone";
 
 /**
@@ -93,8 +93,9 @@ export function DetailAction({
       }}
       disabled={!blocked && (disabled || busy)}
       aria-disabled={blocked || undefined}
+      aria-busy={busy || undefined}
       className={cn(
-        "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40",
+        "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-caption transition-colors disabled:pointer-events-none disabled:opacity-40",
         danger ? "text-err" : "text-fg-mut",
         blocked
           ? "cursor-default opacity-40"
@@ -102,7 +103,11 @@ export function DetailAction({
         className
       )}
     >
-      {Icon && <Icon className={cn("h-3.5 w-3.5", busy && "animate-spin")} />}
+      {busy ? (
+        <Spinner size="xs" aria-hidden="true" className="h-3.5 w-3.5" />
+      ) : (
+        Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
       {label}
     </button>
   );
@@ -205,6 +210,7 @@ function ConditionRow({
   dated: boolean;
 }) {
   const role = conditionRole(condition, among);
+  const { reason, message } = spokenCondition(condition);
   // Colour is spent on anomalies only: five of a pod's six conditions are
   // satisfied on every healthy pod, and five green ticks per row is the wall
   // of colour that makes the sixth invisible. A satisfied condition keeps its
@@ -218,7 +224,7 @@ function ConditionRow({
   const Icon = ROLE_ICON[role];
   const age = useRealtimeAge(condition.lastTransitionTime ?? null);
   const stamp = formatDate(condition.lastTransitionTime) ?? undefined;
-  const detail = condition.message || condition.reason;
+  const detail = message || reason;
   // The one fact a satisfied condition's glyph has not already given: since
   // when. It reads on from the status word — `Ready True for 3d` — so it takes
   // the sentence's place, and the row has no second place to print it.
@@ -247,13 +253,16 @@ function ConditionRow({
        *  `MemoryPressure` the word that means met is `False`, and the reader
        *  with `kubectl describe` open beside this needs to see which. */}
       <span
-        className={cn("truncate text-[11px]", satisfied ? "text-fg-fnt" : tone)}
+        className={cn(
+          "truncate text-caption",
+          satisfied ? "text-fg-fnt" : tone
+        )}
       >
         {condition.status}
       </span>
       <span className="truncate text-fg-mut">
-        {condition.reason && detail !== condition.reason && (
-          <span className="font-mono">{condition.reason} </span>
+        {reason && detail !== reason && (
+          <span className="font-mono">{reason} </span>
         )}
         {detail && (
           <ResourceMessage message={detail} subject={subject} oneLine />
@@ -265,7 +274,7 @@ function ConditionRow({
         )}
       </span>
       {dated && (
-        <span className="text-right text-[11px] text-fg-fnt" title={stamp}>
+        <span className="text-right text-caption text-fg-fnt" title={stamp}>
           {detail && condition.lastTransitionTime ? age : ""}
         </span>
       )}
@@ -320,7 +329,7 @@ export function ProblemSummary({
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        <p className={cn("text-[13px] font-semibold tracking-tight", color)}>
+        <p className={cn("text-title font-semibold tracking-tight", color)}>
           {headline}
         </p>
         {detail && (
@@ -331,7 +340,9 @@ export function ProblemSummary({
          *  of the page's actions rather than the way to the rest of this
          *  one. */}
         {action && (
-          <div className="-ml-1.5 mt-0.5 flex items-center">{action}</div>
+          <div className="-ml-1.5 mt-0.5 flex flex-wrap items-center gap-x-3">
+            {action}
+          </div>
         )}
       </div>
     </div>
@@ -358,7 +369,6 @@ const BAR_ROLE = { ok: "bg-info", warn: "bg-warn", err: "bg-err" } as const;
  */
 export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   const t = useT();
-  const absence = useMetricsAbsence();
   const usedNum = typeof used === "number" ? used : null;
   const totalNum = typeof total === "number" && total > 0 ? total : null;
   const ratio =
@@ -366,7 +376,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
 
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_minmax(150px,max-content)] items-center gap-3 px-1.5 py-1">
-      <span className="text-[11px] text-fg-mut">{label}</span>
+      <span className="text-caption text-fg-mut">{label}</span>
       {/* No track without a ratio to fill it. An empty full-width track
        *  reads as a bar at zero, and neither "declares no limit" nor "no
        *  metrics-server" is a reading of 0%. */}
@@ -383,18 +393,11 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
           />
         </span>
       )}
-      <span className="whitespace-nowrap text-right text-[11px] text-fg-mut">
+      <span className="whitespace-nowrap text-right text-caption text-fg-mut">
         {usedNum === null ? (
-          // A blank number here is almost never "this object uses
-          // nothing" — it is metrics-server not being installed, which
-          // is a cluster the reader can fix rather than a reading.
-          <span className="text-fg-fnt">
-            {type === "count"
-              ? t("cluster", "countsUnread")
-              : absence === null
-                ? t("cluster", "metricNoSampleYet")
-                : t("cluster", ABSENCE_SHORT[absence])}
-          </span>
+          <UnreadMetric
+            reason={type === "count" ? t("cluster", "countsUnread") : undefined}
+          />
         ) : (
           <UnitValue value={formatQuantity(usedNum, type, unit)} />
         )}
@@ -418,6 +421,11 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   );
 }
 
+function UnreadGlyph({ refused }: { refused?: boolean }) {
+  const Glyph = refused ? Lock : TriangleAlert;
+  return <Glyph className="h-3 w-3 flex-none" aria-hidden="true" />;
+}
+
 export type CompositionTone = "ok" | "pending" | "warn" | "err" | "neutral";
 
 export interface CompositionSegment {
@@ -426,6 +434,7 @@ export interface CompositionSegment {
   tone: CompositionTone;
   /** Counted from what nobody could confirm: drawn with the not-read mark. */
   unread?: boolean;
+  refused?: boolean;
   /** Words that qualify the count, kept whole: they wrap onto their own line rather than break. */
   qualifier?: string;
 }
@@ -460,6 +469,8 @@ export interface CompositionProps {
   emptyMessage?: ReactNode;
   /** Why the total is what it is, e.g. "2 at a time · up to 6 retries". */
   note?: ReactNode;
+  /** What stands in the legend when the total is `null`; defaults to the refusal wording. */
+  unreadLegend?: ReactNode;
 }
 
 /**
@@ -476,6 +487,7 @@ export function Composition({
   segments,
   emptyMessage,
   note,
+  unreadLegend,
 }: CompositionProps) {
   const visible = segments.filter((segment) => segment.count > 0);
 
@@ -484,13 +496,13 @@ export function Composition({
       <div className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            "font-mono text-[15px] font-semibold",
+            "font-mono text-display font-semibold",
             total == null ? "text-fg-fnt" : "text-fg"
           )}
         >
           {total ?? <T section="empty" k="notReadLower" />}
         </span>
-        <span className="text-[11px] text-fg-mut">{label}</span>
+        <span className="text-caption text-fg-mut">{label}</span>
       </div>
       <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
         {total != null &&
@@ -502,10 +514,10 @@ export function Composition({
             />
           ))}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
         {total == null ? (
           <span className="text-fg-fnt">
-            <T section="empty" k="notReadableWithAccess" />
+            {unreadLegend ?? <T section="empty" k="notReadableWithAccess" />}
           </span>
         ) : visible.length === 0 ? (
           <span className="text-fg-fnt">
@@ -525,9 +537,7 @@ export function Composition({
                   {segment.count} {segment.label}
                 </span>{" "}
                 <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                  {segment.unread && (
-                    <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-                  )}
+                  {segment.unread && <UnreadGlyph refused={segment.refused} />}
                   {segment.qualifier}
                 </span>
               </span>
@@ -539,16 +549,14 @@ export function Composition({
                   segment.unread && "inline-flex items-center gap-1"
                 )}
               >
-                {segment.unread && (
-                  <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-                )}
+                {segment.unread && <UnreadGlyph refused={segment.refused} />}
                 {segment.count} {segment.label}
               </span>
             )
           )
         )}
       </div>
-      {note && <p className="mt-1.5 text-[11px] text-fg-fnt">{note}</p>}
+      {note && <p className="mt-1.5 text-caption text-fg-fnt">{note}</p>}
     </div>
   );
 }
@@ -571,17 +579,17 @@ export interface HeadlineProps {
 export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
   return (
     <div>
-      <div className="text-[11px] text-fg-mut">{label}</div>
+      <div className="text-caption text-fg-mut">{label}</div>
       <div
         className={cn(
-          "mt-1 wrap-break-word text-[15px] font-semibold",
+          "mt-1 wrap-break-word text-display font-semibold",
           mono && "font-mono",
           tone ? TONE_CLASS[tone] : "text-fg"
         )}
       >
         {value}
       </div>
-      {note && <p className="mt-0.5 text-[11px] text-fg-fnt">{note}</p>}
+      {note && <p className="mt-0.5 text-caption text-fg-fnt">{note}</p>}
     </div>
   );
 }
@@ -659,7 +667,7 @@ const EventRow = memo(function EventRow({
   const isWarning = event.type === "Warning";
   const count = event.count ?? 0;
   const tally = tallyOf(event);
-  const { family, Icon, color } = eventReasonMark(event.reason ?? null);
+  const { family, Icon } = eventReasonMark(event.reason ?? null);
   // Almost every name a controller writes is in its own namespace and it
   // does not say so; the involved object is the one thing that knows which.
   const subject = {
@@ -667,12 +675,7 @@ const EventRow = memo(function EventRow({
     name: event.involvedObject.name,
     namespace: involvedNamespace(event),
   };
-  // Two independent channels, one per column: the left mark is severity, the
-  // mark on the reason is family. Where they meet severity takes the colour
-  // outright — a Warning is amber end to end or the warnings in a feed cannot
-  // be counted — and the family keeps only its shape, so a FailedMount is an
-  // amber platter and a FailedScheduling an amber pin.
-  const familyStyle = isWarning || !color ? undefined : { color };
+  // Only a Warning carries a tone; a Normal reason stays muted.
 
   return (
     <div className={compact ? EVENT_ROW_COMPACT : EVENT_ROW}>
@@ -680,7 +683,7 @@ const EventRow = memo(function EventRow({
        *  stay readable without hue. */}
       <span
         className={cn(
-          "justify-self-center text-[9px]",
+          "justify-self-center text-micro",
           isWarning ? "text-warn" : "text-fg-fnt"
         )}
         aria-hidden="true"
@@ -690,9 +693,8 @@ const EventRow = memo(function EventRow({
       <span
         className={cn(
           "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
-          isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
+          isWarning ? "text-warn" : "text-fg-mut"
         )}
-        style={familyStyle}
         title={event.reason ?? undefined}
       >
         <span className="sr-only">
@@ -703,7 +705,11 @@ const EventRow = memo(function EventRow({
           className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
           aria-hidden="true"
         />
-        {event.reason ? <ReasonText reason={event.reason} /> : <None />}
+        {event.reason ? (
+          <ReasonText reason={event.reason} oneLine={compact} />
+        ) : (
+          <None />
+        )}
       </span>
       {/* The row truncates, and an Event has no detail page to open, so the
        *  controller's own sentence is otherwise unreachable. */}
@@ -735,7 +741,7 @@ const EventRow = memo(function EventRow({
       {/* One cell for both, so a row that never repeated hands the count's
        *  width to its message instead of leaving it blank. */}
       <span
-        className="flex items-baseline justify-end gap-2 whitespace-nowrap text-[11px] text-fg-fnt"
+        className="flex items-baseline justify-end gap-2 whitespace-nowrap text-caption text-fg-fnt"
         data-testid="event-when"
       >
         {count > 1 && (

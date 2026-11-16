@@ -35,6 +35,14 @@ const answers = vi.hoisted(() => ({
   },
 }));
 
+const shell = vi.hoisted(() => ({
+  attention: null as { items: unknown[] } | null,
+}));
+
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => shell.attention,
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     forgetDiscovery: () => Promise.resolve(),
@@ -97,6 +105,7 @@ const table = (
 });
 
 beforeEach(() => {
+  shell.attention = null;
   answers.pages = [];
   answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
   useClusterStore.setState({
@@ -529,6 +538,93 @@ describe("an access kind on the generic list", () => {
       expect(screen.getByText(header)).toBeVisible();
     for (const english of ["Reference", "Targets", "MinPods", "Replicas"])
       expect(screen.queryByText(english)).toBeNull();
+  });
+
+  /**
+   * The HPA's Targets read "cpu: <unknown>/80%, memory: <unknown>/80%", the
+   * word kubectl prints for a metric it could not read, as if it were a value.
+   * Fails if the word is drawn as text instead of the could-not-look mark, or
+   * if the whole printed text stops being the hover.
+   */
+  it("draws an HPA metric the cluster printed as <unknown> with the could-not-look mark", async () => {
+    const HPA: CatalogEntry = {
+      ...LEASES,
+      group: "autoscaling",
+      kind: "HorizontalPodAutoscaler",
+      plural: "horizontalpodautoscalers",
+    };
+    await inRussian(
+      HPA,
+      printed(
+        [column("Name"), column("Targets")],
+        [
+          row("hello-web", "lena-sandbox", [
+            "hello-web",
+            "cpu: <unknown>/80%, memory: <unknown>/80%",
+          ]),
+        ]
+      )
+    );
+    expect(await screen.findByText("hello-web")).toBeVisible();
+    expect(screen.getAllByRole("img", { name: /<unknown>/ })).toHaveLength(2);
+    expect(
+      document.querySelector(
+        '[title="cpu: <unknown>/80%, memory: <unknown>/80%"]'
+      )
+    ).not.toBeNull();
+  });
+
+  /**
+   * The api HPA was FailedGetScale on the Overview and "1 problem" in the
+   * status bar while its own row in the HPA list said nothing. Fails if a
+   * printed list's row does not carry the problem the shell counts against
+   * its object, or carries another object's.
+   */
+  it("marks the row of an object the shell counts a problem against", async () => {
+    const HPA: CatalogEntry = {
+      ...LEASES,
+      group: "autoscaling",
+      kind: "HorizontalPodAutoscaler",
+      plural: "horizontalpodautoscalers",
+    };
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+    };
+    shell.attention = {
+      items: [
+        {
+          ...self,
+          key: "hpa",
+          tone: "warn",
+          reason: "FailedGetScale",
+          detail: null,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: self,
+        },
+      ],
+    };
+    await inRussian(
+      HPA,
+      printed(
+        [column("Name"), column("Reference")],
+        [
+          row("hello-web", "lena-sandbox", [
+            "hello-web",
+            "Deployment/hello-web",
+          ]),
+          row("other", "lena-sandbox", ["other", "Deployment/other"]),
+        ]
+      )
+    );
+    const marked = await screen.findByTitle("FailedGetScale");
+    expect(marked).toHaveAttribute("data-problem", "warn");
+    expect(marked).toHaveTextContent("hello-web");
+    expect(document.querySelectorAll("[data-problem]")).toHaveLength(1);
   });
 
   /** Lena's HPA list beside the peek drew its Name as "h…". Fails if a narrow port squeezes the name rather than hiding the later columns, or hides them without saying so. */

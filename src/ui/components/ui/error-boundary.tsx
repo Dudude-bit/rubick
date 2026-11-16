@@ -60,7 +60,7 @@ export class ErrorBoundary extends React.Component<
 
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="text-lg font-semibold">
+        <div className="text-display font-semibold">
           <T section="action" k="somethingWentWrong" />
         </div>
         <div className="text-xs text-fg-mut">

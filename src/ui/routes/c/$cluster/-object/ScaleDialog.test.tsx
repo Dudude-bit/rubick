@@ -10,6 +10,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ScaleDialog } from "./ScaleDialog";
+import { writeToastsHeld } from "@/lib/write-hold";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -152,5 +153,109 @@ describe("a count read after the dialog opened", () => {
     expect(
       screen.getByText("Type how many replicas to run, 0 or more.")
     ).toBeInTheDocument();
+  });
+});
+
+describe("scaling while the write is in flight", () => {
+  /**
+   * The submit was disabled with no sign of why and Cancel stayed live,
+   * closing the dialog over a write that was still running. Fails if the
+   * button stops showing it is working, or Cancel stays pressable.
+   */
+  it("shows the scale button working and holds Cancel", () => {
+    render(scale({ busy: true }));
+    expect(scaleButton()).toBeDisabled();
+    expect(scaleButton()).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+});
+
+describe("scaling when the write failed", () => {
+  /**
+   * A failure was a toast over a dialog that looked unchanged. Fails if the
+   * dialog stops saying inline which count could not be set, and why.
+   */
+  it("says under the count what could not be set and why", async () => {
+    const { rerender } = render(scale({ onSubmit: () => {} }));
+    await userEvent.click(scaleButton());
+    rerender(scale({ error: new Error("deployments/scale is forbidden") }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/forbidden/);
+  });
+
+  /** Fails if an unanswered write is drawn red, as if the cluster had refused it. */
+  it("says an unanswered write may have gone through", async () => {
+    const { rerender } = render(scale());
+    await userEvent.click(scaleButton());
+    rerender(
+      scale({
+        error: Object.assign(new Error("timed out"), { code: "NO_ANSWER" }),
+      })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/may have done it/);
+  });
+
+  /** Fails if the dialog lets the toast say the same refusal a second time. */
+  it("holds the failure toasts exactly while the write is out", async () => {
+    const { rerender } = render(scale());
+    expect(writeToastsHeld()).toBe(false);
+    rerender(scale({ busy: true }));
+    expect(writeToastsHeld()).toBe(true);
+    rerender(scale({ busy: false }));
+    expect(writeToastsHeld()).toBe(false);
+  });
+
+  /** Fails if Enter in the count field sends a second write while the first is out. */
+  it("does not submit again while a write is out", async () => {
+    const onSubmit = vi.fn();
+    render(scale({ busy: true, onSubmit }));
+    await userEvent.type(screen.getByLabelText(/replicas/i), "{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  /** Fails if an error left from an earlier opening shows before anything was asked. */
+  it("shows no error before a count was submitted", () => {
+    render(scale({ error: new Error("old failure") }));
+    expect(screen.queryByText(/old failure/)).toBeNull();
+  });
+});
+
+describe("what the dialog says before it scales", () => {
+  /**
+   * Opened from a list row, the dialog showed a bare field: no current count
+   * and no word on what the number does. Fails if the running count is not
+   * stated, or the change typed is not worded as pods started, stopped, none
+   * or all.
+   */
+  it("states the running count and what the typed number changes", async () => {
+    render(scale({ current: 3 }));
+    expect(screen.getByTestId("scale-current")).toHaveTextContent(
+      "Runs 3 replicas now."
+    );
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "The same as now"
+    );
+    const field = screen.getByLabelText("Number of replicas");
+    await userEvent.clear(field);
+    await userEvent.type(field, "5");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Starts 2 more pods."
+    );
+    await userEvent.clear(field);
+    await userEvent.type(field, "2");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Stops 1 pod."
+    );
+    await userEvent.clear(field);
+    await userEvent.type(field, "0");
+    expect(screen.getByTestId("scale-change")).toHaveTextContent(
+      "Stops every pod"
+    );
+  });
+
+  /** Fails if a count that was not read is drawn as a number, or a change is claimed against it. */
+  it("says nothing about a count it has not read", () => {
+    render(scale({ current: undefined }));
+    expect(screen.queryByTestId("scale-current")).toBeNull();
+    expect(screen.queryByTestId("scale-change")).toBeNull();
   });
 });

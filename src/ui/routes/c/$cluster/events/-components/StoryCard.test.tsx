@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 import type { EventInfo } from "@/generated/types";
 import {
@@ -108,7 +108,7 @@ describe("a story card held between watch ticks", () => {
    * say with nothing else on the card moving. Fails if the card is held over
    * a state it no longer has.
    */
-  it("draws the story's new state when a filter narrows the feed under it", async () => {
+  it("draws the story's new state, named for what was read, when a filter narrows the feed under it", async () => {
     const started: EventInfo = {
       ...backOff,
       type: "Normal",
@@ -142,7 +142,8 @@ describe("a story card held between watch ticks", () => {
         showNamespace={false}
       />
     );
-    expect(screen.getByText("cannot say")).toBeInTheDocument();
+    expect(screen.getByText("no warnings read")).toBeInTheDocument();
+    expect(screen.queryByText("cannot say")).not.toBeInTheDocument();
   });
 });
 
@@ -459,5 +460,157 @@ describe("a story's clock for a static pod", () => {
       "team-a/Service.serving.knative.dev/web",
       "team-a/Service/web",
     ]);
+  });
+});
+
+describe("a story's timeline column", () => {
+  /**
+   * One column mixed "14:03:22" and "12.11 14:03:22": the rows from today
+   * carried no date and the rest did, so the eye could not read them as one
+   * scale. Fails if a row from today drops its date while another has one, or
+   * a timeline of today alone grows one.
+   */
+  it("dates every row once any row is not from today", async () => {
+    const live = Date.now();
+    const options: StoryOptions = {
+      now: live,
+      windowMs: 48 * HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const old = {
+      ...backOff,
+      uid: "old",
+      firstTimestamp: new Date(live - 30 * HOUR).toISOString(),
+      lastTimestamp: new Date(live - 30 * HOUR).toISOString(),
+      count: 1,
+    };
+    const recent = {
+      ...backOff,
+      count: 1,
+      firstTimestamp: new Date(live - 1000).toISOString(),
+      lastTimestamp: new Date(live - 1000).toISOString(),
+    };
+    const rows = async (events: EventInfo[]) => {
+      const [story] = storiesOf(events, options);
+      await renderWithRouter(
+        <StoryCard
+          crd={undefined}
+          story={story}
+          options={options}
+          showNamespace={false}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Timeline/ }));
+      return screen
+        .getAllByRole("listitem")
+        .map((item) => item.firstElementChild?.textContent ?? "");
+    };
+
+    const mixed = await rows([old, recent]);
+    expect(mixed).toHaveLength(2);
+    for (const stamp of mixed)
+      expect(stamp).toMatch(/^\d\d\.\d\d \d\d:\d\d:\d\d$/);
+
+    cleanup();
+    const today = await rows([recent]);
+    expect(today[0]).toMatch(/^\d\d:\d\d:\d\d$/);
+  });
+});
+
+describe("one story, one tone", () => {
+  /**
+   * A story still happening drew its reason red while the header and the
+   * timeline drew the same Warning amber. Fails if an ongoing story turns a
+   * Warning's reason red instead of marking it with its label.
+   */
+  it("draws the reason of a story still happening amber, as every Warning is", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const [story] = storiesOf([backOff], options);
+    expect(story.state).toBe("stillHappening");
+    await renderWithRouter(
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
+    );
+    const reason = screen.getByText("BackOff");
+    expect(reason).toHaveClass("text-warn");
+    expect(reason).not.toHaveClass("text-err");
+  });
+});
+
+describe("what a story's chip and spans say", () => {
+  const whole: StoryOptions = {
+    now: NOW,
+    windowMs: HOUR,
+    narrowed: false,
+    readFrom: null,
+  };
+  const card = (story: ReturnType<typeof storiesOf>[number], options = whole) =>
+    renderWithRouter(
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
+    );
+
+  /**
+   * A routine story in a read cut short drew a grey "cannot say" that read
+   * as a failed read. Fails if it is worded as one, or its hover stops
+   * saying why it is not "done".
+   */
+  it("calls a routine story in a cut read one with no warnings read, and says why on hover", async () => {
+    const started: EventInfo = {
+      ...backOff,
+      type: "Normal",
+      reason: "Started",
+    };
+    const cut = { ...whole, readFrom: NOW - HOUR / 2 };
+    await card(storiesOf([started], cut)[0], cut);
+    const chip = screen.getByText("no warnings read");
+    expect(chip.title).toMatch(/stopped at its limit/);
+    expect(screen.queryByText("cannot say")).not.toBeInTheDocument();
+  });
+
+  /** A warning with no time really cannot be placed, and keeps the could-not-tell word. Fails if every unknown is softened. */
+  it("keeps cannot say for a warning that carries no time", async () => {
+    const undated: EventInfo = {
+      ...backOff,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    };
+    await card(storiesOf([undated], whole)[0]);
+    expect(screen.getByText("cannot say").title).toMatch(/carries no time/);
+  });
+
+  /** Counts from before the window sat beside a header that counts the window. Fails if a story reaching back says only its length. */
+  it("says a span reaches before the window", async () => {
+    const old: EventInfo = {
+      ...backOff,
+      count: 245,
+      firstTimestamp: new Date(NOW - 40 * HOUR).toISOString(),
+    };
+    await card(storiesOf([old], whole)[0]);
+    expect(screen.getByText(/reaching before the window/)).toBeInTheDocument();
+  });
+
+  /** The hatched slices are unread, and must say so on hover. Fails if they are mute. */
+  it("explains the hatched slices of the strip", async () => {
+    const cut = { ...whole, readFrom: NOW - HOUR / 2 };
+    await card(storiesOf([backOff], cut)[0], cut);
+    const hatch = screen
+      .getByRole("img")
+      .querySelector<HTMLElement>(".border-dashed");
+    expect(hatch?.title).toMatch(/Nobody looked there/);
   });
 });

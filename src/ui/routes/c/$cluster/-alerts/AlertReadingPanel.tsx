@@ -1,5 +1,8 @@
 import { useMemo, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ExternalLink, TriangleAlert } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
 import { formatAge, cn, formatWhen } from "@/lib/utils";
@@ -105,22 +108,22 @@ export function AlertReadingPanel({
   return (
     <div className="flex flex-col gap-2 px-3 py-2.5">
       <div className="flex items-baseline gap-2">
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("alerts", "readAsAnAlert")}
         </span>
-        <span className="ml-auto rounded border border-hair px-1.5 text-[10px] uppercase tracking-wide text-fg-fnt">
+        <span className="ml-auto rounded border border-hair px-1.5 text-micro uppercase tracking-wide text-fg-fnt">
           {t("alerts", FORMAT_KEY[reading.format])}
         </span>
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="truncate font-mono text-[13px] font-medium text-fg">
+        <span className="truncate font-mono text-title font-medium text-fg">
           {reading.alertName ?? t("alerts", "unnamedAlert")}
         </span>
         {reading.severity ? (
           <span
             className={cn(
-              "flex-none rounded border px-1 text-[10px] uppercase tracking-wide",
+              "flex-none rounded border px-1 text-micro uppercase tracking-wide",
               SEVERITY_CHIP[severityTone(reading.severity)]
             )}
           >
@@ -130,12 +133,12 @@ export function AlertReadingPanel({
       </div>
 
       {reading.grouped !== null ? (
-        <p className="text-[11px] text-warn">
+        <p className="text-caption text-warn">
           {t("alerts", "grouped", { n: reading.grouped })}
         </p>
       ) : null}
 
-      <dl className="grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[11.5px]">
+      <dl className="grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
         <dt className={context === null ? "text-warn" : "text-fg-fnt"}>
           {t("alerts", "cluster")}
         </dt>
@@ -297,38 +300,41 @@ export function AlertReadingPanel({
       </dl>
 
       {reading.claim ? (
-        <p className="border-l-2 border-hair py-1 pl-2.5 text-[11.5px] text-fg-mid">
+        <p className="rounded-[4px] border border-hair bg-hover px-2 py-1 text-xs text-fg-mid">
           {reading.claim}
-          <span className="mt-1 block text-[10.5px] text-fg-fnt">
+          <span className="mt-1 block text-caption text-fg-fnt">
             {t("alerts", "theAlertsWords")}
           </span>
         </p>
       ) : null}
 
       {reading.objects.some((entry) => entry.from.how === "shape") ? (
-        <p className="border-l-2 border-warn/50 py-1 pl-2.5 text-[11.5px] text-fg-mut">
-          {t("alerts", "guessedFromShape")}
-        </p>
+        <Alert variant="warn" className="py-1.5">
+          <TriangleAlert aria-hidden />
+          <p className="text-fg-mut">{t("alerts", "guessedFromShape")}</p>
+        </Alert>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 pt-0.5">
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="outline"
           // No autoFocus: it took focus off the palette's input the instant
           // the panel mounted, and the handler that puts `esc` back on the
           // search box lives there — so `esc` closed the whole palette and
           // ⌘K reopened it on the stale alert instead of the search.
           disabled={link === null || context === null}
           onClick={() => object && open(link, object.kind, object.name)}
-          className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-[11.5px] text-info transition-colors hover:bg-info/20 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className="text-info"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
           {object
             ? t("alerts", "openThis", { kind: object.kind, name: object.name })
             : t("alerts", "openIt")}
-        </button>
+        </Button>
         {object !== null && link === null ? (
-          <span className="text-[11px] text-warn">
+          <span className="text-caption text-warn">
             {objectLink({
               kind: object.kind,
               name: object.name,
@@ -344,7 +350,7 @@ export function AlertReadingPanel({
             onClick={() =>
               open(namespaceLink, "Namespace", namespace as string)
             }
-            className="rounded px-1 text-[11px] text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            className="rounded px-1 text-caption text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >
             {t("alerts", "orTheNamespace", { namespace: namespace as string })}
           </button>
@@ -413,18 +419,18 @@ function Value({
 function From({ from, t }: { from: Provenance; t: T }) {
   if (from.how === "key") {
     return (
-      <span className="font-mono text-[10.5px] text-fg-fnt">{`${from.key} =`}</span>
+      <span className="font-mono text-caption text-fg-fnt">{`${from.key} =`}</span>
     );
   }
   if (from.how === "sourceHost") {
     return (
-      <span className="text-[10.5px] text-fg-fnt">
+      <span className="text-caption text-fg-fnt">
         {t("alerts", "fromTheSourceHost")}
       </span>
     );
   }
   return (
-    <span className="text-[10.5px] text-warn">{t("alerts", "byShape")}</span>
+    <span className="text-caption text-warn">{t("alerts", "byShape")}</span>
   );
 }
 
@@ -453,7 +459,7 @@ function Choices({
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="text-[10.5px] text-fg-fnt">{note}</span>
+      <span className="text-caption text-fg-fnt">{note}</span>
       <div
         ref={group}
         role="radiogroup"
@@ -496,7 +502,7 @@ function Choices({
               <span className="font-mono text-fg-mut">{item.kind}</span>
             ) : null}
             <span className="truncate font-mono text-fg">{item.label}</span>
-            <span className="ml-auto flex-none pl-2 text-[10.5px] text-fg-fnt">
+            <span className="ml-auto flex-none pl-2 text-caption text-fg-fnt">
               {item.why}
             </span>
           </button>

@@ -21,7 +21,7 @@
 import { create } from "zustand";
 
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import type {
   DrainOptions,
   DrainOutcome,
@@ -58,7 +58,7 @@ export type DrainState =
       message: string | null;
     }
   /** The command itself was refused — no drain ever started. */
-  | { phase: "failed"; node: string; message: string };
+  | { phase: "failed"; node: string; message: string; refused: boolean };
 
 const IDLE: DrainState = { phase: "idle" };
 
@@ -228,7 +228,12 @@ export async function startDrain(
   } catch (error) {
     if (handles.get(key) !== handle) return;
     if (handle.drainId === null) handles.delete(key);
-    put(key, { phase: "failed", node, message: errorToShow(error) });
+    put(key, {
+      phase: "failed",
+      node,
+      message: errorToShow(error),
+      refused: isRefusal(error),
+    });
   }
 }
 

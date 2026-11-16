@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { LIST_NOTICE_WIDTH } from "./list-unread";
 import { Unknown } from "@/components/ui/unknown";
 import type { UnreadNamespace } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -15,12 +17,15 @@ export function UnreadNamespaces({
   unread: readonly UnreadNamespace[];
   /** What was not read, as it reads inside a sentence. */
   label: string;
-  onRetry?: () => void;
+  onRetry?: () => unknown;
 }) {
   const t = useT();
   if (unread.length === 0) return null;
   return (
-    <div className="mb-2 flex flex-col gap-1.5" data-testid="unread-namespaces">
+    <div
+      className={cn("mb-2 flex flex-col gap-1.5", LIST_NOTICE_WIDTH)}
+      data-testid="unread-namespaces"
+    >
       {unread.map((missing) => (
         <Unknown
           key={missing.namespace}

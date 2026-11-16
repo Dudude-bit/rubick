@@ -15,7 +15,7 @@ import { ExitAgo } from "../../../-object/ExitAgo";
 import type { ContainerInfo, PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
-import { StartOnAsk } from "./StartOnAsk";
+import { HollowFrame, StartOnAsk } from "./StartOnAsk";
 import type { PodDenied } from "@/lib/access";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { cn } from "@/lib/utils";
@@ -236,10 +236,9 @@ function Hollow({
   children: ReactNode;
 }) {
   return (
-    <div className="max-w-[62ch] px-3 pb-12 pt-11" data-testid="shell-hollow">
-      <h3 className="mb-1.5 text-[13px] font-medium text-fg">{headline}</h3>
+    <HollowFrame headline={headline} testId="shell-hollow">
       {children}
-    </div>
+    </HollowFrame>
   );
 }
 
@@ -407,7 +406,7 @@ export function PodShell({
           role="radiogroup"
           aria-label={t("action", "containerToAttach")}
           data-testid="shell-chooser"
-          className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
+          className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-caption"
         >
           {containers.map((c) => {
             const why = whyNoShell(c, t);
@@ -443,7 +442,7 @@ export function PodShell({
                   {c.name}
                 </span>
                 {phase && (
-                  <span className="text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+                  <span className="text-micro uppercase tracking-[0.04em] text-fg-fnt">
                     {phase}
                   </span>
                 )}
@@ -456,7 +455,7 @@ export function PodShell({
 
       {target && denied.shell ? (
         <Hollow headline={t("empty", "shellNotPermitted")}>
-          <p className="flex items-start gap-1.5 text-xs text-err">
+          <p className="flex items-start gap-1.5 text-xs text-warn">
             <Lock className="mt-px h-3.5 w-3.5 flex-none" aria-hidden="true" />
             {denied.shell}
           </p>

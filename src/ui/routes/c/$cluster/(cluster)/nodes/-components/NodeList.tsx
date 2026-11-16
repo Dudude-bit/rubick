@@ -7,6 +7,7 @@ import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { KindAbout } from "@/components/object/KindAbout";
 import { NodeUtilisation } from "./NodeUtilisation";
 import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
@@ -18,6 +19,8 @@ import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { widestText } from "@/lib/text-width";
 import { useCallback, useMemo } from "react";
+import { SegmentedControl } from "@/components/ui/states";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -89,6 +92,7 @@ export const columns = (
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
+      sort: (row: NodeInfo) => (nodeReadyWord(row) === "Ready" ? 0 : 1),
       floor: () => badgeCellPx(["NotReady"]),
       share: (row: NodeInfo) => nodeReadyWord(row),
     },
@@ -105,7 +109,10 @@ export const columns = (
     size: 170,
     accessorKey: "roles",
     header: columnHeader("columns", "roles"),
-    meta: { floor: () => widestText(["control-plane"], "sans", 6.6) + 20 },
+    meta: {
+      sort: (row: NodeInfo) => row.roles.join(" "),
+      floor: () => widestText(["control-plane"], "sans", 6.6) + 20,
+    },
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -138,6 +145,8 @@ export const columns = (
     header: columnHeader("columns", "internalIp"),
     meta: {
       yields: 1,
+      sort: (row: NodeInfo) =>
+        row.status.addresses.find((a) => a.type === "InternalIP")?.address,
       floor: IPV4_CELL_PX,
       share: (row: NodeInfo, t) => ({
         text:
@@ -158,9 +167,10 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: columnHeader("columns", "cpuUsage"),
+    header: columnHeader("columns", "cpu"),
     meta: {
       yields: 3,
+      sort: (row: NodeInfo) => nodeMetricsByName.get(row.name)?.cpuMillicores,
       floor: metricCellFloor(
         (row: NodeInfo) => nodeMetricsByName.get(row.name)?.cpuMillicores
       ),
@@ -178,6 +188,7 @@ export const columns = (
         <MetricValue
           used={metrics?.cpuMillicores ?? null}
           limit={capacity ? parseCPU(capacity) : null}
+          of="capacity"
           type="cpu"
         />
       );
@@ -186,9 +197,10 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: columnHeader("columns", "memoryUsage"),
+    header: columnHeader("columns", "memory"),
     meta: {
       yields: 2,
+      sort: (row: NodeInfo) => nodeMetricsByName.get(row.name)?.memoryBytes,
       floor: metricCellFloor(
         (row: NodeInfo) => nodeMetricsByName.get(row.name)?.memoryBytes
       ),
@@ -208,6 +220,7 @@ export const columns = (
         <MetricValue
           used={metrics?.memoryBytes ?? null}
           limit={capacity ? parseMemory(capacity) : null}
+          of="capacity"
           type="memory"
         />
       );
@@ -219,6 +232,10 @@ export const columns = (
     header: columnHeader("columns", "podCap"),
     meta: {
       yields: 4,
+      sort: (row: NodeInfo) => {
+        const pods = Number(row.capacity?.pods);
+        return Number.isNaN(pods) ? undefined : pods;
+      },
       share: (row: NodeInfo, t) =>
         row.capacity?.pods || {
           text: t("empty", "unknownLower"),
@@ -264,7 +281,6 @@ export function NodeList() {
     subscribe: subscribeNodes,
     queryKey,
     detail: NODE_DETAIL,
-    reportFailure: toPlural(ResourceType.Node),
   });
 
   // In the URL, so a deep link can open the view and a reload keeps it.
@@ -308,28 +324,15 @@ export function NodeList() {
   });
 
   const viewToggle = (
-    <span
-      role="tablist"
-      aria-label={t("columns", "view")}
-      className="flex items-center gap-0.5"
-    >
-      {(["table", "utilisation"] as const).map((candidate) => (
-        <button
-          key={candidate}
-          type="button"
-          role="tab"
-          aria-selected={view === candidate}
-          onClick={() => setView(candidate)}
-          className={
-            view === candidate
-              ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-              : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
-          }
-        >
-          {t("columns", candidate === "table" ? "tableView" : "utilisation")}
-        </button>
-      ))}
-    </span>
+    <SegmentedControl
+      label={t("columns", "view")}
+      value={view}
+      onChange={setView}
+      segments={[
+        { value: "table", label: t("columns", "tableView") },
+        { value: "utilisation", label: t("columns", "utilisation") },
+      ]}
+    />
   );
 
   const nodeColumns = useMemo(
@@ -348,12 +351,16 @@ export function NodeList() {
         icon: ShieldOff,
         label: t("action", "cordon"),
         onClick: (item) => actions.cordon(item.name),
+        hidden: (item) => item.unschedulable,
+        pending: (item) => actions.pending(item.name),
         reason: (item) => actions.denied(item.name),
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
         onClick: (item) => actions.uncordon(item.name),
+        hidden: (item) => !item.unschedulable,
+        pending: (item) => actions.pending(item.name),
         reason: (item) => actions.denied(item.name),
       },
       {
@@ -388,7 +395,12 @@ export function NodeList() {
         <div className="flex h-full min-h-0 flex-col gap-4">
           <ResourceListHeader
             title={NODES_TITLE}
-            count={nodesForTrends.data?.rows.length}
+            description={<KindAbout kind={ResourceType.Node} />}
+            count={
+              nodesForTrends.isError
+                ? undefined
+                : nodesForTrends.data?.rows.length
+            }
             actions={
               <>
                 {viewToggle}
@@ -397,14 +409,24 @@ export function NodeList() {
             }
             dataUpdatedAt={nodesForTrends.dataUpdatedAt}
             live={live && !resyncing}
+            stale={nodesForTrends.isError && nodesForTrends.data !== undefined}
           />
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-lane">
+            {nodesForTrends.isError && nodesForTrends.data !== undefined && (
+              <StaleRows
+                label={toPlural(ResourceType.Node)}
+                since={nodesForTrends.dataUpdatedAt}
+                error={nodesForTrends.error}
+                onRetry={() => void nodesForTrends.refetch()}
+              />
+            )}
             <NodeUtilisation
               nodes={nodesForTrends.data?.rows ?? []}
               nodesKnown={nodesForTrends.data !== undefined}
               nodesReason={
                 nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
               }
+              onRetryNodes={() => void nodesForTrends.refetch()}
               range={range}
               onRange={setRange}
             />

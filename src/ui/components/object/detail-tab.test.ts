@@ -22,6 +22,7 @@ describe("a Pods tab's mark", () => {
     expect(podsMark([], t, { error: new Error("pods is forbidden") })).toEqual({
       shows: "unchecked",
       says: "Could not read this workload's pods.",
+      refused: true,
     });
     expect(podsMark([], t, { pending: true })).toBeUndefined();
     expect(podsMark([], t)).toEqual({ shows: "count", of: 0 });
@@ -48,6 +49,33 @@ describe("a Pods tab's mark", () => {
       shows: "count",
       of: 1,
     });
+  });
+});
+
+describe("a refused read on a tab", () => {
+  const refusal = Object.assign(new Error("forbidden"), {
+    code: "PERMISSION_DENIED",
+  });
+
+  /** A refusal wears the lock and a failure the triangle. Fails if either mark stops carrying which it is. */
+  it("is marked refused on the Pods tab, and a failure is not", () => {
+    expect(podsMark([], t, { error: refusal })).toMatchObject({
+      shows: "unchecked",
+      refused: true,
+    });
+    expect(podsMark([], t, { error: new Error("timeout") })).not.toHaveProperty(
+      "refused"
+    );
+  });
+
+  /** Fails if a counted-by-read tab drops the refusal and draws the triangle. */
+  it("is marked refused on a read-counted tab", () => {
+    expect(readCountMark(null, "revisions unread", refusal)).toMatchObject({
+      refused: true,
+    });
+    expect(
+      readCountMark(null, "revisions unread", new Error("x"))
+    ).not.toHaveProperty("refused");
   });
 });
 

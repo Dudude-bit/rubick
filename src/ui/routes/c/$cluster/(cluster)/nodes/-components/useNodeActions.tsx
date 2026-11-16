@@ -20,15 +20,16 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { listQueryFor, ResourceType } from "@/lib/resource-registry";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { guardedOf, noteDenied, useDenied, useRowDenial } from "@/lib/access";
 
 export interface NodeActions {
-  cordon: (node: string) => void;
-  uncordon: (node: string) => void;
+  cordon: (node: string) => unknown;
+  uncordon: (node: string) => unknown;
   /** Opens the drain dialog; the drain itself starts from there. */
   drain: (node: string) => void;
+  /** Whether a cordon or an uncordon this window sent is still unanswered for `node`. */
+  pending: (node: string) => boolean;
   /** Whether a drain this window started is still running on `node`. */
   draining: (node: string) => boolean;
   /** Why the cluster will not let this user cordon, uncordon or drain `node`. */
@@ -72,13 +73,8 @@ export function useNodeActions(asked: string | null): NodeActions {
       });
     },
     onError: (error, nodeName) => {
+      toastWriteError(t("action", "cordonFailed", { node: nodeName }), error);
       noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
-      if (toastedUnanswered(error)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "cordonFailed", { error: errorToShow(error) }),
-        variant: "destructive",
-      });
     },
   });
 
@@ -92,15 +88,8 @@ export function useNodeActions(asked: string | null): NodeActions {
       });
     },
     onError: (error, nodeName) => {
+      toastWriteError(t("action", "uncordonFailed", { node: nodeName }), error);
       noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
-      if (toastedUnanswered(error)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "uncordonFailed", {
-          error: errorToShow(error),
-        }),
-        variant: "destructive",
-      });
     },
   });
 
@@ -160,13 +149,14 @@ export function useNodeActions(asked: string | null): NodeActions {
         onConfirm={() => {
           if (!pendingSchedulable) return;
           const { action, node } = pendingSchedulable;
-          setPendingSchedulable(null);
-          if (action === "cordon") cordonMutation.mutate(node);
-          else uncordonMutation.mutate(node);
+          return action === "cordon"
+            ? cordonMutation.mutateAsync(node)
+            : uncordonMutation.mutateAsync(node);
         }}
       />
       <DrainDialog
         node={open}
+        onItsPage={open !== null && open === asked}
         state={state}
         onOpenChange={(next) => {
           if (next) return;
@@ -199,6 +189,9 @@ export function useNodeActions(asked: string | null): NodeActions {
       criticalActive
         ? setPendingSchedulable({ action: "uncordon", node })
         : uncordonMutation.mutate(node),
+    pending: (node) =>
+      (cordonMutation.isPending && cordonMutation.variables === node) ||
+      (uncordonMutation.isPending && uncordonMutation.variables === node),
     // Each node has its own drain, so reopening one shows what is running
     // on it and never another node's report.
     drain: setOpen,

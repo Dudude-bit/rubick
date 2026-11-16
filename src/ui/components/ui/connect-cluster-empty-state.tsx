@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { useClusterFilter } from "@/hooks/useClusterFilter";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
+import { EmptyPage } from "@/components/ui/empty-page";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
@@ -30,47 +31,43 @@ export function ConnectClusterEmptyState({
   const cluster = useClusterFilter();
 
   return (
-    <div className="flex h-full justify-center px-6 py-12">
-      <div className="w-full max-w-[420px]">
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
-          {t("empty", "noClusterIsConnected")}
-        </h2>
-        <p className="mt-[3px] text-xs text-fg-mut">
-          {resourceLabel
-            ? // Callers hand this label in whichever case their page title
-              // uses, and it starts a sentence here.
-              t("empty", "kindReadFromCluster", {
-                kind: `${resourceLabel[0].toUpperCase()}${resourceLabel.slice(1)}`,
-              })
-            : t("empty", "notOnClusterYet")}
+    <EmptyPage
+      title={t("empty", "noClusterIsConnected")}
+      body={
+        resourceLabel
+          ? // Callers hand this label in whichever case their page title
+            // uses, and it starts a sentence here.
+            t("empty", "kindReadFromCluster", {
+              kind: `${resourceLabel[0].toUpperCase()}${resourceLabel.slice(1)}`,
+            })
+          : t("empty", "notOnClusterYet")
+      }
+    >
+      {contexts.length > 0 ? (
+        <div className="w-full">
+          <ClusterList
+            contexts={cluster.shown}
+            total={cluster.total}
+            filter={cluster.filter}
+            onFilterChange={cluster.setFilter}
+            query={cluster.query}
+            inputRef={cluster.inputRef}
+            onSelect={openCluster}
+            autoFocus={false}
+          />
+        </div>
+      ) : (
+        <p className="text-caption text-fg-fnt">
+          {t("empty", "kubeconfigListsNoClusters")}{" "}
+          <Link
+            to="/"
+            className="text-fg-mut underline decoration-dotted underline-offset-2 hover:text-fg"
+          >
+            {t("empty", "seeWhereReadFrom")}
+          </Link>
+          .
         </p>
-
-        {contexts.length > 0 ? (
-          <div className="mt-5">
-            <ClusterList
-              contexts={cluster.shown}
-              total={cluster.total}
-              filter={cluster.filter}
-              onFilterChange={cluster.setFilter}
-              query={cluster.query}
-              inputRef={cluster.inputRef}
-              onSelect={openCluster}
-              autoFocus={false}
-            />
-          </div>
-        ) : (
-          <p className="mt-4 text-[11px] text-fg-fnt">
-            {t("empty", "kubeconfigListsNoClusters")}{" "}
-            <Link
-              to="/"
-              className="text-fg-mut underline decoration-dotted underline-offset-2 hover:text-fg"
-            >
-              {t("empty", "seeWhereReadFrom")}
-            </Link>
-            .
-          </p>
-        )}
-      </div>
-    </div>
+      )}
+    </EmptyPage>
   );
 }

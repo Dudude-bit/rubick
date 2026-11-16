@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
+import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
@@ -143,6 +144,41 @@ async function openRow(name: string) {
     await screen.findByRole("button", { name: `Expand ${name}` })
   );
 }
+
+describe("the freshness of the Applications read", () => {
+  /** The page re-read on a bare staleTime and drew no mark; fails if the chip goes. */
+  it("says how current the Applications are, as every list does", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        application(
+          "aaa",
+          {},
+          { sync: { status: "Synced" }, health: { status: "Healthy" } }
+        ),
+      ])
+    );
+    useClusterStore.setState({ isConnected: true });
+    await renderOn("applications");
+    await waitFor(() =>
+      expect(screen.getAllByText("polling").length).toBeGreaterThan(0)
+    );
+  });
+
+  /**
+   * The chip sat on the tab row while every list wears it top right in the
+   * header. Fails if it is drawn outside the header beside Share, in the
+   * tab strip.
+   */
+  it("sits in the header row, not the tab row", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([]));
+    useClusterStore.setState({ isConnected: true });
+    await renderOn("applications");
+    const chip = (await screen.findAllByText("polling"))[0];
+    const heading = screen.getByRole("heading", { name: "Argo CD" });
+    expect(heading.parentElement).toContainElement(chip);
+    expect(screen.getByRole("tablist")).not.toContainElement(chip);
+  });
+});
 
 describe("Applications that are not in sync", () => {
   const healthy = application(
@@ -502,9 +538,11 @@ describe("Argo's own workloads", () => {
 
     await renderOn("controller");
 
-    expect(await screen.findByText(/Could not list deployments/)).toHaveClass(
-      "text-warn"
-    );
+    expect(
+      (await screen.findByText(/Could not list deployments/)).closest(
+        "[role=alert]"
+      )
+    ).toHaveClass("border-dashed");
     expect(screen.queryByText(/Nothing in this cluster carries/)).toBeNull();
   });
 });

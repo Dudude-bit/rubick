@@ -19,15 +19,7 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import {
-  Bug,
-  Copy,
-  Info,
-  AlertTriangle,
-  Clock,
-  Loader2,
-  Lock,
-} from "lucide-react";
+import { Bug, Copy, Info, Lock } from "lucide-react";
 import type {
   DebugConfig,
   DebugOperation,
@@ -36,8 +28,9 @@ import type {
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
-import { cn, isK8sVersionAtLeast, formatTimeUnit } from "@/lib/utils";
+import { cn, isK8sVersionAtLeast } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
+import { DebugNotReady, DebugPolling } from "./DebugWaiting";
 import { useDebugOperation } from "@/hooks";
 import { debugFailureWords } from "@/hooks/useDebugOperation";
 import { useT } from "@/i18n/useT";
@@ -137,6 +130,7 @@ export function DebugPodDialog({
   const isImageValid = image.trim().length > 0;
 
   const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [timeoutOperation, setTimeoutOperation] =
     useState<DebugOperation | null>(null);
 
@@ -237,6 +231,7 @@ export function DebugPodDialog({
 
   const handleDeletePod = async () => {
     if (timeoutOperation) {
+      setDeleting(true);
       try {
         await commands.deleteDebugPod(
           timeoutOperation.podName,
@@ -250,6 +245,8 @@ export function DebugPodDialog({
         });
       } catch (err) {
         toastWriteError(t("action", "failedToDeletePod"), err);
+      } finally {
+        setDeleting(false);
       }
     }
     setShowTimeoutDialog(false);
@@ -265,94 +262,49 @@ export function DebugPodDialog({
 
   if (showTimeoutDialog && timeoutOperation) {
     return (
-      <Dialog open={open} onOpenChange={() => {}}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warn" />
-              {t("action", "containerNotReady")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("action", "debugContainerInPod")}{" "}
-              <span className="font-mono text-fg">
-                {timeoutOperation.podName}
-              </span>{" "}
-              {t("action", "didNotBecomeReady")}
-            </DialogDescription>
-          </DialogHeader>
-
-          {statusReason && (
-            <div className="flex items-center gap-2 border-t border-hair pt-2 text-xs">
-              <Clock className="h-3.5 w-3.5 flex-none text-fg-fnt" />
-              <span className="text-fg-mut">{t("action", "lastStatus")}</span>
-              <span className="ml-auto font-mono text-fg">{statusReason}</span>
-            </div>
-          )}
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={handleLeave}>
-              {t("action", "leave")}
-            </Button>
-            <Button variant="destructive" onClick={handleDeletePod}>
-              {t("action", "deletePod")}
-            </Button>
-            <Button onClick={handleKeepWaiting}>
-              {t("action", "keepWaiting")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DebugNotReady
+        open={open}
+        title={t("action", "containerNotReady")}
+        description={
+          <>
+            {t("action", "debugContainerInPod")}{" "}
+            <span className="font-mono text-fg">
+              {timeoutOperation.podName}
+            </span>{" "}
+            {t("action", "didNotBecomeReady")}
+          </>
+        }
+        statusReason={statusReason}
+        deleting={deleting}
+        onLeave={handleLeave}
+        onDelete={handleDeletePod}
+        onKeepWaiting={handleKeepWaiting}
+      />
     );
   }
 
-  // Render polling UI
   if (isPolling) {
     return (
-      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-fg-fnt" />
-              {state === "creating"
-                ? t("action", "creatingDebugContainer")
-                : t("action", "waitingForContainer")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("action", "debugContainerForPod")}{" "}
-              <span className="font-mono text-fg">{podName}</span>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-2 border-t border-hair pt-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-fg-mut">{t("columns", "status")}</span>
-              <span className="font-mono text-fg">
-                {statusReason || t("action", "initializing")}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-fg-mut">{t("action", "elapsed")}</span>
-              <span className="font-mono text-fg">
-                {formatTimeUnit(elapsedSeconds, "second")}{" "}
-                <span className="text-fg-fnt">/</span>{" "}
-                {formatTimeUnit(timeoutSeconds, "second")}
-              </span>
-            </div>
-            <div className="h-[3px] overflow-hidden rounded-sm bg-sel">
-              <div
-                className="h-full bg-info"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancel}>
-              {t("action", "cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DebugPolling
+        open={open}
+        onOpenChange={handleDialogOpenChange}
+        title={
+          state === "creating"
+            ? t("action", "creatingDebugContainer")
+            : t("action", "waitingForContainer")
+        }
+        description={
+          <>
+            {t("action", "debugContainerForPod")}{" "}
+            <span className="font-mono text-fg">{podName}</span>
+          </>
+        }
+        statusReason={statusReason}
+        elapsedSeconds={elapsedSeconds}
+        timeoutSeconds={timeoutSeconds}
+        progressPercent={progressPercent}
+        onCancel={handleCancel}
+      />
     );
   }
 
@@ -411,12 +363,12 @@ export function DebugPodDialog({
                       {t("action", "ephemeralContainerMode")}
                     </span>
                     {!supportsEphemeralContainers && (
-                      <span className="text-[11px] text-fg-fnt">
+                      <span className="text-caption text-fg-fnt">
                         (K8s 1.25+)
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-fg-mut">
+                  <p className="mt-0.5 text-caption text-fg-mut">
                     {t("action", "ephemeralModeHint")}
                   </p>
                   <Refusal reason={denied.ephemeral} />
@@ -448,7 +400,7 @@ export function DebugPodDialog({
                       {t("action", "copyPodMode")}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-fg-mut">
+                  <p className="mt-0.5 text-caption text-fg-mut">
                     {t("action", "copyPodModeHint")}
                   </p>
                   <Refusal reason={denied.copy} />
@@ -501,7 +453,7 @@ export function DebugPodDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-fg-mut">
+              <p className="text-caption text-fg-mut">
                 {t("action", "targetContainerHint")}
               </p>
             </div>
@@ -514,7 +466,7 @@ export function DebugPodDialog({
                 <Label htmlFor="share-processes">
                   {t("action", "shareProcessNamespace")}
                 </Label>
-                <p className="text-[11px] text-fg-mut">
+                <p className="text-caption text-fg-mut">
                   {t("action", "shareProcessNamespaceHint")}
                 </p>
               </div>
@@ -531,7 +483,7 @@ export function DebugPodDialog({
               <Label htmlFor="trace-processes">
                 {t("action", "traceProcesses")}
               </Label>
-              <p className="text-[11px] text-fg-mut">
+              <p className="text-caption text-fg-mut">
                 {t("action", "traceProcessesHint")}
               </p>
             </div>
@@ -544,7 +496,7 @@ export function DebugPodDialog({
 
           {/* Info about ephemeral containers support */}
           {!supportsEphemeralContainers && (
-            <p className="flex items-start gap-2 border-t border-hair pt-2 text-[11px] text-fg-mut">
+            <p className="flex items-start gap-2 border-t border-hair pt-2 text-caption text-fg-mut">
               <Info className="mt-px h-3.5 w-3.5 flex-none text-fg-fnt" />
               {t("action", "ephemeralUnsupported", {
                 version: kubernetesVersion || t("action", "unknownVersion"),
@@ -577,7 +529,7 @@ export function DebugPodDialog({
 export function Refusal({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
-    <p className="mt-1 flex items-start gap-1.5 text-[11px] text-err">
+    <p className="mt-1 flex items-start gap-1.5 text-caption text-err">
       <Lock className="mt-px h-3 w-3 flex-none" aria-hidden="true" />
       {reason}
     </p>

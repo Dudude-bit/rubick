@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
+import { Activity, Info, Link2, ListTree, Tag } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import {
@@ -9,29 +9,33 @@ import {
   ownersSection,
   statusSummarySection,
 } from "@/lib/share/custom-resource-share";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { eventsTab } from "../events-tab";
 import { eventsKindOf, useObjectEvents } from "@/hooks/useObjectEvents";
+import { DeleteAction } from "../DeleteAction";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
+import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { stateOf } from "../facets";
+import { listedKindOf } from "../problem";
+import { PodsTroubleLines } from "../PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../pods-trouble";
 import { servedOf } from "../served";
-import { noteDenied, useDenied } from "@/lib/access";
+import { noteDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { OwnerRef } from "../../-peek/OwnerRef";
 import { RelatedPanel } from "../RelatedPanel";
 import { relatedMark, useRelatedObjects } from "../useRelatedObjects";
-import { KeyValueSection, type KeyValue } from "../detail-kv";
+import { BreakableKey, KeyValueSection, type KeyValue } from "../detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOf } from "@/lib/delivery";
-import { InterceptedAction } from "../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../-delivery/useDelivery";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
@@ -108,7 +112,12 @@ function JsonRow({
   if (!isContainer(value)) {
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
-        <span className="wrap-break-word text-[11px] text-fg-fnt">{label}</span>
+        <span
+          className="min-w-0 overflow-hidden text-ellipsis text-caption text-fg-fnt"
+          title={label}
+        >
+          <BreakableKey text={label} />
+        </span>
         <span className="min-w-0 text-xs">
           <JsonLeaf value={value} />
         </span>
@@ -123,10 +132,13 @@ function JsonRow({
   return (
     <div className="border-b border-hair py-1 last:border-b-0">
       <div className="flex items-baseline gap-2">
-        <span className="wrap-break-word text-[11px] font-medium text-fg-mid">
-          {label}
+        <span
+          className="min-w-0 overflow-hidden text-ellipsis text-caption font-medium text-fg-mid"
+          title={label}
+        >
+          <BreakableKey text={label} />
         </span>
-        <span className="text-[11px] text-fg-fnt">{size}</span>
+        <span className="text-caption text-fg-fnt">{size}</span>
       </div>
       <div className="mt-0.5">
         <JsonEntries
@@ -175,11 +187,14 @@ export function CustomResourceDetail({
     setActiveTab(tab);
     setSearch({ tab: tab === "overview" ? undefined : tab }, { replace: true });
   };
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const goBack = backInTab;
 
-  const { data: crdInfo } = useQuery({
+  const {
+    data: crdInfo,
+    error: crdError,
+    refetch: refetchCrd,
+  } = useQuery({
     queryKey: queryKeys.crd(crdName),
     queryFn: () => commands.getCrd(crdName),
     enabled: isConnected && !!crdName,
@@ -188,7 +203,9 @@ export function CustomResourceDetail({
   const {
     data: resource,
     isLoading,
-    error,
+    error: readError,
+    refetch,
+    freshness,
   } = useLiveQuery({
     queryKey: queryKeys.customResource(crdName, namespace, name),
     queryFn: () => commands.getCustomResource(crdName, name, namespace || null),
@@ -203,13 +220,20 @@ export function CustomResourceDetail({
     queryKeys.customResource(crdName, namespace, name),
     queryKeys.customResourceYaml(crdName, namespace, name)
   );
-  const { data: yaml = "" } = useQuery({
+  const {
+    data: yaml,
+    error: yamlError,
+    refetch: refetchYaml,
+  } = useQuery({
     queryKey: queryKeys.customResourceYaml(crdName, namespace, name),
     queryFn: () =>
       commands.getCustomResourceYaml(crdName, name, namespace || null),
     enabled: isConnected && !!crdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
   });
+
+  const error =
+    resource && !isResourceNotFoundError(readError) ? null : readError;
 
   const eventsOf = eventsKindOf({
     kind: crdInfo?.kind ?? "",
@@ -229,7 +253,6 @@ export function CustomResourceDetail({
     namespace: namespace || null,
     name,
   };
-  const deleteDenied = useDenied(guarded).delete;
   const deleteMutation = useMutation({
     mutationFn: () =>
       commands.deleteCustomResource(crdName, name, namespace || null),
@@ -257,6 +280,14 @@ export function CustomResourceDetail({
   });
 
   const status = stateOf(resource?.status) ?? null;
+  const podsOwner = crdInfo
+    ? listedKindOf({ kind: crdInfo.kind, crd: crdName })
+    : null;
+  const podsTrouble = usePodsTrouble(
+    podsOwner ?? "",
+    namespace,
+    podsOwner ? name : undefined
+  );
   const owners = resource?.ownerReferences ?? [];
   const finalizers = resource?.finalizers ?? [];
 
@@ -332,11 +363,14 @@ export function CustomResourceDetail({
       label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <KeyValueSection
-          title={t("columns", "object")}
-          items={facts}
-          className="max-w-lg"
-        />
+        <>
+          <PodsTroubleLines pods={podsTrouble} className="mb-4" />
+          <KeyValueSection
+            title={t("columns", "object")}
+            items={facts}
+            className="max-w-lg"
+          />
+        </>
       ),
     },
     {
@@ -345,7 +379,7 @@ export function CustomResourceDetail({
       glyph: viewGlyph(ListTree),
       content: (
         <Section>
-          <SectionHeader title="Spec" />
+          <SectionHeader title={t("columns", "spec")} />
           {/* The guard is on the object, not on `spec` — this is "the read
               has not landed", which on a CRD the reader has never seen
               before is indistinguishable from "this kind has no spec". */}
@@ -423,11 +457,31 @@ export function CustomResourceDetail({
       mark: relatedMark(related, crdInfo?.kind ?? "these", t),
       content: <RelatedPanel query={related} kind={crdInfo?.kind ?? "these"} />,
     },
-    eventsTab(events, t, { kind: crdInfo?.kind ?? "", name }),
+    crdError && !crdInfo
+      ? {
+          ...eventsTab(events, t, { kind: "", name }),
+          mark: {
+            shows: "unchecked" as const,
+            says: t("empty", "eventsNeedDefinition"),
+          },
+          content: (
+            <Section>
+              <SectionHeader title={t("columns", "events")} />
+              <Unknown
+                question={t("empty", "eventsNeedDefinition")}
+                error={crdError}
+                onRetry={() => refetchCrd()}
+              />
+            </Section>
+          ),
+        }
+      : eventsTab(events, t, { kind: crdInfo?.kind ?? "", name }),
     yamlTab({
-      title: `${resource?.kind || "Resource"} YAML`,
+      title: t("action", "kindYaml", { kind: resource?.kind || "Resource" }),
       yaml,
-      onCopy: () => copyToClipboard(yaml),
+      error: yaml === undefined ? yamlError : null,
+      onRetry: () => refetchYaml(),
+      onCopy: () => yaml && copyToClipboard(yaml),
     }),
   ];
 
@@ -451,69 +505,52 @@ export function CustomResourceDetail({
   }, [resource, t]);
 
   return (
-    <>
-      <ResourceDetailLayout
-        served={served}
-        resource={resource}
-        share={share}
-        isLoading={isLoading}
-        error={error}
-        delivery={deliveryQuery}
-        resourceKind={crdInfo?.kind || "Resource"}
-        listLink={objectLink({
-          kind: ResourceType.CustomResourceDefinition,
-          name: crdName,
-        })}
-        listLabel={crdInfo?.kind || crdName}
-        title={resource?.name || name || ""}
-        namespace={resource?.namespace ?? undefined}
-        createdAt={resource?.createdAt}
-        statusBadge={status && <StatusBadge status={status} />}
-        badges={
-          resource && (
-            <span className="font-mono text-[11px] text-fg-fnt">
-              {resource.apiVersion}
-            </span>
-          )
-        }
-        onBack={goBack}
-        actions={
-          <InterceptedAction
-            intercept={intercept("Delete")}
-            label={t("action", "delete")}
-            icon={Trash2}
-            onClick={() => setDeleteDialogOpen(true)}
-            busy={deleteMutation.isPending}
-            danger
-            reason={deleteDenied}
-          />
-        }
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={changeTab}
-      />
-
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        // Kind with its group and name with its namespace: "Delete Service?
-        // web" over a Knative Service reads as any core Service of that name.
-        title={t("action", "deleteKindQuestion", {
-          kind: crdInfo
-            ? `${crdInfo.kind}.${crdInfo.group}`
-            : t("action", "resourceNoun"),
-        })}
-        description={t("action", "willBeRemovedIrreversible", {
-          name: namespace ? `${namespace}/${name}` : (name ?? ""),
-        })}
-        confirmLabel={t("action", "delete")}
-        confirmVariant="destructive"
-        confirmDisabled={deleteMutation.isPending}
-        onConfirm={() => {
-          deleteMutation.mutate();
-          setDeleteDialogOpen(false);
-        }}
-      />
-    </>
+    <ResourceDetailLayout
+      served={served}
+      resource={resource}
+      share={share}
+      isLoading={isLoading}
+      error={error}
+      onRetry={refetch}
+      freshness={freshness}
+      delivery={deliveryQuery}
+      resourceKind={crdInfo?.kind || "Resource"}
+      listLink={objectLink({
+        kind: ResourceType.CustomResourceDefinition,
+        name: crdName,
+      })}
+      listLabel={crdInfo?.kind || crdName}
+      title={resource?.name || name || ""}
+      namespace={resource?.namespace ?? undefined}
+      createdAt={resource?.createdAt}
+      statusBadge={status && <StatusBadge status={status} />}
+      trouble={withPodsTrouble([], podsTrouble)}
+      badges={
+        resource && (
+          <span className="font-mono text-caption text-fg-fnt">
+            {resource.apiVersion}
+          </span>
+        )
+      }
+      onBack={goBack}
+      actions={
+        <DeleteAction
+          kind={
+            crdInfo
+              ? `${crdInfo.kind}.${crdInfo.group}`
+              : t("action", "resourceNoun")
+          }
+          name={name}
+          namespace={namespace}
+          detail={resource}
+          intercept={intercept("Delete")}
+          mutation={deleteMutation}
+          served={served}
+        />
+      }
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={changeTab}
+    />
   );
 }

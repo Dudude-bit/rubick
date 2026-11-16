@@ -44,10 +44,17 @@ import {
 import type { PlacedSection } from "@/lib/report-parts";
 import { commands, wrapCommand } from "@/lib/commands";
 import { currentConnection, forgetRefusals, noteRefusal } from "@/lib/refusals";
+import { ListEmpty } from "./list-unread";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
-import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
+import {
+  NOTICE_READ_MS,
+  SCOPE_PICKER_OPEN,
+  SLOW_READ_MS,
+} from "@/lib/read-deadline";
 import { renderWithRouter } from "@/test/render";
+import { queryKeys } from "@/lib/query-keys";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 
 interface Item {
   name: string;
@@ -55,6 +62,14 @@ interface Item {
 }
 
 const columns: ColumnDef<Item>[] = [{ accessorKey: "name", header: "Name" }];
+
+const namespace = (name: string) => ({
+  name,
+  uid: name,
+  status: "Active",
+  labels: {},
+  createdAt: null,
+});
 
 const draw = (ui: ReactElement, client?: QueryClient) =>
   renderWithRouter(ui, { client, at: "/c/prod/pods", route: "/c/$cluster/$" });
@@ -81,6 +96,73 @@ const list = (props: {
       {...props}
     />
   );
+
+describe("a list a search narrows", () => {
+  /**
+   * The footer said "1 of 3" while the title still said "Pods 3". Fails if
+   * the title stops saying how many of the total the search leaves.
+   */
+  it("says how many of the total are left in its title", async () => {
+    await list({
+      data: [
+        { name: "web-1", namespace: "shop" },
+        { name: "web-2", namespace: "shop" },
+        { name: "db-1", namespace: "shop" },
+      ],
+    });
+    expect(screen.getByText("3")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Search..."), "db");
+    expect(await screen.findByText("1 of 3")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Search..."));
+    await waitFor(() => expect(screen.queryByText("1 of 3")).toBeNull());
+    expect(screen.getByText("3")).toBeInTheDocument();
+  });
+});
+
+describe("a list's header content", () => {
+  function Probe() {
+    return (
+      <>
+        <ListEmpty.Consumer>
+          {(empty) => <span data-testid="probe">{String(empty)}</span>}
+        </ListEmpty.Consumer>
+      </>
+    );
+  }
+
+  /**
+   * The CPU and memory notice sat over "No resources of this type" with
+   * nothing to measure. Fails if the list stops telling its header content
+   * that it was read and has no rows, or says so while it has rows.
+   */
+  it("tells what it holds that it was read and is empty, and not while it has rows", async () => {
+    const { unmount } = await draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[]}
+        headerContent={<Probe />}
+      />
+    );
+    expect(screen.getByTestId("probe")).toHaveTextContent("true");
+    unmount();
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[{ name: "web-1", namespace: "shop" }]}
+        headerContent={<Probe />}
+      />
+    );
+    expect(screen.getByTestId("probe")).toHaveTextContent("false");
+  });
+});
 
 describe("a list whose rows come from outside", () => {
   /**
@@ -149,6 +231,9 @@ describe("a list whose rows come from outside", () => {
           allowed: namespaces[0] === "team-checkout",
         }))
       );
+    const listed = vi
+      .spyOn(commands, "listNamespaces")
+      .mockResolvedValue([namespace("team-checkout")]);
     await list({ data: [], error: new Error("pods is forbidden: RBAC") });
 
     expect(
@@ -164,6 +249,7 @@ describe("a list whose rows come from outside", () => {
       ["team-checkout"]
     );
     asked.mockRestore();
+    listed.mockRestore();
     store.state.currentContext = null;
     store.state.contexts = [];
   });
@@ -274,9 +360,7 @@ describe("a list whose rows come from outside", () => {
 
     expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(
-      screen.getByText(
-        /Could not read pods just now\. The rows below are from 09:55:10/
-      )
+      screen.getByText(/Could not read pods\. The rows below are from 09:55:10/)
     ).toBeVisible();
     expect(screen.getByText(/502 Bad Gateway/)).toBeVisible();
     expect(screen.getByText("read failing")).toBeVisible();
@@ -285,14 +369,75 @@ describe("a list whose rows come from outside", () => {
   });
 });
 
+describe("a live list while the overview cannot list its kind", () => {
+  const overviewWith = (unread: unknown[]) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(queryKeys.clusterOverview(null, []), {
+      unread,
+      warningsShort: [],
+    });
+    return client;
+  };
+  const watched = (client: QueryClient) =>
+    draw(
+      <ResourceList<Item>
+        title="Deployments"
+        kind="Deployment"
+        columns={columns}
+        emptyStateLabel="Deployments"
+        data={[{ name: "argocd-repo-server", namespace: "argocd" }]}
+        dataUpdatedAt={Date.now()}
+        live
+      />,
+      client
+    );
+
+  /**
+   * Under a Deployments 500 the list wore "live" while the status bar and the
+   * peek said they could not read. Fails if the notice goes, if it drops the
+   * cluster's reason, or if the chip still says live.
+   */
+  it("says the rows come from the watch and names why a fresh list fails", async () => {
+    await watched(
+      overviewWith([
+        {
+          kind: "Deployment",
+          namespace: null,
+          code: "NO_ANSWER",
+          message: "500 Internal Server Error",
+        },
+      ])
+    );
+    expect(screen.getByText("argocd-repo-server")).toBeVisible();
+    expect(
+      screen.getByText(/rows come from the open watch, which is still live/)
+    ).toBeVisible();
+    expect(screen.getByText(/500 Internal Server Error/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /retry|again/i })).toBeVisible();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /** A failing read of another kind says nothing about this list; the notice must not appear for it, nor for an overview with nothing unread. */
+  it("says nothing when the overview read this kind, or only failed on another", async () => {
+    await watched(
+      overviewWith([
+        { kind: "Pod", namespace: null, code: "NO_ANSWER", message: "boom" },
+      ])
+    );
+    expect(screen.queryByText(/open watch/)).toBeNull();
+    expect(screen.getByText("live")).toBeVisible();
+  });
+});
+
 describe("a list whose re-read is refused", () => {
   /**
-   * Marco after his grant was revoked: 18 namespaces under a warning
-   * triangle and "read failing", though the words said refused. A refusal
-   * now is the page a first refusal draws. Fails if the old rows stay, the
-   * header keeps "live" or "read failing", or the lock state is not drawn.
+   * Nodes under a 403 dropped every row its watch still streamed, while Pods
+   * kept theirs under the refusal. Fails if the rows go, the header keeps
+   * "live" or "read failing", or the notice stops saying the watch holds them.
    */
-  it("draws the refused page instead of the rows an earlier read showed", async () => {
+  it("keeps the rows its watch holds under the refusal, and says refused", async () => {
     const onRetry = vi.fn();
     store.state.namespaceScope = ["shop"];
     await list({
@@ -304,17 +449,30 @@ describe("a list whose re-read is refused", () => {
     });
     store.state.namespaceScope = [];
 
-    expect(screen.queryByText("api-7bcd")).not.toBeInTheDocument();
+    expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(
-      screen.getByText(/do not have permission to list these/)
+      screen.getByText(/rows come from the open watch, which is still live/)
     ).toBeVisible();
-    expect(screen.queryByText(/just now/)).not.toBeInTheDocument();
+    expect(screen.getByText("refused")).toBeVisible();
     expect(screen.queryByText("read failing")).not.toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Try the read again" })
     );
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  /** Marco's revoked grant with no watch: fails if the rows go, or are not said to be from the last read that answered. */
+  it("keeps the rows of the last read that answered, said to be from then", async () => {
+    await list({
+      data: [{ name: "api-7bcd", namespace: "shop" }],
+      error: new Error("pods is forbidden: RBAC"),
+      dataUpdatedAt: new Date(2026, 0, 1, 20, 57, 44).getTime(),
+    });
+
+    expect(screen.getByText("api-7bcd")).toBeVisible();
+    expect(screen.getByText(/The rows below are from 20:57:44/)).toBeVisible();
+    expect(screen.getByText("refused")).toBeVisible();
   });
 
   /**
@@ -439,11 +597,14 @@ describe("the count beside the title", () => {
     expect(counted()).toBeNull();
   });
 
-  /** Fails if the first read, still running, is counted as nothing found. */
-  it("draws no number while the first read is still running", async () => {
+  /** Fails if the first read, still running, is counted as nothing found, or leaves no room for the count so the title jumps when it lands. */
+  it("holds the count's place, without a number, while the first read is still running", async () => {
     await list({ data: [], isLoading: true });
 
-    expect(counted()).toBeNull();
+    expect(counted()).toBe("");
+    expect(
+      screen.getByTestId("section-count").querySelector("[aria-hidden]")
+    ).not.toBeNull();
   });
 
   /** Fails if the rule above swallowed a real zero too. */
@@ -717,6 +878,71 @@ describe("a read on a large cluster", () => {
   });
 
   /**
+   * A slow first load said nothing until eight seconds. Fails if a skeleton
+   * past three seconds does not say it is still reading, or says it at once.
+   */
+  it("says in a quiet line that it is still reading after three seconds, not before", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "slow"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByTestId("reading-list")).toBeEmptyDOMElement();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+  });
+
+  /**
+   * "Still reading persistent volumes in any namespace" named a scope a
+   * cluster-scoped kind does not have. Fails if the line says "in" anything
+   * for a kind without a namespace, or drops it for a namespaced one.
+   */
+  it("names no scope while reading a cluster-scoped kind, and names it for a namespaced one", async () => {
+    vi.useFakeTimers();
+    const reading = (kind: string, label: string) => (
+      <ResourceList<Item>
+        title={label}
+        kind={kind as never}
+        columns={columns}
+        emptyStateLabel={label}
+        queryKey={["scope-words", kind]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    const { unmount } = await draw(
+      reading("PersistentVolume", "Persistent Volumes")
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /^Still reading persistent volumes$/
+    );
+    unmount();
+    await draw(reading("Pod", "Pods"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading pods in /
+    );
+  });
+
+  /**
    * Three things the deadline screen used to get wrong at once: a count of
    * zero in the header, directly above the sentence saying the read did not
    * finish; the `READ_DEADLINE:` wire marker printed at the reader in
@@ -744,7 +970,9 @@ describe("a read on a large cluster", () => {
     expect(document.body.textContent).not.toContain("READ_DEADLINE:");
     expect(screen.queryByText("0")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
     expect(retried).toHaveBeenCalledTimes(1);
   });
 
@@ -782,6 +1010,87 @@ describe("a read on a large cluster", () => {
     expect(screen.getByTestId("slow-read")).toHaveTextContent(
       /Still reading pods/
     );
+  });
+
+  /**
+   * A caller with rows of its own that has no clock for the wait handed in
+   * `null`, and the three-second line never came. Fails if the list does not
+   * time its own skeleton when the caller's clock is null.
+   */
+  it("says it is still reading after three seconds when the caller has no clock", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        data={undefined}
+        isLoading
+        waitingSince={null}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS + 1000);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
+  });
+
+  /**
+   * The reading line was still missing at 3 s, because it waited
+   * for the next tick of a one-second clock. Fails if the line is later than
+   * the deadline by more than a timer's slack, or if a list of unknown length
+   * draws more than three skeleton rows.
+   */
+  it("says it is still reading the moment three seconds are up, over three skeleton rows", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "exact"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS - 50);
+    });
+    expect(screen.getByTestId("reading-list")).toBeEmptyDOMElement();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(screen.getByTestId("reading-list")).toHaveTextContent(
+      /Still reading persistent volumes/
+    );
+    expect(screen.getAllByTestId("skeleton-row")).toHaveLength(3);
+  });
+
+  /**
+   * The reading line sat in the flow above the skeleton and the real table
+   * landed 24 px higher. Fails if the line takes any height in the flow.
+   */
+  it("keeps the reading line out of the flow so the table does not jump on arrival", async () => {
+    vi.useFakeTimers();
+    await draw(
+      <ResourceList<Item>
+        title="Persistent Volumes"
+        kind="PersistentVolume"
+        columns={columns}
+        emptyStateLabel="Persistent Volumes"
+        queryKey={["pvs", "flow"]}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_READ_MS + 1000);
+    });
+    const line = screen.getByTestId("reading-list");
+    expect(line).toHaveClass("h-0", "relative");
+    expect(line.firstElementChild).toHaveClass("absolute");
   });
 });
 
@@ -1121,5 +1430,143 @@ describe("a list a link narrowed to the rows it named", () => {
     expect(collect!()[0].caption).toBe(
       "Pods matching app=web in shop Showing only the 1 row the Overview listed as needing attention."
     );
+  });
+});
+
+describe("a refusal remembered from an earlier visit", () => {
+  const refusal = () =>
+    Object.assign(new Error("pods is forbidden: RBAC"), {
+      code: "PERMISSION_DENIED",
+    });
+  /**
+   * A query client holding the list as a return to the page finds it: rows
+   * read twenty minutes ago, then refused seven minutes ago. A query with no
+   * rows drops its error when asked again, and has nothing to say this about.
+   */
+  const refusedEarlier = (queryKey: string[]) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client
+      .getQueryCache()
+      .build(client, { queryKey })
+      .setState({
+        status: "error",
+        data: { rows: [{ name: "api-1", namespace: "shop" }], unread: [] },
+        dataUpdatedAt: Date.now() - 20 * 60_000,
+        error: refusal(),
+        errorUpdatedAt: Date.now() - 7 * 60_000,
+        fetchStatus: "idle",
+      });
+    return client;
+  };
+  const visit = (queryKey: string[], client: QueryClient) =>
+    draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        queryKey={queryKey}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />,
+      client
+    );
+
+  /**
+   * Back on Pods six minutes after a 403 cleared, the page drew the old
+   * refusal with a "refused" pill and no age while it asked again. Fails if
+   * a refusal being asked again is not dated, or not said to be asked again.
+   */
+  it("dates the refusal and says it is asked again until the answer lands", async () => {
+    const queryKey = ["pods-remembered"];
+    await visit(queryKey, refusedEarlier(queryKey));
+
+    expect(
+      await screen.findByText("Refused 7m ago; asking the cluster again.")
+    ).toBeVisible();
+    expect(screen.getByText("refused")).toBeVisible();
+    expect(screen.getByText("7m ago")).toBeVisible();
+  });
+
+  /**
+   * The sidebar said "Pods 99" from a read after the refusal, while the page
+   * beside it said the list was refused. Fails if a refusal older than the
+   * sidebar's answer is drawn while the list is asked again.
+   */
+  it("draws no refusal the sidebar has read past while it asks again", async () => {
+    store.state.currentContext = "prod";
+    const queryKey = ["pods-outlived"];
+    const client = refusedEarlier(queryKey);
+    client.setQueryData(
+      queryKeys.clusterOverview("prod", []),
+      { counts: { pods: 99 } },
+      { updatedAt: Date.now() - 60_000 }
+    );
+    try {
+      await visit(queryKey, client);
+      expect(screen.queryByText(/refused/i)).toBeNull();
+      expect(screen.queryByTestId("unread-list")).toBeNull();
+      expect(screen.queryByText("api-1")).toBeNull();
+    } finally {
+      store.state.currentContext = null;
+    }
+  });
+});
+
+describe("the namespaces a refused list offers instead", () => {
+  const refusedAcross = async (listed: () => Promise<unknown>) => {
+    store.state.currentContext = "prod";
+    store.state.contexts = [{ name: "prod", namespace: "team-checkout" }];
+    useNamespaceRecencyStore.setState({ recent: { prod: ["all"] } });
+    const asked = vi
+      .spyOn(commands, "checkListAccess")
+      .mockImplementation(async (queries) =>
+        queries.map((query) => ({ resource: query.resource, allowed: true }))
+      );
+    const names = vi
+      .spyOn(commands, "listNamespaces")
+      .mockImplementation(listed as never);
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+    return () => {
+      asked.mockRestore();
+      names.mockRestore();
+      useNamespaceRecencyStore.setState({ recent: {} });
+      store.state.currentContext = null;
+      store.state.contexts = [];
+    };
+  };
+
+  /**
+   * "You can list them in all, argocd" offered a namespace typed earlier that
+   * the cluster does not have. Fails if a recent name the namespace list
+   * lacks is offered as a way out.
+   */
+  it("offers only namespaces the cluster's list has", async () => {
+    const done = await refusedAcross(async () => [namespace("team-checkout")]);
+    try {
+      expect(
+        await screen.findByText("You can list them in team-checkout.")
+      ).toBeVisible();
+      expect(screen.queryByText(/\ball\b/)).toBeNull();
+    } finally {
+      done();
+    }
+  });
+
+  /** Fails if names the namespace list could not check are offered as if they were checked. */
+  it("says the names went unchecked when the namespace list could not be read", async () => {
+    const done = await refusedAcross(async () => {
+      throw new Error("etcdserver: request timed out");
+    });
+    try {
+      expect(
+        await screen.findByText(
+          "You can list them in team-checkout, all, if those exist: the list of namespaces could not be read to check."
+        )
+      ).toBeVisible();
+    } finally {
+      done();
+    }
   });
 });

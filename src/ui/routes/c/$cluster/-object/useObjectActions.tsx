@@ -53,6 +53,7 @@ import type {
 } from "@/generated/types";
 
 import { ScaleDialog } from "./ScaleDialog";
+import { useOpening } from "./use-opening";
 import { RestartDialog } from "./RestartDialog";
 import {
   deleteCommandFor,
@@ -322,7 +323,9 @@ export function useObjectActions({
     },
   });
 
+  const scaleOpening = useOpening(dialog === "scale");
   const busy: Partial<Record<PeekActionId, boolean>> = {
+    scale: scaleOpening.opening,
     restart: restart.isPending,
     delete: remove.isPending,
     portForward: !!service && backend.fetching,
@@ -374,7 +377,7 @@ export function useObjectActions({
       case "portForward":
         return setDialog("portForward");
       case "scale":
-        return setDialog("scale");
+        return scaleOpening.begin(() => setDialog("scale"));
       case "restart":
         // A pod's restart is its deletion, owned or not.
         if (kind === "Pod") return setConfirming("restart");
@@ -454,13 +457,18 @@ export function useObjectActions({
       {scaleCommand && (
         <ScaleDialog
           open={dialog === "scale"}
-          onOpenChange={(open) => setDialog(open ? "scale" : null)}
+          onOpenChange={(open) => {
+            if (open) scale.reset();
+            setDialog(open ? "scale" : null);
+          }}
           kind={kind}
           name={name}
           namespace={namespace}
           current={(detail as ScalableInfo | undefined)?.replicas.desired}
           busy={scale.isPending}
+          error={scale.isError ? scale.error : null}
           warnings={scaleWarnings(governance, intercept("Scale"), t)}
+          reading={governance.isPending && governance.fetchStatus !== "idle"}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}
@@ -474,7 +482,7 @@ export function useObjectActions({
         detail={detail}
         intercept={intercept("Delete")}
         busy={remove.isPending}
-        onConfirm={() => remove.mutate()}
+        onConfirm={() => remove.mutateAsync()}
       />
 
       {kind === "Pod" && (
@@ -488,14 +496,17 @@ export function useObjectActions({
           detail={detail}
           intercept={intercept("Restart")}
           busy={restart.isPending}
-          onConfirm={() => restart.mutate()}
+          onConfirm={() => restart.mutateAsync()}
         />
       )}
 
       {restartRollsOut(kind) && (
         <RestartDialog
           open={confirming === "rolling"}
-          onOpenChange={(open) => setConfirming(open ? "rolling" : null)}
+          onOpenChange={(open) => {
+            if (open) restart.reset();
+            setConfirming(open ? "rolling" : null);
+          }}
           kind={kind}
           name={name}
           namespace={namespace}
@@ -505,6 +516,7 @@ export function useObjectActions({
           readiness={readinessOf(detail)}
           intercept={intercept("Restart")}
           busy={restart.isPending}
+          error={restart.isError ? restart.error : null}
           onConfirm={() => restart.mutate()}
         />
       )}

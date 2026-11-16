@@ -46,7 +46,7 @@ function PortText({ port }: { port: ServicePortInfo }) {
         <span className="font-mono text-fg-mut">:{port.nodePort}</span>
       )}
       {qualifier && (
-        <span className="ml-1 text-[11px] text-fg-fnt">{qualifier}</span>
+        <span className="ml-1 text-caption text-fg-fnt">{qualifier}</span>
       )}
     </span>
   );
@@ -70,7 +70,7 @@ export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            <pre className="whitespace-pre text-[11px]">
+            <pre className="whitespace-pre text-caption">
               {formatPortFull(port)}
             </pre>
           </TooltipContent>
@@ -79,14 +79,14 @@ export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
       {rest.length > 0 && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="cursor-default text-[11px] text-fg-fnt">
+            <span className="cursor-default text-caption text-fg-fnt">
               <T section="count" k="plusMore" values={{ n: rest.length }} />
             </span>
           </TooltipTrigger>
           <TooltipContent>
             <div className="flex flex-col gap-2">
               {rest.map((port, idx) => (
-                <pre key={idx} className="whitespace-pre text-[11px]">
+                <pre key={idx} className="whitespace-pre text-caption">
                   {formatPortFull(port)}
                 </pre>
               ))}

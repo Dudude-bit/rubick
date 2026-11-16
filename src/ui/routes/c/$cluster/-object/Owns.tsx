@@ -9,11 +9,10 @@ import { useState } from "react";
 
 import type { Dependent, Dependents, NotRead } from "@/generated/types";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
 import { segmentOf } from "@/lib/access-kinds";
@@ -39,12 +38,11 @@ export function OwnsPanel({
 
   if (owned.isError && !owned.data)
     return (
-      <Alert variant="destructive">
-        {t("owns", "failed", { error: errorToShow(owned.error) })}{" "}
-        <Button variant="link" size="sm" onClick={() => void owned.refetch()}>
-          {t("owns", "retry")}
-        </Button>
-      </Alert>
+      <Unknown
+        question={t("owns", "failed")}
+        error={owned.error}
+        onRetry={() => owned.refetch()}
+      />
     );
   if (!owned.data) return <TextSkeleton lines={3} />;
 
@@ -66,7 +64,7 @@ export function OwnsPanel({
           <Pager owned={owned.data} onPage={setPage} />
         </div>
       ) : reading ? null : (
-        <p className="flex items-center gap-2 text-sm text-fg-mut">
+        <p className="flex items-center gap-2 text-xs text-fg-mut">
           <Inbox className="h-4 w-4 text-fg-fnt" aria-hidden="true" />
           {t("owns", "none")}
         </p>
@@ -124,12 +122,12 @@ function DependentRow({
           }
         />
         {opens && (
-          <span className="rounded-full bg-hover px-2 py-px text-[11px] tabular-nums text-fg-mut">
+          <span className="rounded-full bg-hover px-2 py-px text-caption tabular-nums text-fg-mut">
             {t("count", "dependents", { n: dependent.dependents })}
           </span>
         )}
         {!dependent.controlled && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-fg-fnt">
+          <span className="inline-flex items-center gap-1 text-caption text-fg-fnt">
             <Link2Off className="h-3 w-3" aria-hidden="true" />
             {t("owns", "notController")}
           </span>
@@ -147,6 +145,7 @@ function Children({
   uid: string;
   namespace: string | null;
 }) {
+  const t = useT();
   const [page, setPage] = useState(0);
   const owned = useDependents(uid, true, page);
   return (
@@ -167,6 +166,14 @@ function Children({
             <Pager owned={owned.data} onPage={setPage} />
           </li>
         </>
+      ) : owned.isError ? (
+        <li role="none" className="py-1 pl-8">
+          <Unknown
+            question={t("owns", "failed")}
+            error={owned.error}
+            onRetry={() => owned.refetch()}
+          />
+        </li>
       ) : (
         <li className="py-1 pl-8">
           <TextSkeleton lines={1} />

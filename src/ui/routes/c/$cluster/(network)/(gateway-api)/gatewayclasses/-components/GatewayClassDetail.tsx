@@ -8,7 +8,8 @@
 
 import { Info, Tag } from "lucide-react";
 import { DeleteAction } from "../../../../-object/DeleteAction";
-import { errorToShow } from "@/lib/error-utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 
 import { yamlTab } from "../../../../-object/yaml-tab";
 import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
@@ -39,6 +40,7 @@ function GatewayRows({ className }: { className: string }) {
     data: gateways,
     error,
     isLoading,
+    refetch,
   } = useLiveQuery({
     queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
@@ -59,13 +61,13 @@ function GatewayRows({ className }: { className: string }) {
         count={gateways ? users.length : undefined}
       />
       {error && gateways === undefined ? (
-        <p className="text-xs text-err">
-          {t("empty", "couldNotReadGateways", {
-            message: errorToShow(error),
-          })}
-        </p>
+        <Unknown
+          question={t("empty", "couldNotReadGateways")}
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : isLoading && gateways === undefined ? (
-        <p className="text-xs text-fg-fnt">{t("empty", "readingGateways")}</p>
+        <Reading>{t("empty", "readingGateways")}</Reading>
       ) : users.length === 0 ? (
         <p className="text-xs text-fg-fnt">{t("empty", "gwClassUnused")}</p>
       ) : (
@@ -109,6 +111,7 @@ export function GatewayClassDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<GatewayClassInfo>({
     resourceKind: ResourceType.GatewayClass,
     isClusterScoped: true,
@@ -231,12 +234,13 @@ export function GatewayClassDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.GatewayClass}
       title={cls?.name || name || ""}
       createdAt={cls?.createdAt}
       badges={
         cls && (
-          <span className="font-mono text-[11px] text-fg-mut">
+          <span className="font-mono text-caption text-fg-mut">
             {cls.controllerName}
           </span>
         )

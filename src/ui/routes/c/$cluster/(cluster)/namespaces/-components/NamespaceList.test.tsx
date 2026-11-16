@@ -36,6 +36,7 @@ function counts(podCount: number | null) {
   vi.mocked(useClusterSummary).mockReturnValue({
     namespaces: [{ name: "prod", podCount, problems: null }],
     podCount,
+    problems: null,
     namespaceList: "listed",
     refused: false,
     isLoading: false,

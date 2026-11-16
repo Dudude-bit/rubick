@@ -29,7 +29,7 @@ export function WordTable({
                 <th
                   key={column}
                   scope="col"
-                  className="border-b border-hair py-1 pr-3 text-left font-mono text-[11px] font-normal text-fg-fnt"
+                  className="border-b border-hair py-1 pr-3 text-left font-mono text-caption font-normal text-fg-fnt"
                 >
                   {column}
                 </th>
@@ -40,7 +40,10 @@ export function WordTable({
             {table.rows.map((row, index) => (
               <tr key={index} className="border-b border-hair last:border-b-0">
                 {row.map((cell, column) => (
-                  <td key={column} className="py-1 pr-3 align-top">
+                  <td
+                    key={column}
+                    className="py-1 pr-3 align-top wrap-anywhere"
+                  >
                     <Words cell={cell} />
                   </td>
                 ))}
@@ -50,7 +53,7 @@ export function WordTable({
         </table>
       </div>
       {escalates && (
-        <p className="flex items-start gap-1.5 text-[11px] text-fg-mut">
+        <p className="flex items-start gap-1.5 text-caption text-fg-mut">
           <ShieldAlert
             className="mt-px h-3 w-3 flex-none text-err"
             aria-hidden

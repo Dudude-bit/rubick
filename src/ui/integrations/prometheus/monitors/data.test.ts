@@ -12,6 +12,8 @@ import {
   alertsMark,
   monitorCount,
   monitorMark,
+  rowsOfPicture,
+  scopePicture,
   worstTone,
   type Picture,
 } from "./data";
@@ -266,5 +268,63 @@ describe("what the Alerts tab and the sidebar dot carry", () => {
         withRules({ rules: { state: "unread", reason: "403" } } as never)
       )
     ).toBeNull();
+  });
+});
+
+describe("what a namespace scope leaves of the monitors", () => {
+  const withRules = (base: Picture): Picture =>
+    ({ ...base, rules: { state: "absent" } }) as unknown as Picture;
+  const cr = (name: string, namespace: string) => ({
+    name,
+    namespace,
+    spec: {},
+  });
+  const scoped = (scope: string[]) =>
+    scopePicture(
+      withRules(
+        picture(
+          {
+            state: "read",
+            items: [cr("api", "argocd"), cr("web", "shop"), cr("db", "shop")],
+          },
+          { state: "read", items: [] }
+        )
+      ),
+      scope
+    );
+
+  /**
+   * The argocd scope listed the api, backend and scheduler monitors of other
+   * namespaces. Fails if a monitor outside the scope stays in the count.
+   */
+  it("counts only the monitors in the scope", () => {
+    expect(monitorCount(scoped(["argocd"]))).toBe(1);
+    expect(monitorCount(scoped(["argocd", "shop"]))).toBe(3);
+  });
+
+  /**
+   * The whole cluster is the empty scope. Fails if an empty scope narrows to
+   * nothing.
+   */
+  it("leaves the whole cluster alone under no scope", () => {
+    expect(monitorCount(scoped([]))).toBe(3);
+  });
+
+  /**
+   * A kind the cluster refused stays refused inside a scope, never an empty
+   * list. Fails if scoping turns an unread kind into zero monitors.
+   */
+  it("keeps a refused kind unread rather than empty", () => {
+    const refused = scopePicture(
+      withRules(
+        picture(
+          { state: "unread", reason: "servicemonitors is forbidden" },
+          { state: "read", items: [] }
+        )
+      ),
+      ["argocd"]
+    );
+    expect(monitorCount(refused)).toBeNull();
+    expect(rowsOfPicture(refused)).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@
 import type {
   AutoscalerInfo,
   ClusterOverview,
+  OverviewUnread,
   ClusterProblem,
   EventsShort,
   IngressHealthInput,
@@ -29,11 +30,13 @@ import {
   type ClaimReads,
 } from "@/lib/claim-cause";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { autoscalerVerdict } from "@/lib/governance";
+import { autoscalerVerdict, type Autoscaler } from "@/lib/governance";
 import { namespacesWhere } from "@/lib/namespace-scope";
 import { sameCause } from "@/lib/pod-cause";
 import { policyNamesOf } from "@/lib/policy-door";
 import { parseRefusal } from "@/lib/refusal";
+import { keptByName } from "@/lib/kept-by-name";
+import { formatWhen } from "@/lib/utils";
 import { kindFacts } from "@/lib/resource-registry";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import {
@@ -81,12 +84,20 @@ export interface AttentionItem {
   replaced: boolean;
   /** The workload a pod's row belongs to, whose row the list draws it under. */
   workload?: PodWorkload;
+  /** The node a pod's row ran on: where that node's row says it went down, the pod is drawn under it. */
+  node?: string;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
   unservedClass?: { name: string; rest: string | null };
   /** The NetworkPolicies that shut a Service, keyed by the sentence other Services here may share. */
   shutBy?: { key: string; policies: string[] };
+  /** The last answer about it, kept while the reads that would tell it again fail. */
+  stale?: boolean;
+  /** Where `stale`: when the answer it is kept from came, and whether the reads since were refused rather than failed. */
+  lastKnown?: { at: number; refused: boolean };
+  /** The autoscaler it was judged from, so a reader words it as the workload's page does. */
+  autoscaler?: Autoscaler;
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -184,7 +195,7 @@ export function checkSaid(check: AttentionCheck, t: T): string {
 }
 
 export interface Attention {
-  /** Worst first, then what is down now before pods already replaced, then the longest broken (undated first, as the backend ranks). */
+  /** As `ranked` orders them: a node that went down, then what began today, then the undated, then the long-standing, worst first in each. */
   items: AttentionItem[];
   /** Every problem, counting the rows the backend's ranked list cut. */
   total: number;
@@ -197,6 +208,58 @@ export interface Attention {
   /** What a workload's controller says where its pods went unread: named as not checked, never counted. */
   unconfirmed: AttentionItem[];
 }
+
+/** The unread reach of `item`'s kind that covers where it lives, if a check lost one. */
+function lostReach(
+  checks: readonly AttentionCheck[],
+  item: Pick<AttentionItem, "kind" | "namespace">
+): Unread | undefined {
+  for (const check of checks) {
+    if (check.state !== "unread" || check.partial || check.kind !== item.kind)
+      continue;
+    const entry = check.unread.find(
+      (each) => each.namespace === null || each.namespace === item.namespace
+    );
+    if (entry) return entry;
+  }
+  return undefined;
+}
+
+/** Whether a row rests on a kind or a namespace whose read failed or was refused: last known, not current. */
+export const itemIsStale = (
+  attention: Pick<Attention, "checks">,
+  item: Pick<AttentionItem, "kind" | "namespace" | "stale">
+): boolean =>
+  item.stale === true || lostReach(attention.checks, item) !== undefined;
+
+/**
+ * `item` as last known where a check of its kind lost the reach it lives in,
+ * dated by the answer it came from: one sentence for every reader, the
+ * Overview's row, the list's chip, the peek and Share. A pod row stood
+ * "not rechecked" with no time under one that had one.
+ */
+function lastKnownOf(
+  item: AttentionItem,
+  checks: readonly AttentionCheck[],
+  at: number | undefined
+): AttentionItem {
+  if (item.stale) return item;
+  const lost = lostReach(checks, item);
+  if (!lost) return item;
+  return {
+    ...item,
+    stale: true,
+    ...(at !== undefined && {
+      lastKnown: { at, refused: lost.code === ERROR_CODES.PERMISSION },
+    }),
+  };
+}
+
+/** What a last-known row adds after its words, in every reader: not rechecked, and the time it is known at, or why there is none. */
+export const notRecheckedWords = (t: T, at: number | undefined): string =>
+  at
+    ? t("cluster", "problemNotRecheckedAt", { time: formatWhen(at, "clock") })
+    : t("cluster", "problemNotRecheckedUnseen");
 
 /** One namespace's share of an attention read across several. */
 export interface NamespaceAttention {
@@ -212,6 +275,8 @@ export interface Answer<V> {
   error: unknown;
   /** Older than the rate it is read at allows: a re-read is due or under way. */
   overdue?: boolean;
+  /** When `data` answered. */
+  at?: number;
 }
 
 /** The kinds the backend's answer covers, in the order they are named. */
@@ -313,6 +378,7 @@ const itemOf = (problem: ClusterProblem): AttentionItem =>
     foldedPods: problem.foldedPods,
     replaced: problem.replaced,
     workload: problem.workload,
+    node: problem.node,
     opens: {
       kind: problem.kind,
       name: problem.name,
@@ -338,46 +404,339 @@ const SERVES_NOBODY: ReadonlySet<ServiceHealth["state"]> = new Set([
   "shut",
 ]);
 
-const serviceItems = remember(
-  (answered: ServiceHealthInputs[], t: T): AttentionItem[] =>
-    answered.flatMap(({ namespace, groups }) =>
-      groups.flatMap((group) => {
-        const health = serviceHealthOf(group, group, null);
-        // Some addresses not ready is the workload's verdict to give; a
-        // Service with none serving is a fact no other reader reports.
-        if (!SERVES_NOBODY.has(health.state)) return [];
-        const words = serviceHealthWords(health, t);
-        const tone = toneOf(words.role);
-        if (!tone) return [];
-        const detail: AttentionDetail | null = words.cause
-          ? { says: "stopCause", ...words.cause }
-          : words.reason
-            ? ours(words.reason)
-            : null;
-        const shutBy =
-          health.state === "shut"
-            ? {
-                key: `${namespace}\n${words.reason}`,
-                policies: policyNamesOf(health.stop),
-              }
-            : undefined;
-        return group.names.map((name) => {
-          const subject = { kind: "Service", name, namespace };
-          return withKey({
-            ...subject,
-            tone,
-            reason: words.label,
-            detail,
-            since: null,
-            restarts: null,
-            foldedPods: null,
-            replaced: false,
-            opens: subject,
-            ...(shutBy && { shutBy }),
-          });
+/** A read that failed, by the kind it lists. */
+type KindUnread = Unread & { kind: string };
+
+const heldBack = (inputs: ServiceHealthInputs) =>
+  inputs.groups.filter(
+    (group) => serviceHealthOf(group, group, null).state === "podsUnread"
+  );
+
+/**
+ * The reads that failed where a Service's verdict waits on pods or workloads
+ * nobody could read, by the kind each lists: the Services were read, their
+ * pods were not. The backend marks exactly those stops, so the verdict is
+ * left out of the items and the check of the kind that failed says so.
+ *
+ * A kind the overview read again after the Services answered is not what
+ * they wait on any more: they are `asking` again, and the kind is not drawn
+ * unread beside the tile that read it. For fifteen seconds after a pods 403
+ * lifted, Not checked said "Pods list is forbidden" under a Pods tile that
+ * had answered.
+ */
+function notCheckedIn(
+  answered: ServiceHealthInputs[],
+  lost: readonly OverviewUnread[],
+  t: T,
+  since: { at: number | undefined; regained: Regained }
+): { failed: KindUnread[]; asking: boolean } {
+  let asking = false;
+  const failed = answered.flatMap((inputs): KindUnread[] => {
+    const { namespace } = inputs;
+    const [group] = heldBack(inputs);
+    if (!group) return [];
+    const readAgain = (kind: string) =>
+      since.at !== undefined &&
+      Math.max(
+        since.regained.get(reachKey(kind, namespace)) ?? -Infinity,
+        since.regained.get(reachKey(kind, null)) ?? -Infinity
+      ) > since.at;
+    const own = inputs.unread.filter((entry) => !readAgain(entry.kind));
+    if (inputs.unread.length > 0 && own.length === 0) {
+      asking = true;
+      return [];
+    }
+    const failed =
+      own.length > 0
+        ? own
+        : lost.filter(
+            (entry) => entry.namespace === null || entry.namespace === namespace
+          );
+    if (failed.length > 0)
+      return failed.map(({ kind, code, message }) => ({
+        kind,
+        namespace,
+        code,
+        message,
+      }));
+    const health = serviceHealthOf(group, group, null);
+    return [
+      {
+        kind: "Service",
+        namespace,
+        code: "",
+        message: serviceHealthWords(health, t).reason ?? "",
+      },
+    ];
+  });
+  return { failed, asking };
+}
+
+/** `checks` with each failed read in the check of its kind, where that check does not already cover its namespace. */
+function withFailed(
+  checks: AttentionCheck[],
+  failed: readonly KindUnread[]
+): AttentionCheck[] {
+  const out = checks.map((check) => ({ ...check, unread: [...check.unread] }));
+  for (const { kind, ...entry } of failed) {
+    const check = out.find((each) => each.kind === kind && !each.partial);
+    if (!check) {
+      out.push({ kind, state: "unread", unread: [entry] });
+      continue;
+    }
+    const covered = check.unread.some(
+      (had) => had.namespace === null || had.namespace === entry.namespace
+    );
+    if (covered) continue;
+    check.state = "unread";
+    check.unread.push(entry);
+  }
+  return out;
+}
+
+/** Services kept from the last read that told their verdicts: when it answered, and whether the reads since were refused. */
+export type KeptServices = ServiceHealthInputs & {
+  at: number;
+  refused?: boolean;
+};
+
+/** Each namespace's Services as the last read that could tell all their verdicts answered. */
+type Checked = ReadonlyMap<string, KeptServices>;
+
+/** `last` moved on by `answered`: a namespace told whole again replaces what was kept of it, and one gone from the answer is let go. */
+function checkedAfter(
+  last: Checked,
+  answered: readonly ServiceHealthInputs[],
+  at: number
+): Checked {
+  const next = new Map<string, KeptServices>();
+  for (const inputs of answered) {
+    const kept =
+      heldBack(inputs).length > 0
+        ? last.get(inputs.namespace)
+        : { ...inputs, at };
+    if (kept) next.set(inputs.namespace, kept);
+  }
+  return next;
+}
+
+/** What `checked` last said of the Services whose verdicts `answered` cannot tell now. */
+function keptServices(
+  checked: Checked,
+  answered: readonly ServiceHealthInputs[]
+): KeptServices[] {
+  return answered.flatMap((inputs) => {
+    const untold = new Set(heldBack(inputs).flatMap((group) => group.names));
+    const last = checked.get(inputs.namespace);
+    if (!last || untold.size === 0) return [];
+    const groups = last.groups.flatMap((group) => {
+      const names = group.names.filter((name) => untold.has(name));
+      return names.length > 0 ? [{ ...group, names }] : [];
+    });
+    const refused =
+      inputs.unread.length > 0 &&
+      inputs.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
+    return groups.length > 0 ? [{ ...last, groups, refused }] : [];
+  });
+}
+
+const checkedBy = new Map<
+  string,
+  {
+    answered: readonly ServiceHealthInputs[];
+    checked: Checked;
+    kept: KeptServices[];
+  }
+>();
+keptByName(() => checkedBy.clear());
+
+/**
+ * The Services under `key` (a cluster and a scope) whose verdicts went
+ * untold, as the last read that told them answered at `at`. Moved on once
+ * per answer, so every reader of one answer is handed the same rows.
+ */
+export function servicesKept(
+  key: string,
+  answered: readonly ServiceHealthInputs[],
+  at: number
+): KeptServices[] {
+  const was = checkedBy.get(key);
+  if (was?.answered === answered) return was.kept;
+  const checked = checkedAfter(was?.checked ?? new Map(), answered, at);
+  const kept = keptServices(checked, answered);
+  checkedBy.set(key, { answered, checked, kept });
+  return kept;
+}
+
+const toldBy = new Map<
+  string,
+  {
+    overview: ClusterOverview;
+    answeredAt: number;
+    told: ReadonlyMap<string, { item: AttentionItem; at: number }>;
+    kept: AttentionItem[];
+    regained: Regained;
+  }
+>();
+keptByName(() => toldBy.clear());
+
+/** Where a kind the overview had lost was read again, and when: by {@link reachKey}. */
+export type Regained = ReadonlyMap<string, number>;
+
+const NONE_REGAINED: Regained = new Map();
+
+/** A kind in one namespace, or across the cluster where `namespace` is null. */
+const reachKey = (kind: string, namespace: string | null): string =>
+  `${kind}\n${namespace ?? ""}`;
+
+/** `was` moved on from `before` to `now`: a reach lost before and read now is regained at `at`; one lost now is not. */
+function regainedAfter(
+  was: Regained,
+  before: readonly OverviewUnread[],
+  now: readonly OverviewUnread[],
+  at: number
+): Regained {
+  const lost = new Set(
+    now.map((entry) => reachKey(entry.kind, entry.namespace))
+  );
+  const next = new Map([...was].filter(([reach]) => !lost.has(reach)));
+  for (const entry of before) {
+    const reach = reachKey(entry.kind, entry.namespace);
+    if (!lost.has(reach)) next.set(reach, at);
+  }
+  return next;
+}
+
+/** The reaches under `key` the overview read again after losing them, as {@link problemsKept} last moved them on. */
+export const regainedUnder = (key: string): Regained =>
+  toldBy.get(key)?.regained ?? NONE_REGAINED;
+
+/**
+ * The backend's problems under `key` (a cluster and a scope) whose kind went
+ * unread where they live, as the last answer that read it there told them,
+ * until a read of it there answers again. A pod whose list was refused has
+ * not recovered; it has gone unseen. One the answer still tells beside its
+ * unread kind is kept too, dated by the last answer that read it: the
+ * Overview quoted a Deployment's status as current under a Deployments 500.
+ * Moved on once per answer, as {@link servicesKept} is.
+ */
+export function problemsKept(
+  key: string,
+  overview: ClusterOverview,
+  answeredAt: number
+): AttentionItem[] {
+  const was = toldBy.get(key);
+  if (was?.overview === overview && was.answeredAt === answeredAt)
+    return was.kept;
+  const current = problemItems(overview.problems);
+  const lostFor = (item: AttentionItem) =>
+    overview.unread.find(
+      (entry) =>
+        entry.kind === item.kind &&
+        (entry.namespace === null || entry.namespace === item.namespace)
+    );
+  const tell = (
+    told: Map<string, { item: AttentionItem; at: number }>,
+    item: AttentionItem
+  ) => {
+    const before = was?.told.get(item.key);
+    if (!lostFor(item)) told.set(item.key, { item, at: answeredAt });
+    else if (before) told.set(item.key, { item, at: before.at });
+  };
+  // An answer identical to the last comes back as the same object: it told
+  // the same problems again, later.
+  if (was?.overview === overview) {
+    const told = new Map(was.told);
+    for (const item of current) tell(told, item);
+    toldBy.set(key, { ...was, answeredAt, told });
+    return was.kept;
+  }
+  const told = new Map<string, { item: AttentionItem; at: number }>();
+  const kept: AttentionItem[] = [];
+  const answered = new Set(current.map((item) => item.key));
+  for (const [itemKey, last] of was?.told ?? []) {
+    if (answered.has(itemKey)) continue;
+    if (!lostFor(last.item)) continue;
+    told.set(itemKey, last);
+  }
+  for (const item of current) tell(told, item);
+  const regained = regainedAfter(
+    was?.regained ?? NONE_REGAINED,
+    was?.overview.unread ?? [],
+    overview.unread,
+    answeredAt
+  );
+  for (const { item, at } of told.values()) {
+    const lost = lostFor(item);
+    if (!lost) continue;
+    kept.push({
+      ...item,
+      stale: true,
+      lastKnown: { at, refused: lost.code === ERROR_CODES.PERMISSION },
+    });
+  }
+  toldBy.set(key, { overview, answeredAt, told, kept, regained });
+  return kept;
+}
+
+/** The backend kinds whose pods decide a Service's stop, as unread over `overview`. */
+const lostBackend = remember((overview: ClusterOverview) =>
+  overview.unread.filter((entry) => entry.kind !== "Node")
+);
+
+const serviceItemsOf = (
+  answered: ServiceHealthInputs[],
+  t: T
+): AttentionItem[] =>
+  answered.flatMap(({ namespace, groups }) =>
+    groups.flatMap((group) => {
+      const health = serviceHealthOf(group, group, null);
+      // Some addresses not ready is the workload's verdict to give; a
+      // Service with none serving is a fact no other reader reports.
+      if (!SERVES_NOBODY.has(health.state)) return [];
+      const words = serviceHealthWords(health, t);
+      const tone = toneOf(words.role);
+      if (!tone) return [];
+      const detail: AttentionDetail | null = words.cause
+        ? { says: "stopCause", ...words.cause }
+        : words.reason
+          ? ours(words.reason)
+          : null;
+      const shutBy =
+        health.state === "shut"
+          ? {
+              key: `${namespace}\n${words.reason}`,
+              policies: policyNamesOf(health.stop),
+            }
+          : undefined;
+      return group.names.map((name) => {
+        const subject = { kind: "Service", name, namespace };
+        return withKey({
+          ...subject,
+          tone,
+          reason: words.label,
+          detail,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: subject,
+          ...(shutBy && { shutBy }),
         });
-      })
-    )
+      });
+    })
+  );
+
+const serviceItems = remember(serviceItemsOf);
+
+const keptItems = remember((kept: KeptServices[], t: T) =>
+  kept.flatMap((inputs) =>
+    serviceItemsOf([inputs], t).map((item) => ({
+      ...item,
+      stale: true,
+      lastKnown: { at: inputs.at, refused: inputs.refused ?? false },
+    }))
+  )
 );
 
 /**
@@ -495,10 +854,13 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
           name: target.name,
           namespace: target.namespace,
         },
+        autoscaler: { object: autoscaler, facts: autoscaler.facts, target },
       }),
     ];
   })
 );
+
+const NO_SERVICES: KeptServices[] = [];
 
 const UNREAD_CLAIM_READS: ClaimReads = { classes: "unread", volumes: "unread" };
 
@@ -692,13 +1054,23 @@ function checkOf<V>(
 
 export interface AttentionInputs {
   overview: ClusterOverview;
+  /** When `overview` answered. */
+  overviewAt?: number;
+  /** The reaches `overview` read again after losing them ({@link regainedUnder}). */
+  regained?: Regained;
   /** The namespaces every list below was asked in; `null` is the cluster. */
   scope: readonly string[] | null;
   services: {
     answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
     overdue?: boolean;
+    /** When `answered` answered. */
+    at?: number;
+    /** The last answer for Services whose verdicts `answered` cannot tell now. */
+    kept?: KeptServices[];
   };
+  /** The backend's last told problems whose kind `overview` could not read again where they live ({@link problemsKept}). */
+  kept?: AttentionItem[];
   ingresses: Answer<Scoped<IngressHealthInput>>;
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
@@ -711,20 +1083,56 @@ export interface AttentionInputs {
 
 const SEVERITY: Record<AttentionTone, number> = { err: 0, warn: 1 };
 
-const dated = (since: string | null) =>
-  since === null ? 0 : Date.parse(since) || 0;
+/** As `src/contracts/attention-rank-conformance.json` states it for both halves. */
+export const LONG_STANDING_HOURS = 24;
 
-function ranked(items: AttentionItem[]): AttentionItem[] {
-  return [...items].sort(
-    (a, b) =>
-      SEVERITY[a.tone] - SEVERITY[b.tone] ||
-      Number(a.replaced) - Number(b.replaced) ||
-      dated(a.since) - dated(b.since)
-  );
+// Not the first row's: what is happening now ranks above an older, worse one.
+const worstOf = (items: readonly AttentionItem[]): AttentionTone | null =>
+  items.some((item) => item.tone === "err")
+    ? "err"
+    : items.length > 0
+      ? "warn"
+      : null;
+
+const wentDown = (item: Pick<AttentionItem, "kind" | "reason">) =>
+  item.kind === "Node" && item.reason === "NotReady";
+
+function rankKey(item: AttentionItem, now: number): number[] {
+  const at = item.since === null ? NaN : Date.parse(item.since);
+  const undated = Number.isNaN(at);
+  return [
+    wentDown(item) ? 0 : 1,
+    undated ? 1 : now - at < LONG_STANDING_HOURS * 3_600_000 ? 0 : 2,
+    SEVERITY[item.tone],
+    Number(item.replaced),
+    undated ? 0 : -at,
+  ];
+}
+
+/**
+ * The backend's `rank_key`, applied again with this side's rows beside its
+ * own: a node that went down first; then what began within a day; then what
+ * has no date; then what has stood longer, worst first inside each. Pods
+ * already replaced come after what is down, the newest first. Services
+ * without endpoints for months, undated, sat among today's problems.
+ */
+export function ranked(items: AttentionItem[], now: number): AttentionItem[] {
+  const keys = new Map(items.map((item) => [item, rankKey(item, now)]));
+  return [...items].sort((a, b) => {
+    const ka = keys.get(a)!;
+    const kb = keys.get(b)!;
+    for (let i = 0; i < ka.length; i++)
+      if (ka[i] !== kb[i]) return ka[i] - kb[i];
+    return 0;
+  });
 }
 
 export type AttentionLine =
-  | { at: "item"; item: AttentionItem; under: null | "class" | "policy" }
+  | {
+      at: "item";
+      item: AttentionItem;
+      under: null | "class" | "policy" | "node";
+    }
   | {
       at: "item";
       item: AttentionItem;
@@ -738,7 +1146,8 @@ export type AttentionLine =
 const workloadKey = (kind: string, name: string, namespace: string | null) =>
   `${kind}/${namespace ?? "-"}/${name}`;
 
-function causeTold(head: AttentionItem, row: AttentionItem): boolean {
+/** Whether a workload's own row already tells the cause one of its pods' rows gives. */
+export function causeTold(head: AttentionItem, row: AttentionItem): boolean {
   const told = head.detail?.says === "podsCause" ? head.detail.cause : null;
   const own = row.detail?.says === "cause" ? row.detail.cause : null;
   return told !== null && own !== null && sameCause(told, own);
@@ -748,7 +1157,8 @@ function causeTold(head: AttentionItem, row: AttentionItem): boolean {
  * The list as it is drawn, each group where the first of it ranked:
  * Ingresses asking for the same missing IngressClass under one line that says
  * so, Services one NetworkPolicy shuts the same way under one line that says
- * that, and a workload's pods under the workload's own row.
+ * that, a workload's pods under the workload's own row, and the pods on a
+ * node that went down under the node's, whatever their workload.
  */
 export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   const byClass = new Map<string, AttentionItem[]>();
@@ -762,14 +1172,18 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
     const key = workloadKey(item.kind, item.name, item.namespace);
     if (!item.workload && !heads.has(key)) heads.set(key, item);
   }
+  const down = new Map(
+    items.filter(wentDown).map((item) => [item.name, item] as const)
+  );
   const rowsOf = new Map<AttentionItem, AttentionItem[]>();
   const headOf = new Map<AttentionItem, AttentionItem>();
   for (const item of items) {
     const head =
-      item.workload &&
-      heads.get(
-        workloadKey(item.workload.kind, item.workload.name, item.namespace)
-      );
+      (item.kind === "Pod" && item.node && down.get(item.node)) ||
+      (item.workload &&
+        heads.get(
+          workloadKey(item.workload.kind, item.workload.name, item.namespace)
+        ));
     if (!head) continue;
     headOf.set(item, head);
     rowsOf.set(head, [...(rowsOf.get(head) ?? []), item]);
@@ -783,12 +1197,16 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
       placed.add(head);
       lines.push({ at: "item", item: head, under: null });
       for (const row of rowsOf.get(head) ?? [])
-        lines.push({
-          at: "item",
-          item: row,
-          under: "workload",
-          sameCause: causeTold(head, row),
-        });
+        lines.push(
+          wentDown(head)
+            ? { at: "item", item: row, under: "node" }
+            : {
+                at: "item",
+                item: row,
+                under: "workload",
+                sameCause: causeTold(head, row),
+              }
+        );
       continue;
     }
     const shut = item.shutBy?.key;
@@ -854,12 +1272,9 @@ function countByNamespace(
   return counts;
 }
 
-/** A count some kind went unread for is a floor, and every badge marks it so. */
-export const attentionFigure = ({
-  total,
-  complete,
-}: Pick<Attention, "total" | "complete">): string =>
-  complete ? String(total) : `${total}+`;
+/** The count alone; a surface whose count some kind went unread for says so beside it, never as a "+". */
+export const attentionFigure = ({ total }: Pick<Attention, "total">): string =>
+  String(total);
 
 /** The same count in words, alike on every surface that has room for them. */
 export function attentionWords(
@@ -869,7 +1284,7 @@ export function attentionWords(
   if (complete) return t("cluster", "problemCount", { n: total });
   return total > 0
     ? t("cluster", "problemCountPartial", { n: total })
-    : t("cluster", "problemsNotAllChecked");
+    : t("cluster", "problemsNoneNotAllChecked");
 }
 
 export const ATTENTION_TEXT = {
@@ -896,9 +1311,9 @@ export function namespaceAttention(
             (entry) => entry.namespace !== null && entry.namespace !== namespace
           ))
     ),
-    worst:
-      attention.items.find((item) => item.namespace === namespace)?.tone ??
-      null,
+    worst: worstOf(
+      attention.items.filter((item) => item.namespace === namespace)
+    ),
   };
 }
 
@@ -909,9 +1324,15 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     input.ingressHealth,
     t
   );
-  const backend = problemItems(overview.problems);
+  const told = problemItems(overview.problems);
+  // A kept problem stands in for the answer's own telling of it.
+  const keptKeys = new Set((input.kept ?? []).map((item) => item.key));
+  const backend = told.filter((item) => !keptKeys.has(item.key));
+  const toldKeys = new Set(told.map((item) => item.key));
   const ours = [
+    ...(input.kept ?? []),
     ...serviceItems(services.answered, t),
+    ...keptItems(services.kept ?? NO_SERVICES, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(
@@ -923,49 +1344,80 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ...gatewayItems(input.gatewayApi.pulse),
     ...routeItems(input.gatewayApi.board.notServing, t),
   ];
-  const items = ranked([...backend, ...ours]);
 
   const servicesUnread =
     services.unread === "reading"
       ? []
       : [...services.unread, ...shutUncheckedIn(services.answered, t)];
-  const checks: AttentionCheck[] = [
-    ...BACKEND_KINDS.map((kind): AttentionCheck => {
-      const unread = overview.unread.filter((entry) => entry.kind === kind);
-      return { kind, state: unread.length > 0 ? "unread" : "read", unread };
-    }),
-    ...eventsChecks(overview.warningsShort),
+  const { failed, asking } =
     services.unread === "reading"
-      ? { kind: "Service", state: "reading", unread: [] }
-      : {
-          kind: "Service",
-          state:
-            servicesUnread.length > 0
-              ? "unread"
-              : services.overdue
-                ? "reading"
-                : "read",
-          unread: servicesUnread,
-        },
-    checkOf(
-      "Ingress",
-      input.ingresses,
-      input.scope,
-      ingress.unknown,
-      ingress.reading
+      ? { failed: [], asking: false }
+      : notCheckedIn(services.answered, lostBackend(overview), t, {
+          at: services.at,
+          regained: input.regained ?? NONE_REGAINED,
+        });
+  const checks = withFailed(
+    [
+      ...BACKEND_KINDS.map((kind): AttentionCheck => {
+        const unread = overview.unread.filter((entry) => entry.kind === kind);
+        return { kind, state: unread.length > 0 ? "unread" : "read", unread };
+      }),
+      ...eventsChecks(overview.warningsShort),
+      services.unread === "reading"
+        ? { kind: "Service", state: "reading", unread: [] }
+        : {
+            kind: "Service",
+            state:
+              servicesUnread.length > 0
+                ? "unread"
+                : services.overdue || asking
+                  ? "reading"
+                  : "read",
+            unread: servicesUnread,
+          },
+      checkOf(
+        "Ingress",
+        input.ingresses,
+        input.scope,
+        ingress.unknown,
+        ingress.reading
+      ),
+      checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
+      checkOf("PersistentVolumeClaim", input.claims, input.scope),
+      ...gatewayApiChecks(input.gatewayApi, input.scope),
+    ],
+    failed
+  );
+  const answeredAt: Partial<Record<string, number>> = {
+    ...Object.fromEntries(
+      BACKEND_KINDS.map((kind) => [kind, input.overviewAt])
     ),
-    checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
-    checkOf("PersistentVolumeClaim", input.claims, input.scope),
-    ...gatewayApiChecks(input.gatewayApi, input.scope),
-  ];
+    ...Object.fromEntries(
+      ["Gateway", ...input.gatewayApi.routeKinds].map((kind) => [
+        kind,
+        input.gatewayApi.routes.at,
+      ])
+    ),
+    Service: services.at,
+    Ingress: input.ingresses.at,
+    HorizontalPodAutoscaler: input.autoscalers.at,
+    PersistentVolumeClaim: input.claims.at,
+  };
+  const items = ranked([...backend, ...ours], input.now).map((item) =>
+    lastKnownOf(item, checks, answeredAt[item.kind])
+  );
 
   return {
     items,
     total: items.length + overview.problemsTruncated,
     checks,
     complete: checks.every((check) => check.state === "read"),
-    worst: items[0]?.tone ?? null,
-    byNamespace: countByNamespace(overview, backend, ours),
+    worst: worstOf(items),
+    byNamespace: countByNamespace(
+      overview,
+      told,
+      ours.filter((item) => !toldKeys.has(item.key))
+    ),
     unconfirmed: unconfirmedItems(overview.unconfirmed),
   };
 }

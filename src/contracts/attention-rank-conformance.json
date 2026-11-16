@@ -1,0 +1,234 @@
+{
+  "longStandingHours": 24,
+  "now": "2026-11-15T12:00:00Z",
+  "cases": [
+    {
+      "name": "a node that went down leads what it took down and every failure that has stood for days",
+      "rows": [
+        {
+          "id": "job-38d",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-10-08T12:00:00Z"
+        },
+        {
+          "id": "hpa-74d",
+          "kind": "HorizontalPodAutoscaler",
+          "reason": "FailedGetScale",
+          "severity": "critical",
+          "since": "2026-09-02T12:00:00Z"
+        },
+        {
+          "id": "pod-kube-proxy",
+          "kind": "Pod",
+          "reason": "Terminated",
+          "severity": "critical",
+          "since": "2026-11-15T11:59:00Z"
+        },
+        {
+          "id": "pod-nats",
+          "kind": "Pod",
+          "reason": "Terminated",
+          "severity": "critical",
+          "since": "2026-11-15T11:58:30Z",
+          "replaced": true
+        },
+        {
+          "id": "node",
+          "kind": "Node",
+          "reason": "NotReady",
+          "severity": "critical",
+          "since": "2026-11-15T11:50:00Z"
+        },
+        {
+          "id": "pod-unhealthy",
+          "kind": "Pod",
+          "reason": "Unhealthy",
+          "severity": "warning",
+          "since": "2026-11-15T11:00:00Z"
+        },
+        {
+          "id": "undated",
+          "kind": "Deployment",
+          "reason": "Unavailable",
+          "severity": "critical",
+          "since": null
+        }
+      ],
+      "order": [
+        "node",
+        "pod-kube-proxy",
+        "pod-nats",
+        "pod-unhealthy",
+        "undated",
+        "job-38d",
+        "hpa-74d"
+      ]
+    },
+    {
+      "name": "inside a tier the newest leads",
+      "rows": [
+        {
+          "id": "earlier",
+          "kind": "Pod",
+          "reason": "CrashLoopBackOff",
+          "severity": "critical",
+          "since": "2026-11-15T11:00:00Z"
+        },
+        {
+          "id": "later",
+          "kind": "Pod",
+          "reason": "CrashLoopBackOff",
+          "severity": "critical",
+          "since": "2026-11-15T11:30:00Z"
+        },
+        {
+          "id": "old",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-11-01T00:00:00Z"
+        },
+        {
+          "id": "older",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-10-01T00:00:00Z"
+        }
+      ],
+      "order": ["later", "earlier", "old", "older"]
+    },
+    {
+      "name": "worst first inside a tier, and what began today above a worse failure that has stood for days",
+      "rows": [
+        {
+          "id": "old-critical",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-10-01T00:00:00Z"
+        },
+        {
+          "id": "new-warning",
+          "kind": "Pod",
+          "reason": "Unhealthy",
+          "severity": "warning",
+          "since": "2026-11-15T11:59:00Z"
+        },
+        {
+          "id": "new-critical",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "2026-11-15T10:00:00Z"
+        }
+      ],
+      "order": ["new-critical", "new-warning", "old-critical"]
+    },
+    {
+      "name": "a day to the second has stood for days, a second less has not",
+      "rows": [
+        {
+          "id": "a-day",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "2026-11-14T12:00:00Z"
+        },
+        {
+          "id": "undated",
+          "kind": "Deployment",
+          "reason": "Unavailable",
+          "severity": "critical",
+          "since": null
+        },
+        {
+          "id": "a-second-less",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "2026-11-14T12:00:01Z"
+        }
+      ],
+      "order": ["a-second-less", "undated", "a-day"]
+    },
+    {
+      "name": "pods already replaced come after what is down in the same tier, and a date that does not parse is no date",
+      "rows": [
+        {
+          "id": "replaced",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "2026-11-15T11:59:00Z",
+          "replaced": true
+        },
+        {
+          "id": "down",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "2026-11-15T11:00:00Z"
+        },
+        {
+          "id": "garbled",
+          "kind": "Pod",
+          "reason": "Failed",
+          "severity": "critical",
+          "since": "yesterday"
+        },
+        {
+          "id": "cordoned",
+          "kind": "Node",
+          "reason": "Cordoned",
+          "severity": "warning",
+          "since": null
+        }
+      ],
+      "order": ["down", "replaced", "garbled", "cordoned"]
+    },
+    {
+      "name": "undated rows that may have stood for months rank below what began today and above what is dated older, worst first",
+      "rows": [
+        {
+          "id": "svc-a",
+          "kind": "Service",
+          "reason": "NoEndpoints",
+          "severity": "warning",
+          "since": null
+        },
+        {
+          "id": "old-job",
+          "kind": "Job",
+          "reason": "BackoffLimitExceeded",
+          "severity": "critical",
+          "since": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "svc-b",
+          "kind": "Service",
+          "reason": "NoEndpoints",
+          "severity": "warning",
+          "since": null
+        },
+        {
+          "id": "today",
+          "kind": "Pod",
+          "reason": "Unhealthy",
+          "severity": "warning",
+          "since": "2026-11-15T09:00:00Z"
+        },
+        {
+          "id": "undated-critical",
+          "kind": "Deployment",
+          "reason": "Unavailable",
+          "severity": "critical",
+          "since": null
+        }
+      ],
+      "order": ["today", "undated-critical", "svc-a", "svc-b", "old-job"]
+    }
+  ]
+}

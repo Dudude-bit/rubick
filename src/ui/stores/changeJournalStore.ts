@@ -119,6 +119,12 @@ interface ChangeJournalState {
   heartbeat: (context: string, now: number) => void;
   endSpan: (context: string, now: number) => void;
   forget: (context: string) => void;
+  /** Why a cluster's watches went down and when, until a span opens again. */
+  down: Record<string, { at: number; why: string }>;
+  wentDown: (context: string, at: number, why: string) => void;
+  /** Asks every watch to be opened again; the journal follows the count. */
+  again: number;
+  watchAgain: () => void;
 }
 
 function trimmed(entries: JournalEntry[], now: number): JournalEntry[] {
@@ -151,6 +157,15 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
       entries: [],
       spans: {},
       identities: {},
+      down: {},
+      again: 0,
+      wentDown: (context, at, why) =>
+        set((state) =>
+          state.down[context]
+            ? state
+            : { down: { ...state.down, [context]: { at, why } } }
+        ),
+      watchAgain: () => set((state) => ({ again: state.again + 1 })),
       seenCluster: (context, identity) => {
         if (identity === null) return;
         const known = get().identities[context];
@@ -187,6 +202,9 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
       },
       beginSpan: (context, now, cover = {}) =>
         set((state) => ({
+          down: Object.fromEntries(
+            Object.entries(state.down).filter(([key]) => key !== context)
+          ),
           spans: {
             ...state.spans,
             [context]: [

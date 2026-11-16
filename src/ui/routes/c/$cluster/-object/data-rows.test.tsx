@@ -401,4 +401,51 @@ describe("editing a key on critical infrastructure", () => {
     await userEvent.click(save);
     expect(onEditKey).toHaveBeenCalledWith("log.level", "info");
   });
+
+  /**
+   * A Secret whose values were refused showed bare keys, or "holds no keys",
+   * with no reason. Fails if a failed values read draws as no data, claims the
+   * keys are unreadable with this access, or offers no way to read again.
+   */
+  it("says the values could not be read instead of claiming there are none", async () => {
+    const retry = vi.fn();
+    render(
+      <DataSection
+        data={{}}
+        keys={["tls.crt"]}
+        error={new Error("secrets is forbidden")}
+        onRetry={retry}
+        kind="Secret"
+        emptyMessage="This Secret holds no keys"
+      />
+    );
+    expect(
+      screen.getByText("Could not read this Secret's data.")
+    ).toBeVisible();
+    expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    expect(screen.getByText("not read")).toBeInTheDocument();
+    expect(
+      screen.queryByText("not readable with this access")
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(retry).toHaveBeenCalled();
+  });
+
+  /** With no key named either, a failed read must not fall back to "holds no keys". */
+  it("does not say the object holds no keys when the read that would say so failed", () => {
+    render(
+      <DataSection
+        data={{}}
+        error={new Error("boom")}
+        kind="ConfigMap"
+        emptyMessage="This ConfigMap holds no keys"
+      />
+    );
+    expect(
+      screen.queryByText("This ConfigMap holds no keys")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
+  });
 });

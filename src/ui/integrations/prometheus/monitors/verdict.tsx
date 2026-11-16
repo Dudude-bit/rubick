@@ -71,7 +71,7 @@ export function verdictOf(
         body: worst.lastError ? (
           <>
             {t("monitors", "prometheusSays")}:{" "}
-            <span className="select-text break-all font-mono text-[11.5px] text-fg-mid">
+            <span className="select-text break-all font-mono text-xs text-fg-mid">
               {worst.lastError}
             </span>
           </>

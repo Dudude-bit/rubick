@@ -66,3 +66,90 @@ describe("a folded document", () => {
     expect(screen.getByText(/^JSON · [\d,\s]+ chars$/)).toBeInTheDocument();
   });
 });
+
+describe("a key's wrapping points", () => {
+  /**
+   * `app.kubernetes.io/component` has no break opportunity before the slash,
+   * so the browser cut it inside "component". Fails if a label stops offering
+   * a break after `.`, `/` and `-`.
+   */
+  it("offers a break after each dot, slash and hyphen of a key", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "app.kubernetes.io/pod-template-hash", value: "x" }]}
+      />
+    );
+    const key = container.querySelector("dt") as HTMLElement;
+    expect(key.querySelectorAll("wbr")).toHaveLength(5);
+    expect(key).toHaveTextContent("app.kubernetes.io/pod-template-hash");
+  });
+
+  /** Fails if a long plain value loses its full-text tooltip. */
+  it("gives a plain value its full text as a tooltip", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "node", value: "ip-10-0-1-2.internal" }]}
+      />
+    );
+    expect(container.querySelector("dd")).toHaveAttribute(
+      "title",
+      "ip-10-0-1-2.internal"
+    );
+  });
+});
+
+describe("a key-value row", () => {
+  /**
+   * A label stacked over its value doubled the height of the Rollout and
+   * Placement blocks. Fails if the key column stops being a fixed track beside the value.
+   */
+  it("keeps key and value on one row at the canonical key width", () => {
+    render(
+      <KeyValueList items={[{ label: "Ready", value: "5 of 5 ready" }]} />
+    );
+    const row = screen.getByText("5 of 5 ready").parentElement!;
+    expect(row.className).toContain("grid-cols-[132px_minmax(0,1fr)]");
+    expect(row.className).not.toContain("min-content");
+  });
+
+  /**
+   * "blueGreen.prePromotionAnalysisRu / nStatus.name", a key
+   * cut inside a word because its one dotted segment was wider than the
+   * track. Fails if a camelCase key offers no break between its words, or
+   * if a word wider than the track is broken inside rather than cut whole
+   * with the key as its tooltip.
+   */
+  it("breaks a camelCase key between its words and never inside one", () => {
+    const key = "blueGreen.prePromotionAnalysisRunStatus.name";
+    const { container } = render(
+      <KeyValueList items={[{ label: key, value: "x" }]} />
+    );
+    const dt = container.querySelector("dt") as HTMLElement;
+    const parts = [...dt.childNodes]
+      .filter((node) => node.nodeName !== "WBR")
+      .map((node) => node.textContent);
+    expect(parts).toEqual([
+      "blue",
+      "Green.",
+      "pre",
+      "Promotion",
+      "Analysis",
+      "Run",
+      "Status.",
+      "name",
+    ]);
+    expect(dt.className).not.toMatch(/wrap-break-word|break-all|wrap-anywhere/);
+    expect(dt.className).toContain("text-ellipsis");
+    expect(dt).toHaveAttribute("title", key);
+  });
+
+  /** Fails if a long key loses its break opportunities after `.`, `/` and `-`. */
+  it("offers a break after the separators of a long key", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "app.kubernetes.io/component", value: "api" }]}
+      />
+    );
+    expect(container.querySelectorAll("dt wbr")).toHaveLength(3);
+  });
+});

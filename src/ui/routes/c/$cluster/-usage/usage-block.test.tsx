@@ -37,6 +37,7 @@ vi.mock("@/lib/commands", () => ({
     probePrometheus: () => probePrometheus(),
     prometheusQueryRange: (query: string) => prometheusQueryRange(query),
     prometheusQuery: () => prometheusQuery(),
+    forgetDiscovery: () => Promise.resolve(),
   },
 }));
 
@@ -118,6 +119,7 @@ const withClaim = (): ResourceConnections => {
           subPath: null,
           volume: "data",
           projected: false,
+          optional: false,
         },
       ],
     },
@@ -147,8 +149,10 @@ describe("UsageBlock when metrics-server is missing", () => {
         status={{ status: "notInstalled", message: null }}
       />
     );
-    expect(screen.getAllByText("metrics-server not installed")).toHaveLength(2);
-    expect(document.querySelector("svg")).toBeNull();
+    expect(
+      screen.getAllByRole("img", { name: "metrics-server not installed" })
+    ).toHaveLength(2);
+    expect(document.querySelector("svg:not([aria-hidden])")).toBeNull();
   });
 
   /**
@@ -170,9 +174,13 @@ describe("UsageBlock when metrics-server is missing", () => {
       />
     );
     expect(
-      screen.getAllByText("metrics not readable with this access")
+      screen.getAllByRole("img", {
+        name: "metrics not readable with this access",
+      })
     ).toHaveLength(2);
-    expect(screen.queryByText(/metrics-server not installed/)).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: /metrics-server not installed/ })
+    ).toBeNull();
   });
 
   it("offers no range picker when there is nothing to range over", async () => {
@@ -191,6 +199,34 @@ describe("UsageBlock when metrics-server is missing", () => {
     expect(
       screen.queryByRole("button", { name: "1h" })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("UsageBlock on a pod that has ended", () => {
+  /**
+   * An ended pod with no Prometheus read "Reading what  kept from while it
+   * was running." with the vendor missing, at a different indent from the
+   * note under it. Fails if a vendor-less pod names a source it does not have,
+   * or the idle note leaves the plot's column.
+   */
+  it("names no history source it does not have, and aligns the note with the others", async () => {
+    await wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-ended"
+        cpu={null}
+        memory={null}
+        cpuLimit={200}
+        memoryLimit={null}
+        sampledAt={null}
+        live={false}
+        idleNote="This pod has finished."
+        status={{ status: "available", message: null }}
+      />
+    );
+    const note = screen.getByText("This pod has finished.");
+    expect(note.textContent).not.toMatch(/kept from|Reading what/);
+    expect(note.style.paddingLeft).toBe("104px");
   });
 });
 
@@ -296,7 +332,7 @@ describe("UsageBlock window label", () => {
       />
     );
     expect(
-      screen.getByText(/watched since you opened this page/i)
+      screen.getByText(/watched since \d{1,2}:\d{2}/i)
     ).toBeInTheDocument();
   });
 });
@@ -309,6 +345,7 @@ describe("UsageBlock with no limits at all", () => {
     uid: string;
     cpuLimit: number | null;
     memoryLimit: number | null;
+    noLimitNote?: "noLimitsDeclared";
   }) => {
     const base = {
       kind: "Pod" as const,
@@ -347,15 +384,36 @@ describe("UsageBlock with no limits at all", () => {
     expect(shares).toHaveLength(0);
   });
 
-  it("still attaches the sentence to the one measure that lacks a ceiling", async () => {
+  /**
+   * "No limits declared" under CPU while the Memory band below
+   * drew "limit 128Mi". Fails if the one measure without a ceiling is not
+   * named in its sentence, or the other measure is said to lack one.
+   */
+  it("still attaches the sentence to the one measure that lacks a ceiling, naming it", async () => {
     const { container } = await renderPolled({
       uid: "uid-7",
       cpuLimit: null,
       memoryLimit: 128 * 1024 * 1024,
     });
-    expect(screen.getAllByText(/No limit set/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^No CPU limit set/)).toHaveLength(1);
+    expect(screen.queryByText(/^No limit set/)).toBeNull();
+    expect(screen.queryByText(/memory limit/i)).toBeNull();
     // The measure that does have one still reads against it.
     expect(container.textContent).toMatch(/\/128Mi/);
+  });
+
+  /** The shot's own case, a workload's template: fails if its note says "no limits" where only memory's is missing. */
+  it("names the measure a workload's template leaves without a limit", async () => {
+    await renderPolled({
+      uid: "uid-8",
+      cpuLimit: 500,
+      memoryLimit: null,
+      noLimitNote: "noLimitsDeclared",
+    });
+    expect(
+      screen.getAllByText(/^No memory limit declared on this template/)
+    ).toHaveLength(1);
+    expect(screen.queryByText(/^No limits declared/)).toBeNull();
   });
 });
 
@@ -418,13 +476,9 @@ describe("UsageBlock on a node with no metrics-server", () => {
     );
     expect(screen.getByText("against declared capacity")).toBeInTheDocument();
     expect(screen.queryByText(/capacitys/)).toBeNull();
-    const reasons = screen.getAllByText("metrics-server not installed");
-    expect(reasons).toHaveLength(2);
-    for (const reason of reasons) {
-      expect(reason.parentElement).toHaveTextContent(
-        /^metrics-server not installed$/
-      );
-    }
+    expect(
+      screen.getAllByRole("img", { name: "metrics-server not installed" })
+    ).toHaveLength(2);
   });
 });
 
@@ -444,7 +498,9 @@ describe("UsageBlock in its first seconds", () => {
         status={{ status: "available", message: null }}
       />
     );
-    expect(screen.getAllByText(/Watching from now/i)).toHaveLength(1);
+    expect(screen.getAllByText(/Watching since \d{1,2}:\d{2}/i)).toHaveLength(
+      1
+    );
   });
 });
 
@@ -487,9 +543,7 @@ describe("UsageBlock and a history supplier", () => {
     }
     // The core answer is drawn and stays drawn.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "connect one" })).toHaveAttribute(
       "href",
@@ -516,7 +570,7 @@ describe("UsageBlock and a history supplier", () => {
 
     expect(
       await screen.findByText(
-        /Without metrics-server, a Prometheus can still draw these over time/
+        /Without live readings, a Prometheus can still draw these over time/
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/Longer than this/)).toBeNull();
@@ -606,9 +660,7 @@ describe("UsageBlock and a history supplier", () => {
 
     // An integration may never take something away.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
     // And it must not read as never-configured.
     expect(
@@ -633,9 +685,7 @@ describe("UsageBlock and a history supplier", () => {
 
     // Still the watched window, drawn, while the range is in flight.
     expect(
-      screen.getAllByText(
-        /watched since you opened this page|watching from now/i
-      ).length
+      screen.getAllByText(/watched since \d|watching from now/i).length
     ).toBeGreaterThan(0);
   });
 });
@@ -808,5 +858,134 @@ describe("UsageBlock for a node summed from its pods", () => {
     await openHour("uid-node-root");
     await screen.findByText(/from prometheus\.monitoring:9090/);
     expect(screen.queryByText(/Summed from each node's pods/)).toBeNull();
+  });
+});
+
+describe("UsageBlock while the metrics read has not answered", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  const unanswered = {
+    kind: "Deployment",
+    uid: "uid-pending",
+    cpu: null,
+    memory: null,
+    cpuLimit: 200,
+    memoryLimit: null,
+    sampledAt: null,
+    status: null,
+  } as const;
+
+  /**
+   * An object metrics-server had nothing for and an object it was never
+   * asked about drew the same "not reporting" rows. Fails if a read still on
+   * its way is said as "not reporting".
+   */
+  it("holds the bands as a skeleton instead of saying not reporting", async () => {
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        reading={{ pending: true, error: null, retry: vi.fn() }}
+      />
+    );
+    expect(screen.queryByText("not reporting")).toBeNull();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+
+  /**
+   * Fails if a refused or failed metrics read is drawn as rows that say the
+   * object reports nothing, or offers no way to ask again.
+   */
+  it("says the read failed and offers to ask again instead of not reporting", async () => {
+    const retry = vi.fn();
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        reading={{ pending: false, error: new Error("boom"), retry }}
+      />
+    );
+    expect(screen.queryByText("not reporting")).toBeNull();
+    expect(
+      screen.getByText(/Could not read CPU and memory from metrics-server/)
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    await waitFor(() => expect(retry).toHaveBeenCalled());
+  });
+
+  /** Fails if the failure branch is keyed on the error alone, so a stale error hides a reading that did arrive. */
+  it("draws the bands once a reading has arrived, whatever the last read said", async () => {
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        cpu={48}
+        status={{ status: "available", message: null }}
+        reading={{ pending: false, error: new Error("boom"), retry: vi.fn() }}
+      />
+    );
+    expect(
+      screen.queryByText(/Could not read CPU and memory/)
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("UsageBlock storage fullness that could not be read", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  const mounted = () =>
+    wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-fullness"
+        cpu={48}
+        memory={96}
+        cpuLimit={200}
+        memoryLimit={128}
+        sampledAt={1_700_000_000_000}
+        status={{ status: "available", message: null }}
+        connections={withClaim()}
+      />
+    );
+
+  /**
+   * A failed fullness read landed in the same sentence as "no supplier
+   * connected". Fails if the failure is said as "declared size, not fullness".
+   */
+  it("says the read failed instead of that only declared sizes exist", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    prometheusQuery.mockRejectedValue(new Error("query timed out"));
+    await mounted();
+    expect(
+      await screen.findByText(/Could not read how full the volumes are/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Declared size, not how full/i)).toBeNull();
+  });
+});
+
+describe("UsageBlock range switch", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  /**
+   * The picker was a hand-rolled button row that fell back to the live
+   * window while the next range loaded. Fails if the chosen range stops
+   * being exposed as pressed on the segmented control.
+   */
+  it("marks the chosen range as pressed", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    await wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-range"
+        cpu={48}
+        memory={96}
+        cpuLimit={200}
+        memoryLimit={128}
+        sampledAt={1_700_000_000_000}
+        status={{ status: "available", message: null }}
+        history={{ kind: "pod", namespace: "ns", pod: "p" }}
+      />
+    );
+    const hour = await screen.findByRole("button", { name: "1h" });
+    await waitFor(() => expect(hour).toBeEnabled());
+    await userEvent.click(hour);
+    expect(hour).toHaveAttribute("aria-pressed", "true");
   });
 });

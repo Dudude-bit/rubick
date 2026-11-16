@@ -24,7 +24,7 @@ import {
   type JournalEntry,
   type ObservedSpan,
 } from "./changes";
-import { conditionRole } from "./condition-health";
+import { conditionRole, spokenCondition } from "./condition-health";
 import { iconSvg } from "./icon-svg";
 import { parseImageRef } from "./image-ref";
 import {
@@ -218,14 +218,17 @@ export function conditionsSection(
     count: conditions.length,
     body: {
       type: "conditions",
-      rows: conditions.map((condition) => ({
-        type: condition.type,
-        status: condition.status,
-        role: conditionRole(condition, conditions),
-        reason: condition.reason,
-        message: condition.message,
-        since: condition.lastTransitionTime,
-      })),
+      rows: conditions.map((condition) => {
+        const { reason, message } = spokenCondition(condition);
+        return {
+          type: condition.type,
+          status: condition.status,
+          role: conditionRole(condition, conditions),
+          reason,
+          message,
+          since: condition.lastTransitionTime,
+        };
+      }),
     },
   };
 }

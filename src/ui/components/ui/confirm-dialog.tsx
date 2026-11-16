@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,6 +10,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { WriteFailure } from "@/components/ui/write-failure";
+import { holdWriteToasts } from "@/lib/write-hold";
+import { recordWriteFailure } from "@/stores/writeLogStore";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
@@ -30,7 +34,8 @@ interface ConfirmDialogProps {
    */
   children?: ReactNode;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  /** A promise keeps the dialog open and pending until it settles; it closes only on success. */
+  onConfirm: () => unknown;
 }
 
 export function ConfirmDialog({
@@ -49,9 +54,17 @@ export function ConfirmDialog({
   // On critical infrastructure the reader also types the cluster's name:
   // what this guards against is not the object but the window it is in.
   const gate = useCriticalGate(open);
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
+  if (!open && failure !== null) setFailure(null);
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -62,15 +75,42 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {children}
         {gate.input}
+        {failure !== null && <WriteFailure error={failure} />}
         <AlertDialogFooter>
-          <AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>
             {cancelLabel ?? t("action", "cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             className={buttonVariants({ variant: confirmVariant })}
-            onClick={onConfirm}
-            disabled={confirmDisabled || gate.blocked}
+            onClick={(event) => {
+              const release = holdWriteToasts();
+              const result = onConfirm();
+              if (!(result instanceof Promise)) {
+                release();
+                return;
+              }
+              event.preventDefault();
+              setPending(true);
+              setFailure(null);
+              result
+                .then(
+                  () => onOpenChange(false),
+                  (error: unknown) => {
+                    recordWriteFailure(title, error);
+                    setFailure(error ?? "");
+                  }
+                )
+                .finally(() => {
+                  release();
+                  setPending(false);
+                });
+            }}
+            disabled={confirmDisabled || gate.blocked || pending}
+            aria-busy={pending || undefined}
           >
+            {pending && (
+              <Spinner size="xs" aria-hidden="true" className="mr-1.5" />
+            )}
             {confirmLabel ?? t("action", "confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>

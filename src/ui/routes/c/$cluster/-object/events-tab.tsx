@@ -12,6 +12,7 @@ import {
   OBJECT_EVENTS_READ,
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
+import { isRefusal } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 
 /** What the tab's count is a count of, said: a bare "4" under the tab reads as nothing. A read cut short found no "latest". */
@@ -32,10 +33,12 @@ export function eventsTab(
     id: "events",
     label: t("columns", "events"),
     glyph: kindGlyph(ResourceType.Event),
+    reading: !error && !data,
     mark: error
       ? {
           shows: "unchecked",
           says: t("empty", eventsUnreadWords(error)),
+          refused: isRefusal(error),
         }
       : data
         ? countMark(eventTotal(data))
@@ -45,7 +48,7 @@ export function eventsTab(
         <SectionHeader
           title={t("columns", "events")}
           count={
-            data && data.length > 0
+            !error && data && data.length > 0
               ? eventCount(data.length, query.short, t)
               : undefined
           }

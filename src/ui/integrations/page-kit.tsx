@@ -13,6 +13,8 @@
  * ordering and every sentence in them are each vendor's own.
  */
 
+import { Alert } from "@/components/ui/alert";
+import { Eyebrow } from "@/components/ui/states";
 import {
   Children,
   cloneElement,
@@ -28,7 +30,10 @@ import { AlertTriangle, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 export { OutLink } from "@/components/ui/out-link";
 import { Section } from "@/components/ui/section";
+import { failedWithNothing } from "./kit";
+import { Spinner } from "@/components/ui/spinner";
 import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { cn } from "@/lib/utils";
 import { withoutCredentials } from "@/lib/hints";
 import { CopyableValue } from "@/components/ui/copyable-value";
@@ -41,7 +46,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { objectLink } from "@/lib/links";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
-import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
+import { TONE_TEXT } from "@/lib/tone";
 
 /**
  * How a list registers what it draws for Share: a title for the section (and
@@ -202,6 +207,48 @@ export function VendorReadFailure({
   );
 }
 
+/** A read still on its way inside a cell or a line of words: a spinner, and the words when `words`. */
+export function ReadingMark({ words = false }: { words?: boolean }) {
+  const t = useT();
+  const label = t("action", "readingInline");
+  return (
+    <span
+      role="status"
+      aria-label={words ? undefined : label}
+      className="inline-flex items-center gap-1 text-fg-fnt"
+    >
+      <Spinner size="xs" aria-hidden="true" />
+      {words && label}
+    </span>
+  );
+}
+
+interface ReadOf {
+  error: unknown;
+  data: unknown;
+  dataUpdatedAt: number;
+  refetch: () => unknown;
+}
+
+/**
+ * A failed re-read over a page that already has data: the page stays, and
+ * this line says it is from the last read that answered.
+ */
+export function StaleRead({ read, label }: { read: ReadOf; label: string }) {
+  if (!read.error || failedWithNothing(read)) return null;
+  return (
+    <StaleRows
+      label={label}
+      object
+      shared={false}
+      since={read.dataUpdatedAt}
+      error={read.error}
+      onRetry={() => void read.refetch()}
+      className=""
+    />
+  );
+}
+
 /**
  * A row's findings: all of them in the open row, and in a closed one the
  * first that says more than the row's own state word, with a count of the
@@ -236,7 +283,7 @@ export function FindingList<F>({
         <Fragment key={index}>{render(finding)}</Fragment>
       ))}
       {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
@@ -348,7 +395,7 @@ export function TroubleList<T>({
           label={filterWords.label}
         />
         {summary && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {needle !== ""
               ? t("count", "shownOfTotal", {
                   n: shown.length,
@@ -471,10 +518,10 @@ export function TroubleRow({
   );
   const rest = (
     <>
-      <span className="min-w-0 flex-1 truncate text-[11px] text-fg-fnt">
+      <span className="min-w-0 flex-1 truncate text-caption text-fg-fnt">
         {meta}
       </span>
-      <span className={cn("flex-none text-[11px]", toneText(state.tone))}>
+      <span className={cn("flex-none text-caption", toneText(state.tone))}>
         {state.text}
       </span>
     </>
@@ -485,7 +532,7 @@ export function TroubleRow({
       <CopyableValue
         value={copy}
         label={copy}
-        className="truncate font-mono text-[12.5px] text-fg"
+        className="truncate font-mono text-xs text-fg"
       >
         {title}
       </CopyableValue>
@@ -495,7 +542,7 @@ export function TroubleRow({
       // link that renders nothing.
       <ObjectLink
         {...reference}
-        className="min-w-0 truncate rounded-[3px] font-mono text-[12.5px] text-fg hover:bg-hover"
+        className="min-w-0 truncate rounded-[3px] font-mono text-xs text-fg hover:bg-hover"
       >
         {title}
       </ObjectLink>
@@ -537,9 +584,7 @@ export function TroubleRow({
           className="flex w-full items-baseline gap-2 text-left"
         >
           {chevron}
-          <span className="truncate font-mono text-[12.5px] text-fg">
-            {title}
-          </span>
+          <span className="truncate font-mono text-xs text-fg">{title}</span>
           {rest}
         </button>
       )}
@@ -552,6 +597,12 @@ export function TroubleRow({
     </div>
   );
 }
+
+const FINDING_VARIANT = {
+  err: "destructive",
+  warn: "warn",
+  unknown: "warn",
+} as const satisfies Record<Exclude<RowTone, "ok">, "destructive" | "warn">;
 
 /**
  * A finding: what is wrong, in one line, with the reason under it.
@@ -573,17 +624,20 @@ export function Finding({
   children?: ReactNode;
 }) {
   return (
-    <div className={cn("border-l-2 pl-2.5", TONE_BORDER[tone])}>
-      <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
+    <Alert variant={FINDING_VARIANT[tone]}>
+      <AlertTriangle aria-hidden />
+      <p className={cn("text-xs", tone === "err" ? "text-err" : "text-fg")}>
+        {title}
+      </p>
       {verbatim && (
-        <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+        <p className="mt-0.5 select-text wrap-break-word font-mono text-caption text-fg-mut">
           {withoutCredentials(verbatim)}
         </p>
       )}
       {children != null && (
-        <div className="mt-0.5 text-[11.5px] text-fg-mut">{children}</div>
+        <div className="mt-0.5 text-xs text-fg-mut">{children}</div>
       )}
-    </div>
+    </Alert>
   );
 }
 
@@ -597,7 +651,7 @@ export function BackingUnread({ error }: { error: string | null }) {
   const t = useT();
   if (!error) return null;
   return (
-    <span className="text-[11px] text-warn" title={error}>
+    <span className="text-caption text-warn" title={error}>
       {t("empty", "behindUnread", { why: error })}
     </span>
   );
@@ -628,7 +682,7 @@ export function ServedUnder({
     />
   );
   return (
-    <span className={cn("text-[11px]", missing ? "text-err" : "text-fg-fnt")}>
+    <span className={cn("text-caption", missing ? "text-err" : "text-fg-fnt")}>
       {missing ? (
         parts(t("empty", "servedUnderDefault"), { secret: ref })
       ) : (
@@ -672,7 +726,7 @@ export function Cell({
   return (
     <div
       className={cn(
-        "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid",
+        "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-caption text-fg-mid",
         unknown && "border-dashed border-fg-fnt/60 text-fg-fnt",
         warn && "border-warn/50 text-warn",
         bad && "border-err/50 text-err"
@@ -682,7 +736,7 @@ export function Cell({
         {children}
       </span>
       {under != null && (
-        <span className="mt-0.5 block truncate font-sans text-[10px] text-fg-fnt">
+        <span className="mt-0.5 block truncate font-sans text-micro text-fg-fnt">
           {under}
         </span>
       )}
@@ -728,9 +782,9 @@ export function Column({
 }) {
   return (
     <div className="flex min-w-0 flex-col pr-3">
-      <span className="mb-1.5 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
+      <Eyebrow as="span" className="mb-1.5">
         {label}
-      </span>
+      </Eyebrow>
       <div className="relative flex flex-col gap-1.5">
         {/* Decorative: the columns are labelled and ordered, so the join says
             nothing a screen reader is not already told. */}

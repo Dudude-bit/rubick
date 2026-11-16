@@ -15,6 +15,9 @@ import { FindingLine } from "../-object/FindingLine";
 import { RolloutSummary } from "../-object/RolloutSummary";
 import { newestRun, useCronJobRuns, useLastRunRefused } from "./cron-runs";
 import { usePeekOwnedPods } from "./peek-owned-pods";
+import { ListedFindingLines } from "./peek-listed";
+import { PodsTroubleLines } from "../-object/PodsTrouble";
+import { usePodsTrouble } from "../-object/pods-trouble";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useRefusal } from "@/hooks/useRefusals";
 import { jobWord } from "@/lib/create-refusal";
@@ -44,6 +47,7 @@ export function WorkloadDiagnosis({
   // The page's key, so an open page or the traffic block answers from cache.
   const connections = useObjectConnections(kind, name, namespace);
   const findings = governanceFindings(connections.data, t);
+  const pods = usePodsTrouble(kind, namespace, name);
   const settled = rolloutSettled(rollout);
   return (
     <div className="flex flex-col pt-2" data-testid="workload-diagnosis">
@@ -53,9 +57,16 @@ export function WorkloadDiagnosis({
         settled={settled}
       />
       <RolloutSummary rollout={rollout} subject={{ kind, name, namespace }} />
-      {findings.map((finding) => (
-        <FindingLine key={finding.title} finding={finding} />
-      ))}
+      <PodsTroubleLines pods={pods} />
+      {/* The row's finding until the peek's own read of what governs it
+          answers, failed or still on its way: "1 problem" above no cause. */}
+      {connections.data ? (
+        findings.map((finding) => (
+          <FindingLine key={finding.title} finding={finding} />
+        ))
+      ) : (
+        <ListedFindingLines kind={kind} namespace={namespace} name={name} />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type { ContainerInfo } from "@/generated/types";
 import {
   countReadings,
   readingOf,
+  followsAgain,
   readLanes,
   worstReading,
   type HowRead,
@@ -57,6 +58,15 @@ const neverRun = container({
 const followed: HowRead = { previous: false, restartsAlways: false };
 const deployment: HowRead = { previous: false, restartsAlways: true };
 const gone = { kind: "gone" } as const;
+
+describe("a log the cluster refused", () => {
+  /** A pods/log 403 read as a lost connection with Reconnect beside it. Fails if a refusal is drawn as lost or offered a retry. */
+  it("reads as refused and is not offered following again", () => {
+    const refused = { kind: "refused" } as const;
+    expect(readingOf(refused, container(), followed)).toBe("refused");
+    expect(followsAgain("refused", "refused", container())).toBe(false);
+  });
+});
 
 describe("what one stream is doing", () => {
   it("is streaming while nothing stopped it, and read when the run was one that is over", () => {

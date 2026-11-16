@@ -131,22 +131,22 @@ export function ContextRow({
           <span style={{ color: colour }}>{label}</span>
         </div>
         {fromFile && (
-          <div className="truncate font-mono text-[11px] text-fg-fnt">
+          <div className="truncate font-mono text-caption text-fg-fnt">
             {show(fromFile)}
           </div>
         )}
         {context.server && (
-          <div className="truncate font-mono text-[11px] text-fg-fnt">
+          <div className="truncate font-mono text-caption text-fg-fnt">
             {context.server}
           </div>
         )}
-        <div className="mt-1 text-[11px] text-fg-mut">
+        <div className="mt-1 text-caption text-fg-mut">
           {reading.how}
           {reading.bound && (
             <button
               type="button"
               onClick={() => onBind(context.name)}
-              className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-[10px] text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-micro text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               {t("settings", "vendorProfile", {
                 vendor: VENDOR_LABEL[reading.bound.vendor],
@@ -157,7 +157,7 @@ export function ContextRow({
         </div>
 
         {missing && (
-          <div className="mt-1 text-[11px] text-err">
+          <div className="mt-1 text-caption text-err">
             <span className="font-mono">{binaryLabel(missing)}</span>{" "}
             {t("settings", "binaryNotOnPath")}
           </div>
@@ -167,7 +167,7 @@ export function ContextRow({
             failure — but it is the fact somebody debugging a wrong-account
             403 came for, so it is on the row rather than in a Bindings tab. */}
         {unbound && unbound !== "aws" && (
-          <div className="mt-1 text-[11px] text-warn">
+          <div className="mt-1 text-caption text-warn">
             {t("settings", "noProfileBoundPrefix", {
               vendor: VENDOR_LABEL[unbound],
             })}{" "}
@@ -184,7 +184,7 @@ export function ContextRow({
             </button>
           </div>
         )}
-        <label className="mt-1.5 flex cursor-pointer items-start gap-2 text-[11px]">
+        <label className="mt-1.5 flex cursor-pointer items-start gap-2 text-caption">
           <Checkbox
             checked={criticality.critical}
             onCheckedChange={(checked) =>
@@ -208,7 +208,7 @@ export function ContextRow({
         </label>
 
         {unbound === "aws" && (
-          <div className="mt-1 text-[11px] text-fg-fnt">
+          <div className="mt-1 text-caption text-fg-fnt">
             {t("settings", "awsNoProfilesPrefix")}{" "}
             <span className="font-mono">aws</span>
             {t("settings", "awsNoProfilesMid")}{" "}
@@ -226,7 +226,7 @@ export function ContextRow({
             : undefined
         }
         className={cn(
-          "flex items-center gap-1 whitespace-nowrap text-[11px]",
+          "flex items-center gap-1 whitespace-nowrap text-caption",
           status.tone
         )}
       >

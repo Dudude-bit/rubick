@@ -1,13 +1,9 @@
 import type { ReactNode } from "react";
 import {
-  Activity,
-  Box,
-  FileText,
   LayoutDashboard,
   Library,
   Network,
   Package,
-  Server,
   Settings,
   ShieldUser,
   SquareTerminal,
@@ -40,6 +36,7 @@ import {
   isResourceType,
   RESOURCE_REGISTRY,
   ResourceType,
+  getResourceIcon,
   toKind,
 } from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
@@ -72,43 +69,43 @@ const quickActions: Array<{
     path: clusterLink(),
   },
   {
-    icon: Box,
+    icon: getResourceIcon(ResourceType.Pod),
     label: "goToPods",
     words: "Pod",
     path: listLink(ResourceType.Pod),
   },
   {
-    icon: Box,
+    icon: getResourceIcon(ResourceType.Deployment),
     label: "goToDeployments",
     words: "Deployment",
     path: listLink(ResourceType.Deployment),
   },
   {
-    icon: Network,
+    icon: getResourceIcon(ResourceType.Service),
     label: "goToServices",
     words: "Service",
     path: listLink(ResourceType.Service),
   },
   {
-    icon: Server,
+    icon: getResourceIcon(ResourceType.Node),
     label: "goToNodes",
     words: "Node",
     path: listLink(ResourceType.Node),
   },
   {
-    icon: FileText,
+    icon: getResourceIcon(ResourceType.ConfigMap),
     label: "goToConfigMaps",
     words: "ConfigMap",
     path: listLink(ResourceType.ConfigMap),
   },
   {
-    icon: FileText,
+    icon: getResourceIcon(ResourceType.Secret),
     label: "goToSecrets",
     words: "Secret",
     path: listLink(ResourceType.Secret),
   },
   {
-    icon: Activity,
+    icon: getResourceIcon(ResourceType.Event),
     label: "goToEvents",
     words: "events",
     path: pageLink("events"),
@@ -155,6 +152,23 @@ function titleMatches(
 /** Kinds a query offers to open the list of, before any object it finds. */
 export const KINDS_SHOWN = 6;
 
+/** 0 a whole name of the kind, 1 a prefix of one, 2 inside one, null no match. */
+export function kindTier(
+  entry: CatalogEntry,
+  needle: string,
+  words: readonly string[] = []
+): 0 | 1 | 2 | null {
+  const names = [entry.kind.toLowerCase(), entry.plural.toLowerCase()];
+  if (
+    [...names, ...words].includes(needle) ||
+    shortNamesOf(entry).includes(needle)
+  )
+    return 0;
+  if ([...names, ...words].some((name) => name.startsWith(needle))) return 1;
+  if ([...names, ...words].some((name) => name.includes(needle))) return 2;
+  return null;
+}
+
 /**
  * Kinds the query names: by kind, plural, kubectl short name, or a word the
  * reader's language or English calls it. Whole names first, then prefixes.
@@ -166,18 +180,8 @@ export function matchingKinds(
 ): CatalogEntry[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
-  const rank = (entry: CatalogEntry) => {
-    const names = [entry.kind.toLowerCase(), entry.plural.toLowerCase()];
-    const words = wordsFor(entry.kind);
-    if (
-      [...names, ...words].includes(needle) ||
-      shortNamesOf(entry).includes(needle)
-    )
-      return 0;
-    if ([...names, ...words].some((name) => name.startsWith(needle))) return 1;
-    if ([...names, ...words].some((name) => name.includes(needle))) return 2;
-    return null;
-  };
+  const rank = (entry: CatalogEntry) =>
+    kindTier(entry, needle, wordsFor(entry.kind));
   return kinds
     .flatMap((entry) => {
       const at = rank(entry);
@@ -371,6 +375,8 @@ export interface KindSplit {
   /** Of `read`, the kinds refused in some namespace it was asked in. */
   partly: number;
   refused: number;
+  /** Of `partly` and of `refused`, the ones that failed rather than being refused. */
+  failed: { partly: number; refused: number };
   loading: number;
   notSearched: number;
   unlistable: number;
@@ -384,11 +390,15 @@ export function kindSplit(
     new Set(list.map((kind) => `${kind.group}/${kind.plural}`));
   const read = keys(cluster.searched);
   const unread = keys(cluster.unreadable);
+  const failed = keys(
+    cluster.unreadable.filter((kind) => kind.reason !== "forbidden")
+  );
   const loading = keys(cluster.loading);
   const split: KindSplit = {
     read: 0,
     partly: 0,
     refused: 0,
+    failed: { partly: 0, refused: 0 },
     loading: 0,
     notSearched: 0,
     unlistable: 0,
@@ -399,36 +409,42 @@ export function kindSplit(
     else if (read.has(key)) {
       split.read += 1;
       if (unread.has(key)) split.partly += 1;
-    } else if (unread.has(key)) split.refused += 1;
-    else if (loading.has(key)) split.loading += 1;
+      if (failed.has(key)) split.failed.partly += 1;
+    } else if (unread.has(key)) {
+      split.refused += 1;
+      if (failed.has(key)) split.failed.refused += 1;
+    } else if (loading.has(key)) split.loading += 1;
     else split.notSearched += 1;
   }
   return split;
 }
 
+export type UnreadGroup = {
+  refused: boolean;
+  partly: boolean;
+  kinds: ClusterSearchState["unreadable"];
+};
+
 /**
  * The kinds a search could not read, split as the summary splits them: not
- * read anywhere it asked, or read in one namespace and refused in another.
- * Marco's header counted both as one "could not read 22" beside a summary
- * saying "13 refused wherever asked".
+ * read anywhere it asked, or read in one namespace and refused in another,
+ * and each of those by cause, so a 500 is never worded as a refusal.
  */
-export function unreadParts(cluster: ClusterSearchState): {
-  wherever: ClusterSearchState["unreadable"];
-  somewhere: ClusterSearchState["unreadable"];
-  /** Every one a refusal, so "refused" is the word; otherwise "could not read". */
-  refusals: boolean;
-} {
+export function unreadParts(cluster: ClusterSearchState): UnreadGroup[] {
   const read = new Set(
     cluster.searched.map((kind) => `${kind.group}/${kind.plural}`)
   );
-  const somewhere = cluster.unreadable.filter((kind) =>
-    read.has(`${kind.group}/${kind.plural}`)
-  );
-  return {
-    wherever: cluster.unreadable.filter((kind) => !somewhere.includes(kind)),
-    somewhere,
-    refusals: cluster.unreadable.every((kind) => kind.reason === "forbidden"),
-  };
+  const groups: UnreadGroup[] = [];
+  for (const partly of [false, true])
+    for (const refused of [true, false]) {
+      const kinds = cluster.unreadable.filter(
+        (kind) =>
+          read.has(`${kind.group}/${kind.plural}`) === partly &&
+          (kind.reason === "forbidden") === refused
+      );
+      if (kinds.length > 0) groups.push({ refused, partly, kinds });
+    }
+  return groups;
 }
 
 /** Kind names in reading order, with the group beside a name two groups share: "Event (core), Event (events.k8s.io)". */
@@ -505,9 +521,10 @@ function emptyHint({
   if (done.length === 0) {
     return {
       tone: "unread",
-      text: clusters.every(isCold)
-        ? t("empty", "nothingSearchedNoCluster")
-        : t("empty", "nothingSearchedAnywhere"),
+      text:
+        total > 0 && clusters.every(isCold)
+          ? t("empty", "nothingSearchedNoCluster")
+          : t("empty", "nothingSearchedAnywhere"),
     };
   }
   if (loading.size > 0) {
@@ -575,6 +592,8 @@ export interface PaletteState {
   marks: Record<string, ClusterMark>;
   recentItems: RecentItem[];
   isConnected: boolean;
+  /** The search is on its way, whether or not any cluster has been named yet. */
+  searching?: boolean;
   error: string | null;
   /** Cluster rows in the order they were asked, cold ones included. */
   shownClusters: ClusterSearchState[];
@@ -610,6 +629,19 @@ const KIND_ORDER = new Map<string, number>(
 );
 
 /**
+ * What of the query is meant for the object's name: the words its namespace
+ * already answers are the namespace's, so "lab api" asks for `api` in `lab`.
+ * Words that only the name holds, or all of them when the namespace holds
+ * every one, stay.
+ */
+export function nameNeedleOf(hit: SearchHit, needle: string): string {
+  const words = needle.split(/\s+/).filter(Boolean);
+  const namespace = hit.namespace?.toLowerCase() ?? "";
+  const rest = words.filter((word) => !namespace.includes(word));
+  return (rest.length > 0 ? rest : words).join(" ");
+}
+
+/**
  * Hits arrive in whatever order the kinds answered, so two identical
  * searches must be put in one order here or Down lands on another object.
  */
@@ -617,11 +649,12 @@ export function orderHits<Found extends { hit: SearchHit }>(
   found: readonly Found[],
   needle: string
 ): Found[] {
-  const tier = ({ name }: SearchHit) => {
-    const lower = name.toLowerCase();
-    if (lower === needle) return 0;
-    if (lower.startsWith(needle)) return 1;
-    return lower.includes(needle) ? 2 : 3;
+  const tier = (hit: SearchHit) => {
+    const lower = hit.name.toLowerCase();
+    const wanted = nameNeedleOf(hit, needle);
+    if (lower === wanted) return 0;
+    if (lower.startsWith(wanted)) return 1;
+    return lower.includes(wanted) ? 2 : 3;
   };
   const kindAt = (kind: string) => KIND_ORDER.get(kind) ?? KIND_ORDER.size;
   return [...found].sort(
@@ -651,6 +684,7 @@ export function buildPaletteEntries({
   marks,
   recentItems,
   isConnected,
+  searching = false,
   error,
   shownClusters,
   hitsByContext,
@@ -669,12 +703,15 @@ export function buildPaletteEntries({
   const scoped = scope.kind !== "current";
   const answered = shownClusters.filter(hasAnswered).length;
   /** At least one cluster is still connecting or listing, right now. */
-  const working = shownClusters.some(
-    (cluster) =>
-      cluster.status === "searching" || cluster.status === "connecting"
-  );
+  const working =
+    searching ||
+    shownClusters.some(
+      (cluster) =>
+        cluster.status === "searching" || cluster.status === "connecting"
+    );
 
   const out: Entry[] = [];
+  let laterKindRows: Entry[] = [];
 
   if (bang) {
     out.push({
@@ -836,19 +873,29 @@ export function buildPaletteEntries({
       ? matchingKinds(kinds, query, (kind) => wordsOf(kind, t))
       : [];
     if (served.length > 0) {
-      out.push({
-        id: "cap:kinds",
-        kind: "caption",
-        text: t("action", "paletteKinds"),
-      });
-      for (const entry of served) {
-        out.push({
+      const kindRows: Entry[] = [
+        {
+          id: "cap:kinds",
+          kind: "caption",
+          text: t("action", "paletteKinds"),
+        },
+        ...served.map((entry): Entry => ({
           id: `kind:${entry.group}/${entry.plural}`,
           kind: "kind",
           entry,
           path: servedListLink(entry),
-        });
-      }
+        })),
+      ];
+      const wholeKind = served.some(
+        (entry) => kindTier(entry, needle, wordsOf(entry.kind, t)) === 0
+      );
+      const wholeObject = shownClusters.some((cluster) =>
+        [...(hitsByContext.get(cluster.context)?.values() ?? [])].some(
+          (hit) => hit.name.toLowerCase() === needle
+        )
+      );
+      if (wholeObject && !wholeKind) laterKindRows = kindRows;
+      else out.push(...kindRows);
     }
 
     // Under their own caption, not Navigation: they open a panel over the
@@ -960,7 +1007,10 @@ export function buildPaletteEntries({
       const path = servedObjectLink(hit, { cluster: hit.context });
       return path ? [{ hit, path }] : [];
     });
-    const named = (hit: SearchHit) => hit.name.toLowerCase().includes(needle);
+    const named = (hit: SearchHit) =>
+      nameNeedleOf(hit, needle)
+        .split(" ")
+        .every((word) => hit.name.toLowerCase().includes(word));
     const ranked = orderHits(found, needle);
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     let viaNamespace = false;
@@ -1013,6 +1063,11 @@ export function buildPaletteEntries({
     if (own && !everything && more > 0 && cluster.status === "done") {
       out.push({ id: "search-more", kind: "search-more", count: more });
     }
+  }
+
+  if (laterKindRows.length > 0) {
+    const lastHit = out.map((entry) => entry.kind).lastIndexOf("hit");
+    out.splice(lastHit < 0 ? out.length : lastHit + 1, 0, ...laterKindRows);
   }
 
   // Rows, not hits: a cluster whose every match was a kind with nowhere to

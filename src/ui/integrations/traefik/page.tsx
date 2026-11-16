@@ -24,6 +24,7 @@ import { hostsNeedAttention } from "@/lib/two-counts";
  * worse than no button.
  */
 
+import { Reading } from "@/components/ui/states";
 import { servingCount } from "@/lib/published";
 import { sayWords } from "@/i18n/say";
 import { Fragment, useMemo, type ReactNode } from "react";
@@ -41,7 +42,17 @@ import {
 } from "../ingress";
 import { Link } from "@tanstack/react-router";
 import { stopUnder } from "@/lib/connections";
-import { Box, Filter, Globe, Network, Plug } from "lucide-react";
+import {
+  Box,
+  Filter,
+  Globe,
+  Info,
+  Network,
+  Plug,
+  TriangleAlert,
+} from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -56,7 +67,7 @@ import {
 } from "@/components/object/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { objectLink } from "@/lib/links";
-import { troubleMark, summariseNames } from "../kit";
+import { troubleMark, summariseNames, failedWithNothing } from "../kit";
 import {
   BackingUnread,
   TroubleList,
@@ -67,7 +78,9 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
+  ReadingMark,
 } from "../page-kit";
 import { RoutingMap } from "../routing-map";
 import { useFrontingTls } from "../fronting-tls";
@@ -188,7 +201,7 @@ export default function TraefikPage() {
   const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
   const namers = useOtherNamers(controller.data);
 
-  if (routeSources.error) {
+  if (failedWithNothing(routeSources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadRouting")}
@@ -295,8 +308,9 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
+      <StaleRead read={routeSources} label="Traefik" />
       {legacyUnconfirmed > 0 && (
-        <p className="max-w-[88ch] text-[11px] text-warn">
+        <p className="max-w-[88ch] text-caption text-warn">
           {t("count", "traefikLegacyUnconfirmed", { n: legacyUnconfirmed })}
         </p>
       )}
@@ -369,21 +383,19 @@ function MapTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {mapSummary(groups, t)}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
       <BackingUnread error={sources?.backingError ?? null} />
       <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("empty", "traefikRestOnNodeHint")}
       </p>
     </div>
@@ -398,7 +410,7 @@ function NothingRoutes() {
       <p className="text-xs text-fg-mut">
         {t("empty", "traefikRunningNothingRoutes")}
       </p>
-      <p className="mt-1.5 text-[11px] text-fg-fnt">
+      <p className="mt-1.5 text-caption text-fg-fnt">
         {t("empty", "traefikNoRouteClaimsClass")}
       </p>
     </div>
@@ -432,9 +444,7 @@ function RoutesTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
 
   if (groups.length === 0) return <NothingRoutes />;
@@ -458,7 +468,7 @@ function RoutesTab({
       aside={
         <>
           {backingLoading && (
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {t("empty", "checkingWhatIsBehind")}
             </span>
           )}
@@ -596,7 +606,7 @@ function PathRow({
   const backing = sources ? backingOf(route, sources) : null;
 
   return (
-    <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+    <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-xs text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
         {describePath(route.clause.path, t)}
         {route.pathType && route.pathType !== "Prefix" && (
@@ -648,7 +658,7 @@ function PathRow({
         )}
         <SourceRef route={route} />
       </span>
-      <span className="text-[11px] text-fg-fnt">
+      <span className="text-caption text-fg-fnt">
         {route.resourceBackend ? (
           <span className="text-err">{t("empty", "skippedByTraefik")}</span>
         ) : !route.service?.kubernetes ? (
@@ -657,7 +667,7 @@ function PathRow({
           backing.error ? (
             t("empty", "unknownLower")
           ) : (
-            "…"
+            <ReadingMark />
           )
         ) : backing?.stop ? (
           t("count", "nPublished", { n: servingCount(backing) })
@@ -728,7 +738,7 @@ function HostChain({
   return (
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
-        <span className="text-[10px] text-fg-fnt">
+        <span className="text-micro text-fg-fnt">
           {t("empty", "thePathThrough", {
             path: describePath(route.clause.path, t),
           })}
@@ -774,7 +784,7 @@ function HostChain({
         </Column>
         <Column label="Middleware">
           {route.middlewares.length === 0 ? (
-            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
+            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-caption text-fg-fnt opacity-60">
               {t("empty", "noneLower")}
             </div>
           ) : (
@@ -842,7 +852,7 @@ function HostChain({
               )}
               title={backing.error ?? undefined}
             >
-              {backing.error ? t("empty", "notReadLower") : "…"}
+              {backing.error ? t("empty", "notReadLower") : <ReadingMark />}
             </Cell>
           ) : backing.stop ? (
             <Cell
@@ -899,8 +909,9 @@ function RawRule({ route }: { route: TraefikRoute }) {
   const t = useT();
   const { rule } = route;
   return (
-    <div className="mt-1 border-l-2 border-hair pl-2.5">
-      <p className="text-[11px] text-fg-mut">
+    <Alert variant="info" className="mt-1">
+      <Info aria-hidden />
+      <p className="text-caption text-fg-mut">
         {rule.refused
           ? t("empty", "ruleShownAsWrittenBecause", {
               reason: sayWords(rule.refused, t),
@@ -910,10 +921,10 @@ function RawRule({ route }: { route: TraefikRoute }) {
               list: rule.unread.join(", "),
             })}
       </p>
-      <p className="mt-0.5 select-text break-all font-mono text-[11px] text-fg-mid">
+      <p className="mt-0.5 select-text break-all font-mono text-caption text-fg-mid">
         {rule.raw}
       </p>
-    </div>
+    </Alert>
   );
 }
 
@@ -1101,7 +1112,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
         {uses.map((use) => (
           <div
             key={`${use.middleware.namespace}/${use.middleware.name}`}
-            className="grid grid-cols-[minmax(0,220px)_minmax(0,140px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+            className="grid grid-cols-[minmax(0,220px)_minmax(0,140px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
           >
             <Link
               {...objectLink({
@@ -1158,9 +1169,7 @@ function EntryPointsTab({
     entryPointsSection(controller, groups, t)
   );
   if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
-    );
+    return <Reading>{t("empty", "readingTheProxy")}</Reading>;
   }
   if (controller.entryPoints.length === 0) {
     return (
@@ -1168,7 +1177,7 @@ function EntryPointsTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "cannotSayWhatTraefikListensOn")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {controller.problem
             ? sayWords(controller.problem, t)
             : t("empty", "entryPointsAreStatic")}
@@ -1196,7 +1205,7 @@ function EntryPointsTab({
           return (
             <div
               key={entry.name}
-              className="grid grid-cols-[minmax(0,140px)_minmax(0,120px)_minmax(0,130px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+              className="grid grid-cols-[minmax(0,140px)_minmax(0,120px)_minmax(0,130px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
             >
               <span className="truncate font-mono text-fg-mid">
                 {entry.name}
@@ -1233,15 +1242,18 @@ function PlainEntryPointNote({ controller }: { controller: ControllerInfo }) {
   if (plain.length === 0) return null;
 
   return (
-    <p className="max-w-[92ch] border-l-2 border-warn pl-2.5 text-[11.5px] text-fg-mut">
-      <span className="text-warn">
-        {t("empty", "plainEntryPointsHead", {
-          n: plain.length,
-          list: plain.map((entry) => entry.name).join(", "),
-        })}
-      </span>{" "}
-      {t("empty", "plainEntryPointsNote")}
-    </p>
+    <Alert variant="warn" className="max-w-[92ch]">
+      <TriangleAlert aria-hidden />
+      <p className="text-fg-mut">
+        <span className="text-fg">
+          {t("empty", "plainEntryPointsHead", {
+            n: plain.length,
+            list: plain.map((entry) => entry.name).join(", "),
+          })}
+        </span>{" "}
+        {t("empty", "plainEntryPointsNote")}
+      </p>
+    </Alert>
   );
 }
 

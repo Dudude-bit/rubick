@@ -23,12 +23,15 @@ export function JobStatusCell({
         </StatusBadge>
       </span>
       {job.status === "Retrying" && (
-        <span className="flex-none text-[11px] tabular-nums text-warn">
+        <span className="flex-none text-caption tabular-nums text-warn">
           {t("count", "failedPods", { n: job.failed })}
         </span>
       )}
       {job.failure?.reason && (
-        <span className="max-w-[24ch] flex-none truncate font-mono text-[11px] text-fg-mut">
+        <span
+          className="max-w-[24ch] flex-none truncate font-mono text-caption text-fg-mut"
+          title={job.failure.reason}
+        >
           {job.failure.reason}
         </span>
       )}

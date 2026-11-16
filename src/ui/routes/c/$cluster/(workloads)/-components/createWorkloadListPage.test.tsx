@@ -41,6 +41,11 @@ vi.mock("@/hooks/usePodsWithMetrics", () => ({
   }),
 }));
 
+const attention = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => ({ items: attention.items }),
+}));
+
 const watch = vi.hoisted(() => ({ live: true }));
 vi.mock("@/hooks/useWatchedList", () => ({
   useWatchedList: () => ({
@@ -101,6 +106,7 @@ beforeEach(() => {
   podRead.read = false;
   podRead.error = null;
   podRead.unread = [];
+  attention.items = [];
   store.state.namespaceScope = ["prod", "staging"];
 });
 
@@ -165,7 +171,9 @@ describe("a workload list while a new scope is read", () => {
     expect(screen.queryByText(/in staging/)).toBeNull();
     expect(screen.queryByText("1 Deployment")).toBeNull();
     expect(
-      screen.getByText("1 Deployment, from the namespaces that answered")
+      screen.getByText(
+        "1 Deployment, from the previous scope while this one is read"
+      )
     ).toBeVisible();
   });
 });
@@ -363,5 +371,104 @@ describe("the refusals a workload list reads", () => {
       .mocked(commands.listEvents)
       .mock.calls.map(([filters]) => filters?.namespace);
     expect(new Set(asked)).toEqual(new Set(["prod", "staging"]));
+  });
+});
+
+describe("the problem a workload list's row carries", () => {
+  /**
+   * The sidebar showed a problem dot for a Deployment whose row said plain
+   * Ready. Fails if a row does not get what another object raises against
+   * it, or a row nothing opens gets one.
+   */
+  it("hands each row what the shell's problem count holds against it", async () => {
+    watch.live = false;
+    attention.items = [
+      {
+        key: "hpa",
+        tone: "warn",
+        kind: "HorizontalPodAutoscaler",
+        name: "api",
+        namespace: "prod",
+        reason: "TooManyReplicas",
+        detail: null,
+        opens: { kind: "Deployment", name: "api", namespace: "prod" },
+      },
+    ];
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [
+          { name: "api", namespace: "prod" },
+          { name: "worker", namespace: "prod" },
+        ],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "problem",
+          header: "Problem",
+          cell: ({ row }) => row.original.problem?.title ?? "none",
+        },
+      ],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await mount(client, List);
+    expect(await screen.findByText("TooManyReplicas")).toBeVisible();
+    expect(screen.getAllByText("none")).toHaveLength(1);
+  });
+
+  /**
+   * argocd-repo-server read a green "Ready 2/2" beside two pods failing their
+   * liveness probe. Fails if a workload's row stops carrying its pods' rows.
+   */
+  it("hands a workload's row its pods' rows, counted once each", async () => {
+    watch.live = false;
+    attention.items = ["api-7d4-a", "api-7d4-b"].map((name) => ({
+      key: name,
+      tone: "warn",
+      kind: "Pod",
+      name,
+      namespace: "prod",
+      reason: "Unhealthy",
+      detail: null,
+      workload: { kind: "Deployment", name: "api" },
+      opens: { kind: "Pod", name, namespace: "prod" },
+    }));
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [
+          { name: "api", namespace: "prod" },
+          { name: "worker", namespace: "prod" },
+        ],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "problem",
+          header: "Problem",
+          cell: ({ row }) =>
+            row.original.problem
+              ? `${row.original.problem.n} ${row.original.problem.title}`
+              : "none",
+        },
+      ],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await mount(client, List);
+    expect(await screen.findByText("2 Unhealthy")).toBeVisible();
+    expect(screen.getAllByText("none")).toHaveLength(1);
   });
 });

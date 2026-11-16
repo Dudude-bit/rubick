@@ -1,5 +1,5 @@
 import type { UseMutationResult } from "@tanstack/react-query";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type {
@@ -25,19 +25,21 @@ vi.mock("@/lib/commands", () => ({
     objectLineage: () =>
       Promise.resolve({ uid: "d", ancestors: [], others: [], stop: null }),
     previewCascade: () => Promise.resolve(cascade.now),
+    checkAccess: () => Promise.resolve([]),
   },
 }));
 
 const { DeleteAction } = await import("./DeleteAction");
 
-const mutate = vi.fn();
+const mutateAsync = vi.fn(() => Promise.resolve());
 const mutation = {
-  mutate,
+  mutateAsync,
   isPending: false,
 } as unknown as UseMutationResult<void, Error, void>;
 
 beforeEach(() => {
-  mutate.mockReset();
+  mutateAsync.mockReset();
+  mutateAsync.mockResolvedValue(undefined);
   getResourceConnections.mockReset();
   cascade.now = THREE_PODS;
   useClusterStore.setState({ currentContext: "test", isConnected: true });
@@ -55,13 +57,21 @@ const renderDelete = () =>
   );
 
 describe("Delete on a detail page", () => {
+  /** Delete drew red at rest on every page header; red belongs to the confirmation. Fails if the header button carries the error colour again. */
+  it("is neutral at rest and leaves red to the confirmation", async () => {
+    await renderDelete();
+    expect(screen.getByRole("button", { name: "Delete" })).not.toHaveClass(
+      "text-err"
+    );
+  });
+
   /** Every detail page deleted on the click itself until this asked first. */
   it("asks first and deletes nothing on the click", async () => {
     await renderDelete();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
-    expect(mutate).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   /** However long the preview grows, the field to type the name stays on screen. */
@@ -87,7 +97,37 @@ describe("Delete on a detail page", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "api" } });
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
-    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  const confirmDelete = async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "api" } });
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll("button")).find(
+        (button) => button.textContent === "Delete"
+      )!
+    );
+  };
+
+  /**
+   * The page's dialog closed on any settle while the peek's stayed up on a
+   * failure, so a refused delete lost the name the reader had typed. Fails if
+   * the dialog closes when the delete failed.
+   */
+  it("stays open when the delete fails", async () => {
+    mutateAsync.mockRejectedValue(new Error("forbidden"));
+    await confirmDelete();
+    expect(await screen.findByText("forbidden")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  /** The control: once the delete is done the dialog goes. */
+  it("closes once the delete succeeds", async () => {
+    await confirmDelete();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 });
 
@@ -127,7 +167,7 @@ describe("Restart on a pod's page", () => {
       "Its ReplicaSet cart-75 will start a replacement."
     );
     expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
-    expect(mutate).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "cart-1" },
@@ -137,7 +177,7 @@ describe("Restart on a pod's page", () => {
         (button) => button.textContent === "Restart"
       )!
     );
-    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -215,6 +255,24 @@ describe("Delete on a Service that Ingresses route to", () => {
       "promo-nginx-canarypromo.nginx.k8s-gui.test/"
     );
     expect(left).not.toHaveTextContent("topology-demo-1");
+  });
+
+  /**
+   * A long route in the "left behind" rows widened the dialog past its edge
+   * and took the Delete button with it. Fails if a row stops shrinking or the
+   * dialog's track stops being zero-floored.
+   */
+  it("keeps a long route to one shrinking line inside the dialog", async () => {
+    const host = `${"very-long-label.".repeat(12)}example.test`;
+    getResourceConnections.mockResolvedValue(
+      neighbourhood({ edges: [routes("long-one", host)] })
+    );
+    const dialog = await openDelete();
+    const left = await within(dialog).findByTestId("dependents");
+    const way = within(left).getByText(new RegExp(host.slice(0, 30)));
+    expect(way).toHaveClass("min-w-0", "truncate");
+    expect(way).toHaveAttribute("title", expect.stringContaining(host));
+    expect(dialog.className).toContain("grid-cols-[minmax(0,1fr)]");
   });
 
   /**

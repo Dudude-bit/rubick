@@ -1,21 +1,19 @@
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  CircleSlash,
-  EyeOff,
-  Info,
-  Loader2,
-  Lock,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleSlash, EyeOff, Info, Lock, TriangleAlert } from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -54,6 +52,8 @@ import {
   checkKey,
   checkRefused,
   foldedWords,
+  itemIsStale,
+  notRecheckedWords,
   reasonWord,
   shuttingPolicy,
   refusedVerb,
@@ -73,6 +73,7 @@ import {
   type StatusRole,
 } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
+import { HOLD_ATTRIBUTE, usePointerOnTable } from "@/lib/pointer-hold";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
@@ -107,9 +108,43 @@ function Unit({ children }: { children: React.ReactNode }) {
 
 // One grid for every row, so a column is as wide as what its rows hold: the
 // reason up to Init:CreateContainerConfigError, a count or an age only where
-// a row has one, and the sentence the rest.
+// a row has one, and the sentence the rest. Widths are measured, never
+// left to the grid: see `useMeasuredColumns`.
 const ROWS =
-  "@container grid grid-cols-[auto_fit-content(240px)_minmax(12rem,1fr)_auto_auto_auto] gap-x-2.5";
+  "@container grid grid-cols-[12px_var(--col-2,0px)_minmax(12rem,1fr)_var(--col-4,0px)_var(--col-5,0px)_var(--col-6,0px)] gap-x-2.5";
+const REASON_CELL = "w-max max-w-[240px]";
+const MEASURED = ["2", "4", "5", "6"] as const;
+
+/**
+ * Sets each measured column to its widest cell. A column the grid sized from
+ * its cells (`auto`, `fit-content`) widened when a row came, and WebKit's
+ * subgrid kept the other rows' heights from before: a sentence that wrapped
+ * onto a new line printed over the next row, and gaps opened where one
+ * unwrapped.
+ */
+function useMeasuredColumns(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const cells = [...root.querySelectorAll<HTMLElement>("[data-col]")];
+    const measure = () => {
+      for (const col of MEASURED) {
+        let widest = 0;
+        for (const cell of cells)
+          if (cell.dataset.col === col)
+            widest = Math.max(widest, cell.getBoundingClientRect().width);
+        const width = `${Math.ceil(widest)}px`;
+        if (root.style.getPropertyValue(`--col-${col}`) !== width)
+          root.style.setProperty(`--col-${col}`, width);
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    for (const cell of cells) observer.observe(cell);
+    return () => observer.disconnect();
+  });
+}
 // Baselines, not centres: a detail that wraps keeps the marks on its first line.
 const ROW =
   "col-span-full grid grid-cols-subgrid items-baseline rounded-[5px] px-1.5 py-[5px] text-xs";
@@ -117,21 +152,11 @@ const MARK = "mt-0.5 h-3 w-3 self-start justify-self-center";
 const SAID = "line-clamp-4 min-w-0 wrap-break-word text-fg-mid";
 
 /**
- * A 60x14 trend line for one problem row.
- *
- * There is no history behind this: the backend returns a snapshot, so the
- * only shape the data justifies is "a pod that has already restarted is still
- * climbing", and everything else draws flat. Derived from the row beside it,
- * not telemetry — do not read it as a series, and do not add shapes no field
- * in `ClusterProblem` supports.
+ * A 60x14 line for a pod that has already restarted and is still climbing.
+ * There is no history behind it: the backend returns a snapshot, so no other
+ * shape is justified, and a flat line carries nothing and is not drawn.
  */
-function Sparkline({
-  rising,
-  className,
-}: {
-  rising: boolean;
-  className: string;
-}) {
+function RisingLine({ className }: { className: string }) {
   return (
     <svg
       width="60"
@@ -141,11 +166,7 @@ function Sparkline({
       aria-hidden="true"
     >
       <polyline
-        points={
-          rising
-            ? "0,12 10,12 20,10 30,8 40,5 50,3 60,1"
-            : "0,7 10,7 20,7 30,7 40,7 50,7 60,7"
-        }
+        points="0,12 10,12 20,10 30,8 40,5 50,3 60,1"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
@@ -214,7 +235,11 @@ function ClassMarker({ name }: { name: string }) {
     <span
       role="img"
       aria-label={t("empty", "noIngressClassNamed", { name })}
-      className="inline-flex min-w-0 items-center gap-1 pl-3 font-mono text-err"
+      data-col="2"
+      className={cn(
+        "inline-flex min-w-0 items-center gap-1 pl-3 font-mono text-err",
+        REASON_CELL
+      )}
     >
       <CircleSlash className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
       <span className="truncate">{name}</span>
@@ -233,8 +258,10 @@ function ShutRow({ head, members }: { head: AttentionItem; members: number }) {
     <OpensRow link={policy && objectLink(policy)} testId="attention-shut">
       <SeverityIcon className={cn(MARK, tone)} aria-hidden="true" />
       <span
+        data-col="2"
         className={cn(
           "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+          REASON_CELL,
           tone
         )}
       >
@@ -273,7 +300,13 @@ function UnservedRow({
   return (
     <div className={ROW} data-testid="attention-unserved">
       <SeverityIcon className={cn(MARK, ROLE_TEXT.err)} aria-hidden="true" />
-      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err">
+      <span
+        data-col="2"
+        className={cn(
+          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err",
+          REASON_CELL
+        )}
+      >
         <CircleSlash
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
@@ -294,13 +327,21 @@ function AttentionRow({
   item,
   under = null,
   sameCause = false,
+  stale = false,
+  answeredAt,
 }: {
   item: AttentionItem;
+  /** Last known: the read this row rests on failed, so it may have changed. */
+  stale?: boolean;
+  /** When the answer this row came from arrived, where the item does not say. */
+  answeredAt?: number;
   under?: Extract<AttentionLine, { at: "item" }>["under"];
   /** Under its workload's row, which already tells this cause. */
   sameCause?: boolean;
 }) {
   const t = useT();
+  // A crash loop not rechecked is still a crash loop: the severity keeps its
+  // mark and colour, and only the amber suffix says the read is old.
   const tone = ROLE_TEXT[item.tone];
   const SeverityIcon = ROLE_ICON[item.tone];
   const link = objectLink(item.opens);
@@ -311,6 +352,7 @@ function AttentionRow({
   const marked = under === "class" ? item.unservedClass : undefined;
   const shut = under === "policy" ? item.shutBy : undefined;
   const pod = under === "workload" || shut !== undefined;
+  const indented = pod || under === "node";
   const folded = foldedWords(item, t);
   const detail: AttentionItem["detail"] = shut
     ? null
@@ -329,9 +371,11 @@ function AttentionRow({
         <ClassMarker name={marked.name} />
       ) : (
         <span
+          data-col="2"
           className={cn(
             "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
-            pod && "pl-3",
+            REASON_CELL,
+            indented && "pl-3",
             tone
           )}
         >
@@ -350,6 +394,7 @@ function AttentionRow({
           name={item.name}
           namespace={item.namespace}
           showKind={false}
+          opens="page"
           className="max-w-full"
         />
         {elsewhere && (
@@ -360,6 +405,7 @@ function AttentionRow({
               name={item.opens.name}
               namespace={item.opens.namespace}
               showKind={false}
+              opens="page"
               className="max-w-full"
             />
           </>
@@ -385,15 +431,30 @@ function AttentionRow({
             )}
           </span>
         )}
+        {stale && (
+          <span
+            className="whitespace-nowrap text-warn"
+            data-testid="attention-not-rechecked"
+          >
+            {" · "}
+            {notRecheckedWords(t, item.lastKnown?.at ?? answeredAt)}
+          </span>
+        )}
       </span>
       {/* The first to give way: it draws nothing the row does not already say. */}
-      <span className="self-start" data-testid="attention-trend">
-        <Sparkline
-          rising={item.kind === "Pod" && restarts > 0}
-          className={cn("mt-px @max-[56rem]:hidden", tone)}
-        />
+      <span
+        data-col="4"
+        className="w-max self-start"
+        data-testid="attention-trend"
+      >
+        {item.kind === "Pod" && restarts > 0 && (
+          <RisingLine className={cn("mt-px @max-[56rem]:hidden", tone)} />
+        )}
       </span>
-      <span className="whitespace-nowrap text-right font-mono text-fg-mut">
+      <span
+        data-col="5"
+        className="w-max justify-self-end whitespace-nowrap text-right font-mono text-fg-mut"
+      >
         {restarts > 0 && (
           <>
             {restarts}
@@ -401,30 +462,52 @@ function AttentionRow({
           </>
         )}
       </span>
-      <span className="whitespace-nowrap text-right text-[11px] leading-4 text-fg-fnt">
-        {item.since !== null && <RealtimeAge timestamp={item.since} />}
+      <span
+        data-col="6"
+        className="w-max justify-self-end whitespace-nowrap text-right text-caption leading-4 text-fg-fnt"
+      >
+        {item.since === null ? (
+          // A standing condition has no moment it began that anything recorded.
+          <span className="text-fg-mut" data-testid="attention-ongoing">
+            {t("cluster", "attentionOngoing")}
+          </span>
+        ) : (
+          <RealtimeAge timestamp={item.since} />
+        )}
       </span>
     </>
   );
 
-  // The row opens the object's page; the name inside it opens the peek.
-  return <OpensRow link={link}>{body}</OpensRow>;
+  return (
+    <OpensRow link={link} stale={stale}>
+      {body}
+    </OpensRow>
+  );
 }
+
+const openRows = (rows: Element | null) =>
+  rows?.querySelectorAll<HTMLElement>(":scope > [role=link]") ?? [];
 
 /** A row that opens `link`, where a link inside it still opens its own. */
 function OpensRow({
   link,
   testId,
+  stale = false,
   children,
 }: {
   link: AppLink | null;
   testId?: string;
+  stale?: boolean;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const t = useT();
+  const mark = stale
+    ? { "data-stale": "", title: t("cluster", "attentionRowStale") }
+    : {};
   if (link === null)
     return (
-      <div className={ROW} data-testid={testId}>
+      <div className={ROW} data-testid={testId} {...mark}>
         {children}
       </div>
     );
@@ -433,15 +516,27 @@ function OpensRow({
       role="link"
       tabIndex={0}
       data-testid={testId}
+      {...mark}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("a")) return;
         navigate(link);
       }}
       onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        navigate(link);
+        if (event.key === "Enter") return navigate(link);
+        const step =
+          event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+        if (step === 0 || event.altKey || event.metaKey || event.ctrlKey)
+          return;
+        const rows = [...openRows(event.currentTarget.parentElement)];
+        const next = rows[rows.indexOf(event.currentTarget) + step];
+        if (!next) return;
+        event.preventDefault();
+        next.focus();
       }}
-      className={cn(ROW, "cursor-pointer hover:bg-hover")}
+      className={cn(
+        ROW,
+        "cursor-pointer hover:bg-hover focus-visible:bg-hover"
+      )}
     >
       {children}
     </div>
@@ -470,7 +565,7 @@ function MoreRows({
     byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item]);
   const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
-    <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
+    <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-caption text-fg-fnt">
       {onCollapse && (
         <button
           type="button"
@@ -514,7 +609,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   const t = useT();
   const reading = check.state === "reading";
   const refused = checkRefused(check);
-  const Icon = reading ? Loader2 : refused ? Lock : TriangleAlert;
+  const Icon = reading ? Spinner : refused ? Lock : TriangleAlert;
   const said = check.unread.find((entry) => entry.message)?.message ?? null;
   const named = check.unread.some((entry) => entry.namespace);
   // A refusal reads as what was refused and where; the server's sentence is
@@ -523,14 +618,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   return (
     <li className="col-span-full grid grid-cols-subgrid items-baseline py-[3px] text-xs">
       <Icon
-        className={cn(
-          MARK,
-          reading
-            ? "animate-spin text-info"
-            : refused
-              ? "text-fg-mut"
-              : "text-warn"
-        )}
+        className={cn(MARK, reading ? "animate-spin text-info" : "text-warn")}
         aria-hidden="true"
       />
       <span className="inline-flex items-baseline gap-1 whitespace-nowrap font-mono text-fg-mid">
@@ -563,7 +651,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
           </span>
         )}
         {said && !refused && (
-          <span className="font-mono text-[11px] text-fg-fnt">
+          <span className="font-mono text-caption text-fg-fnt">
             {": "}
             {said}
           </span>
@@ -591,12 +679,8 @@ function UnconfirmedRow({ item }: { item: AttentionItem }) {
       data-testid="attention-unconfirmed"
     >
       <EyeOff className={cn(MARK, "text-fg-mut")} aria-hidden="true" />
-      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
-        <KindIcon
-          kind={item.kind}
-          crd={undefined}
-          className="h-2.5 w-2.5 flex-none self-center"
-        />
+      {/* The ref draws the kind's mark itself. */}
+      <span className="inline-flex min-w-0 items-baseline font-mono text-fg-mid">
         <ResourceRef
           kind={item.kind}
           name={item.name}
@@ -693,15 +777,34 @@ function useHeldRoom() {
   return [box, content, room] as const;
 }
 
+/** Focus on nothing in particular: the page itself, or the scroller a click on its canvas lands in. */
+/** What the list draws, so a recomputed answer that changes nothing is not news. */
+const drawnAs = (attention: Attention) =>
+  [
+    attention.total,
+    ...attention.items.map((item) => `${item.key}:${item.tone}`),
+    ...attention.checks.map((check) => `${checkKey(check)}:${check.state}`),
+  ].join("|");
+
+function holdsNoControl(active: Element | null) {
+  return active === document.body || active?.id === "main-content";
+}
+
 export function AttentionPanel({
-  attention,
+  attention: live,
   pods,
   podsUnlisted = [],
   podsUnread,
   nodes,
   nodesKnown,
+  refreshFailing = false,
+  answeredAt,
 }: {
   attention: Attention;
+  /** The overview's own read is failing: every row is the last one that answered. */
+  refreshFailing?: boolean;
+  /** When the overview last answered: the time a row kept by `refreshFailing` is last known at. */
+  answeredAt?: number;
   /** `null` when no pod list in scope answered: no count to state. */
   pods: Census<PodComposition> | null;
   /** The pods `pods` counts short of serving that no row names. */
@@ -714,8 +817,15 @@ export function AttentionPanel({
   nodesKnown: boolean;
 }) {
   const t = useT();
-  useShareSection("overview-problems", () => attentionShare(attention, t));
-  useShareSection("overview-unchecked", () => uncheckedShare(attention, t));
+  useShareSection("overview-problems", () => attentionShare(live, t));
+  useShareSection("overview-unchecked", () => uncheckedShare(live, t));
+  // Rows reordered under a resting pointer every few seconds during an
+  // incident; what is drawn waits for the pointer to leave the list.
+  const pointed = usePointerOnTable();
+  const [held, setHeld] = useState(live);
+  if (!pointed && held !== live) setHeld(live);
+  const attention = pointed ? held : live;
+  const waiting = pointed && drawnAs(held) !== drawnAs(live);
   const { items, total, complete, worst } = attention;
   const expanded = useAttentionExpanded((state) => state.expanded);
   const setExpanded = useAttentionExpanded((state) => state.setExpanded);
@@ -738,8 +848,32 @@ export function AttentionPanel({
       n: readyNodes,
       of: t("count", "ofNodes", { n: nodes.length }),
     });
-  const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
+  const whole = complete && !refreshFailing;
+  const summaryRole: StatusRole = worst ?? (whole ? "ok" : "neutral");
   const [overallBox, overallContent, overallRoom] = useHeldRoom();
+  const rowsRef = useRef<HTMLDivElement>(null);
+  useMeasuredColumns(rowsRef);
+  useEffect(() => {
+    const enter = (event: KeyboardEvent) => {
+      if (
+        event.key !== "ArrowDown" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        !holdsNoControl(document.activeElement)
+      )
+        return;
+      const first = openRows(rowsRef.current)[0];
+      const top = first?.getBoundingClientRect().top;
+      if (top === undefined || top < 0 || top > window.innerHeight) return;
+      event.preventDefault();
+      first.focus();
+    };
+    window.addEventListener("keydown", enter);
+    return () => window.removeEventListener("keydown", enter);
+  }, []);
 
   return (
     <Section>
@@ -747,15 +881,50 @@ export function AttentionPanel({
         title={t("action", "needsAttention")}
         count={
           total > 0
-            ? t("count", complete ? "worstFirst" : "worstFirstPartial", {
+            ? t("count", whole ? "worstFirst" : "worstFirstPartial", {
                 n: formatCount(total),
               })
-            : complete
+            : whole
               ? t("cluster", "attentionNothing")
               : t("cluster", "attentionNoneFound")
         }
+        actions={
+          <span
+            role="status"
+            data-testid="attention-waiting"
+            className={cn(
+              "whitespace-nowrap text-caption text-info",
+              !waiting && "invisible"
+            )}
+          >
+            {waiting && t("cluster", "attentionWaiting")}
+          </span>
+        }
       />
-      <div className={ROWS} {...{ [ANCHOR_ROWS]: "" }}>
+      <div
+        ref={rowsRef}
+        className={ROWS}
+        data-testid="attention-rows"
+        {...{ [ANCHOR_ROWS]: "", [HOLD_ATTRIBUTE]: "" }}
+      >
+        {unchecked.length + attention.unconfirmed.length > 0 && (
+          <div
+            className="col-span-full mb-1 border-b border-hair pb-1.5"
+            data-testid="attention-unchecked"
+          >
+            <p className="px-1.5 pb-0.5 text-caption text-fg-fnt">
+              {t("cluster", "attentionNotChecked")}
+            </p>
+            <ul className="grid grid-cols-[10px_max-content_minmax(0,1fr)] gap-x-2.5 px-1.5">
+              {attention.unconfirmed.map((item) => (
+                <UnconfirmedRow key={item.key} item={item} />
+              ))}
+              {unchecked.map((check) => (
+                <CheckRow key={checkKey(check)} check={check} />
+              ))}
+            </ul>
+          </div>
+        )}
         {shown.map((line) =>
           line.at === "item" ? (
             <AttentionRow
@@ -763,6 +932,8 @@ export function AttentionPanel({
               item={line.item}
               under={line.under}
               sameCause={line.under === "workload" && line.sameCause}
+              stale={refreshFailing || itemIsStale(attention, line.item)}
+              answeredAt={refreshFailing ? answeredAt : undefined}
             />
           ) : line.at === "shut" ? (
             <ShutRow
@@ -799,7 +970,13 @@ export function AttentionPanel({
             )}
             aria-hidden="true"
           />
-          <span className="truncate font-mono font-medium text-fg-mut">
+          <span
+            data-col="2"
+            className={cn(
+              "truncate font-mono font-medium text-fg-mut",
+              REASON_CELL
+            )}
+          >
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           {/* Every count stays whole with its words, and the line breaks
@@ -889,24 +1066,6 @@ export function AttentionPanel({
             </span>
           </span>
         </div>
-        {unchecked.length + attention.unconfirmed.length > 0 && (
-          <div
-            className="col-span-full mt-1 border-t border-hair pt-1.5"
-            data-testid="attention-unchecked"
-          >
-            <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
-              {t("cluster", "attentionNotChecked")}
-            </p>
-            <ul className="grid grid-cols-[10px_max-content_minmax(0,1fr)] gap-x-2.5 px-1.5">
-              {attention.unconfirmed.map((item) => (
-                <UnconfirmedRow key={item.key} item={item} />
-              ))}
-              {unchecked.map((check) => (
-                <CheckRow key={checkKey(check)} check={check} />
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </Section>
   );
@@ -918,16 +1077,62 @@ export function AttentionPending() {
   return (
     <Section>
       <SectionHeader title={t("action", "needsAttention")} />
-      <p className="flex items-center gap-2 px-1.5 py-[5px] text-xs text-fg-mut">
-        <Loader2
-          className="h-3 w-3 animate-spin text-info"
-          aria-hidden="true"
-        />
+      <Reading className="px-1.5 py-[5px] text-xs text-fg-mut">
         {t("cluster", "attentionStillReading")}
-      </p>
+      </Reading>
     </Section>
   );
 }
+
+/** The first load, in the panels' own order and heights: Needs attention, Workloads, Scheduler headroom, Nodes. */
+export function OverviewSkeleton() {
+  const t = useT();
+  return (
+    <div
+      className="flex flex-col gap-[22px]"
+      role="status"
+      aria-busy="true"
+      aria-label={t("action", "readingEllipsis")}
+    >
+      <Section>
+        <SectionHeader title={t("action", "needsAttention")} />
+        <div className="flex flex-col gap-2 px-1.5 py-1">
+          <Skeleton className="h-3.5 w-3/5" />
+          <Skeleton className="h-3.5 w-2/5" />
+          <Skeleton className="h-3.5 w-1/2" />
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title={t("nav", "workloads")} />
+        <div className="flex flex-col gap-3 px-1.5 py-1">
+          <Skeleton className="h-2 w-full" />
+          <div className="flex gap-6">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-24" />
+          </div>
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title={t("cluster", "schedulerHeadroom")} />
+        <div className="flex flex-col gap-3 px-1.5 py-1">
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-2 w-full" />
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title="Nodes" />
+        <div className="flex flex-col gap-2 px-1.5 py-1">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+const isPermission = (entry: Unread) => entry.code === ERROR_CODES.PERMISSION;
 
 /** Words about where a kind went unread, behind the mark of why: refused or failed. */
 function UnreadMark({
@@ -937,16 +1142,14 @@ function UnreadMark({
   unread: readonly Unread[];
   children: React.ReactNode;
 }) {
-  const refused = unread.every(
-    (entry) => entry.code === ERROR_CODES.PERMISSION
-  );
+  const refused = unread.every(isPermission);
   const Icon = refused ? Lock : TriangleAlert;
   return (
     <span title={unread.find((entry) => entry.message)?.message}>
       <Icon
         className={cn(
           "mr-1 inline-block h-2.5 w-2.5 align-[-1px]",
-          refused ? "text-fg-mut" : "text-warn"
+          "text-warn"
         )}
         aria-hidden="true"
       />
@@ -982,34 +1185,48 @@ export function WorkloadsPanel({
       <div className="grid grid-cols-4 gap-[22px]">
         {workloadCards(overview, t).map((card) => {
           const partial = card.total !== null && card.unread.length > 0;
-          return (
-            <Composition
-              key={card.kind}
-              total={card.total}
-              label={card.total === 1 ? card.kind : getDisplayPlural(card.kind)}
-              emptyMessage={t(
-                "empty",
-                partial ? "noneWhereRead" : "noneInScope"
+          const unread = card.unread.length > 0;
+          const note = unread ? (
+            <UnreadMark unread={card.unread}>
+              {partial ? (
+                parts(t("cluster", "notReadWhere"), {
+                  where: (
+                    <span className="inline-block max-w-full">
+                      {unreadWhere(card.unread, t)}
+                    </span>
+                  ),
+                })
+              ) : (
+                <Prose text={unreadWhere(card.unread, t)} />
               )}
-              segments={card.segments}
-              note={
-                card.unread.length > 0 ? (
-                  <UnreadMark unread={card.unread}>
-                    {partial ? (
-                      parts(t("cluster", "notReadWhere"), {
-                        where: (
-                          <span className="inline-block max-w-full">
-                            {unreadWhere(card.unread, t)}
-                          </span>
-                        ),
-                      })
-                    ) : (
-                      <Prose text={unreadWhere(card.unread, t)} />
-                    )}
-                  </UnreadMark>
-                ) : undefined
-              }
-            />
+            </UnreadMark>
+          ) : undefined;
+          return (
+            <div
+              key={card.kind}
+              data-unread={unread ? "" : undefined}
+              className={cn(
+                unread && "[&>div>div]:opacity-60 [&>div>div]:grayscale"
+              )}
+            >
+              <Composition
+                total={card.total}
+                label={
+                  card.total === 1 ? card.kind : getDisplayPlural(card.kind)
+                }
+                emptyMessage={t(
+                  "empty",
+                  partial ? "noneWhereRead" : "noneInScope"
+                )}
+                segments={card.segments}
+                note={note}
+                unreadLegend={
+                  unread && !card.unread.every(isPermission)
+                    ? t("empty", "notReadFault")
+                    : undefined
+                }
+              />
+            </div>
           );
         })}
       </div>
@@ -1037,7 +1254,7 @@ function PressureRow({
 
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
-      <span className="text-[11px] text-fg-mut">{label}</span>
+      <span className="text-caption text-fg-mut">{label}</span>
       <span className="relative h-[5px] overflow-hidden rounded-[3px] bg-sel">
         <span
           className={cn(
@@ -1055,7 +1272,7 @@ function PressureRow({
           />
         )}
       </span>
-      <span className="text-right font-mono text-[11px] text-fg-mut">
+      <span className="text-right font-mono text-caption text-fg-mut">
         {used}
         <Unit>/</Unit>
         {total}
@@ -1070,9 +1287,12 @@ function PressureRow({
 export function SchedulerPanel({
   scheduler,
   metricsAvailable,
+  scoped = false,
 }: {
   scheduler: SchedulerPressure;
   metricsAvailable: boolean;
+  /** A namespace scope is active: the headroom is still the whole cluster's. */
+  scoped?: boolean;
 }) {
   const t = useT();
   useShareSection("overview-scheduler", () => schedulerShare(scheduler, t));
@@ -1082,11 +1302,15 @@ export function SchedulerPanel({
        *  spare" and then wonder why the next pod sits Pending. */}
       <SectionHeader
         title={t("cluster", "schedulerHeadroom")}
-        count={
-          metricsAvailable
-            ? t("cluster", "headroomLegend")
-            : t("cluster", "headroomLegendNoMetrics")
-        }
+        count={[
+          scoped && t("cluster", "headroomClusterWide"),
+          t(
+            "cluster",
+            metricsAvailable ? "headroomLegend" : "headroomLegendNoMetrics"
+          ),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       />
       <div>
         <PressureRow label="CPU" pressure={scheduler.cpu} ratio={cpuRatio} />
@@ -1128,29 +1352,40 @@ function NodeRow({ node }: { node: NodeSummary }) {
           kind={ResourceType.Node}
           name={node.name}
           showKind={false}
+          opens="page"
         />
         {node.roles.map((role) => (
-          <span key={role} className="text-[11px] text-fg-fnt">
+          <span key={role} className="text-caption text-fg-fnt">
             {role}
           </span>
         ))}
         {!node.schedulable && (
-          <span className="text-[11px] text-warn">cordoned</span>
+          <span className="text-caption text-warn">cordoned</span>
         )}
-        {!node.ready && <span className="text-[11px] text-err">NotReady</span>}
+        {!node.ready && <span className="text-caption text-err">NotReady</span>}
       </span>
-      <span className="text-right font-mono text-[11px] text-fg-mut">
-        {node.podCount}
-        {node.podCapacity != null && (
+      <span className="text-right font-mono text-caption text-fg-mut">
+        {node.podCount === null ? (
+          <span className="font-sans text-fg-fnt">
+            {t("empty", "podsNotReadLower")}
+          </span>
+        ) : (
           <>
-            <Unit>/</Unit>
-            {node.podCapacity}
+            {node.podCount}
+            {node.podCapacity != null && (
+              <>
+                <Unit>/</Unit>
+                {node.podCapacity}
+              </>
+            )}
+            <Unit>
+              {" "}
+              {t("count", "podNoun", {
+                n: node.podCapacity ?? node.podCount,
+              })}
+            </Unit>
           </>
         )}
-        <Unit>
-          {" "}
-          {t("count", "podNoun", { n: node.podCapacity ?? node.podCount })}
-        </Unit>
       </span>
     </div>
   );
@@ -1315,7 +1550,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           </span>
         )}
       </span>
-      <span className="text-right text-[11px] text-fg-fnt">
+      <span className="text-right text-caption text-fg-fnt">
         <RealtimeAge timestamp={warning.lastSeen} />
       </span>
     </div>

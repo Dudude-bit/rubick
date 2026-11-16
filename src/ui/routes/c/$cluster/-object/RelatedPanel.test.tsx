@@ -8,7 +8,8 @@
  * the app inventing a claim it never checked.
  */
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 
 import { RelatedPanel } from "./RelatedPanel";
@@ -200,5 +201,24 @@ describe("a custom resource's connections", () => {
   it("warns that a failed integration leaves the list short", async () => {
     await draw({ claimed: true, error: new Error("connection refused") });
     expect(screen.getByText(/short by an unknown amount/)).toBeInTheDocument();
+  });
+
+  /**
+   * A failed integration with no rows read "nothing points at anything" under
+   * the warning, so a failure read as a verdict. Fails if the empty sentence
+   * is drawn while the read is failing, or the failure has no retry.
+   */
+  it("does not say nothing relates while the read that would say so is failing", async () => {
+    const refetch = vi.fn();
+    await draw(
+      { claimed: true, error: new Error("connection refused"), refetch },
+      "Application"
+    );
+    expect(screen.getByText(/connection refused/)).toBeInTheDocument();
+    expect(screen.queryByText(/names no other object right now/)).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(refetch).toHaveBeenCalled();
   });
 });

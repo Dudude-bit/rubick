@@ -54,6 +54,10 @@ export interface AppColumnMeta {
       ) => number);
   /** Pixels it is drawn at while the port has room for every column's. */
   ideal?: number | ((t: T, rows: readonly never[]) => number);
+  /** What the column sorts by, for a column that draws a derived cell: the table makes it sortable. */
+  sort?: (row: never) => string | number | boolean | null | undefined;
+  /** The accessor only orders the rows, so the search and a shared file must not read it. */
+  sortOnly?: boolean;
   /** Where a port too narrow for every floor hides it, the lowest first; never hidden without one. */
   yields?: number;
 }

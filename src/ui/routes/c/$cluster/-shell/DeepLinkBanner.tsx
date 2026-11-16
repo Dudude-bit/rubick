@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { Link2, TriangleAlert, X } from "lucide-react";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
@@ -47,14 +48,11 @@ export function DeepLinkBanner() {
   if (arrival.status === "live") return null;
 
   return (
-    <div
-      role="alert"
-      className="flex items-start gap-2 border-b border-hair bg-hover px-4 py-2 text-xs text-fg-mid"
+    <Alert
+      variant="warn"
+      className="rounded-none border-x-0 border-t-0 border-solid bg-hover py-2 pr-4"
     >
-      <TriangleAlert
-        className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
-        aria-hidden="true"
-      />
+      <TriangleAlert aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="text-fg">
           {t("cluster", "linkContextMissing", {
@@ -84,7 +82,7 @@ export function DeepLinkBanner() {
           </Button>
         </div>
       </div>
-    </div>
+    </Alert>
   );
 }
 

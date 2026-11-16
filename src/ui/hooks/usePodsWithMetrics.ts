@@ -15,7 +15,7 @@ import { withKubeletWarned } from "@/lib/share/pod-status";
 import { useWarnedPods } from "@/hooks/useClusterOverview";
 import { queryKeys } from "@/lib/query-keys";
 import { useWatchedList } from "@/hooks/useWatchedList";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
 import { listPodRows, type PodRow } from "@/lib/pod-rows";
 import type { UnreadNamespace } from "@/generated/types";
 
@@ -60,7 +60,6 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     subscribe: subscribePods,
     queryKey,
     detail: POD_DETAIL,
-    reportFailure: toPlural(ResourceType.Pod),
   });
 
   const queryClient = useQueryClient();

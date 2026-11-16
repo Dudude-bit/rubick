@@ -17,7 +17,7 @@ export function CloudProfilesPanel() {
   const t = useT();
   return (
     <div className="mt-3 border-t border-hair pt-2">
-      <p className="pb-1 text-[11px] text-fg-mut">
+      <p className="pb-1 text-caption text-fg-mut">
         {t("settings", "cloudProfilesIntro")}
       </p>
       <GcpProfilesSection />

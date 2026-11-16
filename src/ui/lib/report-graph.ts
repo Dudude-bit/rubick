@@ -8,6 +8,7 @@ import {
   connectionCount,
   connectionGroups,
   describeExistence,
+  rowExistence,
   chainStopHop,
   ownPods,
   hopTone,
@@ -222,10 +223,7 @@ export function graphSections(
             ]
               .filter(Boolean)
               .join(" · "),
-            existence: row.object
-              ? describeExistence(row.object, t, row.verifiable ?? false)
-              : null,
-            missing: row.object?.existence === "missing",
+            ...rowExistence(row, t),
           })),
         }))
     : [];

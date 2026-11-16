@@ -10,18 +10,21 @@
 
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { Ban, ExternalLink, Unlink } from "lucide-react";
+import { Ban, ChevronRight, ExternalLink, Unlink } from "lucide-react";
 
 import { PerfProfiler } from "@/lib/perf-profiler";
 
 import { Section } from "@/components/ui/section";
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "./object-unread";
+import { WaitsOnObject } from "./WaitsOnObject";
 import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
 import {
   connectionGroups,
-  describeExistence,
+  rowExistence,
   type ConnRow,
   type OutsideEnd,
 } from "@/lib/connections";
@@ -40,9 +43,6 @@ import type { ObjectRef, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { NodeRef } from "./NodeRef";
 import { ResourceType } from "@/lib/resource-registry";
-
-const GROUP_HEADING =
-  "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 function Name({ object }: { object: ObjectRef }) {
   const { crdFor } = useCrdIndex();
@@ -97,7 +97,7 @@ function Outside({ end }: { end: OutsideEnd }) {
           <button
             type="button"
             onClick={() => openExternal(end.link!.url, end.link!.site, t)}
-            className="inline-flex items-baseline gap-0.5 font-mono text-[11px] text-info hover:underline"
+            className="inline-flex items-baseline gap-0.5 font-mono text-caption text-info hover:underline"
           >
             {shortRevision(end.revision)}
             <ExternalLink
@@ -106,7 +106,7 @@ function Outside({ end }: { end: OutsideEnd }) {
             />
           </button>
         ) : (
-          <span className="font-mono text-[11px] text-fg-fnt">
+          <span className="font-mono text-caption text-fg-fnt">
             {shortRevision(end.revision)}
           </span>
         ))}
@@ -114,18 +114,101 @@ function Outside({ end }: { end: OutsideEnd }) {
   );
 }
 
+function Chevron() {
+  return (
+    <ChevronRight
+      className="h-3 w-3 flex-none transition-transform group-open:rotate-90"
+      aria-hidden="true"
+    />
+  );
+}
+
+const MANY_MISSING = 4;
+const MANY_KEYS = 6;
+
+const keysFolded = (row: ConnRow) =>
+  Math.max(
+    row.keysReferenced ?? 0,
+    row.ways.length + (row.missingKeys?.length ?? 0)
+  ) > MANY_KEYS;
+
+function missingLines(row: ConnRow, t: ReturnType<typeof useT>) {
+  return (row.missingKeys ?? []).map((key) => (
+    <p
+      key={key.key}
+      className={cn(
+        "flex items-center gap-1 text-caption",
+        key.optional ? "text-fg-fnt" : "text-err"
+      )}
+    >
+      <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
+      {t("nav", key.optional ? "keyNotInSubjectOptional" : "keyNotInSubject", {
+        key: key.key,
+        kind: key.from,
+      })}
+    </p>
+  ));
+}
+
+function MissingKeys({ row }: { row: ConnRow }) {
+  const t = useT();
+  const missing = row.missingKeys ?? [];
+  const lines = missingLines(row, t);
+  if (missing.length < MANY_MISSING || !missing.every((key) => key.optional))
+    return <>{lines}</>;
+  return (
+    <details className="group text-caption text-fg-fnt">
+      <summary className="flex cursor-pointer select-none list-none items-center gap-1 rounded py-0.5 hover:text-fg-mut [&::-webkit-details-marker]:hidden">
+        <Chevron />
+        {t("nav", "keysSummaryOptional", {
+          n: row.keysReferenced ?? missing.length,
+          absent: missing.length,
+        })}
+      </summary>
+      {lines}
+    </details>
+  );
+}
+
+/** A reference to many keys is one line with a disclosure; absent keys that are required stay outside it. */
+function KeysFolded({ row }: { row: ConnRow }) {
+  const t = useT();
+  const missing = row.missingKeys ?? [];
+  const required = missing.filter((key) => !key.optional);
+  return (
+    <>
+      <details className="group text-caption text-fg-fnt">
+        <summary className="flex cursor-pointer select-none list-none items-center gap-1 rounded py-0.5 hover:text-fg-mut [&::-webkit-details-marker]:hidden">
+          <Chevron />
+          {t("count", "keysReferenced", { n: row.keysReferenced ?? 0 })}
+          {missing.length > 0 &&
+            `, ${t("count", "keysReferencedAbsent", { absent: missing.length })}`}
+        </summary>
+        {row.ways.map((way) => (
+          <p key={way} className="text-caption text-fg-fnt">
+            {way}
+          </p>
+        ))}
+        {missingLines(
+          { ...row, missingKeys: missing.filter((key) => key.optional) },
+          t
+        )}
+      </details>
+      {missingLines({ ...row, missingKeys: required }, t)}
+    </>
+  );
+}
+
 function Row({ row }: { row: ConnRow }) {
   const t = useT();
-  const existence = row.object
-    ? describeExistence(row.object, t, row.verifiable ?? false)
-    : null;
+  const { existence, missing } = rowExistence(row, t);
   // One way stays on the name's line, as a name and what it is for. Several
   // become their own lines, because five clauses joined by commas is a
   // sentence nobody finishes.
   const inline = row.ways.length === 1 ? row.ways[0] : null;
   return (
     <div className="grid grid-cols-[minmax(0,148px)_minmax(0,1fr)] items-baseline gap-3 py-[3px]">
-      <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
+      <span className="min-w-0 wrap-break-word text-caption text-fg-fnt">
         {row.label}
       </span>
       <div className="min-w-0">
@@ -135,7 +218,7 @@ function Row({ row }: { row: ConnRow }) {
           {(inline || row.detail) && (
             <span
               className={cn(
-                "min-w-0 text-[11px]",
+                "min-w-0 text-caption",
                 row.object || row.outside ? "text-fg-fnt" : "text-fg-mut"
               )}
             >
@@ -145,8 +228,8 @@ function Row({ row }: { row: ConnRow }) {
           {existence && (
             <span
               className={cn(
-                "text-[11px]",
-                row.object?.existence === "missing" ? "text-err" : "text-fg-fnt"
+                "text-caption",
+                missing ? "text-err" : "text-fg-fnt"
               )}
             >
               {existence}
@@ -154,33 +237,24 @@ function Row({ row }: { row: ConnRow }) {
           )}
         </span>
         {row.refused && (
-          <p className="flex items-center gap-1 text-[11px] text-err">
+          <p className="flex items-center gap-1 text-caption text-err">
             <Ban className="h-3 w-3 flex-none" aria-hidden="true" />
             {row.refused}
           </p>
         )}
-        {!inline &&
-          row.ways.map((way) => (
-            <p key={way} className="text-[11px] text-fg-fnt">
-              {way}
-            </p>
-          ))}
-        {row.missingKeys?.map((missing) => (
-          <p
-            key={missing.key}
-            className={cn(
-              "flex items-center gap-1 text-[11px]",
-              missing.optional ? "text-warn" : "text-err"
-            )}
-          >
-            <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
-            {t(
-              "nav",
-              missing.optional ? "keyNotInSubjectOptional" : "keyNotInSubject",
-              { key: missing.key, kind: missing.from }
-            )}
-          </p>
-        ))}
+        {keysFolded(row) && !inline ? (
+          <KeysFolded row={row} />
+        ) : (
+          <>
+            {!inline &&
+              row.ways.map((way) => (
+                <p key={way} className="text-caption text-fg-fnt">
+                  {way}
+                </p>
+              ))}
+            <MissingKeys row={row} />
+          </>
+        )}
       </div>
     </div>
   );
@@ -203,7 +277,7 @@ function Nothing({ subject }: { subject: ResourceConnections["subject"] }) {
       <p className="text-xs text-fg-mut">
         {t("empty", "nothingStatesEdge", { where, kind: subject.kind })}
       </p>
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("empty", "everyWorkloadRead", { where })}
       </p>
     </Section>
@@ -228,6 +302,7 @@ function ConnectionsPanelInner({
   delivery?: DeliveryQuery | null;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const { data, isPending, error } = query;
   const { deliveries } = useDelivery(delivery ?? null);
   const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
@@ -248,20 +323,22 @@ function ConnectionsPanelInner({
   if (isPending) {
     return (
       <Section>
-        <p className="text-xs text-fg-fnt">
-          {t("empty", "readingWhatConnects")}
-        </p>
+        <Reading>{t("empty", "readingWhatConnects")}</Reading>
       </Section>
     );
   }
   if (error || !data) {
     return (
       <Section>
-        <Unknown
-          question={t("empty", "couldNotReadWhatConnects")}
-          error={error ?? t("empty", "clusterDidNotAnswer")}
-          onRetry={() => void query.refetch()}
-        />
+        {error && unreadObject ? (
+          <WaitsOnObject unread={unreadObject} />
+        ) : (
+          <Unknown
+            question={t("empty", "couldNotReadWhatConnects")}
+            error={error ?? t("empty", "clusterDidNotAnswer")}
+            onRetry={() => void query.refetch()}
+          />
+        )}
       </Section>
     );
   }
@@ -273,14 +350,14 @@ function ConnectionsPanelInner({
     <Section className="gap-[18px]">
       {groups.map((group) => (
         <div key={group.key} className="flex flex-col">
-          <p className={cn(GROUP_HEADING, "pb-1.5")}>
+          <Eyebrow className="pb-1.5">
             {group.title}
             {group.caption && (
-              <span className="ml-2 font-normal normal-case tracking-normal text-[11px] text-fg-fnt">
+              <span className="ml-2 font-normal normal-case tracking-normal text-caption text-fg-fnt">
                 {group.caption}
               </span>
             )}
-          </p>
+          </Eyebrow>
           {group.rows.map((row) => (
             <Row key={`${group.key}/${row.key}`} row={row} />
           ))}

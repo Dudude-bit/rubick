@@ -1,3 +1,4 @@
+import { Eyebrow } from "@/components/ui/states";
 import { useEffect, useId, useRef } from "react";
 import { Search } from "lucide-react";
 
@@ -236,7 +237,7 @@ export function ClusterList({
           so do not add a default. */}
       {contexts.length === 0 && (
         <>
-          <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+          <p className="px-[7px] py-2 text-caption text-fg-fnt">
             {total === 0
               ? t("empty", "noContextsInKubeconfig")
               : t("empty", "nothingMatchesQuery", { query })}
@@ -249,7 +250,7 @@ export function ClusterList({
                 onFilterChange("");
                 inputRef.current?.focus();
               }}
-              className="self-start rounded-sm px-[7px] text-[11px] text-fg-mut underline decoration-dotted underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              className="self-start rounded-sm px-[7px] text-caption text-fg-mut underline decoration-dotted underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               {t("action", "clearSearch")}
             </button>
@@ -261,11 +262,7 @@ export function ClusterList({
 }
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt first:mt-0">
-      {children}
-    </p>
-  );
+  return <Eyebrow className="mb-1 mt-5 first:mt-0">{children}</Eyebrow>;
 }
 
 function ClusterListRow({

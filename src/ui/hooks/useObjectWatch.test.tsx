@@ -257,3 +257,47 @@ it("reads nothing again for a page read that answered after its watch's list was
   await new Promise((resolve) => setTimeout(resolve, 400));
   expect(getService).toHaveBeenCalledTimes(1);
 });
+
+/**
+ * A pod deleted 44 minutes before, opened from an event: the watch on its
+ * name still listed it while its read said 404, and the page flipped to
+ * loading and back for as long as it was open, 9 frames in 10. Fails if the
+ * page is read again on every flip rather than once per answer of the watch.
+ */
+it("reads a gone page's object again once per answer of its watch, not on every re-read", async () => {
+  const client = testQueryClient();
+  const getService = vi.fn(async () => SERVICE);
+  const { rerender } = renderHook(
+    ({ gone }: { gone: boolean }) => {
+      useObjectWatch("Service", SERVICE.namespace, SERVICE.name, gone);
+      return useQuery({
+        queryKey: queryKeys.detail("Service", SERVICE.namespace, SERVICE.name),
+        queryFn: getService,
+        staleTime: Infinity,
+      }).data;
+    },
+    {
+      initialProps: { gone: true },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
+  );
+  await waitFor(() => expect(getService).toHaveBeenCalledTimes(1));
+  send(
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+  await waitFor(() => expect(getService).toHaveBeenCalledTimes(2));
+
+  for (let flip = 0; flip < 4; flip++) {
+    rerender({ gone: false });
+    rerender({ gone: true });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(getService).toHaveBeenCalledTimes(2);
+});

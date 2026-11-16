@@ -256,6 +256,53 @@ describe("what an autoscaler is worth saying", () => {
     ).toBe("метрика external");
   });
 
+  /**
+   * The metric that pushed an autoscaler to its ceiling sat in another column
+   * as plain text. Fails if the finding stops carrying the readings above
+   * their target, or carries one that is under it or in another unit.
+   */
+  it("hands the ceiling finding the metric that is over its target", () => {
+    const limited = condition(
+      "ScalingLimited",
+      "True",
+      "TooManyReplicas",
+      "the desired replica count is more than the maximum replica count"
+    );
+    const busy = autoscalers(
+      conns([
+        governs(
+          hpa("hpa-busy", {
+            conditions: [limited],
+            metrics: [
+              {
+                name: "memory",
+                source: "resource",
+                target: "80%",
+                current: "105%",
+              },
+              {
+                name: "cpu",
+                source: "resource",
+                target: "80%",
+                current: "40%",
+              },
+              {
+                name: "depth",
+                source: "external",
+                target: "30",
+                current: "12",
+              },
+              { name: "rps", source: "pods", target: "10", current: null },
+            ],
+          })
+        ),
+      ])
+    )[0];
+    expect(
+      autoscalerFinding(busy, t)?.evidence?.map(({ label }) => label)
+    ).toEqual(["memory"]);
+  });
+
   it("calls a ceiling a ceiling and a floor a floor", () => {
     const ceiling = autoscalers(
       conns([
@@ -506,6 +553,29 @@ describe("what the Scale dialog reads", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0].lead).toContain("hpa-busy");
     expect(warnings[0].description).toContain("1 and 2");
+  });
+
+  /**
+   * "api owns this replica count" beside a Deployment named api read as the
+   * Deployment owning itself. Fails if the lead stops naming the kind.
+   */
+  it("names the autoscaler's kind in the sentence that says it owns the count", () => {
+    const [busy] = scaleWarnings(read([governs(hpa("api"))]), null, t);
+    expect(busy.lead).toBe("The autoscaler api will put this number back.");
+    const [stuck] = scaleWarnings(
+      read([
+        governs(
+          hpa("api", {
+            conditions: [condition("ScalingActive", "False", "Why", "no")],
+          })
+        ),
+      ]),
+      null,
+      t
+    );
+    expect(stuck.lead).toBe(
+      "The autoscaler api owns this replica count, and is stuck."
+    );
   });
 
   it("says the number stands while the autoscaler cannot act", () => {

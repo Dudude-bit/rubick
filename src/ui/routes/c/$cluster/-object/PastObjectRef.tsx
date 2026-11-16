@@ -68,7 +68,7 @@ export function PastObjectRef({
           showKind={showKind}
         />
       </span>
-      <span className="inline-flex flex-none items-center gap-0.5 self-center rounded bg-fg-fnt/15 px-1 py-px text-[10px] text-fg-mut">
+      <span className="inline-flex flex-none items-center gap-0.5 self-center rounded bg-fg-fnt/15 px-1 py-px text-micro text-fg-mut">
         <Icon className="h-2.5 w-2.5" aria-hidden="true" />
         <span className={cn(fit && "sr-only @[15rem]:not-sr-only")}>
           {t("readings", word)}

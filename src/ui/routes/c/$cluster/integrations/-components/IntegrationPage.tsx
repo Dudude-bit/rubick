@@ -15,6 +15,7 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { PackageOpen } from "lucide-react";
 
+import { Unknown } from "@/components/ui/unknown";
 import { Section } from "@/components/ui/section";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { useIntegrationPage } from "@/integrations";
@@ -51,10 +52,22 @@ export function IntegrationPage() {
   // fact about the cluster behind a fact about this account's rights.
   if (page.state === "cannotTell") {
     return (
-      <Missing
-        title={t("empty", "integrationCannotTell", { name: page.name })}
-        body={t("empty", "couldNotLookWhy")}
-      />
+      <Section className="max-w-[64ch] py-8">
+        <Unknown
+          question={
+            <>
+              <span className="block font-medium">
+                {t("empty", "integrationCannotTell", { name: page.name })}
+              </span>
+              <span className="block text-fg-mut">
+                {t("empty", "couldNotLookWhy")}
+              </span>
+            </>
+          }
+          error={page.error}
+          onRetry={page.retry}
+        />
+      </Section>
     );
   }
 
@@ -65,6 +78,7 @@ export function IntegrationPage() {
       <Missing
         title={t("empty", "integrationNotConnected", { name: page.name })}
         body={t("empty", "integrationNotConnectedBody")}
+        connect={{ vendor: vendor ?? "", name: page.name }}
       />
     );
   }
@@ -73,18 +87,34 @@ export function IntegrationPage() {
   return <Page />;
 }
 
-function Missing({ title, body }: { title: string; body: string }) {
+function Missing({
+  title,
+  body,
+  connect,
+}: {
+  title: string;
+  body: string;
+  connect?: { vendor: string; name: string };
+}) {
   const t = useT();
   return (
     <Section className="max-w-[64ch] py-8">
       <div className="flex items-center gap-2">
         <PackageOpen className="size-4 text-fg-fnt" aria-hidden />
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {title}
         </h2>
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
-      <p className="text-[11px] text-fg-fnt">
+      {connect && (
+        <Link
+          {...pageLink("integrations", { vendor: connect.vendor })}
+          className="w-fit text-xs text-info hover:underline"
+        >
+          {t("empty", "connectVendorLink", { name: connect.name })}
+        </Link>
+      )}
+      <p className="text-caption text-fg-fnt">
         {parts(t("empty", "integrationsPageLists"), {
           link: (
             <Link

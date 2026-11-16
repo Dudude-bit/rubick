@@ -13,6 +13,9 @@ import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 /** After this the app stops waiting for one request and says so. */
 export const LIST_DEADLINE_SECONDS = 60;
 
+/** After this a list's skeleton says in one quiet line that it is still reading. */
+export const NOTICE_READ_MS = 3_000;
+
 /** After this a skeleton says what it is waiting for and what would shorten it. */
 export const SLOW_READ_MS = 8_000;
 

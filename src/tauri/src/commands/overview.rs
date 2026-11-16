@@ -132,6 +132,10 @@ pub enum ProblemDetail {
     },
     /// A workload whose pods the API server refuses to create, in its words.
     PodsRefused { said: String },
+    /// A pod whose containers restart while the kubelet says a probe fails.
+    Probe {
+        failure: crate::resources::ProbeFailure,
+    },
 }
 
 impl ProblemDetail {
@@ -250,6 +254,9 @@ pub struct ClusterProblem {
     /// The workload a row of pods belongs to, which the list draws it under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workload: Option<crate::resources::PodWorkload>,
+    /// The node a pod's row ran on: a node that went down draws it under its own row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<String>,
 }
 
 /// Requested vs allocatable for one resource dimension, plus live usage.
@@ -281,7 +288,8 @@ pub struct NodeSummary {
     pub ready: bool,
     pub schedulable: bool,
     pub roles: Vec<String>,
-    pub pod_count: usize,
+    /// `None` where the pods across the cluster went unread.
+    pub pod_count: Option<usize>,
     pub pod_capacity: Option<i64>,
     pub cpu: ResourcePressure,
     pub memory: ResourcePressure,
@@ -610,6 +618,11 @@ pub struct PodComposition {
     /// `pending_grace` gives them and showing no fault, which Needs attention
     /// does not list and the workload running them counts as coming up.
     pub starting: usize,
+    /// Also a subset of `running`, apart from the others: up and `Ready`,
+    /// and named by a row of Needs attention all the same, a liveness probe
+    /// failing between restarts. Counted serving, the bar drew them green.
+    #[serde(default)]
+    pub troubled: usize,
 }
 
 /// How many pods one reason holds.
@@ -691,6 +704,10 @@ pub struct RolloutCount {
     pub reason: String,
     pub count: usize,
     pub pods_unread: bool,
+    /// Of `count`, the Deployments a Pod row in `problems` belongs to: their
+    /// own word says nothing of a pod failing its probe between restarts.
+    #[serde(default)]
+    pub troubled: usize,
 }
 
 /// What the lists of one kind that answered hold.
@@ -721,11 +738,14 @@ pub struct ClusterOverview {
     /// unlike pods they do not multiply per workload), and a truncated node
     /// list would hide exactly the node someone is looking for.
     pub nodes: Vec<NodeSummary>,
-    /// False when the cluster-wide node/pod reads the capacity view needs were
-    /// refused — a namespace-scoped token has no cluster read rights. `nodes`
-    /// and `scheduler` are then empty and mean "unknown", not "no capacity":
-    /// the panels say so rather than drawing a cluster with zero headroom.
+    /// False when the node list was refused or failed: a namespace-scoped
+    /// token has no cluster read rights. `nodes` and `scheduler` are then
+    /// empty and mean "unknown", not "no capacity".
     pub nodes_known: bool,
+    /// The pod read across the cluster that failed, where it did: each node's
+    /// pod count and every request `scheduler` adds up come from it, so those
+    /// are unknown while the nodes themselves were read.
+    pub node_pods_unread: Option<OverviewUnread>,
     pub warnings: Vec<WarningGroup>,
     /// Where an events list failed or was cut at the page cap, and which:
     /// `warnings` then holds only what was read, and an empty one is not
@@ -821,7 +841,7 @@ pub struct OverviewUnread {
 }
 
 impl OverviewUnread {
-    fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
+    pub(crate) fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
         Self {
             kind: kind.to_string(),
             namespace: namespace.map(str::to_string),
@@ -886,10 +906,15 @@ fn pod_problems<'a>(
             pod_problem(pod, now).map(|problem| ClusterProblem {
                 replaced: crate::resources::replaced(pod),
                 workload: crate::resources::PodWorkload::of(pod),
+                node: node_of(pod),
                 ..problem
             })
         })
         .collect()
+}
+
+fn node_of(pod: &Pod) -> Option<String> {
+    pod.spec.as_ref().and_then(|spec| spec.node_name.clone())
 }
 
 /// The single worst thing to say about one pod, or `None` if it is fine.
@@ -933,6 +958,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -960,6 +986,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -983,6 +1010,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1015,6 +1043,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1040,6 +1069,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             });
         }
     }
@@ -1063,6 +1093,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         });
     }
 
@@ -1071,6 +1102,73 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
 
 /// This app's word for a pod that runs and is not Ready; the kubelet has none.
 const NOT_READY: &str = "NotReady";
+
+/// The kubelet's reason on the events that say a probe failed.
+const UNHEALTHY: &str = "Unhealthy";
+
+/// The pods no other row speaks for whose containers restart while the
+/// kubelet says a probe fails: what their own page leads with, said where
+/// the Overview and the list count them. An events read that failed gives
+/// none of them, and the Event check says what went unread.
+fn probe_problems<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    events: &[&Event],
+    told: &[ClusterProblem],
+    now: DateTime<Utc>,
+) -> Vec<ClusterProblem> {
+    let mut unhealthy: HashMap<&str, Vec<crate::resources::EventInfo>> = HashMap::new();
+    for event in events {
+        if event.reason.as_deref() != Some(UNHEALTHY) {
+            continue;
+        }
+        if let Some(uid) = event.involved_object.uid.as_deref() {
+            unhealthy
+                .entry(uid)
+                .or_default()
+                .push(crate::resources::EventInfo::from(*event));
+        }
+    }
+    if unhealthy.is_empty() {
+        return Vec::new();
+    }
+    let told: HashSet<(Option<&str>, &str)> = told
+        .iter()
+        .filter(|problem| problem.kind == "Pod")
+        .map(|problem| (problem.namespace.as_deref(), problem.name.as_str()))
+        .collect();
+    pods.into_iter()
+        .filter(|pod| {
+            pod.status.as_ref().and_then(|s| s.phase.as_deref()) != Some("Succeeded")
+                && !told.contains(&(
+                    pod.metadata.namespace.as_deref(),
+                    pod.metadata.name.as_deref().unwrap_or_default(),
+                ))
+        })
+        .filter_map(|pod| {
+            let about = unhealthy.get(crate::resources::events_uid(pod)?)?;
+            let failure = crate::resources::probe_failure(
+                &crate::resources::probed_restarts(pod),
+                about,
+                now,
+            )?;
+            let (restarts, _) = crate::resources::restarts(pod);
+            Some(ClusterProblem {
+                severity: ProblemSeverity::Warning,
+                kind: "Pod".to_string(),
+                name: pod.metadata.name.clone().unwrap_or_default(),
+                namespace: pod.metadata.namespace.clone(),
+                reason: UNHEALTHY.to_string(),
+                since: failure.since.map(|t| t.to_rfc3339()),
+                detail: Some(ProblemDetail::Probe { failure }),
+                restarts: Some(restarts),
+                folded_pods: None,
+                replaced: crate::resources::replaced(pod),
+                workload: crate::resources::PodWorkload::of(pod),
+                node: None,
+            })
+        })
+        .collect()
+}
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
 /// included, as the workload running it reads it.
@@ -1155,6 +1253,7 @@ fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<C
             folded_pods: None,
             replaced: false,
             workload: crate::resources::PodWorkload::of(pod),
+            node: node_of(pod),
         })
         .collect()
 }
@@ -1323,6 +1422,7 @@ fn deployments_saying<'a>(
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             })
         })
         .collect()
@@ -1392,6 +1492,7 @@ fn set_problem(
         folded_pods: None,
         replaced: false,
         workload: None,
+        node: None,
     })
 }
 
@@ -1560,6 +1661,7 @@ fn job_problems<'a>(
                 folded_pods: None,
                 replaced: false,
                 workload: None,
+                node: None,
             })
         })
         .collect()
@@ -1605,6 +1707,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             if let Some(pressure) = node_pressure(n) {
@@ -1623,6 +1726,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             // Cordoned nodes are usually intentional, but a node left
@@ -1644,6 +1748,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     folded_pods: None,
                     replaced: false,
                     workload: None,
+                    node: None,
                 });
             }
             None
@@ -1781,7 +1886,7 @@ struct NodeAggregate {
 fn summarize_nodes<'a>(
     nodes: impl IntoIterator<Item = &'a Node>,
     requests_by_node: &BTreeMap<String, (f64, u64)>,
-    pods_by_node: &BTreeMap<String, usize>,
+    pods_by_node: Option<&BTreeMap<String, usize>>,
     usage_by_node: Option<&BTreeMap<String, (f64, u64)>>,
 ) -> NodeAggregate {
     let metrics_available = usage_by_node.is_some();
@@ -1837,7 +1942,7 @@ fn summarize_nodes<'a>(
                 .and_then(|s| s.unschedulable)
                 .unwrap_or(false),
             roles: node_roles(node),
-            pod_count: pods_by_node.get(&name).copied().unwrap_or(0),
+            pod_count: pods_by_node.map(|pods| pods.get(&name).copied().unwrap_or(0)),
             pod_capacity,
             cpu: ResourcePressure {
                 requested: cpu_requested,
@@ -1949,11 +2054,7 @@ fn unlisted_pods<'a>(
     problems: &[ClusterProblem],
     now: DateTime<Utc>,
 ) -> Vec<ReasonCount> {
-    let listed: HashSet<(Option<&str>, &str)> = problems
-        .iter()
-        .filter(|p| p.kind == "Pod")
-        .map(|p| (p.namespace.as_deref(), p.name.as_str()))
-        .collect();
+    let listed = listed_pods(problems);
     let mut counts = [0usize; UNLISTED.len()];
     for pod in pods {
         let key = (
@@ -1988,28 +2089,87 @@ fn unlisted_pods<'a>(
         .collect()
 }
 
+fn listed_pods(problems: &[ClusterProblem]) -> HashSet<(Option<&str>, &str)> {
+    problems
+        .iter()
+        .filter(|p| p.kind == "Pod")
+        .map(|p| (p.namespace.as_deref(), p.name.as_str()))
+        .collect()
+}
+
+/// See [`PodComposition::troubled`]. Branches as [`pod_composition`] does, so only a pod its Running segment counts is counted.
+fn troubled_pods<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+    now: DateTime<Utc>,
+) -> usize {
+    let listed = listed_pods(problems);
+    pods.into_iter()
+        .filter(|pod| {
+            let status = pod.status.as_ref();
+            status.and_then(|s| s.phase.as_deref()) == Some("Running")
+                && pod.metadata.deletion_timestamp.is_none()
+                && !crash_looping(pod, now)
+                && stuck_reason(pod).is_none()
+                && condition_is_true(status, "Ready")
+                && listed.contains(&(
+                    pod.metadata.namespace.as_deref(),
+                    pod.metadata.name.as_deref().unwrap_or_default(),
+                ))
+        })
+        .count()
+}
+
 /// How many verdicts each word covers, a word whose pods went unread counted
-/// apart from the same word with them read.
-fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
+/// apart from the same word with them read. `troubled` answers positionally,
+/// one per rollout: whether a Pod row names one of its pods.
+fn count_rollouts(rollouts: &[Rollout], troubled: &[bool]) -> Vec<RolloutCount> {
     let mut counts: Vec<RolloutCount> = Vec::new();
-    for rollout in rollouts {
+    for (index, rollout) in rollouts.iter().enumerate() {
         let (reason, pods_unread) = (
             rollout.code(),
             matches!(rollout, Rollout::PodsUnread { .. }),
         );
+        let troubled = usize::from(troubled.get(index).copied().unwrap_or(false));
         match counts
             .iter_mut()
             .find(|entry| entry.reason == reason && entry.pods_unread == pods_unread)
         {
-            Some(entry) => entry.count += 1,
+            Some(entry) => {
+                entry.count += 1;
+                entry.troubled += troubled;
+            }
             None => counts.push(RolloutCount {
                 reason: reason.to_string(),
                 count: 1,
                 pods_unread,
+                troubled,
             }),
         }
     }
     counts
+}
+
+/// Positionally, whether a Pod row in `problems` belongs to each Deployment.
+fn deployments_troubled(deployments: &[Arc<Deployment>], problems: &[ClusterProblem]) -> Vec<bool> {
+    let named: HashSet<(Option<&str>, &str)> = problems
+        .iter()
+        .filter(|p| p.kind == "Pod")
+        .filter_map(|p| {
+            let workload = p.workload.as_ref()?;
+            (workload.kind == "Deployment")
+                .then_some((p.namespace.as_deref(), workload.name.as_str()))
+        })
+        .collect();
+    deployments
+        .iter()
+        .map(|d| {
+            named.contains(&(
+                d.metadata.namespace.as_deref(),
+                d.metadata.name.as_deref().unwrap_or_default(),
+            ))
+        })
+        .collect()
 }
 
 /// Jobs per word. A Pending one where the Warning events were not read to
@@ -2249,10 +2409,15 @@ fn fold_replaced<'a>(
             continue;
         }
         let pods = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        let node = rows[0]
+            .node
+            .clone()
+            .filter(|node| rows.iter().all(|row| row.node.as_ref() == Some(node)));
         let Some(newest) = rows.into_iter().max_by(|a, b| a.since.cmp(&b.since)) else {
             continue;
         };
         kept.push(ClusterProblem {
+            node,
             workload: Some(crate::resources::PodWorkload {
                 kind: kind.clone(),
                 name: name.clone(),
@@ -2269,17 +2434,53 @@ fn fold_replaced<'a>(
     kept
 }
 
-/// Worst first, then oldest first — the top row is both the most severe and
-/// the one that has been broken longest — then cut to `MAX_PROBLEMS`. Pods
-/// their controller already replaced come after what is down now, however
-/// long ago they failed. Returns the list and how many rows the cut dropped.
-fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usize) {
-    problems.sort_by(|a, b| {
-        (a.severity == ProblemSeverity::Warning)
-            .cmp(&(b.severity == ProblemSeverity::Warning))
-            .then_with(|| a.replaced.cmp(&b.replaced))
-            .then_with(|| a.since.cmp(&b.since))
-    });
+/// How long a failure stands before it ranks below what began since, as
+/// `src/contracts/attention-rank-conformance.json` states it for both halves.
+pub const LONG_STANDING_HOURS: i64 = 24;
+
+/// What is happening now before what has stood for days: a node that went
+/// down first, since everything on it goes with it; then what began within
+/// [`LONG_STANDING_HOURS`]; then what has no date; then what is older, worst
+/// first inside each. Pods already replaced come after what is down, and the
+/// newest first. A spot node lost a minute ago sat under month-old Job
+/// failures, and Services without endpoints for months, undated, among
+/// today's.
+fn rank_key(
+    problem: &ClusterProblem,
+    now: DateTime<Utc>,
+) -> (
+    bool,
+    u8,
+    bool,
+    bool,
+    std::cmp::Reverse<Option<DateTime<Utc>>>,
+) {
+    let since = problem
+        .since
+        .as_deref()
+        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.with_timezone(&Utc));
+    let tier = match since {
+        Some(at) if now - at < chrono::Duration::hours(LONG_STANDING_HOURS) => 0,
+        None => 1,
+        Some(_) => 2,
+    };
+    (
+        !(problem.kind == "Node" && problem.reason == "NotReady"),
+        tier,
+        problem.severity == ProblemSeverity::Warning,
+        problem.replaced,
+        std::cmp::Reverse(since),
+    )
+}
+
+/// Ranked as [`rank_key`] says, then cut to `MAX_PROBLEMS`, so what the cut
+/// drops is the oldest news. Returns the list and how many rows it dropped.
+fn rank_and_cap(
+    mut problems: Vec<ClusterProblem>,
+    now: DateTime<Utc>,
+) -> (Vec<ClusterProblem>, usize) {
+    problems.sort_by_cached_key(|problem| rank_key(problem, now));
     let truncated = problems.len().saturating_sub(MAX_PROBLEMS);
     problems.truncate(MAX_PROBLEMS);
     (problems, truncated)
@@ -2324,9 +2525,10 @@ struct OverviewInputs<'a> {
     /// allocatable. Same slice as `scoped_pods` when nothing is selected.
     accounting_pods: &'a [Arc<Pod>],
     nodes: &'a [Arc<Node>],
-    /// False when the node list (or the cluster-wide accounting pods) was
-    /// refused: the capacity view is unknown, not empty.
+    /// False when the node list was refused: the capacity view is unknown, not empty.
     nodes_known: bool,
+    /// Why `accounting_pods` is not the cluster's pods, where it is not.
+    node_pods_unread: Option<&'a OverviewUnread>,
     /// Every workload the scope handed over. Their problems stand whether or
     /// not another namespace refused its list; the counts do not.
     deployments: &'a [Arc<Deployment>],
@@ -2363,7 +2565,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let aggregate = summarize_nodes(
         refs(nodes),
         &accounting.requests,
-        &accounting.pods,
+        input.node_pods_unread.is_none().then_some(&accounting.pods),
         input.usage_by_node.as_ref(),
     );
 
@@ -2376,6 +2578,12 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         .filter_map(|(pod, _)| pod.metadata.uid.as_deref())
         .collect();
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
+    problems.extend(probe_problems(
+        refs(input.scoped_pods),
+        &events,
+        &problems,
+        input.now,
+    ));
     let by_deployment = pods_by_deployment(refs(input.scoped_pods));
     problems.extend(deployment_problems(
         refs(input.deployments),
@@ -2428,7 +2636,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         beside,
         unconfirmed,
     ));
-    let (unconfirmed, _) = rank_and_cap(said);
+    let (unconfirmed, _) = rank_and_cap(said, input.now);
     problems.extend(job_problems(refs(input.jobs), beside));
     problems.extend(node_problems(refs(nodes)));
     problems.extend(warned_while_starting(&warned_rows));
@@ -2440,6 +2648,8 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let problems = fold_replaced(problems, refs(input.scoped_pods));
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_short);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
+    let pods_troubled = troubled_pods(refs(input.scoped_pods), &problems, input.now);
+    let deployments_troubled = deployments_troubled(input.deployments, &problems);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
         None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
@@ -2448,7 +2658,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         }
         _ => Vec::new(),
     };
-    let (problems, problems_truncated) = rank_and_cap(problems);
+    let (problems, problems_truncated) = rank_and_cap(problems, input.now);
 
     // The lists this query already had to read answer their own counts, so
     // those four kinds cost no extra request. A refused node read is `None`,
@@ -2472,6 +2682,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
+        node_pods_unread: input.node_pods_unread.cloned(),
         warnings: {
             let holders = Holders::of(input);
             recent_warnings(refs(input.events), |event| holders.incarnation(event))
@@ -2479,7 +2690,10 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings_short: input.events_short.to_vec(),
         counts,
         pods: census("Pod").map(|complete| Census {
-            read: pod_composition(refs(input.scoped_pods), input.now, &warned),
+            read: PodComposition {
+                troubled: pods_troubled,
+                ..pod_composition(refs(input.scoped_pods), input.now, &warned)
+            },
             complete,
         }),
         pods_warned,
@@ -2488,7 +2702,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
             complete,
         }),
         deployments: census("Deployment").map(|complete| Census {
-            read: count_rollouts(&rollouts),
+            read: count_rollouts(&rollouts, &deployments_troubled),
             complete,
         }),
         namespaces,
@@ -2819,9 +3033,20 @@ pub async fn cluster_overview(
                 .overview_cache
                 .snapshot(&context, || client.clone())
                 .await?;
-            let looked =
-                look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()).await;
-            Some((snapshot, looked))
+            let (looked, lost) = tokio::join!(
+                look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()),
+                async {
+                    if let Some(lost) = state.overview_cache.probed(&context, &scope) {
+                        return lost;
+                    }
+                    let lost = unlistable(&client, scope.as_deref()).await;
+                    state
+                        .overview_cache
+                        .keep_probe(&context, &scope, lost.clone());
+                    lost
+                },
+            );
+            lost.is_empty().then_some((snapshot, looked))
         },
     );
     let (counts, partial) = counts;
@@ -2840,9 +3065,53 @@ pub async fn cluster_overview(
         overview
             .counts_partial
             .extend(beside.partial.iter().cloned());
+        let failed = |short: &EventsShort| matches!(short, EventsShort::Failed { .. });
+        if overview.unread.is_empty() && !overview.warnings_short.iter().any(failed) {
+            state.overview_cache.listed_whole(&context);
+        }
         return Ok(overview);
     };
     Ok(followed(&snapshot, scope, &beside, &looked))
+}
+
+/// The watched kinds that no longer list where `scope` reaches, and the
+/// nodes, which list across the cluster whatever the scope. An open watch
+/// streams on after its kind's reads start failing, until it reconnects into
+/// the failure, minutes later; the stores alone would answer for a read the
+/// reader can no longer make, and the scope's lists say why instead.
+async fn unlistable(client: &Client, scope: Option<&[String]>) -> Vec<OverviewUnread> {
+    async fn probe<K>(client: &Client, kind: &str, reach: Option<&str>) -> Option<OverviewUnread>
+    where
+        K: Resource<Scope = k8s_openapi::NamespaceResourceScope> + Clone + Debug + DeserializeOwned,
+        K::DynamicType: Default,
+    {
+        let probe = ListParams::default().limit(1);
+        let answer = api_in::<K>(client, reach).list_metadata(&probe).await;
+        answer
+            .err()
+            .map(|error| OverviewUnread::of(kind, reach, &Error::from(error)))
+    }
+    let reads = reaches(scope).into_iter().map(|reach| async move {
+        let (pods, deployments, sets, daemons, jobs, events) = tokio::join!(
+            probe::<Pod>(client, "Pod", reach),
+            probe::<Deployment>(client, "Deployment", reach),
+            probe::<StatefulSet>(client, "StatefulSet", reach),
+            probe::<DaemonSet>(client, "DaemonSet", reach),
+            probe::<Job>(client, "Job", reach),
+            probe::<Event>(client, "Event", reach),
+        );
+        [pods, deployments, sets, daemons, jobs, events]
+    });
+    let nodes = async {
+        let probe = ListParams::default().limit(1);
+        Api::<Node>::all(client.clone())
+            .list_metadata(&probe)
+            .await
+            .err()
+            .map(|error| OverviewUnread::of("Node", None, &Error::from(error)))
+    };
+    let (lost, nodes) = tokio::join!(join_all(reads), nodes);
+    lost.into_iter().flatten().flatten().chain(nodes).collect()
 }
 
 /// See [`follow_cluster_overview`]. The stores announce up to a change a
@@ -3114,6 +3383,7 @@ fn from_snapshot(
         // A store only serves while every watch it holds is allowed and
         // healthy, so the capacity view is known here by construction.
         nodes_known: true,
+        node_pods_unread: None,
         deployments: &scoped.deployments,
         stateful_sets: &scoped.stateful_sets,
         daemon_sets: &scoped.daemon_sets,
@@ -3314,37 +3584,27 @@ async fn by_listing(
     // rather than failing the whole overview, so a scoped user still sees the
     // workloads they CAN read with the capacity view marked no-access.
     let mut unread = listed.unread;
-    let cluster_pods = match cluster_pods_result.transpose() {
-        Ok(listed) => listed.map(|list| arcs(list.items)),
-        Err(error) => {
-            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
-            None
-        }
+    let (cluster_pods, cluster_pods_unread) = match cluster_pods_result.transpose() {
+        Ok(listed) => (listed.map(|list| arcs(list.items)), None),
+        Err(error) => (
+            None,
+            Some(OverviewUnread::of("Pod", None, &Error::from(error))),
+        ),
     };
     let nodes = match nodes_result {
         Ok(list) => Some(arcs(list.items)),
         Err(error) => {
-            unread.retain(|kind| kind.kind != "Node");
             unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
             None
         }
     };
-    // Unscoped, the accounting pods are the scoped ones, refused with them.
-    let pods_refused = unread.iter().find(|entry| entry.kind == "Pod").cloned();
-    let accounting_known = match (scope, pods_refused) {
-        (Some(_), _) => cluster_pods.is_some(),
-        (None, None) => true,
-        (None, Some(refused)) => {
-            if nodes.is_some() {
-                unread.push(OverviewUnread {
-                    kind: "Node".to_string(),
-                    ..refused
-                });
-            }
-            false
-        }
+    // Unscoped, the accounting pods are the scoped ones, refused with them;
+    // the nodes themselves were still read.
+    let node_pods_unread = match scope {
+        Some(_) => cluster_pods_unread,
+        None => unread.iter().find(|entry| entry.kind == "Pod").cloned(),
     };
-    let nodes_known = nodes.is_some() && accounting_known;
+    let nodes_known = nodes.is_some();
     let looked = match holders {
         Some((here, memo)) => look_up_holders(here, memo, refs(&listed.events), scope).await,
         None => Looked::new(),
@@ -3355,6 +3615,7 @@ async fn by_listing(
         accounting_pods: cluster_pods.as_deref().unwrap_or(&listed.pods),
         nodes: nodes.as_deref().unwrap_or_default(),
         nodes_known,
+        node_pods_unread: node_pods_unread.as_ref(),
         deployments: &listed.deployments,
         stateful_sets: &listed.stateful_sets,
         daemon_sets: &listed.daemon_sets,
@@ -3486,6 +3747,7 @@ mod tests {
             accounting_pods: &arcs(accounting_pods.to_vec()),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3529,6 +3791,7 @@ mod tests {
             accounting_pods: &arcs(pods.to_vec()),
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3649,6 +3912,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &arcs(stateful_sets.to_vec()),
             daemon_sets: &[],
@@ -3802,6 +4066,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3887,6 +4152,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4251,6 +4517,10 @@ mod tests {
         }
     }
 
+    fn noon() -> DateTime<Utc> {
+        "2026-08-05T12:00:00Z".parse().expect("a time")
+    }
+
     fn problem(reason: &str, severity: ProblemSeverity, since: Option<&str>) -> ClusterProblem {
         ClusterProblem {
             severity,
@@ -4264,6 +4534,7 @@ mod tests {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         }
     }
 
@@ -4296,6 +4567,7 @@ mod tests {
             // they must be ignored, not drawn and not counted.
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: false,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4350,7 +4622,7 @@ mod tests {
                     ..Default::default()
                 }],
                 &BTreeMap::new(),
-                &BTreeMap::new(),
+                Some(&BTreeMap::new()),
                 usage.as_ref(),
             );
             assert!(aggregate.scheduler.cpu.usage.is_none());
@@ -4376,6 +4648,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4414,8 +4687,8 @@ mod tests {
 
         assert_eq!(result.scheduler.cpu.allocatable, 8000.0);
         assert_eq!(result.scheduler.cpu.requested, 1750.0);
-        assert_eq!(result.nodes[0].pod_count, 2);
-        assert_eq!(result.nodes[1].pod_count, 1);
+        assert_eq!(result.nodes[0].pod_count, Some(2));
+        assert_eq!(result.nodes[1].pod_count, Some(1));
         assert_eq!(result.nodes[0].cpu.requested, 1500.0);
         // The scoped list still owns the counts that are about the selection.
         assert_eq!(result.counts.pods, Some(1));
@@ -4460,8 +4733,8 @@ mod tests {
     }
 
     /// The namespace picker counted problems in the list after it was cut to
-    /// fifty, worst first: fifty-one failed pods in one namespace pushed every
-    /// other namespace's warnings off it, and those namespaces read "0".
+    /// fifty: fifty-one failed pods in one namespace pushed another
+    /// namespace's days-old row off it, and that namespace read "0".
     #[test]
     fn a_namespace_counts_its_problems_before_the_list_is_cut() {
         let now = Utc::now();
@@ -4478,7 +4751,7 @@ mod tests {
                 failed
             })
             .collect();
-        let mut waiting = pending_pod("web", now, 3600);
+        let mut waiting = pending_pod("web", now, 3 * 24 * 3600);
         waiting.metadata.namespace = Some("dev".to_string());
         pods.push(waiting);
 
@@ -4487,6 +4760,7 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4713,6 +4987,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4767,6 +5042,7 @@ mod tests {
                 accounting_pods: &[],
                 nodes: &[],
                 nodes_known: true,
+                node_pods_unread: None,
                 deployments: &[],
                 stateful_sets: &arcs(vec![set.clone()]),
                 daemon_sets: &[],
@@ -5142,6 +5418,82 @@ mod tests {
             panic!("the workload tells its pod's cause");
         };
         assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
+    }
+
+    fn probed(restarts: i32) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "api-1", "namespace": "shop", "uid": "pod-uid-1"},
+            "spec": {"containers": [{"name": "api", "livenessProbe": {
+                "httpGet": {"path": "/healthz", "port": 8080}
+            }}]},
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "containerStatuses": [{
+                    "name": "api", "image": "", "imageID": "", "ready": true,
+                    "restartCount": restarts, "state": {"running": {}}
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
+    fn unhealthy(message: &str, minutes_ago: i64, now: DateTime<Utc>) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": {"name": "api-1.probe", "namespace": "shop"},
+            "type": "Warning",
+            "reason": "Unhealthy",
+            "message": message,
+            "count": 3,
+            "lastTimestamp": (now - chrono::Duration::minutes(minutes_ago))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": {"kind": "Pod", "name": "api-1", "namespace": "shop", "uid": "pod-uid-1"}
+        }))
+        .unwrap()
+    }
+
+    /// A pod's page led with its failing liveness probe while the Overview,
+    /// the list and the status bar said nothing. Fails if the Overview does
+    /// not raise the row the page leads with.
+    #[test]
+    fn a_pod_whose_probe_fails_while_it_restarts_needs_attention() {
+        let now = Utc::now();
+        let pod = probed(2);
+        let event = unhealthy(
+            "Liveness probe failed: HTTP probe failed with statuscode: 500",
+            5,
+            now,
+        );
+        let rows = probe_problems([&pod], &[&event], &[], now);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].reason, UNHEALTHY);
+        assert_eq!(rows[0].restarts, Some(2));
+        assert!(matches!(
+            &rows[0].detail,
+            Some(ProblemDetail::Probe { failure }) if failure.probe == crate::resources::ProbeKind::Liveness
+        ));
+    }
+
+    /// Fails if a pod that never restarted, a failure outside the window, an
+    /// events list that was not read, or a pod another row already tells
+    /// about raises a probe row.
+    #[test]
+    fn no_probe_row_without_restarts_a_recent_failure_events_or_for_a_pod_already_told() {
+        let now = Utc::now();
+        let failing = unhealthy("Liveness probe failed: context deadline exceeded", 5, now);
+        assert!(probe_problems([&probed(0)], &[&failing], &[], now).is_empty());
+        let old = unhealthy(
+            "Liveness probe failed: context deadline exceeded",
+            crate::resources::PROBE_WINDOW_MINUTES + 10,
+            now,
+        );
+        assert!(probe_problems([&probed(2)], &[&old], &[], now).is_empty());
+        assert!(probe_problems([&probed(2)], &[], &[], now).is_empty());
+        let told = probe_problems([&probed(2)], &[&failing], &[], now);
+        assert!(probe_problems([&probed(2)], &[&failing], &told, now).is_empty());
     }
 
     /// The Overview named two Ready pods' old exits as why a Deployment was
@@ -5862,13 +6214,13 @@ mod tests {
             })
             .collect();
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
         assert_eq!(kept.len(), MAX_PROBLEMS);
         assert_eq!(truncated, overflow);
     }
 
     #[test]
-    fn cap_keeps_the_worst_and_oldest_rows() {
+    fn cap_keeps_the_worst_rows() {
         let mut problems = vec![problem(
             "Restarting",
             ProblemSeverity::Warning,
@@ -5882,7 +6234,7 @@ mod tests {
             )
         }));
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
         assert_eq!(truncated, 1);
         assert!(
             kept.iter().all(|p| p.severity == ProblemSeverity::Critical),
@@ -5892,11 +6244,14 @@ mod tests {
 
     #[test]
     fn short_problem_lists_are_not_truncated() {
-        let (kept, truncated) = rank_and_cap(vec![problem(
-            "Pending",
-            ProblemSeverity::Critical,
-            Some("2026-08-05T00:00:00Z"),
-        )]);
+        let (kept, truncated) = rank_and_cap(
+            vec![problem(
+                "Pending",
+                ProblemSeverity::Critical,
+                Some("2026-08-05T00:00:00Z"),
+            )],
+            noon(),
+        );
         assert_eq!(kept.len(), 1);
         assert_eq!(truncated, 0);
     }
@@ -6280,7 +6635,7 @@ mod tests {
         // both sides have in common.
         let seen = |n: &Node| {
             serde_json::to_value(
-                summarize_nodes([n], &BTreeMap::new(), &BTreeMap::new(), None).summaries,
+                summarize_nodes([n], &BTreeMap::new(), Some(&BTreeMap::new()), None).summaries,
             )
             .expect("a node summary serialises")
         };
@@ -6307,6 +6662,7 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -6361,6 +6717,7 @@ mod tests {
             accounting_pods: &arcs(cluster),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &arcs(deployments),
             stateful_sets: &[],
             daemon_sets: &[],
@@ -6510,6 +6867,40 @@ mod tests {
             .filter(|row| row.containers.iter().any(|c| !c.ready))
             .count();
         assert_eq!(composition.not_ready, unready_rows);
+    }
+
+    /// argocd's repo-server pods stayed Ready while their liveness probe
+    /// failed, and the Pods tile drew all nine green beside Needs attention
+    /// listing two. Fails if a Ready pod a row names is not counted apart,
+    /// or if one already carved out as not ready is counted twice.
+    #[test]
+    fn a_ready_pod_a_row_names_is_counted_troubled_and_only_once() {
+        let mut ready = search_pod(true);
+        ready.metadata.name = Some("repo-server-mpmgs".to_string());
+        let mut quiet = search_pod(true);
+        quiet.metadata.name = Some("repo-server-khl75".to_string());
+        let unready = search_pod(false);
+        let row = |name: &str| ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name: name.to_string(),
+            namespace: Some("shop".to_string()),
+            reason: UNHEALTHY.to_string(),
+            detail: None,
+            since: None,
+            restarts: None,
+            folded_pods: None,
+            replaced: false,
+            workload: None,
+            node: None,
+        };
+        let problems = [row("repo-server-mpmgs"), row("search-77fbd8f66-52kp8")];
+        let pods = [ready, quiet, unready];
+
+        let troubled = troubled_pods(&pods, &problems, Utc::now());
+        let composition = pod_composition(&pods, Utc::now(), &HashSet::new());
+
+        assert_eq!((troubled, composition.not_ready), (1, 1));
     }
 
     /// Sam's old big-pull pod kept `Ready` while it terminated, and the
@@ -6714,6 +7105,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &arcs(stateful_sets.to_vec()),
             daemon_sets: &arcs(daemon_sets.to_vec()),
@@ -6922,6 +7314,7 @@ mod tests {
                 accounting_pods: &[],
                 nodes: &[],
                 nodes_known: true,
+                node_pods_unread: None,
                 deployments: &arcs(vec![cart.clone()]),
                 stateful_sets: &[],
                 daemon_sets: &[],
@@ -7033,6 +7426,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7137,6 +7531,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7160,13 +7555,13 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                ("Pod", "lonely", false),
                 ("Pod", "recs-abc-4", false),
-                ("Pod", "db-0", true),
+                ("Pod", "lonely", false),
                 ("Deployment", "recs", true),
+                ("Pod", "db-0", true),
             ]
         );
-        let folded = &overview.problems[3];
+        let folded = &overview.problems[2];
         assert_eq!(folded.reason, "Evicted");
         assert_eq!(folded.folded_pods, Some(3));
         assert_eq!(folded.since, Some(ago(24 * 60)));
@@ -7176,7 +7571,7 @@ mod tests {
                 text: "The node was low on resource: ephemeral-storage.".to_string()
             })
         );
-        assert_eq!(overview.problems[2].folded_pods, None);
+        assert_eq!(overview.problems[3].folded_pods, None);
         let workloads: Vec<_> = overview
             .problems
             .iter()
@@ -7189,10 +7584,10 @@ mod tests {
         assert_eq!(
             workloads,
             vec![
+                Some(("Deployment", "recs")),
                 None,
                 Some(("Deployment", "recs")),
                 Some(("StatefulSet", "db")),
-                Some(("Deployment", "recs")),
             ]
         );
         assert_eq!(
@@ -7271,6 +7666,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7387,11 +7783,52 @@ mod tests {
             reason: reason.to_string(),
             count,
             pods_unread: false,
+            troubled: 0,
         };
         assert_eq!(
-            count_rollouts(&rollouts),
+            count_rollouts(&rollouts, &[]),
             vec![count("Idle", 2), count("Paused", 1)]
         );
+    }
+
+    /// argocd-repo-server read "Ready" on the Overview while both its pods
+    /// failed their liveness probe. Fails if a Deployment a Pod row names is
+    /// not counted troubled under its word, or one no row names is.
+    #[test]
+    fn a_deployment_whose_pod_a_row_names_is_counted_troubled_under_its_word() {
+        let named = |namespace: &str, name: &str| {
+            Arc::new(Deployment {
+                metadata: ObjectMeta {
+                    name: Some(name.to_string()),
+                    namespace: Some(namespace.to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+        };
+        let deployments = [named("argocd", "repo-server"), named("argocd", "redis")];
+        let problems = [ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name: "repo-server-6d99796dd8-rjqwf".to_string(),
+            namespace: Some("argocd".to_string()),
+            reason: UNHEALTHY.to_string(),
+            detail: None,
+            since: None,
+            restarts: None,
+            folded_pods: None,
+            replaced: false,
+            workload: Some(crate::resources::PodWorkload {
+                kind: "Deployment".to_string(),
+                name: "repo-server".to_string(),
+            }),
+            node: None,
+        }];
+        let troubled = deployments_troubled(&deployments, &problems);
+        assert_eq!(troubled, vec![true, false]);
+        let ready = || Rollout::Ready;
+        let counts = count_rollouts(&[ready(), ready()], &troubled);
+        assert_eq!((counts[0].count, counts[0].troubled), (2, 1));
     }
 
     /// Marco's ledger: its pods refused, the Overview's Deployments bar drew
@@ -7406,7 +7843,7 @@ mod tests {
             available: 0,
             desired: 1,
         };
-        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()]);
+        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()], &[]);
         assert_eq!(
             counts,
             vec![
@@ -7414,11 +7851,13 @@ mod tests {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: false,
+                    troubled: 0,
                 },
                 RolloutCount {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: true,
+                    troubled: 0,
                 },
             ]
         );
@@ -7688,6 +8127,53 @@ mod across_namespaces {
 
     fn asked(hits: &Hits, path: &str) -> usize {
         hits.lock().unwrap().get(path).copied().unwrap_or(0)
+    }
+
+    /// A warm store answered "0 problems in backend" beside a Deployments
+    /// list failing there, and Events stayed "live" beside an events list
+    /// failing everywhere: their watches had not reconnected into the
+    /// failure. Fails if a watched kind that no longer lists in a namespace
+    /// of the scope goes unnamed, or one that does is named.
+    #[tokio::test]
+    async fn a_watched_kind_that_no_longer_lists_in_scope_is_named() {
+        let fault = r#"{"kind":"Status","apiVersion":"v1","status":"Failure","message":"etcdserver: request timed out","reason":"InternalError","code":500}"#;
+        let healthy = Cluster::new();
+        let failing = Cluster::new()
+            .answer(
+                "/apis/apps/v1/namespaces/staging/deployments",
+                500,
+                fault.to_string(),
+            )
+            .answer("/api/v1/namespaces/prod/events", 500, fault.to_string());
+        let scope = [PROD.to_string(), STAGING.to_string()];
+        let (client, _) = server(healthy.0).await;
+        assert_eq!(unlistable(&client, Some(&scope)).await, []);
+        let (client, _) = server(failing.0).await;
+        let lost = unlistable(&client, Some(&scope)).await;
+        assert_eq!(
+            lost.iter()
+                .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
+                .collect::<Vec<_>>(),
+            [("Event", Some(PROD)), ("Deployment", Some(STAGING))],
+            "{lost:?}"
+        );
+    }
+
+    /// Nodes refused under a node watch still streaming read "4 of 4 nodes
+    /// ready" on the Overview beside a Nodes page that said refused. Fails if
+    /// a node list that no longer answers goes unnamed.
+    #[tokio::test]
+    async fn a_node_list_that_no_longer_answers_is_named() {
+        let scope = [PROD.to_string(), STAGING.to_string()];
+        let (client, _) = server(Cluster::new().refuse("/api/v1/nodes").0).await;
+        let lost = unlistable(&client, Some(&scope)).await;
+        assert_eq!(
+            lost.iter()
+                .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
+                .collect::<Vec<_>>(),
+            [("Node", None)],
+            "{lost:?}"
+        );
     }
 
     /// The reason this moved to Rust. Asked once per namespace, every part
@@ -8171,6 +8657,7 @@ mod across_namespaces {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: true,
+                    troubled: 0,
                 }],
                 complete: true,
             })
@@ -8201,10 +8688,11 @@ mod across_namespaces {
     }
 
     /// Unscoped, the pods that are refused are the ones the capacity view
-    /// adds up. Fails if that view is drawn from no pods as a cluster with
-    /// nothing requested, or if the node half is not named as unread.
+    /// adds up, and the nodes were still read. Fails if a node's pod count is
+    /// drawn from no pods, if the refusal is not named beside them, or if the
+    /// nodes it did read are called unread.
     #[tokio::test]
-    async fn an_unscoped_overview_whose_pods_were_refused_claims_no_capacity() {
+    async fn an_unscoped_overview_whose_pods_were_refused_keeps_its_nodes() {
         let (client, _) = server(vec![
             ("/api/v1/nodes", 200, list(vec![node("n1", true)])),
             ("/api/v1/pods", 403, refused("/api/v1/pods")),
@@ -8223,8 +8711,16 @@ mod across_namespaces {
             .await
             .expect("the Deployments answered");
 
-        assert!(!overview.nodes_known);
-        assert!(overview.unread.iter().any(|entry| entry.kind == "Node"));
+        assert!(overview.nodes_known);
+        assert!(overview.unread.iter().all(|entry| entry.kind != "Node"));
+        assert_eq!(overview.counts.nodes, Some(1));
+        assert!(overview.nodes[0].ready);
+        assert_eq!(overview.nodes[0].pod_count, None);
+        let why = overview.node_pods_unread.expect("the pods' refusal");
+        assert_eq!(
+            (why.kind.as_str(), why.code.as_str()),
+            ("Pod", "PERMISSION_DENIED")
+        );
         assert_eq!(overview.counts.pods, None);
         assert!(overview.namespaces.is_empty());
     }
@@ -8442,22 +8938,30 @@ mod across_namespaces {
     }
 
     /// The node list and the cluster-wide pods behind the capacity view are
-    /// one read each. Either refused leaves the whole scope's capacity view
-    /// unknown — no node rows, and no node count beside the "no node access"
-    /// note the page shows.
+    /// one read each. The nodes refused leaves no node rows and no node
+    /// count; the pods refused leaves the nodes and their readiness, and only
+    /// what the pods add up unknown. Fails if either answers for the other.
     #[tokio::test]
-    async fn the_capacity_view_is_unknown_when_a_cluster_read_was_refused() {
-        for refused in ["/api/v1/nodes", "/api/v1/pods"] {
-            let overview = Cluster::new()
-                .items("/api/v1/nodes", vec![node("n1", true)])
-                .refuse(refused)
-                .listed()
-                .await;
+    async fn a_refused_cluster_read_leaves_unknown_only_what_it_holds() {
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", true)])
+            .refuse("/api/v1/nodes")
+            .listed()
+            .await;
+        assert!(!overview.nodes_known);
+        assert!(overview.nodes.is_empty());
+        assert_eq!(overview.counts.nodes, None);
 
-            assert!(!overview.nodes_known, "{refused}");
-            assert!(overview.nodes.is_empty(), "{refused}");
-            assert_eq!(overview.counts.nodes, None, "{refused}");
-        }
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", true)])
+            .refuse("/api/v1/pods")
+            .listed()
+            .await;
+        assert!(overview.nodes_known);
+        assert_eq!(overview.counts.nodes, Some(1));
+        assert_eq!(overview.nodes[0].pod_count, None);
+        assert!(overview.node_pods_unread.is_some());
+        assert!(overview.unread.iter().all(|entry| entry.kind != "Node"));
     }
 
     /// Marco checked team-blind beside team-checkout and team-checkout's
@@ -8664,6 +9168,10 @@ mod across_namespaces {
         assert_eq!(reasons, ["FailedScheduling", "BackOff"]);
     }
 
+    fn noon() -> DateTime<Utc> {
+        "2026-08-05T12:00:00Z".parse().expect("a time")
+    }
+
     fn problem_in(
         namespace: &str,
         name: &str,
@@ -8682,6 +9190,7 @@ mod across_namespaces {
             folded_pods: None,
             replaced: false,
             workload: None,
+            node: None,
         }
     }
 
@@ -8690,36 +9199,129 @@ mod across_namespaces {
     /// `CrashLoopBackOff` in the second.
     #[test]
     fn the_worst_row_leads_whichever_namespace_it_came_from() {
-        let (kept, _) = rank_and_cap(vec![
-            problem_in(
-                PROD,
-                "web-1",
-                ProblemSeverity::Warning,
-                Some("2026-08-05T08:00:00Z"),
-            ),
-            problem_in(
-                STAGING,
-                "api-1",
-                ProblemSeverity::Critical,
-                Some("2026-08-05T10:00:00Z"),
-            ),
-        ]);
+        let (kept, _) = rank_and_cap(
+            vec![
+                problem_in(
+                    PROD,
+                    "web-1",
+                    ProblemSeverity::Warning,
+                    Some("2026-08-05T08:00:00Z"),
+                ),
+                problem_in(
+                    STAGING,
+                    "api-1",
+                    ProblemSeverity::Critical,
+                    Some("2026-08-05T10:00:00Z"),
+                ),
+            ],
+            noon(),
+        );
         let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["api-1", "web-1"]);
     }
 
-    /// Oldest first inside a severity: the top row is what has been broken
-    /// longest, and an unknown age is not evidence that a problem is young.
+    /// Newest first inside a tier, what began today above what has no date,
+    /// and that above what has stood for days. Fails if a month-old failure
+    /// leads again, or an undated row is taken for the oldest.
     #[test]
-    fn equal_severities_are_ordered_by_age_undated_first() {
+    fn what_began_today_leads_then_the_undated_then_what_has_stood_for_days() {
         let critical = ProblemSeverity::Critical;
-        let (kept, _) = rank_and_cap(vec![
-            problem_in(PROD, "recent", critical, Some("2026-08-05T10:00:00Z")),
-            problem_in(PROD, "undated", critical, None),
-            problem_in(STAGING, "old", critical, Some("2026-08-05T01:00:00Z")),
-        ]);
+        let (kept, _) = rank_and_cap(
+            vec![
+                problem_in(PROD, "earlier", critical, Some("2026-08-05T01:00:00Z")),
+                problem_in(PROD, "undated", critical, None),
+                problem_in(STAGING, "old", critical, Some("2026-07-01T00:00:00Z")),
+                problem_in(STAGING, "later", critical, Some("2026-08-05T10:00:00Z")),
+            ],
+            noon(),
+        );
         let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["undated", "old", "recent"]);
+        assert_eq!(names, ["later", "earlier", "undated", "old"]);
+    }
+
+    /// The ranking both halves apply, held to one corpus: the frontend
+    /// re-ranks the backend's rows with its own beside them. Fails if this
+    /// side's order or its long-standing line drifts from the file.
+    #[test]
+    fn the_ranking_matches_the_shared_corpus() {
+        const FILE: &str = include_str!("../../../contracts/attention-rank-conformance.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        assert_eq!(file["longStandingHours"], LONG_STANDING_HOURS);
+        let now: DateTime<Utc> = file["now"].as_str().expect("now").parse().expect("a time");
+        for case in file["cases"].as_array().expect("cases") {
+            let rows = case["rows"].as_array().expect("rows");
+            let problems = rows
+                .iter()
+                .map(|row| ClusterProblem {
+                    severity: if row["severity"] == "warning" {
+                        ProblemSeverity::Warning
+                    } else {
+                        ProblemSeverity::Critical
+                    },
+                    kind: row["kind"].as_str().expect("kind").to_string(),
+                    name: row["id"].as_str().expect("id").to_string(),
+                    reason: row["reason"].as_str().expect("reason").to_string(),
+                    since: row["since"].as_str().map(str::to_string),
+                    replaced: row["replaced"].as_bool().unwrap_or(false),
+                    ..problem_in("", "", ProblemSeverity::Critical, None)
+                })
+                .collect();
+            let (kept, _) = rank_and_cap(problems, now);
+            let order: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+            let expected: Vec<_> = case["order"]
+                .as_array()
+                .expect("order")
+                .iter()
+                .map(|id| id.as_str().expect("id"))
+                .collect();
+            assert_eq!(order, expected, "{}", case["name"]);
+        }
+    }
+
+    /// A spot node went `NotReady` and its pods were
+    /// terminated for its shutdown, beside Job failures a month old. Fails if
+    /// the node does not lead, or a pod it took down does not carry its name.
+    #[test]
+    fn a_node_that_went_down_leads_and_its_pods_name_it() {
+        let now = Utc::now();
+        let down = serde_json::from_value::<Node>(node("spot-1", false)).expect("a node");
+        let mut problems = node_problems([&down]);
+        let terminated = |name: &str| {
+            serde_json::from_value::<Pod>(serde_json::json!({
+                "metadata": {"name": name, "namespace": "shop", "uid": name},
+                "spec": {"nodeName": "spot-1", "containers": [{"name": "app"}]},
+                "status": {
+                    "phase": "Failed",
+                    "reason": "Terminated",
+                    "message": "Pod was terminated in response to imminent node shutdown.",
+                    "startTime": (now - chrono::Duration::minutes(5)).to_rfc3339()
+                }
+            }))
+            .expect("a pod")
+        };
+        let pods = [
+            terminated("api-1"),
+            terminated("api-2"),
+            terminated("worker-1"),
+        ];
+        let from_pods = pod_problems(&pods, now);
+        assert_eq!(from_pods.len(), 3, "{from_pods:?}");
+        assert!(from_pods
+            .iter()
+            .all(|p| p.node.as_deref() == Some("spot-1")));
+        problems.extend(from_pods);
+        problems.push(ClusterProblem {
+            kind: "Job".to_string(),
+            name: "parser-29857320".to_string(),
+            reason: "BackoffLimitExceeded".to_string(),
+            since: Some((now - chrono::Duration::days(38)).to_rfc3339()),
+            ..problem_in("", "", ProblemSeverity::Critical, None)
+        });
+
+        let (kept, _) = rank_and_cap(problems, now);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names[0], "spot-1");
+        assert_eq!(names.last(), Some(&"parser-29857320"));
     }
 
     /// Would grow the panel by fifty rows per namespace watched, on exactly
@@ -8744,7 +9346,7 @@ mod across_namespaces {
         let mut problems = many(PROD, MAX_PROBLEMS, ProblemSeverity::Warning);
         problems.extend(many(STAGING, MAX_PROBLEMS + 3, ProblemSeverity::Critical));
 
-        let (kept, truncated) = rank_and_cap(problems);
+        let (kept, truncated) = rank_and_cap(problems, noon());
 
         assert_eq!(kept.len(), MAX_PROBLEMS);
         assert!(kept.iter().all(|p| p.severity == ProblemSeverity::Critical));

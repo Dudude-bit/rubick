@@ -1,10 +1,10 @@
 /** The faces a floor is measured in, with the classes the headers and cells draw them in. */
 export const TEXT_FACES = {
-  header: "text-[11px] font-medium",
-  badge: "font-mono text-[11px] font-medium",
+  header: "text-caption font-medium",
+  badge: "font-mono text-caption font-medium",
   mono: "font-mono text-xs",
   sans: "text-xs",
-  caption: "text-[11px]",
+  caption: "text-caption",
 } as const;
 
 export type TextFace = keyof typeof TEXT_FACES;

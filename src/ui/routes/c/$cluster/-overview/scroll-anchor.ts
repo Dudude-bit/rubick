@@ -11,11 +11,16 @@ function portOf(element: HTMLElement): HTMLElement | null {
 
 /**
  * Keeps what the reader looks at in place while the page around it changes
- * height: the row or section under the pointer, or at the top of the
- * scroller when the pointer is elsewhere, holds its place and the scroller
- * makes up whatever moved it. WebKit has no scroll anchoring of its own, so a
- * Needs attention row that came or went moved the Workloads card 15 to 135 px
- * under the pointer.
+ * height: the row or section under the pointer, or with the pointer
+ * elsewhere the first section that starts on screen, holds its place and the
+ * scroller makes up whatever moved it. A Needs attention row that came or
+ * went moved the Workloads card 15 to 135 px under the pointer.
+ *
+ * At the top of the page nothing is held: a Not checked row arriving there
+ * scrolled the title and its "partly unread" off screen. A row is held only
+ * under the pointer, where the list itself waits; one held otherwise was
+ * followed wherever a reorder took it. The browser's own anchoring is off
+ * while this runs, or the two would each make up the same move.
  */
 export function holdScroll(root: HTMLElement): () => void {
   const port = portOf(root);
@@ -26,14 +31,30 @@ export function holdScroll(root: HTMLElement): () => void {
   const topOf = (element: Element) =>
     element.getBoundingClientRect().top - port.getBoundingClientRect().top;
 
-  // The deepest row or section that reaches below the line the eye is on.
   const pick = () => {
-    const line = pointer ?? port.getBoundingClientRect().top;
+    if (port.scrollTop <= 0) {
+      anchor = null;
+      return;
+    }
+    const top = port.getBoundingClientRect().top;
+    if (pointer === null) {
+      const sections = [...root.children];
+      const held =
+        sections.find(
+          (element) => element.getBoundingClientRect().top >= top
+        ) ??
+        sections.find(
+          (element) => element.getBoundingClientRect().bottom > top
+        );
+      anchor = held ? { element: held, top: topOf(held) } : null;
+      return;
+    }
+    // The deepest row or section that reaches below the pointer.
     let found: Element | null = null;
     for (const element of root.querySelectorAll(
       `:scope > *, [${ANCHOR_ROWS}] > *`
     )) {
-      if (element.getBoundingClientRect().bottom <= line) continue;
+      if (element.getBoundingClientRect().bottom <= pointer) continue;
       if (found && !found.contains(element)) break;
       found = element;
     }
@@ -63,6 +84,8 @@ export function holdScroll(root: HTMLElement): () => void {
     pick();
   };
 
+  const native = port.style.overflowAnchor;
+  port.style.overflowAnchor = "none";
   pick();
   port.addEventListener("scroll", pick, { passive: true });
   port.addEventListener("pointermove", point, { passive: true });
@@ -75,5 +98,6 @@ export function holdScroll(root: HTMLElement): () => void {
     port.removeEventListener("pointerleave", leave);
     cancelAnimationFrame(frame);
     observer.disconnect();
+    port.style.overflowAnchor = native;
   };
 }

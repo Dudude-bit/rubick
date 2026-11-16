@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, Pin } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { ToastAction } from "@/components/ui/toast";
+import { toast } from "@/components/ui/use-toast";
 import { listLink } from "@/lib/links";
 import { pinKey, pinsOf } from "@/lib/my-services";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -28,6 +30,7 @@ export function MyServices() {
   const context = useClusterStore((s) => s.currentContext);
   const pins = usePinnedServicesStore((s) => s.pins);
   const unpin = usePinnedServicesStore((s) => s.unpin);
+  const repin = usePinnedServicesStore((s) => s.pin);
   const ordered = useMemo(() => pinsOf(pins, context), [pins, context]);
 
   if (!context) return null;
@@ -64,7 +67,20 @@ export function MyServices() {
             <ServiceCard
               key={pinKey(pin)}
               pin={pin}
-              onUnpin={() => unpin(context, pinKey(pin))}
+              onUnpin={() => {
+                unpin(context, pinKey(pin));
+                toast({
+                  title: t("services", "unpinned", { name: pin.name }),
+                  action: (
+                    <ToastAction
+                      altText={t("action", "undo")}
+                      onClick={() => repin(pin)}
+                    >
+                      {t("action", "undo")}
+                    </ToastAction>
+                  ),
+                });
+              }}
             />
           ))}
         </div>

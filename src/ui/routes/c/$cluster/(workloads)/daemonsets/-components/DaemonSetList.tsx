@@ -31,6 +31,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     id: "desired",
     header: columnHeader("columns", "desired"),
     meta: {
+      sort: (row: DaemonSetInfoWithMetrics) => row.desired,
       yields: 5,
       share: (row: DaemonSetInfoWithMetrics) => String(row.desired),
     },
@@ -41,6 +42,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     id: "current",
     header: columnHeader("columns", "current"),
     meta: {
+      sort: (row: DaemonSetInfoWithMetrics) => row.current,
       yields: 4,
       share: (row: DaemonSetInfoWithMetrics) => String(row.current),
     },
@@ -51,6 +53,8 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     id: "ready",
     header: columnHeader("columns", "ready"),
     meta: {
+      sort: (row: DaemonSetInfoWithMetrics) =>
+        Math.max(0, row.desired - row.ready),
       share: (row: DaemonSetInfoWithMetrics) => ({
         text: String(row.ready),
         mono: true,

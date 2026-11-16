@@ -6,7 +6,12 @@ import {
 
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
-import { currentConnection, noteRefusal, readOf } from "@/lib/refusals";
+import {
+  currentConnection,
+  noteAnswer,
+  noteRefusal,
+  readOf,
+} from "@/lib/refusals";
 import { listenEvent } from "@/lib/events";
 import { stallWatch } from "@/lib/stall-watch";
 import { perf, sizeOf } from "@/lib/perf";
@@ -26,6 +31,7 @@ export async function listPodRows(
   signal?: AbortSignal
 ): Promise<Scoped<PodRow>> {
   const started = performance.now();
+  const askedAt = Date.now();
   const generation = perf.generation;
   const connection = currentConnection();
   const id = await commands.listPodRows(scope);
@@ -136,6 +142,7 @@ export async function listPodRows(
     // so "Largest answer" said "nothing over a thousand rows" while ten
     // thousand rows went past. Told here, where the rows actually are.
     stallWatch.noteAnswer("listPodRows", result.rows);
+    noteAnswer("listPodRows", [scope], askedAt, connection);
     return result;
   } finally {
     signal?.removeEventListener("abort", onAbort);

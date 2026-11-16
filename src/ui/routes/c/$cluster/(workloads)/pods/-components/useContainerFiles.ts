@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { commands } from "@/lib/commands";
 import { listenEvent } from "@/lib/events";
-import { errorToShow } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import type { FileEntry, ListedWith } from "@/lib/container-files";
 import type { ListingFailure, Via } from "@/generated/types";
 
@@ -257,7 +257,7 @@ export function useContainerFiles(
           state: {
             phase: "failed",
             entries: EMPTY,
-            reason: "failed",
+            reason: isRefusal(error) ? "refused" : "failed",
             message: errorToShow(error),
             exitCode: null,
             stderr: "",

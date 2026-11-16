@@ -344,7 +344,7 @@ function Answer({
       <p className={`font-medium ${tone[verdict.says]}`}>
         {sentence(verdict, subject, t)}
       </p>
-      <p className="mt-0.5 text-[11px] text-fg-fnt">
+      <p className="mt-0.5 text-caption text-fg-fnt">
         {run.outcome.ranIn === "copy" && run.outcome.copy
           ? t("checks", "ranInCopy", {
               image: run.outcome.copy.image,
@@ -379,17 +379,17 @@ function Answer({
               {t("checks", "runFromCopy")}
             </Button>
           </ReasonTip>
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {t("checks", "copyNote")}
           </span>
         </div>
       ) : null}
       {run.outcome.stdout || run.outcome.stderr ? (
         <details className="mt-1.5">
-          <summary className="cursor-pointer text-[11px] text-fg-fnt">
+          <summary className="cursor-pointer text-caption text-fg-fnt">
             {t("checks", "whatItSaid")}
           </summary>
-          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-fg-mut">
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-caption text-fg-mut">
             {run.outcome.stdout}
             {run.outcome.stderr ? `\n${run.outcome.stderr}` : ""}
           </pre>

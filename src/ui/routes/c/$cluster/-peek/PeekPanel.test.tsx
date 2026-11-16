@@ -75,6 +75,20 @@ vi.mock("../-delivery/useDelivery", async (original) => {
   };
 });
 
+// The shell's problems and the lists' watches, absent unless a test names them.
+const shell = vi.hoisted(() => ({
+  items: [] as unknown[],
+  live: new Set<string>(),
+}));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => (shell.items.length > 0 ? { items: shell.items } : null),
+}));
+vi.mock("@/hooks/useWatchedList", async (original) => ({
+  ...(await original<typeof import("@/hooks/useWatchedList")>()),
+  useListLive: (key: unknown) =>
+    key !== null && shell.live.has(JSON.stringify(key)),
+}));
+
 vi.mock("../-object/AlertsAbout", () => ({
   AlertsAbout: ({ kind, name }: { kind: string; name: string }) => (
     <p>{`alerts about ${kind} ${name}`}</p>
@@ -721,10 +735,15 @@ describe("PeekPanel", () => {
     );
     vi.mocked(commands.listEvents).mockRejectedValue(refusal);
     const refused = await wrap(POD_PEEK);
-    const words = await screen.findByText(
-      "You do not have permission to read these events."
+    expect(
+      await screen.findByText(
+        "You do not have permission to read these events."
+      )
+    ).toBeVisible();
+    expect(screen.getByTestId("events-unread")).toHaveAttribute(
+      "data-read",
+      "refused"
     );
-    expect(words).toHaveAttribute("data-read", "refused");
     expect(screen.queryByText("No events for this object")).toBeNull();
     vi.mocked(commands.listEvents).mockResolvedValue([]);
     await userEvent.click(
@@ -742,7 +761,8 @@ describe("PeekPanel", () => {
       new Error("connection refused")
     );
     await wrap(POD_PEEK);
-    expect(await screen.findByText("Could not read events.")).toHaveAttribute(
+    expect(await screen.findByText("Could not read events.")).toBeVisible();
+    expect(screen.getByTestId("events-unread")).toHaveAttribute(
       "data-read",
       "failed"
     );
@@ -793,11 +813,64 @@ describe("PeekPanel", () => {
 
     expect(
       await screen.findByText(
-        /Could not read Pod crash-demo-56588f6b8c-8bj9v just now/
+        /Could not read Pod crash-demo-56588f6b8c-8bj9v\./
       )
     ).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
     expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
+  });
+
+  /**
+   * The list showed argocd-repo-server 2/2 Ready, then the peek for that row
+   * said only "Could not read". Fails if the row the list holds is not drawn
+   * under the stale notice, or if a peek with no such row draws one anyway.
+   */
+  it("draws the list's row under the stale notice when its own read fails", async () => {
+    vi.mocked(commands.getPod).mockRejectedValue(new Error("500 from get"));
+    const pod = buildPod();
+    const listed = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    listed.setQueryData(["pods", "all"], { rows: [pod], unread: [] });
+    await renderWithRouter(<PeekPanel />, {
+      client: listed,
+      at: POD_PEEK,
+      route: "/c/$cluster/$",
+    });
+    expect(await screen.findByText(/500 from get/)).toBeInTheDocument();
+    expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
+    expect(screen.getByText(/Could not read Pod .*\./)).toBeVisible();
+    expect(screen.queryByText("Could not read this Pod")).toBeNull();
+  });
+
+  /** Fails if a peek with no listed row invents a summary instead of saying it could not read. */
+  it("says only that it could not read when the list holds no row of it", async () => {
+    vi.mocked(commands.getPod).mockRejectedValue(new Error("500 from get"));
+    await wrap(POD_PEEK);
+    expect(await screen.findByText(/500 from get/)).toBeInTheDocument();
+    expect(screen.getByText("Could not read this Pod")).toBeVisible();
+    expect(screen.queryByText("10.42.0.46")).toBeNull();
+  });
+
+  /**
+   * The chip took a second row while polling slowed and gave it back on the
+   * next press, so Scale moved out from under the pointer between its down
+   * and its up and the click landed on the tab strip. Fails if the chip
+   * leaves the title's line for the wrapping line above the actions.
+   */
+  it("keeps its freshness on the title's line, clear of the actions", async () => {
+    connected();
+    await wrap(POD_PEEK);
+    const title = await screen.findByRole("heading", {
+      name: /crash-demo-56588f6b8c-8bj9v/,
+    });
+    const chip = await screen.findByText(/^(polling|live|polled less often)/);
+    expect(title.parentElement?.contains(chip)).toBe(true);
+    const actions = screen
+      .getByRole("button", { name: /Open full page/ })
+      .closest("div");
+    expect(actions?.parentElement?.contains(title)).toBe(true);
+    expect(chip.closest("div")?.contains(actions ?? null)).toBe(false);
   });
 
   it("leaves for the full page and closes behind itself", async () => {
@@ -2408,6 +2481,131 @@ describe("PeekPanel on a core kind the registry does not hold", () => {
   });
 });
 
+describe("PeekPanel on an object with no status of its own", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+  });
+
+  /**
+   * The api HPA's row said "1 problem" beside its peek, whose header said
+   * nothing: the chip only ever rode on a status badge, and an autoscaler
+   * has none. Fails if the peek of an object with no status drops what the
+   * shell counts against it.
+   */
+  it("carries the problem the shell counts against it in its header", async () => {
+    vi.mocked(commands.listApiCatalog).mockResolvedValue({
+      entries: [
+        {
+          group: "autoscaling",
+          version: "v2",
+          kind: "HorizontalPodAutoscaler",
+          plural: "horizontalpodautoscalers",
+          namespaced: true,
+          verbs: ["get", "list"],
+          shortNames: ["hpa"],
+          hasStatus: true,
+        },
+      ],
+      unread: [],
+    });
+    const object = {
+      ...buildApplication(),
+      name: "cart",
+      namespace: "shop",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      spec: { minReplicas: 2, maxReplicas: 10 },
+      status: null,
+    };
+    vi.mocked(commands.getCustomResource).mockResolvedValue(object);
+    vi.mocked(commands.getServedObject).mockResolvedValue(object);
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "cart",
+      namespace: "shop",
+    };
+    shell.items = [
+      {
+        ...self,
+        key: "hpa/shop/cart",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+        opens: self,
+      },
+    ];
+    useClusterStore.setState({ isConnected: true });
+    await wrap("/c/prod/events?peek=horizontalpodautoscalers/shop/cart");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    useClusterStore.setState({ isConnected: false });
+  });
+  /**
+   * The api HPA's peek said "1 problem" in its header and led with nothing,
+   * where a Deployment's and a Pod's lead with the finding. Fails if a peek
+   * of a kind with no finding of its own stops drawing the shell's item for
+   * the object, here one that opens itself as the backend's do.
+   */
+  it("leads with the finding the shell counts against it, under a header that counts one problem", async () => {
+    vi.mocked(commands.listApiCatalog).mockResolvedValue({
+      entries: [
+        {
+          group: "autoscaling",
+          version: "v2",
+          kind: "HorizontalPodAutoscaler",
+          plural: "horizontalpodautoscalers",
+          namespaced: true,
+          verbs: ["get", "list"],
+          shortNames: ["hpa"],
+          hasStatus: true,
+        },
+      ],
+      unread: [],
+    });
+    const object = {
+      ...buildApplication(),
+      name: "cart",
+      namespace: "shop",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      spec: { minReplicas: 2, maxReplicas: 10 },
+      status: null,
+    };
+    vi.mocked(commands.getCustomResource).mockResolvedValue(object);
+    vi.mocked(commands.getServedObject).mockResolvedValue(object);
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "cart",
+      namespace: "shop",
+    };
+    shell.items = [
+      {
+        ...self,
+        key: "hpa/shop/cart",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+        opens: self,
+      },
+    ];
+    useClusterStore.setState({ isConnected: true });
+    await wrap("/c/prod/events?peek=horizontalpodautoscalers/shop/cart");
+    expect(await screen.findByText("1 problem")).toBeInTheDocument();
+    expect(await screen.findByTestId("findings-block")).toHaveTextContent(
+      "FailedGetScale"
+    );
+    useClusterStore.setState({ isConnected: false });
+  });
+});
+
 describe("PeekPanel tab persistence", () => {
   beforeEach(mockCluster);
 
@@ -2461,6 +2659,70 @@ describe("PeekPanel tab persistence", () => {
         "true"
       )
     );
+  });
+
+  const failing = {
+    key: "pod/k8s-gui-test/log-demo-1",
+    tone: "err",
+    kind: "Pod",
+    name: "log-demo-1",
+    namespace: "k8s-gui-test",
+    reason: "CrashLoopBackOff",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Pod", name: "log-demo-1", namespace: "k8s-gui-test" },
+  };
+
+  /**
+   * Enter from a failing pod's peek opened its page on Containers, the tab
+   * the last pod was left on, hiding the cause block. Fails if a tab
+   * remembered from another object of the kind still travels to the page of
+   * one with a problem.
+   */
+  it("opens a failing pod's page on Overview when the tab was only remembered", async () => {
+    shell.items = [failing];
+    try {
+      await wrap(POD_PEEK, withOpeners);
+      await screen.findByText("CrashLoopBackOff");
+      await openTab("Logs");
+      await userEvent.click(screen.getByText("peek other pod"));
+      await waitFor(() =>
+        expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        )
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: /Open full page/ })
+      );
+      await waitFor(() =>
+        expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1")
+      );
+    } finally {
+      shell.items = [];
+    }
+  });
+
+  /** A tab the reader picked on this very object is still wanted on its page, problem or not. */
+  it("takes a tab the reader chose on a failing pod to its page", async () => {
+    shell.items = [failing];
+    try {
+      await wrap(POD_PEEK, withOpeners);
+      await userEvent.click(screen.getByText("peek other pod"));
+      await screen.findByRole("tab", { name: "Logs" });
+      await openTab("Logs");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Open full page/ })
+      );
+      await waitFor(() =>
+        expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1?tab=logs")
+      );
+    } finally {
+      shell.items = [];
+    }
   });
 });
 
@@ -3323,7 +3585,7 @@ describe("restarting a managed workload from the peek on critical infrastructure
     const button = within(confirm).getByRole("button", { name: /^Restart$/ });
     expect(button).toBeDisabled();
 
-    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    await userEvent.type(within(confirm).getByRole("textbox"), PROD);
     expect(button).toBeEnabled();
 
     await userEvent.click(button);
@@ -3380,8 +3642,9 @@ describe("a peek block whose read was refused", () => {
 
     expect(await screen.findByText("Traffic path")).toBeInTheDocument();
     expect(
-      screen.getByText(`Could not read what connects to this: ${FORBIDDEN}`)
+      screen.getByText("Could not read what connects to this.")
     ).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(FORBIDDEN))).toBeInTheDocument();
   });
 
   /** "reading…" forever beside a refused list, and "none" beside a read one. */
@@ -3429,7 +3692,7 @@ describe("a peek block whose read was refused", () => {
       await screen.findByText(/Could not ask the integrations/)
     ).toBeInTheDocument();
     expect(
-      screen.getByText("ingressroutes.traefik.io is forbidden")
+      screen.getByText(/ingressroutes.traefik.io is forbidden/)
     ).toBeInTheDocument();
   });
 });
@@ -3584,5 +3847,475 @@ describe("PeekPanel on a pod being set up inside its wait", () => {
     expect(screen.getByText("ContainerCreating").className).toContain(
       "text-info"
     );
+  });
+});
+
+describe("a governed workload's peek beside its list", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+    shell.live.clear();
+  });
+
+  const CART = {
+    name: "cart",
+    namespace: "shop",
+    replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
+    rollout: { state: "ready" },
+    rolloutPlan: { strategy: "rolling", replicas: 3, surge: 1, unavailable: 1 },
+    containers: [],
+    initContainers: [],
+    ownerReferences: [],
+    createdAt: null,
+  };
+  const hpa = (type: string, status: string, reason: string) => {
+    const facts = {
+      kind: "autoscaler",
+      minReplicas: 1,
+      maxReplicas: 3,
+      currentReplicas: 3,
+      desiredReplicas: 3,
+      metrics: [],
+      conditions: [
+        { type, status, reason, message: null, lastTransitionTime: null },
+      ],
+      lastScaleTime: null,
+    };
+    const ref = (kind: string) => ({
+      kind,
+      name: "cart",
+      namespace: "shop",
+      existence: "present",
+      facts: kind === "Deployment" ? null : facts,
+    });
+    return {
+      object: ref("HorizontalPodAutoscaler"),
+      facts,
+      target: ref("Deployment"),
+    };
+  };
+  const CEILING = {
+    key: "hpa/shop/cart",
+    tone: "warn",
+    kind: "HorizontalPodAutoscaler",
+    name: "cart",
+    namespace: "shop",
+    reason: "TooManyReplicas",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Deployment", name: "cart", namespace: "shop" },
+    autoscaler: hpa("ScalingLimited", "True", "TooManyReplicas"),
+  };
+  const UNREACHED = {
+    ...CEILING,
+    key: "hpa/shop/cart/scale",
+    tone: "err",
+    reason: "FailedGetScale",
+    detail: {
+      says: "said",
+      text: "the HPA controller was unable to get the target's current scale",
+    },
+    autoscaler: hpa("AbleToScale", "False", "FailedGetScale"),
+  };
+  const LIST_KEY = ["deployments", "all"];
+  const open = (listedAt: number) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(
+      LIST_KEY,
+      { rows: [CART], unread: [] },
+      { updatedAt: listedAt }
+    );
+    return renderWithRouter(<PeekPanel />, {
+      client,
+      at: "/c/prod/events?peek=deployments/shop/cart",
+      route: "/c/$cluster/$",
+    });
+  };
+
+  /**
+   * Under its own failed read the peek said a green
+   * "Ready" beside a row saying "1 problem", and its freshness chip went
+   * away. Fails if the held row's chip drops the list's problem, or the chip
+   * stops saying the read fails and how old the answer on screen is.
+   */
+  it("keeps the row's problem and says the read fails, dated by the list's answer", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockRejectedValue(
+      new Error("500 from get")
+    );
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [CEILING];
+    await open(Date.now() - 30_000);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+    expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
+    expect(chip).toHaveAttribute("title", "TooManyReplicas");
+    expect(screen.getByText("read failing")).toBeVisible();
+    expect(screen.getByText(/^last answer (29|30|31)s ago$/)).toBeVisible();
+  });
+
+  /**
+   * A Deployment read Ready while both its pods failed their
+   * liveness probe and its row said so. Fails if the peek's chip does not
+   * count its pods' problems as the row does, or its body does not name them.
+   */
+  it("counts and names its pods' problems as its row does", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [
+      {
+        ...CEILING,
+        key: "pod/shop/cart-1",
+        kind: "Pod",
+        name: "cart-1",
+        reason: "liveness",
+        workload: { kind: "Deployment", name: "cart" },
+        opens: { kind: "Pod", name: "cart-1", namespace: "shop" },
+      },
+    ];
+    await open(Date.now());
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    expect(await screen.findByTestId("pods-trouble")).toHaveTextContent(
+      "cart-1"
+    );
+  });
+
+  /**
+   * Under its own failed read the peek kept "1 problem" and
+   * dropped the finding line the healthy peek leads with. Fails if the body
+   * says nothing of the row's finding once its own read of what governs it
+   * fails.
+   */
+  it("says the row's finding in the body when its own read of what governs it fails", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockRejectedValue(
+      new Error("500 from get")
+    );
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [CEILING];
+    await open(Date.now() - 30_000);
+    expect(
+      await within(await screen.findByTestId("workload-diagnosis")).findByText(
+        "cart wants more replicas than 3, which is its ceiling"
+      )
+    ).toBeVisible();
+  });
+
+  /**
+   * Under a 500 the peek said "1 problem" with no cause for
+   * half a minute, then the raw "FailedGetScale" in red, where the healthy
+   * peek says "api cannot reach what it scales". Fails if the row's finding
+   * waits for the peek's own read of what governs it, or is worded by
+   * another composer than the page's.
+   */
+  it("says the row's finding in the page's words while its own read of what governs it is still on its way", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    vi.mocked(commands.getResourceConnections).mockReturnValue(
+      new Promise(() => {})
+    );
+    shell.items = [UNREACHED];
+    await open(Date.now());
+    const diagnosis = await screen.findByTestId("workload-diagnosis");
+    expect(
+      await within(diagnosis).findByText("cart cannot reach what it scales")
+    ).toHaveClass("text-err");
+    expect(within(diagnosis).queryByText("FailedGetScale")).toBeNull();
+  });
+
+  /**
+   * A peek opened during a failure drew an unlabelled skeleton
+   * for 14 s while the list beside it held the row. Fails if the peek waits
+   * on its own read to draw what the list holds, or does not say that it is
+   * still reading and, without a live watch, how old the row is.
+   */
+  it("draws the list's row at once while its own read is on its way, and says it is reading", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockReturnValue(new Promise(() => {}));
+    vi.mocked(commands.getResourceConnections).mockReturnValue(
+      new Promise(() => {})
+    );
+    shell.items = [UNREACHED];
+    await open(Date.now() - 30_000);
+    expect(
+      await screen.findByText("cart cannot reach what it scales")
+    ).toBeVisible();
+    expect(screen.queryByTestId("peek-skeleton")).toBeNull();
+    expect(document.querySelector('[data-problem="err"]')).not.toBeNull();
+    expect(
+      screen
+        .getByText(/^reading · last answer \d+s ago$/)
+        .closest("[role=status]")
+    ).not.toBeNull();
+    expect(screen.queryByText("live")).toBeNull();
+    cleanup();
+
+    shell.live.add(JSON.stringify(LIST_KEY));
+    await open(Date.now());
+    expect(await screen.findByText(/^reading$/)).toBeVisible();
+  });
+
+  /**
+   * The list said "live" and the peek of its row "polling",
+   * though the list's watch reads the peek again at every change it sees.
+   * Fails if the peek ignores that watch, or claims it when none is live.
+   */
+  it("says live while a live list watch holds the object, polling otherwise", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    await open(Date.now());
+    expect(await screen.findByText("polling")).toBeVisible();
+    cleanup();
+
+    shell.live.add(JSON.stringify(LIST_KEY));
+    await open(Date.now());
+    expect(await screen.findByText("live")).toBeVisible();
+    expect(screen.queryByText("polling")).toBeNull();
+  });
+});
+
+describe("a pod's peek beside the Pods list", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+    shell.live.clear();
+  });
+
+  const NAME = "crash-demo-56588f6b8c-8bj9v";
+  const RUNNING = buildPod({
+    status: {
+      ...buildPod().status,
+      phase: "Running",
+      display: "Running",
+      ready: true,
+    },
+    containers: [
+      {
+        ...buildPod().containers[0],
+        name: "repo-server",
+        ready: true,
+        restartCount: 1,
+      },
+    ],
+    restartCount: 1,
+  });
+  const SAID =
+    'Liveness probe failed: Get "http://10.10.3.52:8084/healthz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)';
+  const PROBE = {
+    key: `pod/k8s-gui-test/${NAME}`,
+    tone: "warn",
+    kind: "Pod",
+    name: NAME,
+    namespace: "k8s-gui-test",
+    reason: "liveness",
+    detail: {
+      says: "probe",
+      failure: {
+        container: "repo-server",
+        probe: "liveness",
+        restarts: 1,
+        said: SAID,
+        since: null,
+      },
+    },
+    since: null,
+    restarts: 1,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Pod", name: NAME, namespace: "k8s-gui-test" },
+  };
+  const ROWS_KEY = ["pod-rows", "k8s-gui-test"];
+  const open = () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(ROWS_KEY, {
+      rows: [{ name: NAME, namespace: "k8s-gui-test" }],
+      unread: [],
+    });
+    return renderWithRouter(<PeekPanel />, {
+      client,
+      at: POD_PEEK,
+      route: "/c/$cluster/$",
+    });
+  };
+
+  /**
+   * The Pods row said "1 problem · Running" and the pod's
+   * page led with its failing liveness probe, while the peek said a plain
+   * green Running. Fails if the peek's chip does not carry the row's
+   * problem, or its Overview does not lead with the page's sentence.
+   */
+  it("carries the row's problem and leads with the page's cause sentence", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.items = [PROBE];
+    await open();
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent(/1 problem/);
+    expect(chip).toHaveTextContent(/Running$/);
+    expect(
+      await screen.findByText("repo-server fails its liveness probe")
+    ).toBeVisible();
+    expect(screen.getByTestId("listed-findings")).toHaveTextContent(
+      "(Client.Timeout exceeded while awaiting headers). Most likely why it restarts:"
+    );
+  });
+
+  /**
+   * The Pods list said "live" and the peek of its row
+   * "polled less often", though the Pods list's watch reads the pod again at
+   * every change. Fails if the peek looks for the Pods list anywhere but
+   * where the Pods page keeps its rows.
+   */
+  it("says live while the Pods list's watch holds the pod", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.live.add(JSON.stringify(ROWS_KEY));
+    await open();
+    expect(await screen.findByText("live")).toBeVisible();
+  });
+
+  /**
+   * Under a pods 403 the peek said green "live" beside the list's "refused".
+   * Fails if a peek whose list is refused, and whose own read has not
+   * answered since, says anything but refused, or still claims live once
+   * its own read has answered after the refusal.
+   */
+  it("says refused while the list it was opened from is refused, and never live", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.live.add(JSON.stringify(ROWS_KEY));
+    const { client } = await open();
+    expect(await screen.findByText("live")).toBeVisible();
+
+    const rows = client.getQueryCache().find({ queryKey: ROWS_KEY })!;
+    const refused = Object.assign(new Error("pods is forbidden: RBAC"), {
+      code: "PERMISSION_DENIED",
+    });
+    act(() =>
+      rows.setState({
+        status: "error",
+        error: refused,
+        errorUpdatedAt: Date.now() + 60_000,
+      })
+    );
+    expect(await screen.findByText("refused")).toBeVisible();
+    expect(screen.queryByText("live")).toBeNull();
+
+    act(() => rows.setState({ errorUpdatedAt: 1 }));
+    await waitFor(() => expect(screen.queryByText("refused")).toBeNull());
+    expect(screen.queryByText("live")).toBeNull();
+  });
+});
+
+describe("the peek of a custom resource that runs pods", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+  });
+
+  const ROLLOUT_PEEK =
+    "/c/prod/events?peek=rollouts.argoproj.io/Rollout/realtime-gateway/node";
+  const rollout = (): CustomResourceDetailInfo => ({
+    ...buildApplication(),
+    name: "node",
+    namespace: "realtime-gateway",
+    apiVersion: "argoproj.io/v1alpha1",
+    kind: "Rollout",
+    spec: { replicas: 3 },
+    status: {
+      phase: "Healthy",
+      conditions: [
+        {
+          type: "Paused",
+          status: "False",
+          reason: "RolloutPaused",
+          message: "Rollout is paused",
+        },
+      ],
+    },
+  });
+  const PROBE = {
+    key: "Pod/realtime-gateway/node-5c8f7b9d4b-q7w2r/readiness",
+    tone: "warn",
+    kind: "Pod",
+    name: "node-5c8f7b9d4b-q7w2r",
+    namespace: "realtime-gateway",
+    reason: "readiness",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    workload: { kind: "Rollout", name: "node" },
+    opens: {
+      kind: "Pod",
+      name: "node-5c8f7b9d4b-q7w2r",
+      namespace: "realtime-gateway",
+    },
+  };
+
+  /**
+   * Rollout/node peeked "Healthy Rollout" while its pod failed
+   * its readiness probe on the Pods row, the pod's page, the Overview and
+   * the status bar. Fails if the chip of an owner that is a custom resource
+   * does not count its pods' rows, or its body does not name them.
+   */
+  it("counts and names its pods' problems as a Deployment's peek does", async () => {
+    connected();
+    vi.mocked(commands.getCustomResource).mockResolvedValue(rollout());
+    shell.items = [PROBE];
+    await wrap(ROLLOUT_PEEK);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    expect(document.querySelector('[data-problem="warn"]')).toHaveTextContent(
+      /1 problem.*Healthy/
+    );
+    expect(await screen.findByTestId("pods-trouble")).toHaveTextContent(
+      "node-5c8f7b9d4b-q7w2r"
+    );
+  });
+
+  /**
+   * "conditions.Paused False (RolloutPaused): Rollout is
+   * paused" in red, the healthy value drawn as an error in words that deny
+   * it. Fails if the row is coloured as trouble or speaks the paused words.
+   */
+  it("draws a resumed rollout's Paused=False as healthy, without the paused words", async () => {
+    connected();
+    vi.mocked(commands.getCustomResource).mockResolvedValue(rollout());
+    await wrap(ROLLOUT_PEEK);
+
+    const row = (await screen.findByText(/^conditions\.Paused$/)).closest(
+      "div"
+    ) as HTMLElement;
+    const value = row.querySelector("dd") as HTMLElement;
+    expect(value).toHaveTextContent(/^False$/);
+    expect(value.className).toContain("text-ok");
   });
 });

@@ -90,7 +90,10 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     {
       id: "listeners",
       header: columnHeader("columns", "listeners"),
-      meta: { share: (row: GatewayInfo, t) => listenersOf(row, t) },
+      meta: {
+        sort: (row: GatewayInfo) => row.listeners.length,
+        share: (row: GatewayInfo, t) => listenersOf(row, t),
+      },
       size: 90,
       cell: ({ row }) => <ListenersCell gateway={row.original} />,
     },

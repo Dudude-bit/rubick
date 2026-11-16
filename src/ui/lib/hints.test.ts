@@ -1479,6 +1479,67 @@ describe("agentReport", () => {
   });
 });
 
+describe("what a container printed, quoted by the guess", () => {
+  const dsn =
+    'ERROR db: dial "postgres://app:hunter2pw@10.43.39.231:5432/shop": connect: connection refused';
+  const text = (value: unknown) => JSON.stringify(value);
+
+  /** The failing line was quoted on the panel whole, DSN password and all. Fails if the line the address came from is kept raw. */
+  it("draws, copies and searches the failing line without its password", () => {
+    const address = addressIn([dsn]);
+    expect(address?.host).toBe("10.43.39.231");
+    expect(address?.line).toContain("postgres://…@10.43.39.231:5432/shop");
+    const trouble = troubleOf(crashing(), [])!;
+    const chain = { ...NONE, address };
+    const hint = hintFor(trouble, crashing(), chain);
+    expect(text(hint)).toContain("factLastLineSaid");
+    expect(text(hint)).not.toContain("hunter2pw");
+    const report = agentReport({
+      version: "4.9.2",
+      context: "prod",
+      at: "2026-09-08T10:39:02Z",
+      pod: crashing(),
+      trouble,
+      logLines: [dsn],
+      logContainer: "app",
+      logPrevious: true,
+      events: [],
+      chain,
+      mounts: [],
+      guess: null,
+    });
+    expect(report).not.toContain("hunter2pw");
+    const url = searchUrl(
+      "google",
+      "",
+      searchQuery(trouble, crashing(), address, false)
+    );
+    expect(decodeURIComponent(url)).not.toContain("hunter2pw");
+  });
+
+  /** An exec probe's answer and a liveness kill are the container's words too. Fails if either reaches the panel raw. */
+  it("quotes a probe's answer without the token it printed", () => {
+    const unready = pod({
+      status: { ...crashing().status, display: "Running" },
+    });
+    const probe = troubleOf(unready, [
+      event("Unhealthy", "Readiness probe failed: password=hunter3pw rejected"),
+    ])!;
+    expect(probe.reason).toBe("probeFailed");
+    expect(text(hintFor(probe, unready, NONE))).not.toContain("hunter3pw");
+    const killed = troubleOf(crashing(), [
+      event(
+        "Unhealthy",
+        "Liveness probe failed: Authorization: Bearer abcdefghijklmnop123456"
+      ),
+    ])!;
+    expect(text(killed)).toContain("Liveness probe failed");
+    expect(text(hintFor(killed, crashing(), NONE))).not.toContain(
+      "abcdefghijklmnop123456"
+    );
+  });
+});
+
 describe("redact", () => {
   /**
    * The lines a shared report carries are what a container printed at

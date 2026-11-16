@@ -40,4 +40,24 @@ describe("asking a read again", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
     await waitFor(() => expect(retry).toHaveBeenCalledOnce());
   });
+
+  /** Fails if the button takes a second press while the read it asked for is still out, though the caller's promise settled early. */
+  it("holds still until the error it was pressed on is replaced", async () => {
+    const retry = vi.fn(() => Promise.resolve());
+    const first = new Error("etcdserver: request timed out");
+    const { rerender } = render(<ReadAgain error={first} onRetry={retry} />);
+    const button = screen.getByRole("button", { name: "Try the read again" });
+    fireEvent.click(button);
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce());
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(retry).toHaveBeenCalledOnce();
+    rerender(
+      <ReadAgain
+        error={new Error("etcdserver: request timed out")}
+        onRetry={retry}
+      />
+    );
+    expect(button).toBeEnabled();
+  });
 });

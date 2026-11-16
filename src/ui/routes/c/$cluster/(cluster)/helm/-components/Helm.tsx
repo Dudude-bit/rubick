@@ -36,7 +36,8 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { useHeldOpen } from "../../../-list/useHeldOpen";
+import { toastWriteError } from "@/lib/toast-error";
 
 const namesOf = (namespaces: NamespaceInfo[]) =>
   namespaces.map((ns) => ns.name);
@@ -73,9 +74,11 @@ export function Helm() {
   const [deleteRepoTarget, setDeleteRepoTarget] = useState<string | null>(null);
 
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [searchResults, setSearchResults] = useState<HelmChartSearchResult[]>(
-    []
-  );
+  const [chartSearch, setChartSearch] = useState<{
+    keyword: string;
+    results: HelmChartSearchResult[] | null;
+    error: unknown;
+  } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
   const [installChart, setInstallChart] =
@@ -107,6 +110,7 @@ export function Helm() {
   });
 
   const helmCliAvailable = helm?.available ?? false;
+  const helmCliChecking = helm === null;
 
   const {
     data: answer,
@@ -148,16 +152,14 @@ export function Helm() {
     enabled: !!historyDialog,
   });
 
-  const { data: repositories = [], isLoading: reposLoading } = useQuery({
+  const {
+    data: repositories,
+    isLoading: reposLoading,
+    error: reposError,
+    refetch: refetchRepos,
+  } = useQuery({
     queryKey: ["helm-repos"],
-    queryFn: async () => {
-      try {
-        return await commands.listHelmRepos();
-      } catch (err) {
-        console.error("Failed to list repos:", err);
-        return [];
-      }
-    },
+    queryFn: () => commands.listHelmRepos(),
     enabled: helmCliAvailable,
   });
 
@@ -182,7 +184,7 @@ export function Helm() {
       setRollbackTarget(null);
     },
     onError: (error) => {
-      toastError(t("action", "rollbackFailed"), error);
+      toastWriteError(t("action", "rollbackFailed"), error);
     },
   });
 
@@ -205,9 +207,11 @@ export function Helm() {
       setUninstallTarget(null);
     },
     onError: (error) => {
-      toastError(t("action", "uninstallFailed"), error);
+      toastWriteError(t("action", "uninstallFailed"), error);
     },
   });
+
+  const uninstallHeld = useHeldOpen(() => setUninstallTarget(null));
 
   const addRepoMutation = useMutation({
     mutationFn: async ({ name, url }: { name: string; url: string }) =>
@@ -225,7 +229,7 @@ export function Helm() {
       setNewRepoUrl("");
     },
     onError: (error) => {
-      toastError(t("action", "addRepositoryFailed"), error);
+      toastWriteError(t("action", "addRepositoryFailed"), error);
     },
   });
 
@@ -240,7 +244,7 @@ export function Helm() {
       setDeleteRepoTarget(null);
     },
     onError: (error) => {
-      toastError(t("action", "removeRepositoryFailed"), error);
+      toastWriteError(t("action", "removeRepositoryFailed"), error);
     },
   });
 
@@ -254,18 +258,20 @@ export function Helm() {
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
     },
     onError: (error) => {
-      toastError(t("action", "updateRepositoriesFailed"), error);
+      toastWriteError(t("action", "updateRepositoriesFailed"), error);
     },
   });
 
   const handleSearchCharts = async () => {
     if (!searchKeyword.trim()) return;
+    const keyword = searchKeyword;
     setIsSearching(true);
+    setChartSearch(null);
     try {
-      const results = await commands.helmSearchCharts(searchKeyword);
-      setSearchResults(results);
+      const results = await commands.helmSearchCharts(keyword);
+      setChartSearch({ keyword, results, error: null });
     } catch (error) {
-      toastError(t("action", "searchFailed"), error);
+      setChartSearch({ keyword, results: null, error });
     } finally {
       setIsSearching(false);
     }
@@ -293,7 +299,7 @@ export function Helm() {
       setInstallWait(true);
     },
     onError: (error) => {
-      toastError(t("settings", "installationFailed"), error);
+      toastWriteError(t("settings", "installationFailed"), error);
     },
   });
 
@@ -317,7 +323,7 @@ export function Helm() {
       setUpgradeWait(true);
     },
     onError: (error) => {
-      toastError(t("action", "upgradeFailed"), error);
+      toastWriteError(t("action", "upgradeFailed"), error);
     },
   });
 
@@ -354,11 +360,23 @@ export function Helm() {
                   <Package className="h-3 w-3" aria-hidden="true" />
                   {t("nav", "releases")}
                 </TabsTrigger>
-                <TabsTrigger value="charts" disabled={!helmCliAvailable}>
+                <TabsTrigger
+                  value="charts"
+                  disabled={!helmCliAvailable}
+                  title={
+                    helmCliChecking ? t("empty", "helmCliChecking") : undefined
+                  }
+                >
                   <Search className="h-3 w-3" aria-hidden="true" />
                   {t("nav", "charts")}
                 </TabsTrigger>
-                <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
+                <TabsTrigger
+                  value="repositories"
+                  disabled={!helmCliAvailable}
+                  title={
+                    helmCliChecking ? t("empty", "helmCliChecking") : undefined
+                  }
+                >
                   <FolderGit2 className="h-3 w-3" aria-hidden="true" />
                   {t("nav", "repositories")}
                 </TabsTrigger>
@@ -384,6 +402,7 @@ export function Helm() {
             error={releasesError ?? null}
             readAt={freshness.stale ? freshness.dataUpdatedAt : null}
             helmCliAvailable={helmCliAvailable}
+            helmCliChecking={helmCliChecking}
             onRefetch={() => refetch()}
             onShowHistory={setHistoryDialog}
             onUpgrade={(release) => {
@@ -408,7 +427,7 @@ export function Helm() {
           <HelmChartsTab
             searchKeyword={searchKeyword}
             onSearchKeywordChange={setSearchKeyword}
-            results={searchResults}
+            search={chartSearch}
             isSearching={isSearching}
             onSearch={handleSearchCharts}
             onInstall={(chart) => {
@@ -423,6 +442,8 @@ export function Helm() {
           <HelmRepositoriesTab
             repositories={repositories}
             isLoading={reposLoading}
+            error={reposError}
+            onRetry={() => refetchRepos()}
             isUpdating={updateReposMutation.isPending}
             onUpdateAll={() => updateReposMutation.mutate()}
             onAddRepoClick={() => setAddRepoDialogOpen(true)}
@@ -455,12 +476,9 @@ export function Helm() {
         })}
         confirmLabel={t("action", "remove")}
         confirmVariant="destructive"
-        confirmDisabled={removeRepoMutation.isPending}
-        onConfirm={() => {
-          if (deleteRepoTarget) {
-            removeRepoMutation.mutate(deleteRepoTarget);
-          }
-        }}
+        onConfirm={() =>
+          deleteRepoTarget && removeRepoMutation.mutateAsync(deleteRepoTarget)
+        }
       />
 
       <HelmInstallDialog
@@ -556,23 +574,19 @@ export function Helm() {
         }
         confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
-        confirmDisabled={rollbackMutation.isPending}
-        onConfirm={() => {
-          if (rollbackTarget) {
-            rollbackMutation.mutate({
-              name: rollbackTarget.release.name,
-              namespace: rollbackTarget.release.namespace,
-              revision: rollbackTarget.revision,
-            });
-          }
-        }}
+        onConfirm={() =>
+          rollbackTarget &&
+          rollbackMutation.mutateAsync({
+            name: rollbackTarget.release.name,
+            namespace: rollbackTarget.release.namespace,
+            revision: rollbackTarget.revision,
+          })
+        }
       />
 
       <DangerousConfirmDialog
         open={uninstallTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setUninstallTarget(null);
-        }}
+        onOpenChange={uninstallHeld.onOpenChange}
         title={t("action", "uninstallRelease")}
         description={
           uninstallTarget
@@ -587,10 +601,14 @@ export function Helm() {
         isLoading={uninstallMutation.isPending}
         onConfirm={() => {
           if (uninstallTarget) {
-            uninstallMutation.mutate({
-              name: uninstallTarget.name,
-              namespace: uninstallTarget.namespace,
-            });
+            uninstallHeld
+              .hold(
+                uninstallMutation.mutateAsync({
+                  name: uninstallTarget.name,
+                  namespace: uninstallTarget.namespace,
+                })
+              )
+              .catch(() => undefined);
           }
         }}
       />

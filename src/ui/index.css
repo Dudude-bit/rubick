@@ -50,6 +50,13 @@
   --animate-fade-in-slow: fade-in var(--animation-slow) ease-out;
   --animate-tab-live: tab-live 2.4s ease-out infinite;
 
+  /* The type scale. Sizes set no line-height, so a line inherits its rhythm
+     from the block it sits in, as the arbitrary sizes they replace did. */
+  --text-micro: 10px;
+  --text-caption: 11px;
+  --text-title: 13px;
+  --text-display: 15px;
+
   --font-sans: Inter Variable, Inter, system-ui, sans-serif;
   --font-mono: JetBrains Mono Variable, JetBrains Mono, Consolas, monospace;
 
@@ -206,7 +213,8 @@
     --fg: 32 16% 11%;
     --fg-mid: 32 10% 26%;
     --fg-mut: 32 8% 37%;
-    --fg-fnt: 32 8% 49%;
+    /* The faintest text still carries words: 4.6:1 on canvas, WCAG's 4.5 for small text. */
+    --fg-fnt: 32 8% 44%;
     --ok: 148 55% 29%;
     --warn: 30 80% 37%;
     --err: 4 66% 45%;
@@ -271,8 +279,6 @@
      * 33%, not 36%: at 36% the yellow-green and teal ends of the family ring
      * reached only 4.2:1 against this canvas, and the reason is 12px text,
      * not a swatch. The dark pair is tuned the same way from its own end. */
-    --evt-s: 46%;
-    --evt-l: 33%;
 
     /* The single documented exception to the flat canvas: an overlay has
      * to read as floating above the page or it looks like a rendering
@@ -310,7 +316,8 @@
     --fg: 220 6% 93%;
     --fg-mid: 212 7% 79%;
     --fg-mut: 213 6% 65%;
-    --fg-fnt: 213 6% 51%;
+    /* 5.4:1 on canvas, 4.6 on a raised surface. */
+    --fg-fnt: 213 6% 59%;
     --ok: 152 44% 49%;
     --warn: 44 82% 48%;
     --err: 358 81% 68%;
@@ -341,8 +348,6 @@
     --ctr-l: 65%;
     --syn-s: 42%;
     --syn-l: 78%;
-    --evt-s: 40%;
-    --evt-l: 66%;
     --raise: 220 7% 18%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }

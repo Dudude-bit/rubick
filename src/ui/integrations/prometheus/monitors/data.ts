@@ -1,6 +1,7 @@
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -104,7 +105,41 @@ export interface Picture {
   alertRules: RulesRead;
 }
 
-export async function readPicture(): Promise<Picture> {
+const inScope = (scope: readonly string[], namespace: string | null) =>
+  scope.length === 0 || (namespace !== null && scope.includes(namespace));
+
+const kindInScope = (
+  kind: Kind<CustomResourceInfo>,
+  scope: readonly string[]
+): Kind<CustomResourceInfo> =>
+  kind.state === "read"
+    ? {
+        ...kind,
+        items: kind.items.filter((cr) => inScope(scope, cr.namespace)),
+      }
+    : kind;
+
+/**
+ * The monitors and rule objects in the window's namespaces. What judges them
+ * (Prometheus instances, Services, namespaces, targets) stays whole: a
+ * monitor is picked up by an instance that lives elsewhere.
+ */
+export function scopePicture(
+  picture: Picture,
+  scope: readonly string[]
+): Picture {
+  if (scope.length === 0) return picture;
+  return {
+    ...picture,
+    serviceMonitors: kindInScope(picture.serviceMonitors, scope),
+    podMonitors: kindInScope(picture.podMonitors, scope),
+    rules: kindInScope(picture.rules, scope),
+  };
+}
+
+export async function readPicture(
+  scope: readonly string[] = []
+): Promise<Picture> {
   const crds = await read(() => commands.listCrds(false));
   const installed = crds.ok
     ? new Set(crds.items.flatMap((group) => group.crds.map((crd) => crd.name)))
@@ -136,16 +171,19 @@ export async function readPicture(): Promise<Picture> {
     readTargets(),
     readRules(),
   ]);
-  return {
-    serviceMonitors,
-    podMonitors,
-    prometheuses,
-    rules,
-    services,
-    namespaces,
-    targets,
-    alertRules,
-  };
+  return scopePicture(
+    {
+      serviceMonitors,
+      podMonitors,
+      prometheuses,
+      rules,
+      services,
+      namespaces,
+      targets,
+      alertRules,
+    },
+    scope
+  );
 }
 
 export function rowsOfPicture(picture: Picture): MonitorRow[] {
@@ -303,10 +341,11 @@ export const MONITORS_STALE = 30_000;
 /** The sidebar's count and the page read one cache entry; see `PageCount`. */
 export function usePicture() {
   const context = useClusterStore((state) => state.currentContext);
+  const scope = useClusterStore((state) => state.namespaceScope);
   return useLiveQuery({
     refresh: "resourceList",
-    queryKey: [context, ...MONITORS_KEY],
-    queryFn: readPicture,
+    queryKey: [context, ...MONITORS_KEY, scopeCacheKey(scope)],
+    queryFn: () => readPicture(scope),
     staleTime: MONITORS_STALE,
   });
 }

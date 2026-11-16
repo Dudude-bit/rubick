@@ -27,7 +27,8 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
-import { errorToShow } from "@/lib/error-utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import {
   endpointAddress,
   endpointState,
@@ -75,18 +76,15 @@ export function PublishedEndpoints({
   const { data, isPending, error } = query;
 
   if (isPending) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingWhatServicePublishes")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingWhatServicePublishes")}</Reading>;
   }
   if (error || !data) {
     return (
-      <p className="text-xs text-err">
-        {t("empty", "couldNotReadWhatServicePublishes")}{" "}
-        {error ? errorToShow(error) : t("empty", "noAnswer")}
-      </p>
+      <Unknown
+        question={t("empty", "couldNotReadWhatServicePublishes")}
+        error={error ?? t("empty", "noAnswer")}
+        onRetry={() => query.refetch()}
+      />
     );
   }
   const published = publishedFor(data, data.subject);
@@ -133,7 +131,7 @@ function Lists({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[11px]"
+                className="h-6 text-caption"
                 onClick={() => setAll(!all)}
               >
                 {all
@@ -191,7 +189,7 @@ function Lists({
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className={cn("text-[11px]", TONE[state.tone])}>
+                    <TableCell className={cn("text-caption", TONE[state.tone])}>
                       {state.unread ? (
                         <span className="inline-flex items-center gap-1">
                           <EyeOff
@@ -224,7 +222,7 @@ function Lists({
           </Table>
         )}
         {hidden > 0 && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("count", "moreNotDrawn", { n: hidden })}
           </p>
         )}

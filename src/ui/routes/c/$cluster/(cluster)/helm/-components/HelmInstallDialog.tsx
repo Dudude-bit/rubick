@@ -139,7 +139,7 @@ export function HelmInstallDialog({
               value={values}
               onChange={(e) => onValuesChange(e.target.value)}
               placeholder="# Custom values&#10;replicaCount: 2"
-              className="font-mono text-sm h-32"
+              className="font-mono text-xs h-32"
             />
             {carriesWithheld && (
               <p role="status" className="text-xs text-warn">
@@ -156,7 +156,7 @@ export function HelmInstallDialog({
                   onCreateNamespaceChange(checked === true)
                 }
               />
-              <Label htmlFor="install-create-ns" className="text-sm">
+              <Label htmlFor="install-create-ns" className="text-xs">
                 {t("action", "createNamespace")}
               </Label>
             </div>
@@ -166,7 +166,7 @@ export function HelmInstallDialog({
                 checked={wait}
                 onCheckedChange={(checked) => onWaitChange(checked === true)}
               />
-              <Label htmlFor="install-wait" className="text-sm">
+              <Label htmlFor="install-wait" className="text-xs">
                 {t("action", "waitForReady")}
               </Label>
             </div>

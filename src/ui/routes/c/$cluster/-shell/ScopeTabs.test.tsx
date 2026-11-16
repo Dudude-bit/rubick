@@ -51,6 +51,11 @@ const summary = vi.hoisted(() => ({
     } | null;
   }>,
   podCount: 0 as number | null,
+  problems: null as {
+    total: number;
+    complete: boolean;
+    worst: "err" | "warn" | null;
+  } | null,
   namespaceList: "listed" as "listed" | "refused" | "failed" | "pending",
 }));
 
@@ -140,6 +145,7 @@ beforeEach(() => {
   localStorage.clear();
   summary.namespaces = [];
   summary.podCount = 0;
+  summary.problems = null;
   summary.namespaceList = "listed";
   useNamespaceRecencyStore.setState({ recent: {} });
   nsAccess.answers = [];
@@ -692,6 +698,18 @@ describe("watching several namespaces at once", () => {
     ).toHaveAttribute("href", "/c/k3d-dev/my-access");
   });
 
+  /**
+   * "What can I do in nosuchns?" was offered for a namespace the list does
+   * not have. Fails if the question is offered for a name the cluster's
+   * listed namespaces lack.
+   */
+  it("does not offer the access question for a namespace the list lacks", async () => {
+    const user = userEvent.setup();
+    await draw(["nosuchns"]);
+    await openPicker(user);
+    expect(screen.queryByRole("link", { name: /What can I do/ })).toBeNull();
+  });
+
   it("names the whole selection where a reader cannot see the strip", async () => {
     await draw(["ns-0", "ns-1"]);
     expect(tabs()[0]).toHaveAttribute(
@@ -754,6 +772,110 @@ describe("watching several namespaces at once", () => {
     await openPicker(user);
     await user.keyboard("ns{Enter}");
     expect(scope()).toEqual(["ns-0"]);
+  });
+
+  /**
+   * The designer typed "all" and pressed Enter: the picker scoped the whole
+   * app to a namespace named "all" that the cluster does not have, over the
+   * "All namespaces" row above it, and no row was drawn as the one Enter
+   * would take. Fails if the typed row beats All namespaces for its own
+   * first letters, or the row Enter takes is not drawn active.
+   */
+  it("takes All namespaces for its first letters, and shows what Enter takes", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    await openPicker(user);
+    await user.keyboard("all");
+    const input = screen.getByRole("combobox", {
+      name: t("action", "filterNamespaces"),
+    });
+    const active = input.getAttribute("aria-activedescendant");
+    expect(active).not.toBeNull();
+    expect(document.getElementById(active ?? "")).toHaveTextContent(
+      t("cluster", "allNamespaces")
+    );
+    await user.keyboard("{Enter}");
+    expect(scope()).toEqual([]);
+  });
+
+  const listNamespaces = (...names: string[]) => {
+    summary.namespaces = names.map((name) => ({
+      name,
+      podCount: 1,
+      problems: null,
+    }));
+  };
+  const filterBox = () =>
+    screen.getByRole("combobox", { name: t("action", "filterNamespaces") });
+  const activeRow = () =>
+    document.getElementById(
+      filterBox().getAttribute("aria-activedescendant") ?? ""
+    );
+
+  /**
+   * "al" and Enter scoped the app to external-secrets, which holds the two
+   * letters mid-word. Fails if two letters of "All namespaces" lose to a
+   * namespace that merely contains them.
+   */
+  it("takes All namespaces for two letters, not a mid-word match", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("external-secrets", "ns-0");
+    await openPicker(user);
+    await user.keyboard("al{Enter}");
+    expect(scope()).toEqual([]);
+  });
+
+  /**
+   * A namespace literally called "all" is what the reader typed in full.
+   * Fails if All namespaces still wins over an exact name.
+   */
+  it("takes a namespace named exactly what was typed over All namespaces", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("all", "ns-0");
+    await openPicker(user);
+    await user.keyboard("all{Enter}");
+    expect(scope()).toEqual(["all"]);
+  });
+
+  /**
+   * Typing "ca" listed acart above cart because both held the letters and
+   * names sort alphabetically. Fails if a mid-word match outranks a prefix
+   * match, in the list or in what Enter takes.
+   */
+  it("ranks prefix matches above mid-word matches", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    listNamespaces("acart", "cart", "ns-0");
+    await openPicker(user);
+    await user.keyboard("ca");
+    const names = screen
+      .getAllByRole("option")
+      .slice(1, 3)
+      .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
+    expect(names).toEqual(["cart", "acart"]);
+    await user.keyboard("{Enter}");
+    expect(scope()).toEqual(["cart"]);
+  });
+
+  /**
+   * An empty filter drew no active row, so Enter's answer was invisible.
+   * Fails if the open picker does not mark the scope the window is on, and
+   * All namespaces when it is on none.
+   */
+  it("draws the current scope's row as active before anything is typed", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-3"]);
+    await openPicker(user);
+    expect(activeRow()).toHaveTextContent("ns-3");
+    await user.keyboard("{Escape}");
+
+    await act(async () => {
+      useClusterStore.setState({ currentNamespace: "", namespaceScope: [] });
+    });
+    await openPicker(user);
+    expect(activeRow()).toHaveTextContent(t("cluster", "allNamespaces"));
   });
 
   /**
@@ -997,8 +1119,9 @@ describe("watching several namespaces at once", () => {
     expect(list.querySelector("button")).toBeNull();
     expect(filter).toHaveFocus();
 
-    // Arrow onto a row: the caret stays put and the row is named instead.
-    await user.keyboard("{ArrowDown}{ArrowDown}");
+    // The picker opens on the scope the window is on (All namespaces); one
+    // arrow onto a row: the caret stays put and the row is named instead.
+    await user.keyboard("{ArrowDown}");
     expect(filter).toHaveAttribute("aria-activedescendant", rowFor("ns-0").id);
 
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -1422,6 +1545,19 @@ describe("the count beside a namespace", () => {
   });
 
   /**
+   * The All row said 98 and nothing else while the cluster had 9 problems
+   * and each namespace row beside it carried its own. Fails if the row for
+   * the whole cluster stops stating the Overview's count in the same words.
+   */
+  it("gives the All namespaces row the cluster's own problem count", async () => {
+    summary.podCount = 98;
+    summary.problems = { total: 9, complete: true, worst: "err" };
+    const list = await open();
+
+    expect(within(list).getByText("98 · 9 problems")).toHaveClass("text-err");
+  });
+
+  /**
    * A namespace whose only trouble is an autoscaler that cannot read its
    * metrics is amber on its Overview. Fails if the picker paints it red.
    */
@@ -1440,8 +1576,9 @@ describe("the count beside a namespace", () => {
 
   /**
    * A kind the cluster would not list leaves the count short. Fails if a
-   * short count reads as the whole count, or a namespace nobody could
-   * check reads as one with no problems.
+   * short count reads as the whole count, a namespace nobody could check
+   * reads as one with no problems, or the longer words stop giving way to
+   * the namespace's name (the picker showed rows with no name at all).
    */
   it("says the count is a floor when a kind was not checked there", async () => {
     summary.namespaces = [
@@ -1458,11 +1595,16 @@ describe("the count beside a namespace", () => {
     ];
     const list = await open();
 
-    expect(within(list).getByText("14 · 3+ problems")).toBeInTheDocument();
+    const counted = within(list).getByText("14 · 3 problems · not all checked");
+    expect(counted).toHaveClass("truncate");
+    expect(counted).toHaveAttribute("title", "3 problems · not all checked");
+    expect(within(list).getByText("shop")).toBeVisible();
     expect(
       within(list).getByRole("option", { name: /^shop,/ })
-    ).toHaveAccessibleName("shop, 14 pods, 3+ problems, not all checked");
-    expect(within(list).getByText("4 · not all checked")).toBeInTheDocument();
+    ).toHaveAccessibleName("shop, 14 pods, 3 problems · not all checked");
+    expect(
+      within(list).getByText("4 · no problems found · not all checked")
+    ).toBeInTheDocument();
   });
 });
 
@@ -1642,4 +1784,39 @@ describe("the new tab button", () => {
       }
     }
   );
+});
+
+describe("the tab bar as one tab stop", () => {
+  /**
+   * Tab walked every control of every tab before the page. Fails if more than
+   * one control is in the tab order, if the open tab does not hold the stop,
+   * or if the arrow keys stop moving between controls.
+   */
+  it("keeps one control in the tab order and moves between them with the arrows", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/c/k3d-dev" }),
+        tab({ id: "b", href: "/c/k3d-dev/pods" }),
+      ],
+      activeId: "b",
+      pendingHref: null,
+    });
+    await mount();
+    const bar = tabs()[0].closest<HTMLElement>("div[class*='select-none']")!;
+    const buttons = () => [...bar.querySelectorAll<HTMLElement>("button")];
+    await waitFor(() =>
+      expect(buttons().filter((each) => each.tabIndex === 0)).toHaveLength(1)
+    );
+    const stop = buttons().find((each) => each.tabIndex === 0)!;
+    expect(tabs()[1]).toContainElement(stop);
+
+    stop.focus();
+    fireEvent.keyDown(stop, { key: "ArrowRight" });
+    const next = buttons()[buttons().indexOf(stop) + 1];
+    expect(document.activeElement).toBe(next);
+    expect(next.tabIndex).toBe(0);
+    expect(stop.tabIndex).toBe(-1);
+    fireEvent.keyDown(next, { key: "Home" });
+    expect(document.activeElement).toBe(buttons()[0]);
+  });
 });

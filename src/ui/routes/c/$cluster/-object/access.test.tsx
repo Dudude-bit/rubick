@@ -89,8 +89,8 @@ const API_POD = {
   ],
 };
 
-const mutation = (mutate = vi.fn()) =>
-  ({ mutate, isPending: false }) as unknown as UseMutationResult<
+const mutation = (mutateAsync = vi.fn(() => Promise.resolve())) =>
+  ({ mutateAsync, isPending: false }) as unknown as UseMutationResult<
     void,
     Error,
     void
@@ -324,11 +324,10 @@ describe("Delete when the access review cannot answer", () => {
 
   /** Deletes the Secret through its page's dialog, the cluster answering `refusal`. */
   const deleteRefused = async (refusal: string) => {
-    const mutate = vi.fn(
-      (_: unknown, options: { onError: (e: Error) => void }) =>
-        options.onError(
-          Object.assign(new Error(refusal), { code: ERROR_CODES.PERMISSION })
-        )
+    const mutate = vi.fn(() =>
+      Promise.reject(
+        Object.assign(new Error(refusal), { code: ERROR_CODES.PERMISSION })
+      )
     );
     await renderWithRouter(
       <DeleteAction
@@ -364,6 +363,7 @@ describe("Delete when the access review cannot answer", () => {
     await waitFor(() => expect(checkAccess).toHaveBeenCalled());
     allowed = false;
     await refused;
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(deleteButton()).toHaveAttribute("aria-disabled", "true")
     );
@@ -391,6 +391,7 @@ describe("Delete when the access review cannot answer", () => {
       ).toBe(true)
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(deleteButton()).not.toHaveAttribute("aria-disabled");
   });
 });

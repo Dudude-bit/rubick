@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Terminal, TerminalMetadata } from "@/components/terminal/Terminal";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
+import { StreamFailure } from "@/components/terminal/StreamFailure";
+import { Unknown } from "@/components/ui/unknown";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
-import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import {
+  normalizeTauriError,
+  ERROR_CODES,
+  errorCode,
+  isRefusal,
+} from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { listenEvent } from "@/lib/events";
@@ -59,6 +66,8 @@ export function PodTerminal({
   });
   const [sessionId, setSessionId] = useState<string | null>(kept);
   const [error, setError] = useState<string | null>(null);
+  // The cluster's no, which no reconnect answers: only a change of access does.
+  const [refused, setRefused] = useState<unknown>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null
   );
@@ -91,6 +100,7 @@ export function PodTerminal({
 
     setIsConnecting(true);
     setError(null);
+    setRefused(null);
     setUnavailableReason(null);
 
     try {
@@ -125,7 +135,8 @@ export function PodTerminal({
     } catch (err) {
       console.error("Failed to open shell:", err);
       if (connectAttemptRef.current === attemptId) {
-        setError(normalizeTauriError(err));
+        if (isRefusal(err)) setRefused(err);
+        else setError(normalizeTauriError(err));
         setIsConnecting(false);
       }
     }
@@ -171,7 +182,12 @@ export function PodTerminal({
         // Two banners, one component: `unavailableReason` is the
         // no-way-back copy the pod-status poll already writes, `error`
         // is the retryable one.
-        if (failure.kind === "gone") {
+        if (failure.kind === "refused") {
+          setRefused({
+            code: ERROR_CODES.PERMISSION,
+            message: failure.message,
+          });
+        } else if (failure.kind === "gone") {
           setUnavailableReason(failure.message);
         } else {
           setError(failure.message);
@@ -283,43 +299,73 @@ export function PodTerminal({
   // offering it reads as "we do not know what happened".
   const canReconnect = !!error;
 
+  if (refused && !isConnecting && !sessionId)
+    return (
+      <div className="h-full overflow-auto bg-canvas p-3">
+        <Unknown
+          question={t("empty", "shellRefused", {
+            target: `${podName}/${containerName}`,
+          })}
+          error={refused}
+          onRetry={connect}
+        />
+      </div>
+    );
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-canvas">
-      {failureReason && (
-        <div
-          role="alert"
-          className="flex items-start justify-between gap-3 border-b border-hair px-4 py-2"
-        >
-          <div className="min-w-0">
-            <p className={`text-xs ${canReconnect ? "text-err" : "text-warn"}`}>
-              {canReconnect
-                ? t("empty", "noShellOn", {
-                    target: `${podName}/${containerName}`,
-                  })
-                : t("empty", "noLongerAvailable", {
-                    target: `${podName}/${containerName}`,
-                  })}
-            </p>
-            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
-              {failureReason}
-            </p>
-          </div>
-          {canReconnect ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={connect}
-            >
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              {t("action", "reconnect")}
-            </Button>
-          ) : (
-            <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-              {t("empty", "nothingLeftToAttachTo")}
-            </span>
-          )}
-        </div>
+      {failureReason ? (
+        <StreamFailure
+          tone={canReconnect ? "err" : "warn"}
+          headline={
+            canReconnect
+              ? t("empty", "noShellOn", {
+                  target: `${podName}/${containerName}`,
+                })
+              : t("empty", "noLongerAvailable", {
+                  target: `${podName}/${containerName}`,
+                })
+          }
+          detail={failureReason}
+          action={
+            canReconnect ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={connect}
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                {t("action", "reconnect")}
+              </Button>
+            ) : (
+              <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
+                {t("empty", "nothingLeftToAttachTo")}
+              </span>
+            )
+          }
+        />
+      ) : (
+        ended &&
+        sessionId && (
+          <StreamFailure
+            tone="warn"
+            headline={t("empty", "shellExited", {
+              target: `${podName}/${containerName}`,
+            })}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={connect}
+              >
+                <Play className="mr-2 h-3 w-3" aria-hidden="true" />
+                {t("action", "startNewShell")}
+              </Button>
+            }
+          />
+        )
       )}
       <Terminal
         sessionId={sessionId}
@@ -329,6 +375,7 @@ export function PodTerminal({
         replay={replay}
         ownsSession={false}
         closeLabel={t("activity", "endShell", { pod: podName })}
+        connecting={isConnecting}
       />
     </div>
   );

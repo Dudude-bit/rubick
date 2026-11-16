@@ -118,6 +118,29 @@ describe("what the Monitors page says a Prometheus picks up", () => {
 });
 
 /**
+ * "Nothing scrapes it" was claimed in red with scraping unchecked. Fails if
+ * the not-picked-up line goes red while no Prometheus is connected.
+ */
+describe("the not-picked-up line", () => {
+  const unpicked = {
+    ...row,
+    pickedUp: { state: "judged", by: [] },
+  } as MonitorRow;
+  it("is amber while scraping is unchecked", async () => {
+    await renderWithRouter(
+      <Detail
+        row={unpicked}
+        picture={picture({ serviceMonitorSelector: {} })}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+    expect(screen.getByText(en.monitors.notPickedUp).className).toContain(
+      "text-warn"
+    );
+  });
+});
+
+/**
  * The step under "Picked up by" said "No Prometheus object in the cluster,
  * so nothing picks it up" in red. Fails if a cluster with no Prometheus
  * object gets the missing-CRD sentence, or a verdict about who reads it.
@@ -134,5 +157,63 @@ describe("the pick-up step where no Prometheus object exists", () => {
     expect(screen.getByText(en.monitors.notJudged)).toBeInTheDocument();
     expect(screen.getByText(en.monitors.noInstances)).toBeInTheDocument();
     expect(screen.queryByText(en.monitors.prometheusKindAbsent)).toBeNull();
+  });
+});
+
+/**
+ * "Picked up by" repeated the card's sentence word for word. Fails if the
+ * sentence about a selector Kubernetes cannot build is drawn twice.
+ */
+describe("the pick-up step when the card above already says why it is unknown", () => {
+  it("says the unevaluable selector once", async () => {
+    const why = { kind: "unevaluable", prometheus: "kps" } as const;
+    await renderWithRouter(
+      <Detail
+        row={{
+          ...row,
+          pickedUp: { state: "unknown", by: [], why },
+          findings: [{ kind: "pickedUpUnknown", severity: "warn", why }],
+        }}
+        picture={picture({ serviceMonitorSelector: {} })}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+    const sentence = en.monitors.pickedUpUnevaluable.replace(
+      "{prometheus}",
+      "kps"
+    );
+    expect(document.body.textContent!.split(sentence)).toHaveLength(2);
+  });
+});
+
+/**
+ * "Picked up by" repeated the verdict's sentence, and the no-Prometheus
+ * paragraph stood in the page note, the card and the Targets step. Fails if
+ * either sentence is drawn by the detail more than the page note leaves to it.
+ */
+describe("a sentence the page already says", () => {
+  const open = (over: Partial<MonitorRow>) =>
+    renderWithRouter(
+      <Detail
+        row={{ ...row, ...over }}
+        picture={picture({ serviceMonitorSelector: {} })}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+
+  it("says why nothing picks it up once, the step answering none", async () => {
+    await open({
+      pickedUp: { state: "judged", by: [] },
+      findings: [{ kind: "notPickedUp", severity: "warn" }],
+    } as Partial<MonitorRow>);
+    expect(
+      document.body.textContent!.split(en.monitors.notPickedUp)
+    ).toHaveLength(2);
+    expect(screen.getByText(en.empty.noneInline)).toBeInTheDocument();
+  });
+
+  it("leaves the no-Prometheus paragraph to the page note", async () => {
+    await open({});
+    expect(document.body.textContent).not.toContain(en.monitors.notConnected);
   });
 });

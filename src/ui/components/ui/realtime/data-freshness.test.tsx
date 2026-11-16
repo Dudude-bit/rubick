@@ -72,13 +72,25 @@ describe("what the freshness reading claims", () => {
   /**
    * Lena read "замедлено · 0 с" beside a page title and could not tell what
    * was slowed or what the bare age meant. Fails if the face goes back to a
-   * word without its subject or an age without "назад".
+   * word without its subject or an age without saying whose age it is.
    */
-  it("says in Russian what is slowed and how long ago it read", () => {
+  it("says in Russian what is slowed and how old its last answer is", () => {
     useLocaleStore.setState({ choice: "ru" });
     wrap(<DataFreshness dataUpdatedAt={Date.now() - 5000} slowed />);
     expect(screen.getByText("опрос реже обычного")).toBeInTheDocument();
-    expect(screen.getByText(/^\d+\s*с назад$/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^последний ответ \d+\s*с назад$/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * "read failing · 55s ago" read as how long the read had been failing.
+   * Fails if a failing read's age stops saying it is the last answer's.
+   */
+  it("dates a failing read by its last answer, not by the failure", () => {
+    wrap(<DataFreshness dataUpdatedAt={Date.now() - 55_000} stale />);
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.getByText(/^last answer \d+s ago$/)).toBeInTheDocument();
   });
 
   it("distinguishes the three states without relying on colour", () => {
@@ -158,7 +170,12 @@ describe("the room the reading takes", () => {
 
     expect(screen.getByText("polling")).toBeInTheDocument();
     expect(reserved).toEqual(
-      expect.arrayContaining(["polled less often", "offline", "59m ago"])
+      expect.arrayContaining([
+        "polled less often",
+        "offline",
+        "59m ago",
+        "last answer 59m ago",
+      ])
     );
     expect(container.textContent).not.toContain("polled less often");
   });

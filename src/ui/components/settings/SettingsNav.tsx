@@ -143,7 +143,7 @@ export function SettingsNav({
               />
               <span className="truncate">{t("settings", section.label)}</span>
               {searching && count > 0 && (
-                <span className="ml-auto pl-1 font-mono text-[11px] text-fg-fnt">
+                <span className="ml-auto pl-1 font-mono text-caption text-fg-fnt">
                   {count}
                 </span>
               )}

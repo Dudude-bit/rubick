@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -43,11 +43,14 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 const readContainerFile = vi.fn();
 const containerWorkingDir = vi.fn();
+const downloadContainerFile = vi.fn();
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: () => Promise.resolve(),
     readContainerFile: (...args: unknown[]) => readContainerFile(...args),
     containerWorkingDir: (...args: unknown[]) => containerWorkingDir(...args),
-    downloadContainerFile: vi.fn(),
+    downloadContainerFile: (...args: unknown[]) =>
+      downloadContainerFile(...args),
   },
 }));
 
@@ -409,6 +412,35 @@ describe("FilesTab", () => {
     } finally {
       useLocaleStore.setState({ choice: null });
     }
+  });
+
+  /**
+   * An exec the cluster refused read "The listing did not finish: ?" over the
+   * raw websocket string. Fails if a refusal is drawn as a listing failure
+   * with a placeholder, or loses the sentence about the identity.
+   */
+  it("says this identity may not exec, with no placeholder, when the upgrade was a 403", async () => {
+    listing.mockReturnValue({
+      phase: "failed",
+      entries: [],
+      reason: "failed",
+      message: "WebSocket upgrade failed: HTTP error: 403 Forbidden",
+      exitCode: null,
+      stderr: "",
+      tried: [],
+    });
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/This identity may not exec into app/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/did not finish: \?/)).toBeNull();
   });
 
   /** A tool that is not there is never an empty folder. */
@@ -919,6 +951,87 @@ describe("FilesTab", () => {
       screen.getAllByRole("button", { name: "Download" }).at(-1)!
     );
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  });
+
+  const small = () =>
+    done([
+      {
+        name: "app.log",
+        kind: "file",
+        mode: "644",
+        size: 2048,
+        modified: null,
+        owner: "app",
+        group: "app",
+        target: null,
+      },
+    ]);
+  const textPreview = {
+    state: "preview",
+    preview: {
+      bytesRead: 8,
+      truncated: false,
+      binary: false,
+      nonTextShare: 0,
+      lossy: false,
+      text: "hello",
+    },
+  };
+
+  /**
+   * A multi-MB download showed nothing until its toast, and a second click
+   * started a concurrent write to the same destination. Fails if Download
+   * stays live while one is running, or if it never comes back after.
+   */
+  it("holds Download while a download is running and releases it after", async () => {
+    listing.mockReturnValue(small());
+    readContainerFile.mockResolvedValue(textPreview);
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(save).mockResolvedValue("/tmp/app.log");
+    let finish: (value: unknown) => void = () => {};
+    downloadContainerFile.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve))
+    );
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("app.log"));
+    const button = await screen.findByRole("button", { name: "Download" });
+    await userEvent.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAttribute("aria-busy", "true");
+    await userEvent.click(button);
+    expect(downloadContainerFile).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ state: "written", bytes: 5 }));
+    await waitFor(() => expect(button).toBeEnabled());
+  });
+
+  /**
+   * A refused preview was a bare red word with no way to ask again. Fails if
+   * the preview's failure loses the sentence about what could not be read, or
+   * the retry.
+   */
+  it("says the preview could not be read and offers to read it again", async () => {
+    listing.mockReturnValue(small());
+    readContainerFile.mockRejectedValue(new Error("pods/exec is forbidden"));
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("app.log"));
+    expect(
+      await screen.findByText(/Could not read app.log, so there is no preview/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /again/i })).toBeInTheDocument();
   });
 
   /**

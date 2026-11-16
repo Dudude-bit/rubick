@@ -85,4 +85,19 @@ describe("the NetworkPolicies on a Pod's page", () => {
     ).toHaveLength(2);
     expect(screen.queryByText(en.readings.podIngressOpen)).toBeNull();
   });
+
+  /**
+   * The wait was a bare grey sentence, and the page then jumped to two
+   * direction blocks. Fails if the wait is not drawn in the blocks' shape, or
+   * if it says "open" or "cannot say" before the read has answered.
+   */
+  it("holds the two direction blocks as a skeleton while the read is on its way", async () => {
+    answer.policies = () => new Promise(() => {});
+    await renderWithRouter(<PodNetworkPolicies pod={API_POD} />);
+
+    const waiting = await screen.findByRole("status");
+    expect(waiting).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText(en.readings.podIngressOpen)).toBeNull();
+    expect(screen.queryByText(en.readings.podPoliciesCannotSay)).toBeNull();
+  });
 });

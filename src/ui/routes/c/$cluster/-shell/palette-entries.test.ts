@@ -10,6 +10,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { hrefOf, setRouter, type AppLink } from "@/lib/links";
 import { Box } from "lucide-react";
+import { getResourceIcon, ResourceType } from "@/lib/resource-registry";
 import {
   buildActionEntries,
   buildPaletteEntries,
@@ -22,6 +23,7 @@ import {
   kindLabels,
   kindSplit,
   orderHits,
+  unreadParts,
 } from "./palette-entries";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -113,6 +115,77 @@ const read = (kind: string, group = "", plural = `${kind.toLowerCase()}s`) => ({
   kind,
   group,
   plural,
+});
+
+describe("the palette's order between a kind and an object", () => {
+  const kind = (name: string, group: string, plural: string) => ({
+    kind: name,
+    group,
+    plural,
+    version: "v1",
+    namespaced: true,
+    verbs: ["list"],
+    shortNames: [],
+  });
+  const kinds = [
+    kind("FrontendConfig", "networking.gke.io", "frontendconfigs"),
+    kind("Deployment", "apps", "deployments"),
+  ];
+  const hit = (name: string, kindName = "Deployment"): SearchHit => ({
+    context: "k3d-dev",
+    kind: kindName,
+    group: kindName === "Deployment" ? "apps" : "",
+    plural: kindName === "Deployment" ? "deployments" : "services",
+    name,
+    namespace: "default",
+  });
+  const order = (text: string, hits: SearchHit[]) =>
+    buildPaletteEntries(
+      state({
+        text,
+        kinds,
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext(hits),
+      })
+    )
+      .filter((entry) => entry.kind === "kind" || entry.kind === "hit")
+      .map((entry) => (entry.kind === "kind" ? "kind" : "hit"));
+
+  /**
+   * Rule: a whole object name, then a whole kind name, then prefixes of
+   * either. "frontend" opened the FrontendConfig list above the Deployment
+   * named frontend.
+   */
+  it.each([
+    [
+      "a whole object name beats a kind's prefix",
+      "frontend",
+      [hit("frontend")],
+      ["hit", "kind"],
+    ],
+    [
+      "a whole kind name beats an object's prefix",
+      "deployment",
+      [hit("deployment-x")],
+      ["kind", "hit"],
+    ],
+    [
+      "a whole name of both keeps the kind first",
+      "deployments",
+      [hit("deployments")],
+      ["kind", "hit"],
+    ],
+    [
+      "a prefix of each keeps the kind first",
+      "frontend",
+      [hit("frontend-web")],
+      ["kind", "hit"],
+    ],
+  ])("%s", (_, text, hits, expected) => {
+    const got = order(text, hits as SearchHit[]);
+    expect(got.filter((x) => x === "kind").length).toBeGreaterThan(0);
+    expect(got.filter((_, i, all) => all.indexOf(_) === i)).toEqual(expected);
+  });
 });
 
 describe("the palette's entries with nothing typed", () => {
@@ -843,6 +916,27 @@ describe("the palette's resource rows", () => {
       "Nothing has been searched: no cluster here is connected yet."
     );
   });
+
+  /** Before the request names any cluster the roster is empty, which is not "none is connected". */
+  it("says it is still reading while the search has not named a cluster yet", () => {
+    const entries = buildPaletteEntries(
+      state({ text: "api", searching: true, shownClusters: [] })
+    );
+
+    expect(hintText(entries)).toBe("Still reading names for “api”…");
+    expect(hintTone(entries)).toBe("loading");
+  });
+
+  /** An empty roster with nothing running is an unread search, never a cold-cluster claim. */
+  it("does not claim no cluster is connected from an empty roster", () => {
+    const entries = buildPaletteEntries(
+      state({ text: "api", searching: false, shownClusters: [] })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing has been searched: the search did not complete on any cluster here."
+    );
+  });
 });
 
 describe("the palette's entries after a bang", () => {
@@ -1009,6 +1103,7 @@ describe("each served kind counted once", () => {
       read: 2,
       partly: 1,
       refused: 0,
+      failed: { partly: 0, refused: 0 },
       loading: 0,
       notSearched: 3,
       unlistable: 1,
@@ -1031,6 +1126,24 @@ describe("each served kind counted once", () => {
           split.notSearched +
           split.unlistable
       ).toBe(catalogue.length);
+  });
+
+  /** Fails if a kind that timed out is counted with the refusals, and so drawn beside a lock and called refused. */
+  it("counts a kind that failed apart from one that was refused", () => {
+    const split = kindSplit(catalogue, {
+      ...cluster("k3d-dev"),
+      searched: [kind("a")],
+      unreadable: [
+        { ...refused("a", ["team-blind"]), reason: "timeout" as const },
+        refused("b", []),
+        { ...refused("c", []), reason: "timeout" as const },
+      ],
+    });
+    expect(split).toMatchObject({
+      partly: 1,
+      refused: 2,
+      failed: { partly: 1, refused: 1 },
+    });
   });
 });
 
@@ -1572,6 +1685,50 @@ describe("the order the palette draws hits in", () => {
     expect(order.at(-1)).toBe("ConfigMap/kube-root-ca.crt");
   });
 
+  /**
+   * "lab api" asked for the object api in the namespace lab and found
+   * nothing, because the whole query was one needle. Fails if a word the
+   * namespace answers stops being left to the namespace, so the exact name
+   * ranks first in either word order.
+   */
+  it("reads two words as a namespace and a name, in either order", () => {
+    const found = [
+      hit("Pod", "api-7d9f", "lab"),
+      hit("Deployment", "api", "lab"),
+      hit("Pod", "api-7d9f", "prod"),
+    ];
+    for (const needle of ["lab api", "api lab"]) {
+      expect(
+        orderHits(found, needle)
+          .slice(0, 2)
+          .map(({ hit }) => `${hit.kind}/${hit.name}`)
+      ).toEqual(["Deployment/api", "Pod/api-7d9f"]);
+    }
+  });
+
+  /** Fails if a hit found through its namespace alone claims to be named by the query. */
+  it("says a hit matched by namespace only when no word of the query is in its name", () => {
+    const own = (name: string): SearchHit => ({
+      context: "k3d-dev",
+      kind: "Pod",
+      group: "",
+      plural: "pods",
+      name,
+      namespace: "lab",
+    });
+    const entries = buildPaletteEntries(
+      state({
+        text: "lab api",
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext([own("api-0"), own("worker")]),
+      })
+    );
+    const caption = ids(entries).indexOf("cap:ns:k3d-dev");
+    expect(caption).toBeGreaterThan(-1);
+    expect(entries[caption - 1]).toMatchObject({ hit: { name: "api-0" } });
+    expect(entries[caption + 1]).toMatchObject({ hit: { name: "worker" } });
+  });
+
   /** Marco's "could not read 13 kinds" list was in a new order on every open. */
   it("names kinds in one order whatever order the cluster listed them in", () => {
     const kinds = ["Role", "DaemonSet", "ClusterRole"].map((kind) => ({
@@ -1600,5 +1757,61 @@ describe("kind names on hover", () => {
         { kind: "Event", group: "" },
       ])
     ).toEqual(["ComponentStatus", "Event (core)", "Event (events.k8s.io)"]);
+  });
+});
+
+describe("the quick actions' icons", () => {
+  /**
+   * Pods, Deployments and Helm shared one cube and ConfigMaps and Secrets
+   * one document, so a row could not be told from the next by its mark.
+   * Fails if a kind's quick action stops wearing the icon the sidebar uses.
+   */
+  it("gives each kind the icon the sidebar uses for it", () => {
+    const links = buildPaletteEntries(state({})).flatMap((entry) =>
+      entry.kind === "link" ? [entry] : []
+    );
+    const iconOf = (id: string) => links.find((entry) => entry.id === id)?.icon;
+    expect(iconOf("nav:goToPods")).toBe(getResourceIcon(ResourceType.Pod));
+    expect(iconOf("nav:goToDeployments")).toBe(
+      getResourceIcon(ResourceType.Deployment)
+    );
+    expect(iconOf("nav:goToConfigMaps")).toBe(
+      getResourceIcon(ResourceType.ConfigMap)
+    );
+    expect(iconOf("nav:goToSecrets")).toBe(
+      getResourceIcon(ResourceType.Secret)
+    );
+  });
+});
+
+describe("the kinds a search could not read", () => {
+  const unread = (plural: string, reason: string) =>
+    ({
+      kind: plural,
+      group: "apps",
+      plural,
+      reason,
+      namespaces: [],
+      message: reason,
+    }) as unknown as ClusterSearchState["unreadable"][number];
+
+  /** Fails if a 500 is counted with the refusals, and so worded as "refused" beside a lock. */
+  it("keeps a refused kind apart from one that failed", () => {
+    const state = {
+      ...cluster("a"),
+      unreadable: [
+        unread("secrets", "forbidden"),
+        unread("deployments", "error"),
+      ],
+    };
+    expect(
+      unreadParts(state).map(({ refused, kinds }) => [
+        refused,
+        kinds.map((kind) => kind.plural),
+      ])
+    ).toEqual([
+      [true, ["secrets"]],
+      [false, ["deployments"]],
+    ]);
   });
 });

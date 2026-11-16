@@ -1,6 +1,13 @@
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useQuery } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import { Info } from "lucide-react";
@@ -9,6 +16,13 @@ import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
+import { useObjectUnread } from "./object-unread";
+
+const shellItems = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () =>
+    shellItems.items.length > 0 ? { items: shellItems.items } : null,
+}));
 import { useResourceDetail } from "@/hooks/useResourceDetail";
 import { renderWithRouter } from "@/test/render";
 import { parseAlert } from "@/lib/alerts";
@@ -709,7 +723,11 @@ describe("the breadcrumb's namespace segment", () => {
     // to the native `auxclick` event, so dispatch that one.
     fireEvent(
       segment(),
-      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })
+      new MouseEvent("auxclick", {
+        bubbles: true,
+        cancelable: true,
+        button: 1,
+      })
     );
     const { tabs: open, activeId } = useScopeTabStore.getState();
     expect(open).toHaveLength(2);
@@ -777,13 +795,13 @@ describe("the breadcrumb's namespace segment", () => {
   });
 });
 
-describe("DetailError does not stack the same sentence twice", () => {
+describe("DetailError says a read it could not do the way every unread is said", () => {
   /**
-   * The red heading already says "could not read this kind"; #128 wired an
-   * Unknown box below it. Passing the heading's own key as the box's question
-   * printed the sentence twice. The box asks the question the read was instead.
+   * A refused GET drew a red "Could not read this Deployment"
+   * over an amber lock box asking "What is this Deployment?". Red is the
+   * cluster's or a write's; fails if the sentence is said twice or in red.
    */
-  it("says 'could not read' once, and asks a distinct question", async () => {
+  it("says 'could not read' once, in the warn box, never in red", async () => {
     await wrap(
       <DetailError
         error={
@@ -796,10 +814,246 @@ describe("DetailError does not stack the same sentence twice", () => {
       />
     );
 
-    expect(screen.getAllByText("Could not read this Deployment")).toHaveLength(
-      1
+    const said = screen.getAllByText("Could not read this Deployment");
+    expect(said).toHaveLength(1);
+    expect(said[0].closest('[data-read="refused"]')).not.toBeNull();
+    expect(screen.queryByText("What is this Deployment?")).toBeNull();
+    expect(document.querySelector(".text-err")).toBeNull();
+  });
+
+  /**
+   * The same page had no header, breadcrumbs or way back to its list while
+   * the list beside it held the object. Fails if a failed read with nothing
+   * held drops the header, which names the object from its address.
+   */
+  it("keeps the header, named from the address, over a read that failed", async () => {
+    await renderWithRouter(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        title=""
+        resourceKind="Deployment"
+        error={new Error("500 from get")}
+        activeTab="overview"
+        tabs={overview}
+      />,
+      {
+        at: "/c/prod/deployments/argocd/argocd-repo-server",
+        route: "/c/$cluster/deployments/$namespace/$name",
+      }
     );
-    expect(screen.getByText("What is this Deployment?")).toBeInTheDocument();
+    expect(screen.getByText("argocd-repo-server")).toBeInTheDocument();
+    expect(screen.getByText("Could not read this Deployment")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Try the read again/ })
+    ).toBeVisible();
+  });
+
+  /**
+   * The list's row drawn: its own read and the one that
+   * finds what governs it both failed, and the chip read a clean Ready beside
+   * a list row saying "1 problem". Fails if the chip over a stale object
+   * does not carry the row's problem.
+   */
+  /**
+   * The Overview and the status bar counted the node autoscaler's
+   * TooManyReplicas; the autoscaler's own page said only "219d old" with one
+   * amber condition row. Fails if an object's own page does not lead with a
+   * finding the shell holds against it, in its chip and its findings.
+   */
+  it("leads an autoscaler's page with the finding the shell counts against it", async () => {
+    shellItems.items = [
+      {
+        key: "hpa",
+        tone: "warn",
+        kind: "HorizontalPodAutoscaler",
+        name: "node",
+        namespace: "realtime-gateway",
+        reason: "TooManyReplicas",
+        detail: null,
+        opens: { kind: "Rollout", name: "node", namespace: "realtime-gateway" },
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "node" }}
+          title="node"
+          namespace="realtime-gateway"
+          resourceKind="HorizontalPodAutoscaler"
+          statusBadge={<span>Active</span>}
+          activeTab="overview"
+          tabs={overview}
+        />
+      );
+      const chip = document.querySelector('[data-problem="warn"]');
+      expect(chip).toHaveAttribute("title", "TooManyReplicas");
+      expect(screen.getByTestId("findings-block")).toHaveTextContent(
+        "TooManyReplicas"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
+   * The chip rode only on a status badge, so a page with none said nothing
+   * of the problem its own row carried. Fails if a page with no status drops
+   * the shell's problem from its header.
+   */
+  it("carries the shell's problem in a header that has no status badge", async () => {
+    const self = {
+      kind: "HorizontalPodAutoscaler",
+      name: "api",
+      namespace: "api",
+    };
+    shellItems.items = [
+      {
+        ...self,
+        key: "hpa",
+        tone: "err",
+        reason: "FailedGetScale",
+        detail: null,
+        opens: self,
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "api" }}
+          title="api"
+          namespace="api"
+          resourceKind="HorizontalPodAutoscaler"
+          activeTab="overview"
+          tabs={overview}
+        />
+      );
+      expect(document.querySelector('[data-problem="err"]')).toHaveAttribute(
+        "title",
+        "FailedGetScale"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
+   * A crash-looping pod's page said its cause in its own summary and again
+   * in the shell's findings block. Fails if a page that tells its own cause
+   * still draws the list row's finding beneath it.
+   */
+  it("draws no second block for a page that tells its own cause", async () => {
+    shellItems.items = [
+      {
+        key: "pod",
+        tone: "err",
+        kind: "Pod",
+        name: "api-1",
+        namespace: "lab",
+        reason: "Init:CrashLoopBackOff",
+        detail: null,
+        opens: { kind: "Pod", name: "api-1", namespace: "lab" },
+      },
+    ];
+    const page = (tellsCause: boolean) => (
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api-1" }}
+        title="api-1"
+        namespace="lab"
+        resourceKind="Pod"
+        statusBadge={<span>Init:CrashLoopBackOff</span>}
+        tellsCause={tellsCause}
+        activeTab="overview"
+        tabs={overview}
+      />
+    );
+    try {
+      await wrap(page(true));
+      expect(screen.queryByTestId("findings-block")).toBeNull();
+      cleanup();
+      await wrap(page(false));
+      expect(screen.getByTestId("findings-block")).toHaveTextContent(
+        "Init:CrashLoopBackOff"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  it("carries the list row's problem over an object its own read could not answer for", async () => {
+    shellItems.items = [
+      {
+        tone: "warn",
+        kind: "HorizontalPodAutoscaler",
+        reason: "TooManyReplicas",
+        detail: null,
+        opens: {
+          kind: "Deployment",
+          name: "argocd-repo-server",
+          namespace: "argocd",
+        },
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "argocd-repo-server" }}
+          title="argocd-repo-server"
+          namespace="argocd"
+          resourceKind="Deployment"
+          statusBadge={<span>Ready</span>}
+          activeTab="overview"
+          tabs={overview}
+          freshness={{
+            dataUpdatedAt: Date.now() - 30_000,
+            slowed: false,
+            paused: false,
+            everyMs: 5000,
+            stale: true,
+            slowRead: false,
+            failure: new Error("403 from get"),
+            waitingSince: null,
+          }}
+        />
+      );
+      const chip = document.querySelector('[data-problem="warn"]');
+      // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+      expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
+      expect(chip).toHaveAttribute("title", "TooManyReplicas");
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /** Fails if the stale line over an object kept from an earlier answer offers no way to ask again. */
+  it("offers to read again over the object an earlier answer left", async () => {
+    const onRetry = vi.fn();
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        onRetry={onRetry}
+        freshness={{
+          dataUpdatedAt: Date.now() - 30_000,
+          slowed: false,
+          paused: false,
+          everyMs: 5000,
+          stale: true,
+          slowRead: false,
+          failure: new Error("500 from get"),
+          waitingSince: null,
+        }}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Try the read again/ })
+    );
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -916,7 +1170,7 @@ describe("a detail page whose re-read fails", () => {
 
     expect(await screen.findByText("read failing")).toBeInTheDocument();
     expect(
-      screen.getByText(/Could not read Pod api-7bcd just now/)
+      screen.getByText(/Could not read Pod api-7bcd\./)
     ).toBeInTheDocument();
     expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
@@ -968,5 +1222,383 @@ describe("ResourceDetailLayout before any read has answered", () => {
     rerender(<ResourceDetailLayout {...base} activeTab="overview" tabs={[]} />);
     expect(screen.queryByTestId("detail-skeleton")).toBeNull();
     expect(faded()).toHaveLength(0);
+  });
+
+  /**
+   * The skeleton replaced the whole page, so the name, the breadcrumb and
+   * Back, all known from the address, vanished until the read answered. Fails
+   * if the placeholder stands in for the header instead of sitting under it.
+   */
+  it("keeps the header with the name and Back while the body loads", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        isLoading
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "pv-demo"
+    );
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+  });
+});
+
+describe("a detail page whose object could not be read at all", () => {
+  /**
+   * The error card named the cause and offered no way out: no page passed a
+   * retry. Fails if a failed read has no Read again button, or the button
+   * does not ask the page's read once more.
+   */
+  it("offers to read the object again", async () => {
+    const retry = vi.fn();
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        error={new Error("connection reset")}
+        onRetry={retry}
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    expect(screen.getByText(/connection reset/)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(retry).toHaveBeenCalled();
+  });
+});
+
+const overview: DetailTab[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    glyph: viewGlyph(Info),
+    content: <p>replicas 5 of 5</p>,
+  },
+];
+
+const ceiling = {
+  tone: "warn" as const,
+  title: "web-hpa is at its ceiling of 5",
+  detail: "The desired replica count is more than the maximum.",
+  evidence: [
+    { key: "m", label: "memory", from: null, current: "105%", target: "80%" },
+  ],
+};
+
+/**
+ * A green word above an amber cause was the bug: the header said Ready and
+ * the reason it was not sat three blocks down. Fails if the chip stops
+ * carrying the finding's tone, or the finding moves back under the facts.
+ */
+describe("ResourceDetailLayout leads with the cause", () => {
+  /**
+   * The list read "⚠ 1 problem · ✓ Ready" and this header "✓ Ready · ⚠ 1
+   * problem", with the word amber. Fails if the mark stops leading in the
+   * problem's tone or the quiet word beside it is drawn in any colour.
+   */
+  it("leads the status chip with the finding's mark and draws the word neutral", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span className="text-ok">Ready</span>}
+        statusRole="ok"
+        findings={[ceiling]}
+      />
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+    expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
+    expect(chip?.firstElementChild).toHaveAttribute("data-problem-mark");
+    expect(chip?.firstElementChild?.className).toContain("text-warn");
+    const word = chip?.querySelector("[data-problem-word]");
+    expect(word?.className).toContain("[&_*]:text-fg-mut!");
+    expect(word?.className).not.toContain("text-warn");
+  });
+
+  it("puts the finding and the metric that caused it before the strip", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[ceiling]}
+      />
+    );
+    const headline = screen.getByText("web-hpa is at its ceiling of 5");
+    const strip = screen.getByRole("tablist");
+    expect(
+      headline.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByTestId("finding-evidence")).toHaveTextContent(
+      "memory 105% against a target of 80%"
+    );
+  });
+
+  /** Two metrics ran together as "80%cpu 86%"; fails if the separator goes. */
+  it("separates the readings of a finding with a middle dot", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[
+          {
+            ...ceiling,
+            evidence: [
+              ...ceiling.evidence,
+              {
+                key: "c",
+                label: "cpu",
+                from: null,
+                current: "86%",
+                target: "80%",
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const [first] = screen.getAllByTestId("finding-evidence");
+    expect(first.parentElement).toHaveTextContent(
+      "memory 105% against a target of 80% · cpu 86% against a target of 80%"
+    );
+  });
+
+  it("keeps a healthy object's chip plain", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[{ ...ceiling, tone: "neutral", evidence: undefined }]}
+      />
+    );
+    expect(document.querySelector("[data-problem]")).toBeNull();
+  });
+
+  it("does not paint a failing badge quieter than it already is", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Failed</span>}
+        statusRole="err"
+        findings={[ceiling]}
+      />
+    );
+    const word = document.querySelector("[data-problem-word]");
+    expect(word).toHaveAttribute("data-problem-word", "loud");
+    expect(word?.className).not.toContain("text-fg-mut");
+  });
+});
+
+/** A page whose events were refused is not live: fails if the header keeps the freshness chip over a read that never answered. */
+describe("ResourceDetailLayout says when a read beside the object failed", () => {
+  it("replaces the live reading with a partly-unread one naming the read", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        freshness={
+          {
+            dataUpdatedAt: Date.now(),
+            live: true,
+            slowed: false,
+            stale: false,
+            slowRead: false,
+          } as never
+        }
+        unread={["Events"]}
+      />
+    );
+    expect(screen.getByTestId("partly-unread")).toHaveTextContent(
+      "partly unread"
+    );
+    expect(screen.queryByText("live")).toBeNull();
+  });
+
+  it("keeps the live reading while every read answered", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        freshness={
+          {
+            dataUpdatedAt: Date.now(),
+            live: true,
+            slowed: false,
+            stale: false,
+            slowRead: false,
+          } as never
+        }
+        unread={[]}
+      />
+    );
+    expect(screen.queryByTestId("partly-unread")).toBeNull();
+    expect(screen.getByText("live")).toBeInTheDocument();
+  });
+});
+
+describe("ResourceDetailLayout after its object comes back, and while it cannot", () => {
+  const freshness = (stale: boolean, failure: unknown = null) => ({
+    dataUpdatedAt: Date.now() - 30_000,
+    slowed: false,
+    paused: false,
+    everyMs: 5000,
+    stale,
+    slowRead: false,
+    failure,
+    waitingSince: null,
+  });
+  const hpaItem = {
+    tone: "warn",
+    kind: "HorizontalPodAutoscaler",
+    name: "api",
+    namespace: "argocd",
+    reason: "api cannot reach what it scales",
+    detail: null,
+    opens: { kind: "Deployment", name: "api", namespace: "argocd" },
+  };
+
+  /**
+   * The object read again, its findings read had not, and
+   * the header dropped "1 problem" beside a row still saying it. Fails if
+   * the chip floors at the row's problem only while the object is stale.
+   */
+  it("carries the row's problem whenever its own findings name none", async () => {
+    shellItems.items = [hpaItem];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "api" }}
+          title="api"
+          namespace="argocd"
+          resourceKind="Deployment"
+          statusBadge={<span>Idle</span>}
+          findings={[]}
+          activeTab="overview"
+          tabs={overview}
+          freshness={freshness(false)}
+        />
+      );
+      expect(document.querySelector('[data-problem="warn"]')).toHaveAttribute(
+        "title",
+        "api cannot reach what it scales"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
+   * Only each box's own retry cleared it. Fails if the object's
+   * one retry leaves a failed part about it to its own timer.
+   */
+  it("asks every failed part about the object again on the object's one retry", async () => {
+    const part = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValue(new Error("etcdserver: request timed out"));
+    function Part() {
+      useQuery({
+        queryKey: ["owned-pods", "Deployment", "argocd", "api", null],
+        queryFn: part,
+        retry: false,
+      });
+      return <p>pods</p>;
+    }
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api" }}
+        title="api"
+        namespace="argocd"
+        resourceKind="Deployment"
+        onRetry={() => undefined}
+        activeTab="overview"
+        tabs={[{ ...overview[0], content: <Part /> }]}
+        freshness={freshness(true, new Error("500 from get"))}
+      />
+    );
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Try the read again/ })
+      ).toBeEnabled()
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Try the read again/ })
+    );
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * The peek said "read failing" and the page "partly
+   * unread" for one refused GET of the object. Fails if the parts that fail
+   * with the object outrank its own failure, or a refusal is not said as one.
+   */
+  it("says the object's own refusal in the chip, over the parts that fail with it", async () => {
+    const refused = new Error('deployments.apps "api" is forbidden');
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api" }}
+        title="api"
+        namespace="argocd"
+        resourceKind="Deployment"
+        activeTab="overview"
+        tabs={overview}
+        unread={["Pods", "Revisions"]}
+        freshness={freshness(true, refused)}
+      />
+    );
+    expect(screen.queryByTestId("partly-unread")).toBeNull();
+    expect(screen.getByText("refused")).toBeInTheDocument();
+  });
+
+  /** Fails if a part read through an object its own read cannot answer for is not told so, or is told after the object answers. */
+  it("tells the parts under it which object they wait on, only while it is unread", async () => {
+    function Part() {
+      const unread = useObjectUnread();
+      return (
+        <p data-testid="part">
+          {unread ? `waits on ${unread.kind} ${unread.name}` : "reads"}
+        </p>
+      );
+    }
+    const props = {
+      ...base,
+      resource: { name: "api" },
+      title: "api",
+      namespace: "argocd",
+      resourceKind: "Deployment",
+      activeTab: "overview",
+      tabs: [{ ...overview[0], content: <Part /> }],
+    };
+    const { rerender } = await wrapRerenderable(
+      <ResourceDetailLayout
+        {...props}
+        freshness={freshness(true, new Error("500 from get"))}
+      />
+    );
+    expect(screen.getByTestId("part")).toHaveTextContent(
+      "waits on Deployment api"
+    );
+    rerender(<ResourceDetailLayout {...props} freshness={freshness(false)} />);
+    expect(screen.getByTestId("part")).toHaveTextContent("reads");
   });
 });

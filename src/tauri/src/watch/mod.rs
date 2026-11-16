@@ -407,7 +407,8 @@ impl WatchManager {
             // re-lists, which is what recycles one that has gone quiet. Until
             // `read_timeout` was removed from the client, kube's own 295-second
             // socket timer did this by accident; now it is asked for.
-            let mut stream = watcher(api, narrow.config()).boxed();
+            let fresh = || watcher(api.clone(), narrow.config()).boxed();
+            let mut stream = fresh();
 
             // Surface watcher failures (RBAC denial, network hiccups) to the
             // frontend as a `Failed` event after a streak of consecutive
@@ -466,6 +467,10 @@ impl WatchManager {
                                     // on is not needlessly behind.
                                     batch.flush(&event_tx);
                                     emit_failure(&event_tx, &stream_id_clone, watch_failure(&e));
+                                    // kube resumes a broken watch from its
+                                    // resourceVersion, which says nothing when
+                                    // it answers again; a list ends in `Synced`.
+                                    stream = fresh();
                                 }
                                 // Cancel still wins, or a closing window
                                 // waits out the whole sleep.
@@ -637,6 +642,64 @@ mod tests {
             matches!(err, Error::Internal(_)),
             "expected Error::Internal, got {err:?}"
         );
+    }
+
+    /// Changes said "Not watching" for good after a Deployments 500: the watch
+    /// kube resumed answered again in silence, and the page waits for `Synced`.
+    /// Fails if a told failure is not followed by a list that ends in one.
+    #[tokio::test]
+    async fn a_watch_that_was_told_failed_lists_again_and_says_synced() {
+        use http::{Request, Response};
+        use k8s_openapi::api::apps::v1::Deployment;
+        use kube::client::Body;
+
+        let service = tower::service_fn(|request: Request<Body>| async move {
+            let (code, body) = if request.uri().query().unwrap_or_default().contains("watch=") {
+                (500, r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"chaos","code":500}"#.to_string())
+            } else {
+                (200, r#"{"kind":"DeploymentList","apiVersion":"apps/v1","metadata":{"resourceVersion":"5"},"items":[{"metadata":{"name":"api","namespace":"lab","resourceVersion":"5"}}]}"#.to_string())
+            };
+            Ok::<_, std::convert::Infallible>(
+                Response::builder()
+                    .status(code)
+                    .body(Body::from(body.into_bytes()))
+                    .unwrap(),
+            )
+        });
+        let (event_tx, mut rx) = broadcast::channel(64);
+        let manager = WatchManager::new(event_tx);
+        let id = manager
+            .subscribe::<Deployment, _, _>(
+                Client::new(service, "lab"),
+                "Deployment",
+                Some(vec!["lab".to_string()]),
+                |d: &Deployment| d.metadata.name.clone(),
+            )
+            .expect("subscribed");
+        manager.mark_subscribed(&id).expect("known");
+
+        let mut ops = Vec::new();
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                let Ok(AppEvent::ResourceWatchEvent { changes, .. }) = rx.recv().await else {
+                    continue;
+                };
+                ops.extend(changes.into_iter().map(|change| change.op));
+                if let Some(failed) = ops.iter().position(|op| *op == WatchOp::Failed) {
+                    if ops[failed..].contains(&WatchOp::Synced) {
+                        return;
+                    }
+                }
+            }
+        })
+        .await;
+        manager.unsubscribe(&id);
+        assert!(heard.is_ok(), "no list after the failure: {ops:?}");
+        let failed = ops
+            .iter()
+            .position(|op| *op == WatchOp::Failed)
+            .expect("told");
+        assert_eq!(ops[failed + 1], WatchOp::Restarted);
     }
 
     #[test]

@@ -161,7 +161,6 @@ export function createResourceListPage<
       subscribe,
       queryKey,
       detail,
-      reportFailure: config.title,
     });
 
     const deleter = config.deleter;

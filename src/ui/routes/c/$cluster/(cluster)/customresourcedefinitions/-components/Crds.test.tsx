@@ -164,7 +164,7 @@ describe("the CRD list when the read did not answer", () => {
     await act(() => client.refetchQueries());
 
     expect(
-      await screen.findByText(/Could not read CRDs just now/)
+      await screen.findByText(/Could not read CRDs\./)
     ).toBeInTheDocument();
     expect(document.body.textContent).toContain("Certificate");
     expect(screen.getByText("read failing")).toBeInTheDocument();

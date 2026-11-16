@@ -1,7 +1,9 @@
 import {
+  Fragment,
   lazy,
   Suspense,
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useMemo,
@@ -135,13 +137,25 @@ interface Wake {
   attempt: number;
 }
 
+const WIDENS_SEARCH = new Set<Entry["kind"]>([
+  "search-more",
+  "search-all-namespaces",
+  "group",
+  "more",
+]);
+
 export function CommandPalette() {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const deferredText = useDeferredValue(text);
   const [scope, setScope] = useState<Scope>({ kind: "current" });
   const [wake, setWake] = useState<Wake | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [enterTried, setEnterTried] = useState(false);
+  const [queuedEnter, setQueuedEnter] = useState<{ newTab: boolean } | null>(
+    null
+  );
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
   const [everything, setEverything] = useState(false);
@@ -301,7 +315,7 @@ export function CommandPalette() {
   const searchEntries = useMemo(
     () =>
       buildPaletteEntries({
-        text,
+        text: deferredText,
         scope,
         contexts,
         currentContext,
@@ -309,6 +323,7 @@ export function CommandPalette() {
         marks,
         recentItems,
         isConnected,
+        searching: isSearching,
         error,
         shownClusters,
         hitsByContext,
@@ -326,7 +341,7 @@ export function CommandPalette() {
         t,
       }),
     [
-      text,
+      deferredText,
       scope,
       contexts,
       currentContext,
@@ -334,6 +349,7 @@ export function CommandPalette() {
       marks,
       recentItems,
       isConnected,
+      isSearching,
       error,
       shownClusters,
       hitsByContext,
@@ -362,6 +378,9 @@ export function CommandPalette() {
     [actionsOf, hostReport, actionText, t]
   );
   const entries = actionEntries ?? searchEntries;
+  const lastCoverageId = entries
+    .filter((entry) => entry.kind === "coverage")
+    .at(-1)?.id;
 
   const selectable = useMemo(() => entries.filter(isSelectable), [entries]);
   // Selection follows the row, not its position: groups arrive as each
@@ -371,6 +390,7 @@ export function CommandPalette() {
     selectable.find((entry) => entry.id === selectedId)?.id ??
     selectable[0]?.id ??
     null;
+  const settling = text !== deferredText;
 
   // ----- acting on it -----
 
@@ -732,9 +752,16 @@ export function CommandPalette() {
         return;
       }
       if (event.key === "Enter") {
-        if (!entry) return;
         event.preventDefault();
-        activate(entry, event.metaKey || event.ctrlKey);
+        const newTab = event.metaKey || event.ctrlKey;
+        const waiting = !actionsOf && (settling || isSearching);
+        if (entry && !settling) {
+          activate(entry, newTab);
+        } else if (waiting) {
+          setQueuedEnter({ newTab });
+        } else {
+          setEnterTried(true);
+        }
         return;
       }
       // The chip is a token in the field, and every token field in the app
@@ -753,13 +780,27 @@ export function CommandPalette() {
       activeId,
       backToSearch,
       bang,
+      isSearching,
       move,
       scoped,
       selectable,
+      settling,
       showActions,
       text,
     ]
   );
+
+  const queuedEntry =
+    queuedEnter && !settling
+      ? selectable.find((entry) => !WIDENS_SEARCH.has(entry.kind))
+      : undefined;
+  /* oxlint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!queuedEnter || !queuedEntry) return;
+    setQueuedEnter(null);
+    activate(queuedEntry, queuedEnter.newTab);
+  }, [queuedEnter, queuedEntry, activate]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   // ----- lifecycle -----
 
@@ -797,6 +838,8 @@ export function CommandPalette() {
         .catch(() => setRecentItems([]));
     } else {
       pointer.current = null;
+      setEnterTried(false);
+      setQueuedEnter(null);
       setText("");
       setScope({ kind: "current" });
       setWake(null);
@@ -839,7 +882,7 @@ export function CommandPalette() {
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="z-60 max-w-[620px] gap-0 overflow-hidden p-0"
+          className="top-[14vh] z-60 max-h-[calc(100vh-14vh-1rem)] max-w-[620px] translate-y-0 gap-0 overflow-hidden p-0"
           onEscapeKeyDown={(event) => {
             if (!actionsOf) return;
             // Out of one object's actions, back to the search it came from.
@@ -857,7 +900,7 @@ export function CommandPalette() {
           <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
             <Search className="h-3.5 w-3.5 flex-none" />
             {actionsOf && (
-              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-[11px] leading-[18px] text-fg-mut">
+              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-caption leading-[18px] text-fg-mut">
                 <Zap className="h-3 w-3 flex-none" aria-hidden />
                 {actionsOf.target.name}
               </span>
@@ -897,11 +940,13 @@ export function CommandPalette() {
                     : t("action", "searchOrBang")
               }
               value={actionsOf ? actionText : text}
-              onChange={(event) =>
-                actionsOf
-                  ? setActionText(event.target.value)
-                  : setText(event.target.value)
-              }
+              onChange={(event) => {
+                setEnterTried(false);
+                setQueuedEnter(null);
+                setSelectedId(null);
+                if (actionsOf) setActionText(event.target.value);
+                else setText(event.target.value);
+              }}
               onPaste={(event) => {
                 const pasted = event.clipboardData.getData("text");
                 if (!looksLikeAlert(pasted)) return;
@@ -921,7 +966,7 @@ export function CommandPalette() {
                 }
                 handleKeyDown(event);
               }}
-              className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
+              className="w-full bg-transparent text-title text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
 
@@ -948,10 +993,13 @@ export function CommandPalette() {
               {entries.map((entry) => (
                 <EntryRow
                   key={entry.id}
+                  pinned={entry.id === lastCoverageId}
                   domId={`${listId}-${entry.id}`}
                   entry={entry}
                   selected={entry.id === activeId}
                   actionable={actionable && entry.id === activeId}
+                  enterTried={enterTried}
+                  enterQueued={queuedEnter !== null}
                   onHover={(event) => {
                     // A row that slid under a resting pointer, as results
                     // arrive, is not one the reader pointed at.
@@ -972,7 +1020,7 @@ export function CommandPalette() {
             </div>
           )}
 
-          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
+          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-caption text-fg-fnt">
             {alert !== null ? (
               <>
                 <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
@@ -1088,7 +1136,7 @@ function ScopeChip({
 }) {
   const t = useT();
   return (
-    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
+    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-caption leading-[18px] text-info ring-1 ring-inset ring-info/45">
       <span className="flex items-center gap-1 pl-1.5">
         <span aria-hidden="true">!</span>
         {label}
@@ -1114,14 +1162,23 @@ function EntryRow({
   entry,
   selected,
   actionable,
+  enterTried,
+  enterQueued,
   onHover,
   onPick,
+  pinned = false,
 }: {
   domId: string;
   entry: Entry;
+  /** The coverage line closing the results stays whole at the bottom edge. */
+  pinned?: boolean;
   selected: boolean;
   /** Tab opens this row's actions. */
   actionable: boolean;
+  /** Enter was pressed with nothing yet to open. */
+  enterTried: boolean;
+  /** Enter was pressed while names were still being read and waits for the first. */
+  enterQueued: boolean;
   onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
@@ -1130,7 +1187,7 @@ function EntryRow({
     return (
       <div
         role="presentation"
-        className="px-2 pb-0.5 pt-2 text-[11px] text-fg-fnt first:pt-1"
+        className="px-2 pb-0.5 pt-2 text-caption text-fg-fnt first:pt-1"
       >
         {entry.text}
       </div>
@@ -1148,22 +1205,37 @@ function EntryRow({
             {HINT_MARK[entry.tone]}
           </span>
         )}
-        <span>{entry.text}</span>
+        <span>
+          {entry.tone === "loading" && enterQueued
+            ? t("empty", "opensWhenRead")
+            : enterTried && entry.tone === "loading"
+              ? t("empty", "nothingToOpenYet")
+              : entry.text}
+        </span>
       </p>
     );
   }
 
   if (entry.kind === "coverage") {
-    return <Coverage entry={entry} />;
+    return (
+      <div
+        className={cn(
+          pinned && "sticky -bottom-1 -mx-1 -mb-1 border-t border-hair bg-raise"
+        )}
+        data-pinned={pinned || undefined}
+      >
+        <Coverage entry={entry} />
+      </div>
+    );
   }
 
   if (entry.kind === "target") {
     return (
       <div
         role="presentation"
-        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-[11px] text-fg-fnt"
+        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-caption text-fg-fnt"
       >
-        <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-1">
           <ResourceName
             kind={entry.target.kind}
             name={entry.target.name}
@@ -1192,7 +1264,7 @@ function EntryRow({
           <span className="ml-auto h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
         ) : (
           <span
-            className="ml-auto min-w-0 truncate text-[11px]"
+            className="ml-auto min-w-0 truncate text-caption"
             title={action.reason}
           >
             {action.reason}
@@ -1232,7 +1304,7 @@ function EntryRow({
           {/* `!*` does not connect to anything on its own: on a laptop
               with fifteen contexts that would be fifteen auth prompts
               from one keystroke. */}
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {t("action", "alreadyConnectedSearched")}
           </span>
         </Row>
@@ -1255,12 +1327,12 @@ function EntryRow({
               {entry.label}
             </span>
             {entry.sub && (
-              <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+              <span className="truncate font-mono text-micro leading-[13px] text-fg-fnt">
                 {entry.sub}
               </span>
             )}
           </span>
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {entry.meta}
           </span>
         </Row>
@@ -1297,7 +1369,7 @@ function EntryRow({
               {t("action", "hintUseAsScope")}
             </span>
           )}
-          <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-fg-fnt">
+          <span className="ml-auto flex flex-none items-center gap-1.5 text-caption text-fg-fnt">
             {actionable && <Kbd shortcut="tab" />}
             {entry.hit.kind}
           </span>
@@ -1308,7 +1380,7 @@ function EntryRow({
         <Row {...shared}>
           <Zap className="h-3.5 w-3.5 flex-none text-info" />
           <span className="flex-none">{t("action", "actionsOn")}</span>
-          <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5 [&>svg]:flex-none">
             <ResourceName
               kind={entry.target.kind}
               name={entry.target.name}
@@ -1336,9 +1408,6 @@ function EntryRow({
           >
             {entry.action.label}
           </span>
-          <span className="ml-auto min-w-0 truncate text-[11px] text-fg-fnt">
-            {entry.target.name}
-          </span>
         </Row>
       );
     case "recent":
@@ -1364,7 +1433,7 @@ function EntryRow({
           {entry.namespace && (
             <span className="truncate text-fg-fnt">{entry.namespace}</span>
           )}
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {entry.resourceKind}
           </span>
         </Row>
@@ -1377,7 +1446,7 @@ function EntryRow({
               n: formatCount(entry.rest),
             })}
           </span>
-          <span className="ml-auto flex flex-none items-center gap-1 text-[11px] text-fg-fnt">
+          <span className="ml-auto flex flex-none items-center gap-1 text-caption text-fg-fnt">
             <Kbd shortcut="↵" /> {t("action", "hintScopeToIt")}
           </span>
         </Row>
@@ -1404,7 +1473,7 @@ function EntryRow({
               ? `${entry.entry.group}/${entry.entry.version}`
               : entry.entry.version}
           </span>
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {t("action", "hintOpenList")}
           </span>
         </Row>
@@ -1472,11 +1541,21 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
     served,
     split,
   } = entry;
-  const { refusals } = unreadParts(cluster);
+  const unread =
+    split === null
+      ? []
+      : (
+          [
+            [true, true, split.partly - split.failed.partly],
+            [true, false, split.failed.partly],
+            [false, true, split.refused - split.failed.refused],
+            [false, false, split.failed.refused],
+          ] as const
+        ).filter(([, , n]) => n > 0);
   return (
     <div
       role="presentation"
-      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-[11px] text-fg-mut"
+      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-caption text-fg-mut"
     >
       <span
         className="flex items-center gap-1"
@@ -1490,32 +1569,22 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
               searched: split.read,
             })}
       </span>
-      {split !== null && split.partly > 0 && (
-        <span
-          className="flex items-center gap-1 text-fg-fnt"
-          title={unreadHover(cluster, t)}
-        >
-          <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", refusals ? "kindsPartlyRefused" : "kindsPartlyUnread", {
-            n: split.partly,
-          })}
-        </span>
-      )}
-      {split !== null && split.refused > 0 && (
-        <span
-          className="flex items-center gap-1 text-warn"
-          title={unreadHover(cluster, t)}
-        >
-          <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t(
-            "count",
-            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
-            {
-              n: split.refused,
-            }
-          )}
-        </span>
-      )}
+      {unread.map(([partly, refused, n]) => {
+        const Mark = refused ? Lock : TriangleAlert;
+        return (
+          <span
+            key={`${partly}-${refused}`}
+            className={cn(
+              "flex items-center gap-1",
+              partly ? "text-fg-fnt" : "text-warn"
+            )}
+            title={unreadHover(cluster, t)}
+          >
+            <Mark className="h-3 w-3 flex-none" aria-hidden />
+            {t("count", unreadKey(refused, partly, true), { n })}
+          </span>
+        );
+      })}
       {scope !== null && (
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3 flex-none" aria-hidden />
@@ -1566,6 +1635,14 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
       )}
     </div>
   );
+}
+
+/** `ofSearched`: said after "searched in n of m", where a partly read kind is one "of them". */
+function unreadKey(refused: boolean, partly: boolean, ofSearched = false) {
+  if (partly && ofSearched)
+    return refused ? "kindsPartlyRefused" : "kindsPartlyUnread";
+  if (refused) return partly ? "kindsRefusedSomewhere" : "kindsRefusedWherever";
+  return partly ? "kindsUnreadSomewhere" : "kindsUnreadWherever";
 }
 
 /** Every refused kind on one line, and any other failure with its own words. */
@@ -1662,42 +1739,30 @@ function ClusterGroup({
     if (cluster.truncated)
       state = t("count", "matchesCapped", { n: cluster.matched });
     if (cluster.unreadable.length > 0) {
-      const Mark = cluster.unreadable.every(
-        (unread) => unread.reason === "forbidden"
-      )
-        ? Lock
-        : TriangleAlert;
       // The one place the palette names what it could not read: cut to the
       // row, whole on hover. Refusals share one line: forty 403 sentences
       // made a tooltip taller than the screen.
       // The summary's own words and counts: a kind read in one namespace
       // and refused in another is not one the cluster refused outright.
-      const { wherever, somewhere, refusals } = unreadParts(cluster);
-      const counts = [
-        wherever.length > 0 &&
-          t(
-            "count",
-            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
-            {
-              n: wherever.length,
-            }
-          ),
-        somewhere.length > 0 &&
-          t(
-            "count",
-            refusals ? "kindsRefusedSomewhere" : "kindsUnreadSomewhere",
-            { n: somewhere.length }
-          ),
-      ]
-        .filter(Boolean)
-        .join(", ");
+      const groups = unreadParts(cluster);
       state = (
         <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
-          {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
-          {t("cluster", "kindsUnreadNamed", {
-            counts,
-            kinds: kindNames([...wherever, ...somewhere]),
+          {state} ·{" "}
+          {groups.map(({ refused, partly, kinds }, at) => {
+            const Mark = refused ? Lock : TriangleAlert;
+            return (
+              <Fragment key={`${partly}-${refused}`}>
+                {at > 0 && ", "}
+                <Mark
+                  className="inline h-3 w-3 align-[-2px]"
+                  aria-hidden
+                />{" "}
+                {t("count", unreadKey(refused, partly), { n: kinds.length })}
+              </Fragment>
+            );
           })}
+          {": "}
+          {kindNames(groups.flatMap((group) => group.kinds))}
         </span>
       );
       tone = "text-warn";
@@ -1717,7 +1782,7 @@ function ClusterGroup({
           })}
       id={domId}
       className={cn(
-        "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-[11px] first:mt-0",
+        "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-caption first:mt-0",
         action !== "none" && "cursor-pointer",
         selected && action !== "none" && "bg-sel"
       )}

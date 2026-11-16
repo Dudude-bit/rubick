@@ -86,7 +86,11 @@ describe("moving along ownership from the keyboard", () => {
   it("goes sideways to the neighbour the index names under the owner", async () => {
     const { router } = await renderWithRouter(<Page />, { at });
     await waitFor(() => {
-      fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+      fireEvent.keyDown(window, {
+        key: "ArrowRight",
+        altKey: true,
+        shiftKey: true,
+      });
       expect(router.state.location.pathname).toBe("/c/test/pods/shop/api-c");
     });
     expect(beside.asked).toContainEqual(["r", "uid-api-b"]);
@@ -95,7 +99,11 @@ describe("moving along ownership from the keyboard", () => {
   it("goes back to the neighbour before it", async () => {
     const { router } = await renderWithRouter(<Page />, { at });
     await waitFor(() => {
-      fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+      fireEvent.keyDown(window, {
+        key: "ArrowLeft",
+        altKey: true,
+        shiftKey: true,
+      });
       expect(router.state.location.pathname).toBe("/c/test/pods/shop/api-a");
     });
   });

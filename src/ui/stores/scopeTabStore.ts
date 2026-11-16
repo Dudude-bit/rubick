@@ -34,6 +34,7 @@ import {
   wireNamespace,
 } from "@/lib/namespace-scope";
 import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
+import { vendorName } from "@/integrations";
 import {
   clusterOf,
   namespaceShownBy,
@@ -651,6 +652,8 @@ export function tabRouteLabel(href: string, t: T, named?: ListNamer): string {
   const route = segments[0] === "c" ? segments.slice(2) : segments;
   // One segment is a list page, `/c/prod/pods` as much as `/c/prod/events`.
   // Anything longer is the object the route shows.
+  if (route.length === 2 && route[0] === "integrations")
+    return vendorName(route[1]) ?? route[1];
   if (route.length > 1) return route.at(-1) as string;
   if (route.length === 0) return t("nav", "overview");
   const [page] = route;

@@ -372,6 +372,14 @@ export interface ServiceHealthInputs {
   namespace: string;
   groups: ServiceHealthGroup[];
   networks: string[];
+  unread: OverviewUnread[];
+}
+
+export interface OverviewUnread {
+  kind: string;
+  namespace: string | null;
+  code: string;
+  message: string;
 }
 
 export interface ServiceHealthGroup {
@@ -493,11 +501,6 @@ export interface PublishedPort {
   port: number | null;
   protocol: string;
   exposed: boolean;
-}
-
-export interface OtherPolicyKinds {
-  namespace: string;
-  kinds: string[];
 }
 
 export interface NetworkPolicyInfo {
@@ -667,6 +670,11 @@ export interface CommandTimes {
   p95: number;
   max: number;
   maxApiCalls: number;
+}
+
+export interface OtherPolicyKinds {
+  namespace: string;
+  kinds: string[];
 }
 
 export interface NodeMetricsResponse {
@@ -1033,6 +1041,11 @@ export interface SetupWarning {
   fault: SetupFault;
 }
 
+export interface LatestEvents {
+  events: EventInfo[];
+  short: boolean;
+}
+
 export interface EventInfo {
   name: string;
   namespace: string;
@@ -1053,11 +1066,6 @@ export interface InvolvedObjectInfo {
   name: string;
   namespace: string | null;
   uid: string | null;
-}
-
-export interface LatestEvents {
-  events: EventInfo[];
-  short: boolean;
 }
 
 export interface EventFilters {
@@ -1134,12 +1142,9 @@ export interface KindCount {
   count: number;
 }
 
-export interface Dependents {
-  dependents: Dependent[];
-  page: number;
-  pageSize: number;
-  total: number;
-  notRead: NotRead;
+export interface Beside {
+  previous: Dependent | null;
+  next: Dependent | null;
 }
 
 export interface Dependent {
@@ -1152,6 +1157,14 @@ export interface Dependent {
   namespace: string | null;
   controlled: boolean;
   dependents: number;
+}
+
+export interface Dependents {
+  dependents: Dependent[];
+  page: number;
+  pageSize: number;
+  total: number;
+  notRead: NotRead;
 }
 
 export interface CronJobDetailInfo {
@@ -2124,6 +2137,7 @@ export interface ClusterOverview {
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
   nodesKnown: boolean;
+  nodePodsUnread: OverviewUnread | null;
   warnings: WarningGroup[];
   warningsShort: EventsShort[];
   namespaces: NamespaceLoad[];
@@ -2148,17 +2162,11 @@ export interface PartialCount {
   unreadIn: string[];
 }
 
-export interface OverviewUnread {
-  kind: string;
-  namespace: string | null;
-  code: string;
-  message: string;
-}
-
 export interface RolloutCount {
   reason: string;
   count: number;
   podsUnread: boolean;
+  troubled: number;
 }
 
 export interface JobCount {
@@ -2179,6 +2187,7 @@ export interface PodComposition {
   terminating: number;
   stuck: ReasonCount[];
   starting: number;
+  troubled: number;
 }
 
 export interface Census<T> {
@@ -2241,7 +2250,7 @@ export interface NodeSummary {
   ready: boolean;
   schedulable: boolean;
   roles: string[];
-  podCount: number;
+  podCount: number | null;
   podCapacity: number | null;
   cpu: ResourcePressure;
   memory: ResourcePressure;
@@ -2270,6 +2279,15 @@ export interface ClusterProblem {
   foldedPods: number | null;
   replaced: boolean;
   workload?: PodWorkload;
+  node?: string;
+}
+
+export interface ProbeFailure {
+  container: string;
+  probe: ProbeKind;
+  restarts: number;
+  said: string;
+  since: string | null;
 }
 
 export interface TlsCertificate {
@@ -2810,6 +2828,7 @@ export type MetricsStatusKind =
   | "available"
   | "notInstalled"
   | "forbidden"
+  | "notAnswering"
   | "error";
 
 export type TcpProbeReason = "refused" | "timedOut";
@@ -3000,8 +3019,9 @@ export type Usage =
       subPath: string | null;
       volume: string;
       projected: boolean;
+      optional: boolean;
     }
-  | { how: "unmounted"; volume: string; projected: boolean }
+  | { how: "unmounted"; volume: string; projected: boolean; optional: boolean }
   | {
       how: "env";
       container: string;
@@ -3010,7 +3030,7 @@ export type Usage =
       optional: boolean;
       keyPresent: boolean | null;
     }
-  | { how: "envFrom"; container: string }
+  | { how: "envFrom"; container: string; optional: boolean }
   | { how: "imagePullSecret" }
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
@@ -3054,12 +3074,6 @@ export type SearchContextStatus =
   | "failed"
   | "skipped";
 
-export type ApplyOutcome =
-  | { says: "applied" }
-  | { says: "refused"; code: string; said: string }
-  | { says: "unanswered"; said: string }
-  | { says: "notSent" };
-
 export type DryRunOutcome =
   | { says: "created" }
   | { says: "configured" }
@@ -3067,6 +3081,12 @@ export type DryRunOutcome =
   | { says: "liveUnread"; said: string }
   | { says: "refused"; said: string }
   | { says: "unanswered"; said: string };
+
+export type ApplyOutcome =
+  | { says: "applied" }
+  | { says: "refused"; code: string; said: string }
+  | { says: "unanswered"; said: string }
+  | { says: "notSent" };
 
 export type AnsiColor =
   | { kind: "named"; index: number }
@@ -3093,6 +3113,11 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type WithheldPart =
+  | { says: "keys"; keys: string[] }
+  | { says: "rewritten"; keys: string[] }
+  | { says: "unread" };
+
 export type TerminalState =
   | "idle"
   | "connecting"
@@ -3104,6 +3129,11 @@ export type TerminalState =
 export type RollbackOutcome =
   | { outcome: "rolledBack" }
   | { outcome: "alreadyThere" };
+
+export type Holder =
+  | { held: "by"; uid: string }
+  | { held: "nobody" }
+  | { held: "notRead" };
 
 export type CountKind =
   | "pods"
@@ -3124,6 +3154,10 @@ export type CountKind =
 
 export type OverviewSource = "watch" | "list";
 
+export type EventsShort =
+  | { why: "capped"; namespace: string | null }
+  | { why: "failed"; namespace: string | null; code: string; message: string };
+
 export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
 
 export type ProblemDetail =
@@ -3139,18 +3173,12 @@ export type ProblemDetail =
       said: string | null;
     }
   | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null }
-  | { says: "podsRefused"; said: string };
+  | { says: "podsRefused"; said: string }
+  | { says: "probe"; failure: ProbeFailure };
+
+export type ProbeKind = "liveness" | "readiness" | "startup";
 
 export type ProblemSeverity = "critical" | "warning";
-
-export type EventsShort =
-  | { why: "capped"; namespace: string | null }
-  | { why: "failed"; namespace: string | null; code: string; message: string };
-
-export type Holder =
-  | { held: "by"; uid: string }
-  | { held: "nobody" }
-  | { held: "notRead" };
 
 export type CertificateProblem =
   | { says: "noSecret" }
@@ -3299,7 +3327,12 @@ export type ListedWith = "gnuFind" | "busyboxStat";
 
 export type FileKind = "file" | "dir" | "symlink" | "other";
 
-export type DrainOutcome = "drained" | "stopped" | "cancelled" | "failed";
+export type DrainOutcome =
+  | "drained"
+  | "stopped"
+  | "cancelled"
+  | "failed"
+  | "refused";
 
 export type DrainRefusal =
   | "notNow"
@@ -3333,7 +3366,8 @@ export type StreamFailureKind =
   | "broken"
   | "no-previous-run"
   | "log-not-kept"
-  | "follow-stopped";
+  | "follow-stopped"
+  | "refused";
 
 export type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
 
@@ -3349,11 +3383,6 @@ export type Withheld =
   | { says: "keyName" }
   | { says: "helmRelease" };
 
-export type WithheldPart =
-  | { says: "keys"; keys: string[] }
-  | { says: "rewritten"; keys: string[] }
-  | { says: "unread" };
-
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
   | { state: "withheld" }
@@ -3362,8 +3391,3 @@ export type FileRead =
   | { state: "failed"; exit_code: number | null; message: string };
 
 export type RawJson = RawValue;
-
-export interface Beside {
-  previous: Dependent | null;
-  next: Dependent | null;
-}

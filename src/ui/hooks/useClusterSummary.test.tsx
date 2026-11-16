@@ -133,6 +133,7 @@ describe("cluster summary counts when the overview is refused", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.podCount).toBeNull();
+    expect(result.current.problems).toBeNull();
     expect(result.current.namespaces.map((n) => n.name).sort()).toEqual([
       "team-a",
       "team-b",
@@ -485,6 +486,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
       {
         namespace: "team-checkout",
         networks: [],
+        unread: [],
         groups: [
           {
             names: ["checkout-api"],

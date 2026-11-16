@@ -13,6 +13,10 @@ import { CriticalNotice } from "@/components/ui/critical-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { WriteFailure } from "@/components/ui/write-failure";
+import { holdWriteToasts } from "@/lib/write-hold";
+import { recordWriteFailure } from "@/stores/writeLogStore";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
@@ -29,7 +33,8 @@ interface DangerousConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  /** A promise keeps the dialog open and pending until it settles; it closes only on success. */
+  onConfirm: () => unknown;
   isLoading?: boolean;
 }
 
@@ -44,13 +49,21 @@ export function DangerousConfirmDialog({
   cancelLabel,
   onOpenChange,
   onConfirm,
-  isLoading = false,
+  isLoading: loadingFromCaller = false,
 }: DangerousConfirmDialogProps) {
   const t = useT();
   const [inputValue, setInputValue] = useState("");
+  const [running, setRunning] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
+  // A refused write is not asked again by a second Enter: the button, or
+  // a change to the typed name, asks it again.
+  const [failedOn, setFailedOn] = useState<string | null>(null);
+  const isLoading = loadingFromCaller || running;
   // Forgotten whenever the dialog is closed, whoever closed it: a caller that
   // flips `open` after a success fires no onOpenChange.
   if (!open && inputValue !== "") setInputValue("");
+  if (!open && failure !== null) setFailure(null);
+  if (!open && failedOn !== null) setFailedOn(null);
   // On critical infrastructure the word to type is the cluster's, not the
   // object's: the mistake this guards against is the cluster, and typing a
   // pod's name proves nothing about which cluster the pod is on.
@@ -60,14 +73,40 @@ export function DangerousConfirmDialog({
 
   const isConfirmEnabled = inputValue === expected && !isLoading;
 
-  const handleConfirm = () => {
-    if (isConfirmEnabled) {
-      onConfirm();
+  const handleConfirm = (event?: { preventDefault: () => void }) => {
+    if (!isConfirmEnabled) return;
+    const release = holdWriteToasts();
+    const result = onConfirm();
+    if (!(result instanceof Promise)) {
+      release();
+      if (!event) onOpenChange(false);
+      return;
     }
+    event?.preventDefault();
+    setRunning(true);
+    setFailure(null);
+    result
+      .then(
+        () => onOpenChange(false),
+        (error: unknown) => {
+          recordWriteFailure(title, error);
+          setFailure(error ?? "");
+          setFailedOn(inputValue);
+        }
+      )
+      .finally(() => {
+        release();
+        setRunning(false);
+      });
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!isLoading) onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -88,7 +127,7 @@ export function DangerousConfirmDialog({
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">
-          <Label htmlFor="confirmation-input" className="text-sm">
+          <Label htmlFor="confirmation-input" className="text-xs">
             {t("action", "typeWord")}{" "}
             <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
               {expected}
@@ -99,10 +138,17 @@ export function DangerousConfirmDialog({
             id="confirmation-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={confirmationPlaceholder ?? expected}
+            placeholder={confirmationPlaceholder}
             autoComplete="off"
             data-autofocus
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || !isConfirmEnabled) return;
+              if (failedOn === inputValue) return;
+              event.preventDefault();
+              handleConfirm();
+            }}
           />
+          {failure !== null && <WriteFailure error={failure} />}
         </div>
 
         <AlertDialogFooter>
@@ -113,10 +159,12 @@ export function DangerousConfirmDialog({
             className={buttonVariants({ variant: "destructive" })}
             onClick={handleConfirm}
             disabled={!isConfirmEnabled}
+            aria-busy={isLoading || undefined}
           >
-            {isLoading
-              ? t("action", "processing")
-              : (confirmLabel ?? t("action", "confirm"))}
+            {isLoading && (
+              <Spinner size="xs" aria-hidden="true" className="mr-1.5" />
+            )}
+            {confirmLabel ?? t("action", "confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

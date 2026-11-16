@@ -9,11 +9,9 @@ import {
 } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
-import { errorToShow } from "@/lib/error-utils";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
-import { useT } from "@/i18n/useT";
 
 // --- query hooks --------------------------------------------------------
 
@@ -122,7 +120,6 @@ export function useResourceMutation<
   mutationFn: (variables: TVariables) => Promise<TData>,
   options: UseResourceMutationOptions<TData, TVariables, TError>
 ) {
-  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -148,12 +145,7 @@ export function useResourceMutation<
       options.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {
-      if (!toastedUnanswered(error))
-        toast({
-          title: t("action", "error"),
-          description: `${options.toast.errorPrefix}: ${errorToShow(error)}`,
-          variant: "destructive",
-        });
+      toastWriteError(options.toast.errorPrefix, error);
       options.onError?.(error, variables);
     },
   } as UseMutationOptions<TData, TError, TVariables>);

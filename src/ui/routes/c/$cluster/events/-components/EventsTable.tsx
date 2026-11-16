@@ -42,20 +42,18 @@ const subjectOf = (event: EventInfo) => ({
 function ReasonCell({ row }: { row: { original: EventInfo } }) {
   const event = row.original;
   const isWarning = event.type === "Warning";
-  const { family, Icon, color } = eventReasonMark(event.reason ?? null);
-  const familyStyle = isWarning || !color ? undefined : { color };
+  const { family, Icon } = eventReasonMark(event.reason ?? null);
   return (
     <span
       className={cn(
         "inline-flex min-w-0 max-w-full items-baseline gap-1.5 font-mono font-medium",
-        isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
+        isWarning ? "text-warn" : "text-fg-mut"
       )}
-      style={familyStyle}
       title={event.reason ?? undefined}
     >
       <span
         className={cn(
-          "w-2.5 flex-none text-center text-[9px]",
+          "w-2.5 flex-none text-center text-micro",
           isWarning ? "text-warn" : "text-fg-fnt"
         )}
         aria-hidden="true"
@@ -140,16 +138,17 @@ function MessageCell({ row }: { row: { original: EventInfo } }) {
   );
 }
 
-function CountCell({ row }: { row: { original: EventInfo } }) {
+/** Beside a count the cluster did not report, a count of one is still an answer. */
+export function CountCell({ row }: { row: { original: EventInfo } }) {
   const t = useT();
-  const count = row.original.count ?? 0;
+  const { count } = row.original;
   const tally = tallyOf(row.original);
   return (
     <span
-      className="font-mono text-[11px] text-fg-fnt"
+      className="font-mono text-caption text-fg-fnt"
       title={tally ? sayWords(tally, t) : undefined}
     >
-      {count > 1 ? `×${count}` : ""}
+      {count === null ? <None /> : `×${Math.max(1, count)}`}
     </span>
   );
 }
@@ -341,7 +340,8 @@ export function EventsTable({
   const { shown, waiting, show } = useHeldRows(
     events,
     held && events.length > 0,
-    question
+    question,
+    uidOf
   );
   const rowHref = useCallback(
     (event: EventInfo) => hrefOfEvent(event, past),

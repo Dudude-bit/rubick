@@ -60,14 +60,9 @@ describe("what a Deployment's actions leave watching", () => {
     await peek();
     fireEvent.click(screen.getByRole("button", { name: "Scale" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText(/replicas/i), {
-      target: { value: "3" },
-    });
-    fireEvent.submit(
-      within(dialog)
-        .getByLabelText(/replicas/i)
-        .closest("form")!
-    );
+    const field = await within(dialog).findByLabelText(/replicas/i);
+    fireEvent.change(field, { target: { value: "3" } });
+    fireEvent.submit(field.closest("form")!);
 
     await waitFor(() =>
       expect(scaleDeployment).toHaveBeenCalledWith("cart", 3, "shop")

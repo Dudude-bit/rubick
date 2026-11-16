@@ -12,13 +12,12 @@ import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { DataSection } from "../../../-object/data-rows";
 import { useToast } from "@/components/ui/use-toast";
-import { errorWords } from "@/i18n/say";
 import { KeyValueSection } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useObjectConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -43,6 +42,7 @@ export function ConfigMapDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<ConfigMapInfo>({
     resourceKind: ResourceType.ConfigMap,
     fetchResource: (name, ns) => commands.getConfigmap(name, ns),
@@ -64,6 +64,7 @@ export function ConfigMapDetail() {
     data: configMapData,
     error: configMapDataError,
     isLoading: isDataLoading,
+    refetch: refetchData,
   } = useQuery({
     queryKey: queryKeys.configMapData(namespace, name),
     queryFn: () => commands.getConfigmapData(name!, namespace!),
@@ -89,12 +90,7 @@ export function ConfigMapDetail() {
       toast({ title: t("action", "keyUpdated", { key }) });
     } catch (error) {
       noteDenied("patch", guarded, error);
-      if (toastedUnanswered(error)) return;
-      toast({
-        title: t("action", "keyUpdateFailed", { key }),
-        description: errorWords(error, t),
-        variant: "destructive",
-      });
+      toastWriteError(t("action", "keyUpdateFailed", { key }), error);
     }
   };
 
@@ -135,6 +131,9 @@ export function ConfigMapDetail() {
           onEditKey={writeKey}
           editDenied={editDenied}
           isLoading={isDataLoading}
+          error={configMapDataError}
+          onRetry={refetchData}
+          kind="ConfigMap"
           emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "ConfigMap" })}
         />
       ),
@@ -180,12 +179,13 @@ export function ConfigMapDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.ConfigMap}
       title={configMap?.name || name || ""}
       namespace={configMap?.namespace || namespace}
       createdAt={configMap?.createdAt}
       badges={
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("count", "keys", { n: dataKeys.length })}
         </span>
       }

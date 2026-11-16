@@ -1,11 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
 
 /**
- * While `held`, the rows there when the hold began, and how many arrived or
- * changed since. A new `key` is a new question, answered at once; `show`
- * takes the rows as they are now and holds those.
+ * While `held`, the rows there when the hold began, and how many arrived,
+ * changed or went away since. A new `key` is a new question, answered at once;
+ * `show` takes the rows as they are now and holds those. With `idOf` a row
+ * that changed is one update; without it the larger of the arrived and the
+ * gone rows is the least that happened.
  */
-export function useHeldRows<Row>(rows: Row[], held: boolean, key: string) {
+export function useHeldRows<Row>(
+  rows: Row[],
+  held: boolean,
+  key: string,
+  idOf?: (row: Row) => string
+) {
   const [snapshot, setSnapshot] = useState<{ rows: Row[]; key: string } | null>(
     null
   );
@@ -16,10 +23,13 @@ export function useHeldRows<Row>(rows: Row[], held: boolean, key: string) {
   const waiting = useMemo(() => {
     if (shown === rows) return 0;
     const drawn = new Set(shown);
-    let count = 0;
-    for (const row of rows) if (!drawn.has(row)) count++;
-    return count;
-  }, [shown, rows]);
+    const current = new Set(rows);
+    const arrived = rows.filter((row) => !drawn.has(row));
+    const gone = shown.filter((row) => !current.has(row));
+    if (!idOf) return Math.max(arrived.length, gone.length);
+    const now = new Set(rows.map(idOf));
+    return arrived.length + gone.filter((row) => !now.has(idOf(row))).length;
+  }, [shown, rows, idOf]);
   const show = useCallback(() => setSnapshot(null), []);
   return { shown, waiting, show };
 }

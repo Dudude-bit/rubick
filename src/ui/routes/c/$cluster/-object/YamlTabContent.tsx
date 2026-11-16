@@ -1,7 +1,8 @@
 import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { YamlEditor, YamlEditorAction } from "../-yaml";
 import { WithheldCopies } from "../-yaml/WithheldCopies";
-import { fetchResourceYaml } from "@/hooks/useResourceYaml";
+import { fetchResourceYaml, useResourceYaml } from "@/hooks/useResourceYaml";
 import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
@@ -17,6 +18,13 @@ export interface YamlTabContentProps {
    */
   title?: string;
   yaml: string | undefined;
+  /**
+   * Why the text is not here. A page that reads the manifest by another
+   * command says so; one that reads it through `useResourceYaml` need not,
+   * the tab asks that read itself while it has nothing to draw.
+   */
+  error?: unknown;
+  onRetry?: () => unknown;
   onCopy: () => void;
   /** What the document is. One line, in the reader's terms, not the API's. */
   note?: string;
@@ -39,6 +47,8 @@ export interface YamlTabContentProps {
 export function YamlTabContent({
   title,
   yaml,
+  error,
+  onRetry,
   resourceKind,
   resourceName,
   namespace,
@@ -47,7 +57,16 @@ export function YamlTabContent({
   onCopy,
 }: YamlTabContentProps) {
   const t = useT();
-  const isYamlLoading = yaml == null;
+  const own = useResourceYaml(
+    resourceKind ?? "",
+    yaml == null && error === undefined ? resourceName : undefined,
+    namespace,
+    "yaml"
+  );
+  const text = yaml ?? own.data;
+  const isYamlLoading = text == null;
+  const failure = isYamlLoading ? (error ?? own.error) : null;
+  const retry = onRetry ?? (() => own.refetch());
 
   const handleFetchYaml = useCallback(() => {
     return fetchResourceYaml(resourceKind ?? "", resourceName ?? "", namespace);
@@ -59,7 +78,7 @@ export function YamlTabContent({
           the rhythm, and the line the title used to occupy says something
           the reader did not already know. */}
       <div className="flex flex-none items-center gap-2 pb-2">
-        <p className="min-w-0 text-[11px] text-fg-fnt">
+        <p className="min-w-0 text-caption text-fg-fnt">
           {note ?? t("empty", "yamlNoteDefault")}
         </p>
         <div className="ml-auto flex flex-none items-center gap-1">
@@ -90,15 +109,23 @@ export function YamlTabContent({
           <p
             key={`${at}:${line}`}
             role="note"
-            className="flex-none pb-2 text-[11px] text-fg-mut"
+            className="flex-none pb-2 text-caption text-fg-mut"
           >
             {line}
           </p>
         ))
       ) : (
-        <WithheldCopies yaml={yaml} />
+        <WithheldCopies yaml={text} />
       )}
-      {isYamlLoading ? (
+      {failure ? (
+        <div className="min-h-0 flex-1 overflow-auto border-t border-hair p-4">
+          <Unknown
+            question={t("empty", "couldNotReadManifest")}
+            error={failure}
+            onRetry={retry}
+          />
+        </div>
+      ) : isYamlLoading ? (
         <div className="min-h-0 flex-1 overflow-hidden border-t border-hair p-4">
           <TextSkeleton lines={18} />
         </div>
@@ -106,7 +133,7 @@ export function YamlTabContent({
         <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
           {/* The editor scrolls itself, so it is handed the box rather than a
               number: a manifest is read against the window it is read in. */}
-          <YamlEditor value={yaml} readOnly height="100%" />
+          <YamlEditor value={text} readOnly height="100%" />
         </div>
       )}
     </section>

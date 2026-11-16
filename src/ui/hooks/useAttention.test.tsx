@@ -277,6 +277,62 @@ describe("the reads behind Needs attention", () => {
   });
 });
 
+describe("a pod's problem when the next read of pods is refused", () => {
+  /**
+   * Pods refused, and the row, the peek and the page chip all
+   * fell back to green "Running" because the count dropped the pod's
+   * problem with the read. Fails if the count stops handing on the last
+   * told problem, marked stale, while the Pod check is unread.
+   */
+  it("keeps the pod's last problem, stale, until pods are read again", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    commands.getClusterOverview.mockResolvedValue({
+      ...OVERVIEW,
+      problems: [
+        {
+          severity: "warning",
+          kind: "Pod",
+          name: "node-5skbg",
+          namespace: "shop",
+          reason: "Unhealthy",
+          detail: null,
+          since: null,
+          restarts: 1,
+          foldedPods: null,
+          replaced: false,
+        },
+      ],
+    });
+    const { result } = renderHook(() => useAttention(), {
+      wrapper: wrapper(client),
+    });
+    await waitFor(() => expect(result.current?.items).toHaveLength(1));
+    expect(result.current!.items[0].stale).toBeUndefined();
+
+    commands.getClusterOverview.mockResolvedValue({
+      ...OVERVIEW,
+      unread: [
+        {
+          kind: "Pod",
+          namespace: null,
+          code: "PERMISSION_DENIED",
+          message: "pods is forbidden",
+        },
+      ],
+    });
+    await act(() => client.refetchQueries({ queryKey: ["cluster-overview"] }));
+    await waitFor(() => expect(result.current?.items[0]?.stale).toBe(true));
+    expect(result.current!.items[0].lastKnown?.refused).toBe(true);
+    expect(result.current!.complete).toBe(false);
+
+    commands.getClusterOverview.mockResolvedValue(OVERVIEW);
+    await act(() => client.refetchQueries({ queryKey: ["cluster-overview"] }));
+    await waitFor(() => expect(result.current?.items).toEqual([]));
+  });
+});
+
 describe("what the count asks about each Ingress", () => {
   afterEach(() => {
     controllers.tls = [];

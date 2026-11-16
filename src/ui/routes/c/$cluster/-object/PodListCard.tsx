@@ -101,7 +101,7 @@ export function PodListCard({
             aria-expanded={showReplaced}
             onClick={() => setShowReplaced(!showReplaced)}
             title={t("count", "replacedPodsHint")}
-            className="flex items-center gap-1 rounded-[5px] px-1.5 py-1 text-[11px] text-fg-fnt hover:bg-hover hover:text-fg-mut"
+            className="flex items-center gap-1 rounded-[5px] px-1.5 py-1 text-caption text-fg-fnt hover:bg-hover hover:text-fg-mut"
           >
             {showReplaced ? (
               <ChevronDown className="h-3 w-3" aria-hidden="true" />

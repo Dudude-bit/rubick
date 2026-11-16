@@ -1,14 +1,15 @@
 import { type ClassValue, clsx } from "clsx";
 import type { T } from "@/i18n/useT";
 import { currentLocale } from "@/stores/localeStore";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 
-/**
- * Merge class names with Tailwind CSS conflict resolution
- *
- * @param inputs - Class values to merge
- * @returns Merged class string with conflicts resolved
- */
+/** The scale's sizes from index.css, which tailwind-merge would otherwise take for colours and drop beside one. */
+export const TYPE_SCALE = ["micro", "caption", "title", "display"] as const;
+
+const twMerge = extendTailwindMerge({
+  extend: { theme: { text: [...TYPE_SCALE] } },
+});
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

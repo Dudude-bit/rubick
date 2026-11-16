@@ -6,9 +6,11 @@
 
 import {
   useMemo,
+  useState,
   useRef,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -35,12 +37,7 @@ import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import {
-  builtInKindOf,
-  listLink,
-  objectLink,
-  resourceSegment,
-} from "@/lib/links";
+import { builtInKindOf, objectLink, resourceSegment } from "@/lib/links";
 import { servedOf, useServed } from "../-object/served";
 import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
@@ -51,21 +48,25 @@ import { KeyValueList } from "../-object/detail-kv";
 import { WordTable } from "../-object/WordTable";
 import { AccessPanel } from "../-object/AccessPanel";
 import { accessSegment } from "@/lib/access-kinds";
-import type { KeyValue } from "@/components/object/key-values";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { RESOURCE_NAME_SHELL } from "@/components/object/ResourceName";
 import { PeekActions } from "./PeekActions";
 import { CopyName } from "../-object/CopyName";
 import { DeliveryMarks, HelmMark } from "../-delivery/delivery";
 import { useDelivery } from "../-delivery/useDelivery";
 import { deliveryOf, deliveryOfKind } from "@/lib/delivery";
+import { ResourceType } from "@/lib/resource-registry";
+import { useObjectConnections } from "@/hooks/useConnections";
+import { governanceFindings } from "@/lib/governance-findings";
+import { statusRole, type StatusRole } from "@/lib/status-role";
+import { FindingsBlock, WithProblem } from "../-object/ProblemTone";
+import { itemFinding } from "../-object/item-finding";
 import {
-  getResourceDefinition,
-  ResourceType,
-  type ResourceKind,
-} from "@/lib/resource-registry";
-import { kindHue } from "@/lib/resource-identity";
-import { useClusterStore } from "@/stores/clusterStore";
+  GOVERNED,
+  listedKindOf,
+  problemOf,
+  useListedItems,
+  useListedProblem,
+} from "../-object/problem";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -76,27 +77,34 @@ import { usePeekHost } from "./peek-dock";
 import { usePodWatch } from "@/hooks/usePodWatch";
 import { useCauseWarnings } from "../-object/useCauseEvidence";
 import { kubeletWarned } from "@/lib/pod-cause";
-import { settingUp, withKubeletWarned } from "@/lib/share/pod-status";
-import { useWarnedPods } from "@/hooks/useClusterOverview";
+import { settingUp } from "@/lib/share/pod-status";
 import type { PodInfo } from "@/generated/types";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { EyeOff, Ghost } from "lucide-react";
+import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
+import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
+import { useHeldRow, useHoldingList } from "@/hooks/useHeldRow";
+import { usePartsReadAgainOnAnswer } from "@/hooks/useResourceDetail";
+import { useListLive } from "@/hooks/useWatchedList";
+import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
+import { ObjectUnreadContext } from "../-object/object-unread";
 import { ServiceHealthView } from "../-object/health-views";
-import { StaleRows } from "../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
+import { Unknown } from "@/components/ui/unknown";
+import { Reading } from "@/components/ui/states";
+import { NamespaceContents } from "../-object/NamespaceContents";
+import { DataFreshness } from "@/components/ui/realtime";
 import {
   ownersOf,
   useLastOwners,
   useRememberOwners,
   type KnownOwners,
 } from "@/hooks/useLastOwners";
-import { attentionOf, rowsWithStarts, startsOf } from "@/lib/workload-status";
-import { useLastPassed } from "@/hooks/useNow";
 import { useStaleNotFound } from "@/hooks/useStaleNotFound";
+import { useListFailure } from "./peek-list-failure";
 
 export function PeekContent({
   target,
@@ -121,9 +129,16 @@ export function PeekContent({
   // of its name is this panel's to draw.
   const builtIn = builtInKindOf(target);
 
+  // Opening an object asks the cluster once more, as a list visit does: a
+  // refusal kept from minutes before is not this look's answer.
+  const visit = useMemo(
+    () => askedAgainFirst(),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one visit per object
+    [source, target.name, namespace]
+  );
   const read = useLiveQuery({
     queryKey: peekQueryKey(target),
-    queryFn: () => source.fetch(target.name, namespace),
+    queryFn: () => visit(() => source.fetch(target.name, namespace)),
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
     refetchOnWindowFocus: false,
@@ -144,6 +159,13 @@ export function PeekContent({
   const error = reappearing ? null : read.error;
   const isLoading = read.isLoading || reappearing;
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  const refusedAt = useRefusedAt(error);
+  usePartsReadAgainOnAnswer(
+    read.error !== null,
+    read.data !== undefined,
+    namespace,
+    target.name
+  );
   const visible = useSurfaceVisible();
   usePodWatch(
     namespace,
@@ -173,13 +195,32 @@ export function PeekContent({
           : null
       )
     ) !== null;
-  const summary = useMemo(
-    () =>
-      data === undefined
-        ? null
-        : source.summarise(data, target, t, { hasStatus, warned }),
-    [data, source, target, t, hasStatus, warned]
+  // The list's row stands in while the peek's own read has not answered,
+  // on its way or failed: the row beside it already says what it is.
+  const held = useHeldRow(builtIn, namespace, target.name, data === undefined);
+  const shownAt = data === undefined && held ? held.at : dataUpdatedAt;
+  // A live watch on a list holding this object reads it again at every
+  // change it sees, as `rowDetail` asks of every list of these kinds.
+  const holding = useHoldingList(
+    builtIn,
+    namespace,
+    target.name,
+    data !== undefined || held !== null
   );
+  const listFailure = useListFailure(
+    holding,
+    builtIn,
+    namespace,
+    dataUpdatedAt
+  );
+  const listDown = listFailure !== null && !listFailure.answeredSince;
+  const followed = useListLive(holding) && listFailure === null;
+  const summary = useMemo(() => {
+    const shown = data ?? held?.row;
+    return shown === undefined
+      ? null
+      : source.summarise(shown, target, t, { hasStatus, warned });
+  }, [data, held, source, target, t, hasStatus, warned]);
   // The cache is dropped on every tab switch, so a peek mounted after the pod
   // died may never hold a read of it; the owners outlive that.
   useRememberOwners(target, data);
@@ -225,6 +266,16 @@ export function PeekContent({
   // `?tab=children` the tab then recorded as its route.
   const view = ownView(target);
   const landing = peekLanding(target);
+  const objectKey = `${target.kind}/${namespace ?? ""}/${target.name}`;
+  const [choseTabFor, setChoseTabFor] = useState<string | null>(null);
+  const hasProblem =
+    useListedProblem(listedKindOf(target), namespace, target.name, true) !==
+    null;
+  // A tab remembered from the last object of this kind would hide the cause.
+  const carriedTab =
+    hasProblem && choseTabFor !== objectKey
+      ? null
+      : pageTab(activeTab, target.kind);
   const fullPage = objectLink(
     {
       kind: target.kind,
@@ -232,9 +283,7 @@ export function PeekContent({
       namespace,
       crd: target.crd,
     },
-    target.via
-      ? landing
-      : { tab: pageTab(activeTab, target.kind) ?? undefined, view }
+    target.via ? landing : { tab: carriedTab ?? undefined, view }
   );
   const routable = fullPage !== null;
   const openFullPage = () => {
@@ -272,9 +321,9 @@ export function PeekContent({
         contentRef.current?.focus({ preventScroll: true });
       }}
       aria-describedby={undefined}
-      style={{ width }}
+      style={{ width, minWidth: width }}
       className={cn(
-        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        "flex max-w-none flex-col gap-0 p-0 transition-transform sm:max-w-none",
         host.position
       )}
     >
@@ -306,8 +355,30 @@ export function PeekContent({
             />
           </SheetTitle>
           <CopyName name={target.name} />
+          {/* On the line that never wraps: below, a row it took and gave back
+              moved the actions out from under a press. */}
+          {gone ? null : data === undefined && held && error === null ? (
+            <ReadingOverRow at={held.at} current={followed} />
+          ) : (
+            <DataFreshness
+              className="ml-auto"
+              dataUpdatedAt={shownAt}
+              live={followed}
+              slowed={read.freshness.slowed}
+              stale={error !== null || read.freshness.stale || listDown}
+              refusedAt={
+                isRefusal(error)
+                  ? refusedAt
+                  : listDown && isRefusal(listFailure.error)
+                    ? listFailure.at
+                    : undefined
+              }
+              slowRead={read.freshness.slowRead}
+              reserve={false}
+            />
+          )}
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
               report and draws nothing; `null` is a kind that has one and
               whose cluster wrote none, which the list and the detail page
@@ -327,21 +398,37 @@ export function PeekContent({
               compact
             />
           ) : summary?.status ? (
-            <StatusBadge
-              status={summary.status}
-              roleOverride={silence ? "neutral" : summary.statusRole}
-              glyph={silence ? undefined : summary.statusGlyph}
-              title={
-                silence
-                  ? silenceNote(silence, t)
-                  : (summary.statusTitle ??
-                    statusMeaning(builtIn ?? "", summary.status, t))
-              }
+            <GovernedStatus
+              on={!gone}
+              target={target}
+              namespace={namespace}
+              role={summary.statusRole ?? statusRole(summary.status)}
             >
-              {summary.statusLabel}
-            </StatusBadge>
+              <StatusBadge
+                status={summary.status}
+                roleOverride={silence ? "neutral" : summary.statusRole}
+                glyph={silence ? undefined : summary.statusGlyph}
+                title={
+                  silence
+                    ? silenceNote(silence, t)
+                    : (summary.statusTitle ??
+                      statusMeaning(builtIn ?? "", summary.status, t))
+                }
+              >
+                {summary.statusLabel}
+              </StatusBadge>
+            </GovernedStatus>
+          ) : summary?.status === null ? (
+            <PhaseBadge phase={null} />
           ) : (
-            summary?.status === null && <PhaseBadge phase={null} />
+            <GovernedStatus
+              on={!gone}
+              target={target}
+              namespace={namespace}
+              role="neutral"
+            >
+              {null}
+            </GovernedStatus>
           )}
           {!gone && summary?.endedAt && <EndedAgo at={summary.endedAt} />}
           <span>{target.kind}</span>
@@ -375,7 +462,10 @@ export function PeekContent({
         // without the sheet replaying its open animation.
         key={`${target.kind}/${namespace ?? ""}/${target.name}`}
         value={activeTab}
-        onValueChange={(value) => onTabChange(value as PeekTabId)}
+        onValueChange={(value) => {
+          setChoseTabFor(objectKey);
+          onTabChange(value as PeekTabId);
+        }}
         className="flex min-h-0 flex-1 flex-col"
       >
         {/* Pills, still: this strip sits inside a panel over a page that has
@@ -410,8 +500,8 @@ export function PeekContent({
                 summary={summary}
                 error={error}
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
-                isLoading={isLoading}
-                readAt={dataUpdatedAt}
+                readAt={shownAt}
+                onRetry={() => read.refetch()}
               />
             ) : (
               <PeekTabBody
@@ -419,12 +509,33 @@ export function PeekContent({
                 target={target}
                 detail={data}
                 isDetailLoading={isLoading}
+                detailError={error}
+                onRetryDetail={() => read.refetch()}
               />
             )}
           </TabsContent>
         ))}
       </Tabs>
     </SheetContent>
+  );
+}
+
+/** The title line's chip while the list's row stands in: reading, and how old the row is where no watch keeps it current. */
+function ReadingOverRow({ at, current }: { at: number; current: boolean }) {
+  const t = useT();
+  const age = useRealtimeAge(new Date(at).toISOString());
+  const reading = t("cluster", "freshReading");
+  return (
+    <div
+      className="ml-auto shrink-0"
+      title={t("cluster", "freshReadingRowNote")}
+    >
+      <Reading className="whitespace-nowrap">
+        {current
+          ? reading
+          : `${reading} · ${t("cluster", "freshAnswerAge", { age })}`}
+      </Reading>
+    </div>
   );
 }
 
@@ -507,91 +618,124 @@ function PeekOverview({
   summary,
   error,
   gone,
-  isLoading,
   readAt,
+  onRetry,
 }: {
   target: PeekTarget;
   summary: PeekSummary | null;
   error: Error | null;
   /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
   gone: KnownOwners | false;
-  isLoading: boolean;
   /** When the object on screen was read. */
   readAt: number;
+  onRetry: () => unknown;
 }) {
   const t = useT();
   const builtIn = builtInKindOf(target);
+  const unreadObject =
+    error && summary && gone === false
+      ? { kind: target.kind, name: target.name, failure: error }
+      : null;
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
-      {error && gone !== false ? (
-        <GoneNotice
-          className="mt-4"
-          kind={target.kind}
-          namespace={target.namespace ?? null}
-          owners={gone}
-          error={error}
-        />
-      ) : error && !summary ? (
-        <p className="pt-4 text-xs text-warn">
-          {t("empty", "couldNotReadKind", {
-            kind: target.kind,
-            error: errorToShow(error),
-          })}
-        </p>
-      ) : isLoading || !summary ? (
-        <PeekSkeleton />
-      ) : (
-        <>
-          {error && (
-            <StaleRows
-              object
-              className="mt-4 mb-2"
-              label={`${target.kind} ${target.name}`}
-              since={readAt}
-              error={error}
-            />
-          )}
-          {summary.lead}
-          {summary.groups.map((group) => (
-            <div key={group.title}>
-              <PeekHeading title={group.title} count={group.count} />
-              {group.table ? (
-                <WordTable
-                  table={group.table}
-                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
-                />
-              ) : (
-                <KeyValueList
-                  items={group.items}
-                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
-                />
-              )}
-            </div>
-          ))}
-        </>
-      )}
-      {/*
-       * The same objects as the detail pages, and the same question: the
-       * page showed what was firing about a workload while the peek at the
-       * same workload showed nothing. The block draws itself only where an
-       * evaluator can name the kind.
-       */}
-      {builtIn && (
-        <AlertsAbout
-          className="mt-3"
-          kind={builtIn}
-          name={target.name}
-          namespace={target.namespace ?? null}
-        />
-      )}
-      {gone === false && <LiveReads target={target} />}
-      <PeekEvents target={target} />
+    <ObjectUnreadContext.Provider value={unreadObject}>
+      <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
+        {error && gone !== false ? (
+          <GoneNotice
+            className="mt-4"
+            kind={target.kind}
+            namespace={target.namespace ?? null}
+            owners={gone}
+            error={error}
+          />
+        ) : error && !summary ? (
+          <Unknown
+            className="mt-4"
+            question={t("empty", "kindCouldNotRead", { kind: target.kind })}
+            error={error}
+            onRetry={onRetry}
+          />
+        ) : !summary ? (
+          <PeekSkeleton />
+        ) : (
+          <>
+            {error && (
+              <StaleRows
+                object
+                className="mt-4 mb-2"
+                label={`${target.kind} ${target.name}`}
+                since={readAt}
+                error={error}
+                onRetry={onRetry}
+              />
+            )}
+            {summary.lead || <ShellFindings target={target} />}
+            {summary.groups.map((group) => (
+              <div key={group.title}>
+                <PeekHeading title={group.title} count={group.count} />
+                {group.table ? (
+                  <WordTable
+                    table={group.table}
+                    emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
+                  />
+                ) : (
+                  <KeyValueList
+                    items={group.items}
+                    emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
+                  />
+                )}
+              </div>
+            ))}
+          </>
+        )}
+        {/*
+         * The same objects as the detail pages, and the same question: the
+         * page showed what was firing about a workload while the peek at the
+         * same workload showed nothing. The block draws itself only where an
+         * evaluator can name the kind.
+         */}
+        {builtIn && (
+          <AlertsAbout
+            className="mt-3"
+            kind={builtIn}
+            name={target.name}
+            namespace={target.namespace ?? null}
+          />
+        )}
+        {gone === false && <LiveReads target={target} />}
+        <PeekEvents target={target} />
+      </div>
+    </ObjectUnreadContext.Provider>
+  );
+}
+
+/**
+ * What the shell counts against an object whose peek leads with no finding of
+ * its own, worded as its page words it, so the header's "1 problem" is
+ * followed by the problem.
+ */
+function ShellFindings({ target }: { target: PeekTarget }) {
+  const t = useT();
+  const kind = listedKindOf(target);
+  const items = useListedItems(
+    kind,
+    target.namespace ?? null,
+    target.name,
+    true
+  );
+  const findings = (items ?? [])
+    .filter((item) => item.kind === kind && item.name === target.name)
+    .map((item) => itemFinding(item, t));
+  if (findings.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <FindingsBlock findings={findings} />
     </div>
   );
 }
 
 /** What is read about the object as it is now, which a gone one has no answer to. */
 function LiveReads({ target }: { target: PeekTarget }) {
+  const { close } = usePeek();
   const kind = builtInKindOf(target);
   return (
     <>
@@ -603,7 +747,13 @@ function LiveReads({ target }: { target: PeekTarget }) {
           service={{ name: target.name, namespace: target.namespace }}
         />
       )}
-      {kind === "Namespace" && <NamespaceContents namespace={target.name} />}
+      {kind === "Namespace" && (
+        <NamespaceContents
+          namespace={target.name}
+          heading={(title) => <PeekHeading title={title} />}
+          onOpen={close}
+        />
+      )}
       {target.crd !== undefined &&
         target.crd === accessSegment(target.kind) && (
           <AccessPanel
@@ -646,12 +796,13 @@ function BackendPolicies({
     return (
       <div>
         <PeekHeading title={t("nav", "policies")} />
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadInScope", { label: "BackendTLSPolicies" })}{" "}
-          <span className="text-fg-fnt">
-            {errorToShow(policiesQuery.error)}
-          </span>
-        </p>
+        <Unknown
+          question={t("empty", "couldNotReadInScope", {
+            label: "BackendTLSPolicies",
+          })}
+          error={policiesQuery.error}
+          onRetry={() => policiesQuery.refetch()}
+        />
       </div>
     );
   }
@@ -669,7 +820,7 @@ function BackendPolicies({
           return (
             <p
               key={policy.name}
-              className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+              className="flex flex-wrap items-baseline gap-x-1.5 text-caption text-fg-fnt"
             >
               <ResourceRef
                 kind="BackendTLSPolicy"
@@ -706,164 +857,6 @@ function BackendPolicies({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/**
- * What actually lives in a namespace — the question its peek exists for.
- * Three cheap namespace-scoped lists; a count alone would hide the part
- * worth peeking for, so the pods row splits out what is not ready.
- */
-function NamespaceContents({ namespace }: { namespace: string }) {
-  const t = useT();
-  const navigate = useNavigate();
-  const switchNamespace = useClusterStore((s) => s.switchNamespace);
-  const { close } = usePeek();
-
-  /** The kind's own icon and hue in the resource shell, as a door: click
-   *  scopes the window to this namespace and opens the kind's list. */
-  const kindDoor = (kind: ResourceKind) => {
-    const definition = getResourceDefinition(kind);
-    const Icon = definition.icon;
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          void switchNamespace(namespace);
-          close();
-          navigate(listLink(kind));
-        }}
-        title={t("action", "openScopedTo", {
-          plural: definition.displayPlural,
-          namespace,
-        })}
-        className={cn(
-          RESOURCE_NAME_SHELL,
-          "hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-        )}
-      >
-        <Icon
-          className="h-2.5 w-2.5 flex-none self-center"
-          style={{
-            color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))`,
-          }}
-          aria-hidden="true"
-        />
-        <span className="truncate">{definition.displayPlural}</span>
-      </button>
-    );
-  };
-
-  const filters = {
-    namespace,
-    labelSelector: null,
-    fieldSelector: null,
-    limit: null,
-  };
-  const pods = useLiveQuery({
-    queryKey: queryKeys.resources(ResourceType.Pod, namespace),
-    queryFn: () =>
-      commands.listPods({
-        ...filters,
-        statusFilter: null,
-        selector: null,
-        nodeName: null,
-      }),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: "resourceDetail",
-    retry: false,
-  });
-  const deployments = useLiveQuery({
-    queryKey: ["peek-ns-deployments", namespace],
-    queryFn: () => commands.listDeployments(filters),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: false,
-    retry: false,
-  });
-  const services = useLiveQuery({
-    queryKey: ["peek-ns-services", namespace],
-    queryFn: () => commands.listServices({ ...filters, serviceType: null }),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: false,
-    retry: false,
-  });
-
-  const notReady =
-    pods.data?.filter(
-      (pod) => !pod.status.ready && pod.status.display !== "Terminating"
-    ).length ?? 0;
-  const warned = useWarnedPods();
-  const starts = useMemo(
-    () => (pods.data ? startsOf(withKubeletWarned(pods.data, warned)) : null),
-    [pods.data, warned]
-  );
-  const ranOut = useLastPassed(starts?.deadlines ?? []);
-  const verdicts = useMemo(
-    () =>
-      deployments.data &&
-      attentionOf(
-        rowsWithStarts("Deployment", deployments.data, starts, ranOut).map(
-          (deployment) => deployment.rollout
-        )
-      ),
-    [deployments.data, starts, ranOut]
-  );
-
-  const count = (
-    { data, error }: { data: unknown[] | undefined; error: Error | null },
-    kind: ResourceKind,
-    trouble?: string,
-    unchecked?: string
-  ): KeyValue => ({
-    label: kindDoor(kind),
-    value: error ? (
-      <span className="break-words">
-        {t("services", "couldNotRead")}{" "}
-        <span className="text-fg-fnt">{errorToShow(error)}</span>
-      </span>
-    ) : data === undefined ? (
-      t("action", "readingInline")
-    ) : data.length === 0 ? (
-      t("empty", "noneCount")
-    ) : (
-      <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
-        {data.length}
-        {trouble && <span className="text-err">({trouble})</span>}
-        {unchecked && (
-          <span className="inline-flex items-baseline gap-1 text-fg-mut">
-            <EyeOff className="h-2.5 w-2.5 self-center" aria-hidden="true" />
-            {unchecked}
-          </span>
-        )}
-      </span>
-    ),
-    tone: error ? ("warn" as const) : trouble ? ("err" as const) : undefined,
-  });
-
-  return (
-    <div>
-      <PeekHeading title={t("nav", "contents")} />
-      <KeyValueList
-        items={[
-          count(
-            pods,
-            "Pod",
-            notReady > 0 ? t("count", "nNotReady", { n: notReady }) : undefined
-          ),
-          count(
-            deployments,
-            "Deployment",
-            verdicts && verdicts.attention > 0
-              ? t("count", "needAttention", { n: verdicts.attention })
-              : undefined,
-            verdicts && verdicts.unconfirmed > 0
-              ? t("count", "unconfirmedByPods", { n: verdicts.unconfirmed })
-              : undefined
-          ),
-          count(services, "Service"),
-        ]}
-      />
     </div>
   );
 }
@@ -922,5 +915,71 @@ function PeekEvents({ target }: { target: PeekTarget }) {
         compact
       />
     </>
+  );
+}
+
+/**
+ * The status chip carrying what the shell carries on the object (its pods'
+ * rows, what opens it from elsewhere), or, before the shell has answered,
+ * the worst finding of what governs it read here.
+ */
+function GovernedStatus({
+  on,
+  target,
+  namespace,
+  role,
+  children,
+}: {
+  on: boolean;
+  target: PeekTarget;
+  namespace: string | null | undefined;
+  role: StatusRole;
+  children: ReactNode;
+}) {
+  const t = useT();
+  if (!on) return <>{children}</>;
+  return (
+    <GovernedProblem target={target} namespace={namespace} role={role} t={t}>
+      {children}
+    </GovernedProblem>
+  );
+}
+
+function GovernedProblem({
+  target,
+  namespace,
+  role,
+  t,
+  children,
+}: {
+  target: PeekTarget;
+  namespace: string | null | undefined;
+  role: StatusRole;
+  t: T;
+  children: ReactNode;
+}) {
+  const kind = builtInKindOf(target);
+  // The connections read has no business in a pod's peek.
+  const governs = !!kind && GOVERNED.has(kind);
+  const governing = useObjectConnections(
+    target.kind,
+    target.name,
+    namespace ?? null,
+    governs
+  );
+  const found = governs
+    ? problemOf(governanceFindings(governing.data, t))
+    : null;
+  // The row's own count first, so the two never disagree on it.
+  const listed = useListedProblem(
+    listedKindOf(target),
+    namespace ?? null,
+    target.name,
+    true
+  );
+  return (
+    <WithProblem problem={listed ?? found} role={role}>
+      {children}
+    </WithProblem>
   );
 }

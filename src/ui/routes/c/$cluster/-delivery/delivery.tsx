@@ -11,6 +11,7 @@
  * file changing.
  */
 
+import { Alert } from "@/components/ui/alert";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, Package } from "lucide-react";
 
@@ -51,7 +52,7 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
           </>
         );
         const className = cn(
-          "inline-flex items-center gap-1.5 text-[11px]",
+          "inline-flex items-center gap-1.5 text-caption",
           mark.tone === "warn" ? "text-warn" : "text-fg-fnt"
         );
         return mark.to ? (
@@ -90,7 +91,7 @@ export function HelmMark({ object }: { object: unknown }) {
     <Link
       {...helmReleaseLink({ source: "native", ...release })}
       title={t("empty", "installedByRelease", { name: release.name })}
-      className="inline-flex items-center gap-1.5 text-[11px] text-fg-fnt hover:text-fg-mut"
+      className="inline-flex items-center gap-1.5 text-caption text-fg-fnt hover:text-fg-mut"
     >
       <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="font-mono">{release.name}</span>
@@ -113,25 +114,15 @@ export function DeliveryBanner({ deliveries }: { deliveries: Delivery[] }) {
 
 function DeliveryLineBody({ line }: { line: DeliveryLine }) {
   return (
-    <div
-      className={cn(
-        "border-l-2 pl-3",
-        line.tone === "warn" ? "border-warn" : "border-info"
-      )}
-    >
-      <p
-        className={cn(
-          "text-xs",
-          line.tone === "warn" ? "text-warn" : "text-info"
-        )}
-      >
+    <Alert variant={line.tone === "warn" ? "warn" : "info"}>
+      <p className={line.tone === "warn" ? "text-warn" : "text-info"}>
         {line.title}
       </p>
-      <p className="mt-0.5 text-xs text-fg-mut">
+      <p className="mt-0.5 text-fg-mut">
         {line.detail}
         {line.where && <DeliveryWhere where={line.where} />}
       </p>
-    </div>
+    </Alert>
   );
 }
 
@@ -192,10 +183,9 @@ function DeliveryWhere({
 }
 
 /**
- * The `Delivery` column's cell. Empty for the ordinary delivered-and-fine
- * row, which on a GitOps cluster is most of them: a problem earns a mark and
- * inventory does not. `not delivered` is faint and not a warning — it is
- * worth knowing and it is not a fault.
+ * The `Delivery` column's cell: the controller's name for the ordinary
+ * delivered-and-fine row, a warning for a problem. `not delivered` is faint
+ * and not a warning — it is worth knowing and it is not a fault.
  */
 export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
   const t = useT();
@@ -204,7 +194,7 @@ export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
   return (
     <span
       className={cn(
-        "text-[11px]",
+        "text-caption",
         cell.tone === "warn" ? "text-warn" : "text-fg-fnt"
       )}
     >

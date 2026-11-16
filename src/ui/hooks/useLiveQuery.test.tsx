@@ -923,4 +923,79 @@ describe("an answer that says when it stops being true", () => {
     await advance(1);
     expect(reads).toBe(2);
   });
+  /** Fails if a read that answered nothing at all throws from the turn time it never named, taking its page down with it. */
+  it("draws on when a read answers with nothing", async () => {
+    function Nothing() {
+      useLiveQuery<{ turnsAt: string | null } | null>({
+        queryKey: ["nothing"],
+        queryFn: async () => null,
+        refresh: "unserved",
+        changesAt: (answer) => answer!.turnsAt,
+      });
+      return <p>drawn</p>;
+    }
+    wrap(<Nothing />);
+    await settle();
+    expect(screen.getByText("drawn")).toBeInTheDocument();
+  });
+});
+
+describe("a read that failed and is being tried again", () => {
+  function Retried({ group = false }: { group?: boolean }) {
+    const options = {
+      queryKey: ["retried"],
+      queryFn: async () => {
+        reads++;
+        if (reads === 1) return "first";
+        throw new Error("etcdserver: request timed out");
+      },
+      staleTime: 0,
+      retry: 3,
+      retryDelay: 5_000,
+    };
+    const one = useLiveQuery<string>({
+      ...options,
+      enabled: !group,
+      refresh: "resourceList",
+    });
+    const many = useLiveQueries<string>({
+      refresh: "resourceList",
+      queries: group ? [options] : [],
+    });
+    const { freshness } = group ? many : one;
+    return (
+      <>
+        <span data-testid="failure">{String(freshness.failure ?? "")}</span>
+        <DataFreshness
+          dataUpdatedAt={freshness.dataUpdatedAt}
+          live
+          stale={freshness.stale}
+        />
+      </>
+    );
+  }
+
+  /**
+   * A peek under a 500 drew a green "live" for six seconds while four reads
+   * failed: React Query holds `success` through its retries. Fails if a read
+   * that has failed once and is retrying still reads live.
+   */
+  it("reads as failing from its first failure, not live while it retries", async () => {
+    wrap(<Retried />);
+    await settle();
+    expect(screen.getByText("live")).toBeInTheDocument();
+    await advance(RATE + 100);
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.getByTestId("failure")).toHaveTextContent("etcdserver");
+  });
+
+  /** The same for a question asked of several namespaces. Fails if a retrying part leaves the group live. */
+  it("reads as failing in a group whose part is retrying", async () => {
+    wrap(<Retried group />);
+    await settle();
+    expect(screen.getByText("live")).toBeInTheDocument();
+    await advance(RATE + 100);
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.getByTestId("failure")).toHaveTextContent("etcdserver");
+  });
 });

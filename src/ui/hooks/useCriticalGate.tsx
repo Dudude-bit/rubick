@@ -56,7 +56,7 @@ export function useCriticalGate(open: boolean): {
     notice: gate ? <CriticalNotice context={gate} /> : null,
     input: gate ? (
       <div className="space-y-2">
-        <Label htmlFor={id} className="text-sm">
+        <Label htmlFor={id} className="text-xs">
           {t("action", "typeWord")}{" "}
           <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
             {gate}

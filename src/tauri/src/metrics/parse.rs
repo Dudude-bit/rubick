@@ -47,8 +47,14 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
                     message: Some(server_words(api_err)),
                 }
             } else {
+                let unanswered =
+                    matches!(api_err.code, 502..=504) || api_err.reason == "ServiceUnavailable";
                 MetricsStatus {
-                    status: MetricsStatusKind::Error,
+                    status: if unanswered {
+                        MetricsStatusKind::NotAnswering
+                    } else {
+                        MetricsStatusKind::Error
+                    },
                     // The banner's title already says this is a metrics error,
                     // in the reader's language. What is left to add is the
                     // server's own code and words.
@@ -59,10 +65,42 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
                 }
             }
         }
+        kube::Error::HyperError(_) | kube::Error::Service(_) => MetricsStatus {
+            status: MetricsStatusKind::NotAnswering,
+            message: Some(err.to_string()),
+        },
         _ => MetricsStatus {
             status: MetricsStatusKind::Error,
             message: Some(err.to_string()),
         },
+    }
+}
+
+/// "Not installed" only where the API server has no metrics API registered.
+/// A registered one answers 404 for a while as its server moves off a node
+/// going down, and taken for "not installed" that told an on-call, mid
+/// incident, that installing metrics-server was someone else's job. Where the
+/// registrations cannot be read, nothing says the API is missing either.
+pub(super) async fn registered(state: &AppState, status: MetricsStatus) -> MetricsStatus {
+    if !matches!(status.status, MetricsStatusKind::NotInstalled) {
+        return status;
+    }
+    let absent = match ResourceContext::for_list_from_app_state(state, None) {
+        Ok(ctx) => ctx.client.list_api_groups().await.is_ok_and(|list| {
+            !list
+                .groups
+                .iter()
+                .any(|group| group.name == "metrics.k8s.io")
+        }),
+        Err(_) => false,
+    };
+    if absent {
+        status
+    } else {
+        MetricsStatus {
+            status: MetricsStatusKind::NotAnswering,
+            message: status.message,
+        }
     }
 }
 
@@ -148,7 +186,10 @@ pub(super) async fn fetch_metrics<T>(
 ) -> Result<(MetricsStatus, Vec<T>)> {
     Ok(match list_metrics(state, namespace, kind, parse).await? {
         Ok(metrics) => (metrics_status_available(), metrics),
-        Err(err) => (metrics_status_from_error(&err), vec![]),
+        Err(err) => (
+            registered(state, metrics_status_from_error(&err)).await,
+            vec![],
+        ),
     })
 }
 
@@ -211,8 +252,30 @@ mod tests {
             .with_code(502),
         ));
         let status = metrics_status_from_error(&page);
-        assert!(matches!(status.status, MetricsStatusKind::Error));
+        assert!(matches!(status.status, MetricsStatusKind::NotAnswering));
         assert_eq!(status.message.as_deref(), Some("502 Bad Gateway"));
+    }
+
+    /// A metrics API that gave no answer is not one that answered with an
+    /// error, and neither is "not installed". Fails if a 503 from an
+    /// `APIService` whose pod is moving, a gateway's 504 or a read that ran out
+    /// of time is filed as anything but not answering.
+    #[test]
+    fn no_answer_is_not_answering() {
+        for unanswered in [
+            api_error(503, "ServiceUnavailable"),
+            api_error(0, "ServiceUnavailable"),
+            api_error(504, "Timeout"),
+            kube::Error::Service(Box::new(tower::timeout::error::Elapsed::new())),
+        ] {
+            assert!(
+                matches!(
+                    metrics_status_from_error(&unanswered).status,
+                    MetricsStatusKind::NotAnswering
+                ),
+                "{unanswered:?}"
+            );
+        }
     }
 
     /// No answer from the API server proves nothing about the session.

@@ -17,4 +17,18 @@ describe("ReasonText", () => {
     expect(text.className).toContain("whitespace-normal");
     expect(text.className).not.toContain("truncate");
   });
+
+  /**
+   * The peek's 128px reason column broke "ScalingReplicaSet" across lines.
+   * Fails if the one-line form wraps or loses its tooltip.
+   */
+  it("keeps a one-line reason on one line, ellipsised, with the whole word as its tooltip", () => {
+    const { container } = render(
+      <ReasonText reason="ScalingReplicaSet" oneLine />
+    );
+    const text = container.firstElementChild as HTMLElement;
+    expect(text.className).toContain("truncate");
+    expect(text.querySelectorAll("wbr")).toHaveLength(0);
+    expect(text).toHaveAttribute("title", "ScalingReplicaSet");
+  });
 });

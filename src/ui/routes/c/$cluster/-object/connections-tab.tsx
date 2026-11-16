@@ -14,7 +14,11 @@ import { ConnectionsPanel } from "./ConnectionsPanel";
 /** The objects the tab draws, and a floor where it says some kinds were not looked at. */
 export function connectionsMark(query: ConnectionsRead, t: T) {
   if (query.error)
-    return readCountMark(null, t("empty", "couldNotReadWhatConnects"));
+    return readCountMark(
+      null,
+      t("empty", "couldNotReadWhatConnects"),
+      query.error
+    );
   if (!query.data) return undefined;
   const { notLookedAt } = query.data;
   return readCountMark(

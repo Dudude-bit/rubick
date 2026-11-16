@@ -1,16 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useRefusal } from "@/hooks/useRefusals";
-import {
-  AlignLeft,
-  BadgeCheck,
-  History,
-  Info,
-  Layers2,
-  Scale,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, History, Info, Layers2 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { useAsk } from "../../../-object/useAsk";
@@ -26,7 +19,11 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
+import { PodsTroubleLines } from "../../../-object/PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../../../-object/pods-trouble";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   kindGlyph,
@@ -40,12 +37,8 @@ import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
-import {
-  Composition,
-  ConditionRows,
-  ReasonedAction,
-} from "@/components/object/detail-blocks";
-import { ScaleDialog } from "../../../-object/ScaleDialog";
+import { Composition, ConditionRows } from "@/components/object/detail-blocks";
+import { ScaleControl } from "../../../-object/ScaleControl";
 import { scaleWarnings } from "@/lib/governance";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
@@ -78,6 +71,7 @@ import {
   rolloutSettled,
   startOf,
   watchedWorkload,
+  workloadRole,
 } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
 
@@ -109,6 +103,8 @@ export function StatefulSetDetail() {
 
   const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
+  const podsTrouble = usePodsTrouble(ResourceType.StatefulSet, namespace, name);
 
   const podsKey = queryKeys.ownedPods(
     ResourceType.StatefulSet,
@@ -192,7 +188,6 @@ export function StatefulSetDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
-  const [scaleOpen, setScaleOpen] = useState(false);
   const asking = useAsk();
 
   const restarted = restartedWords(
@@ -256,7 +251,6 @@ export function StatefulSetDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.StatefulSet, namespace, name)]
           : [],
-      onSuccess: () => setScaleOpen(false),
     }
   );
 
@@ -326,6 +320,7 @@ export function StatefulSetDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     desired === 0
                       ? t("empty", "kindScaledToZero", {
@@ -398,6 +393,7 @@ export function StatefulSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
+        reading: podsPending,
         mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
@@ -504,12 +500,19 @@ export function StatefulSetDetail() {
         title={statefulSet?.name || name || ""}
         namespace={statefulSet?.namespace || namespace}
         createdAt={statefulSet?.createdAt}
+        findings={findings}
+        trouble={withPodsTrouble(findings, podsTrouble)}
+        statusRole={statefulSet && workloadRole(statefulSet.rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+        ])}
         statusBadge={
           statefulSet && <RolloutBadge rollout={statefulSet.rollout} />
         }
         badges={
           statefulSet && (
-            <span className="text-[11px] text-fg-mut">
+            <span className="text-caption text-fg-mut">
               {readyBesideBadge(ready, desired, statefulSet.rollout, t)}
             </span>
           )
@@ -533,6 +536,7 @@ export function StatefulSetDetail() {
                 refused={refused}
                 className="mb-1"
               />
+              <PodsTroubleLines pods={podsTrouble} />
               <RolloutSummary
                 rollout={statefulSet.rollout}
                 subject={{ kind: ResourceType.StatefulSet, name, namespace }}
@@ -548,11 +552,16 @@ export function StatefulSetDetail() {
             {/* Plain, not intercepted: the Scale dialog carries the delivery
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
-            <ReasonedAction
-              label={t("action", "scale")}
+            <ScaleControl
+              kind={ResourceType.StatefulSet}
+              name={name ?? ""}
+              namespace={namespace || null}
+              current={replicas?.desired}
+              ready={!!statefulSet}
               reason={scaleDenied}
-              icon={Scale}
-              onClick={() => statefulSet && setScaleOpen(true)}
+              warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              reading={connections.isPending}
+              mutation={scaleMutation}
             />
             <RestartAction
               kind={ResourceType.StatefulSet}
@@ -578,21 +587,6 @@ export function StatefulSetDetail() {
         onTabChange={setActiveTab}
       />
 
-      {/* Outside the frame, because it is opened from the strip's row and so
-          from any tab — inside the Overview's panel it would be unmounted the
-          moment the reader was on Logs, which is when Scale still has to
-          work. It draws nothing until it is open, and portals when it is. */}
-      <ScaleDialog
-        warnings={scaleWarnings(connections, intercept("Scale"), t)}
-        open={scaleOpen}
-        onOpenChange={setScaleOpen}
-        kind={ResourceType.StatefulSet}
-        name={name ?? ""}
-        namespace={namespace || null}
-        current={replicas?.desired}
-        busy={scaleMutation.isPending}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
       {asking.dialog}
     </>
   );

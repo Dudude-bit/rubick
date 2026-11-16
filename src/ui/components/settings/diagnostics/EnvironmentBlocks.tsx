@@ -254,7 +254,7 @@ export function EnvironmentBlocks({
                     <>
                       <Missing label={attempt.proxy.error} />
                       {attempt.proxy.stderr && (
-                        <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px] text-fg-fnt">
+                        <pre className="mt-1 whitespace-pre-wrap font-mono text-caption text-fg-fnt">
                           {attempt.proxy.stderr}
                         </pre>
                       )}

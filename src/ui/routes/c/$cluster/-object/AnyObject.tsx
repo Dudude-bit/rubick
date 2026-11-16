@@ -1,5 +1,6 @@
 import { Navigate } from "@tanstack/react-router";
 
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { AttachedGate } from "./Attached";
 import { CustomResourceDetail } from "./-components/CustomResourceDetail";
 import { GenericObjectPage } from "./GenericObjectPage";
@@ -28,8 +29,10 @@ export function AnyObject({
   if (namespace === undefined && namespaced !== false)
     return namespaced ? (
       <Navigate {...namespaceListLink(resource, name)} replace />
-    ) : null;
-  if (resource.includes(".") && crds.isLoading) return null;
+    ) : (
+      <DetailSkeleton />
+    );
+  if (resource.includes(".") && crds.isLoading) return <DetailSkeleton />;
   const page =
     resource.includes(".") && crds.isCrd(resource) ? (
       <CustomResourceDetail

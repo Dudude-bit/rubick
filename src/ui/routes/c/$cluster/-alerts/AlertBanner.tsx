@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { severityTone } from "@/lib/alerts";
-import { SEVERITY_BANNER, SEVERITY_QUOTE } from "./severity-tone";
+import { SEVERITY_BANNER } from "./severity-tone";
 import { cn, formatAge, formatWhen } from "@/lib/utils";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { useT } from "@/i18n/useT";
@@ -68,7 +68,7 @@ export function AlertBanner({
     <div className={cn("rounded border px-3 py-2", SEVERITY_BANNER[tone].box)}>
       <div
         className={cn(
-          "flex items-baseline gap-2 text-[11.5px]",
+          "flex items-baseline gap-2 text-xs",
           SEVERITY_BANNER[tone].head
         )}
       >
@@ -89,25 +89,20 @@ export function AlertBanner({
         <button
           type="button"
           onClick={dismiss}
-          className="ml-auto flex-none rounded px-1 text-[11px] text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className="ml-auto flex-none rounded px-1 text-caption text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           {t("alerts", "dismiss")}
         </button>
       </div>
       {reading.claim ? (
-        <p
-          className={cn(
-            "mt-1.5 border-l-2 pl-2.5 text-[11.5px] text-fg-mid",
-            SEVERITY_QUOTE[tone]
-          )}
-        >
+        <p className="mt-1.5 rounded-[4px] border border-hair bg-hover px-2 py-1 text-xs text-fg-mid">
           {reading.claim}
         </p>
       ) : null}
-      <p className="mt-1 text-[10.5px] text-fg-fnt">
+      <p className="mt-1 text-caption text-fg-fnt">
         {t("alerts", "theAlertsWords")}
       </p>
-      <p className="mt-2 border-t border-hair pt-2 text-[11.5px] text-fg-mut">
+      <p className="mt-2 border-t border-hair pt-2 text-xs text-fg-mut">
         <span className="text-fg-fnt">{t("alerts", "readJustNow")}</span>{" "}
         {error !== undefined ? (
           <span className="text-err">
@@ -131,7 +126,7 @@ export function AlertBanner({
           <span className="inline-flex items-baseline gap-2">
             {now}
             {readAt !== undefined ? (
-              <span className="text-[10.5px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("alerts", "readAgo", {
                   ago: formatAge(new Date(readAt).toISOString(), t),
                 })}

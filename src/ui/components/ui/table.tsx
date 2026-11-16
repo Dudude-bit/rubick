@@ -121,7 +121,7 @@ const TableHead = React.forwardRef<
     // without it "Restarts" becomes "Restar", a mislabelled column rather
     // than a visibly truncated one.
     className={cn(
-      "relative overflow-hidden text-ellipsis whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
+      "relative overflow-hidden text-ellipsis whitespace-nowrap px-2.5 py-1 text-left align-middle text-caption font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
       className
     )}
     {...props}

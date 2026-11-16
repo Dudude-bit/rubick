@@ -26,6 +26,7 @@ vi.mock("@/lib/commands", () => ({
       tauriVersion: "2.0.0",
     })),
     getCurrentContext: vi.fn(async () => "k3d-k8s-gui-dev"),
+    listShareTargets: vi.fn(async () => []),
   },
 }));
 

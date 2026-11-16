@@ -2,6 +2,8 @@ import { afterEach, describe, it, expect } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { CountBlock } from "./workload-overview";
+import { useGovernanceFindings } from "./use-governance-findings";
+import { FindingsBlock } from "../../-object/ProblemTone";
 import { Composition } from "@/components/object/detail-blocks";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
@@ -73,20 +75,28 @@ const budget = (over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}) =>
 const query = (data: ResourceConnections | undefined) =>
   ({ data }) as ConnectionsQuery;
 
-function renderBlock(governance?: ConnectionsQuery) {
-  return renderWithRouter(
-    <CountBlock title="Replicas" subject="what runs" governance={governance}>
-      <Composition
-        total={3}
-        label="replicas wanted"
-        segments={[{ label: "ready", count: 3, tone: "ok" }]}
-      />
-    </CountBlock>,
-    {
-      at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
-      route: "/c/$cluster/$",
-    }
+// The page frame draws the findings above the block; drawn together here as the page does.
+function Overview({ governance }: { governance?: ConnectionsQuery }) {
+  const findings = useGovernanceFindings(governance);
+  return (
+    <>
+      <FindingsBlock findings={findings} />
+      <CountBlock title="Replicas" subject="what runs" governance={governance}>
+        <Composition
+          total={3}
+          label="replicas wanted"
+          segments={[{ label: "ready", count: 3, tone: "ok" }]}
+        />
+      </CountBlock>
+    </>
   );
+}
+
+function renderBlock(governance?: ConnectionsQuery) {
+  return renderWithRouter(<Overview governance={governance} />, {
+    at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+    route: "/c/$cluster/$",
+  });
 }
 
 describe("CountBlock", () => {
@@ -125,6 +135,26 @@ describe("CountBlock", () => {
     expect(screen.getByText(/1 to 3 replicas/)).toBeInTheDocument();
     expect(screen.getByText("cpu")).toBeInTheDocument();
     expect(screen.getByText(/against 80%/)).toBeInTheDocument();
+  });
+
+  /**
+   * "cpu no reading" in amber on a Deployment scaled to zero,
+   * which has no pod to read. Fails if that expected absence is drawn as a
+   * warning, or a missing reading with pods running is no longer one.
+   */
+  it("draws a missing reading neutral where nothing runs, and amber where pods run", async () => {
+    const unread = [
+      { name: "cpu", source: "resource", target: "80%", current: null },
+    ];
+    const { unmount } = await renderBlock(
+      query(conns(autoscaler({ currentReplicas: 0, metrics: unread })))
+    );
+    expect(screen.getByTestId("hpa-no-reading")).toHaveClass("text-fg-fnt");
+    expect(screen.getByTestId("hpa-no-reading")).not.toHaveClass("text-warn");
+    unmount();
+
+    await renderBlock(query(conns(autoscaler({ metrics: unread }))));
+    expect(screen.getByTestId("hpa-no-reading")).toHaveClass("text-warn");
   });
 
   /** Issue #178: the block described the autoscaler and gave no way to change it. */

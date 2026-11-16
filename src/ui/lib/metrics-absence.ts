@@ -10,7 +10,9 @@ export function absenceOf(
 ): MetricsAbsence | null {
   if (!status || status.status === "available") return null;
   // Anything this build has no word for is a failure, never "available".
-  return status.status === "notInstalled" || status.status === "forbidden"
+  return status.status === "notInstalled" ||
+    status.status === "forbidden" ||
+    status.status === "notAnswering"
     ? status.status
     : "error";
 }
@@ -29,6 +31,7 @@ export function isUnserved(status: MetricsStatus | null | undefined): boolean {
 export const ABSENCE_SHORT = {
   notInstalled: "metricsShortNotInstalled",
   forbidden: "metricsShortForbidden",
+  notAnswering: "metricsShortNotAnswering",
   error: "metricsShortError",
 } as const satisfies Record<MetricsAbsence, string>;
 

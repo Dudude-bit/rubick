@@ -18,6 +18,8 @@ interface PodSpec {
   of?: string;
   cpu?: number | null;
   memory?: number | null;
+  phase?: string;
+  state?: "running" | "waiting";
 }
 
 function pod({
@@ -27,12 +29,16 @@ function pod({
   of,
   cpu = 10,
   memory = 100,
+  phase = "Running",
+  state = "running",
 }: PodSpec): PodWithMetrics {
   const [kind, owner] = of?.split("/") ?? [];
   return {
     name,
     namespace,
     labels,
+    status: { phase },
+    containers: [{ state: { type: state } }],
     workload: of ? { kind, name: owner } : null,
     cpuMillicores: cpu,
     memoryBytes: memory,
@@ -95,6 +101,34 @@ describe("mergePodsWithMetrics", () => {
     expect(
       mergePodsWithMetrics(pods, [sample("a"), zero])[0].cpuMillicores
     ).toBe(10);
+  });
+
+  /** A Completed pod's cells drew "no sample yet". Fails if a finished pod is not marked as having nothing to measure, or a running one is. */
+  it("marks a finished pod as having nothing to measure, and a running one not", () => {
+    const [done, running] = mergePodsWithMetrics(
+      [pod({ name: "a", phase: "Succeeded" }), pod({ name: "b" })],
+      []
+    );
+    expect(done).toMatchObject({ idle: true, cpuMillicores: null });
+    expect(running.idle).toBeUndefined();
+  });
+
+  /**
+   * A crash-looping pod's cells drew the warning "no sample yet", as if the
+   * read had missed one that was coming. Fails if a pod with no running
+   * container and no sample is not marked as having nothing to measure, or if
+   * a running pod with no sample yet is.
+   */
+  it("marks a pod between crashes as having nothing to measure, and a running one with no sample not", () => {
+    const [looping, young] = mergePodsWithMetrics(
+      [
+        pod({ name: "a", state: "waiting", cpu: null, memory: null }),
+        pod({ name: "b" }),
+      ],
+      []
+    );
+    expect(looping).toMatchObject({ idle: true, cpuMillicores: null });
+    expect(young.idle).toBeUndefined();
   });
 
   /** A cache keyed only by name would hide watch updates or reuse rows from another namespace. */
@@ -228,5 +262,68 @@ describe("attachAggregatedPodMetrics", () => {
         memoryBytes: null,
       },
     ]);
+  });
+
+  /**
+   * A Deployment at 0/0 read "0m" and "0 B", a measured zero,
+   * where its page said nothing runs. Fails if a workload with no pods is
+   * not marked as having nothing to measure once the pods were read, or is
+   * marked so when they were not.
+   */
+  it("says a workload with no pods has nothing to measure once the pods were read, and stays unknown when they were not", () => {
+    const sets = [{ name: "idle", namespace: "shop" }];
+    expect(
+      attachAggregatedPodMetrics(sets, [], matchStatefulSetPods, true)[0]
+    ).toMatchObject({ cpuMillicores: null, memoryBytes: null, idle: true });
+    expect(
+      attachAggregatedPodMetrics(sets, [], matchStatefulSetPods)[0].idle
+    ).toBeUndefined();
+  });
+
+  /** Fails if a finished pod is summed into its workload, which then draws "no sample yet" for a Job that is done. */
+  it("counts only running pods, so a workload whose pods all finished has nothing to measure", () => {
+    const jobs = [{ name: "migrate", namespace: "default" }];
+    const pods = [
+      pod({
+        name: "migrate-a",
+        of: "Job/migrate",
+        phase: "Succeeded",
+        cpu: null,
+      }),
+      pod({ name: "migrate-b", of: "Job/migrate", phase: "Failed", cpu: null }),
+    ];
+    expect(
+      attachAggregatedPodMetrics(
+        jobs,
+        pods,
+        (p) => p.workload?.name ?? null,
+        true
+      )[0]
+    ).toMatchObject({ cpuMillicores: null, idle: true });
+  });
+
+  /** Fails if a workload whose every pod is between crashes draws the unread mark its pods no longer draw. */
+  it("says a workload whose pods all run nothing has nothing to measure", () => {
+    const jobs = [{ name: "api", namespace: "default" }];
+    const [looping] = mergePodsWithMetrics(
+      [
+        pod({
+          name: "api-a",
+          of: "Job/api",
+          state: "waiting",
+          cpu: null,
+          memory: null,
+        }),
+      ],
+      []
+    );
+    expect(
+      attachAggregatedPodMetrics(
+        jobs,
+        [looping],
+        (p) => p.workload?.name ?? null,
+        true
+      )[0]
+    ).toMatchObject({ cpuMillicores: null, idle: true });
   });
 });

@@ -130,3 +130,31 @@ describe("what the density strip says when the lines are too close to map", () =
     );
   });
 });
+
+describe("the strip's rail for where the reader is", () => {
+  /**
+   * Two slices drew a near-black bar, the foreground colour itself, under the
+   * collapse caret in the light theme, with nothing to say what it was. Fails
+   * if the rail goes back to the foreground colour, or stops being drawn.
+   */
+  it("draws the rail in the muted role, never in the foreground colour", () => {
+    useLocaleStore.setState({ choice: "en" });
+    const base = 1_700_000_000_000;
+    const logs = Array.from({ length: 60 }, (_, i) => line(i, base + i * 2000));
+    const { container } = render(
+      <LogDensityStrip
+        {...common}
+        mode="full"
+        logs={logs}
+        retained={60}
+        viewportFrom={base + 40_000}
+        viewportTo={base + 118_000}
+      />
+    );
+    const rails = [...container.querySelectorAll("[role=option] > span")]
+      .map((node) => node.className)
+      .filter((cls) => /\bbg-fg(-mut)?\b/.test(cls));
+    expect(rails.length).toBeGreaterThan(0);
+    for (const cls of rails) expect(cls).not.toMatch(/\bbg-fg\b(?!-)/);
+  });
+});

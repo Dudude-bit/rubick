@@ -43,10 +43,12 @@ describe("a list nobody could read", () => {
   });
 
   /**
-   * Refused and failing both offer the read again, so the words alone must
-   * tell them apart. Fails if a refusal is drawn in the failure's red cross.
+   * Refused and failing both offer the read again, so the mark must tell
+   * them apart, and neither is the cluster's fault drawn in red: a read we
+   * could not do is amber everywhere. Fails if a refusal and a failure look
+   * alike, or if a failed read is painted as an error of the object.
    */
-  it("draws a refusal with a lock in amber and a failure with a cross in red", () => {
+  it("marks a refusal apart from a failure, both in the could-not-look tone", () => {
     const { unmount } = render(
       <UnreadList
         error={new Error("pods is forbidden: User cannot list")}
@@ -54,9 +56,9 @@ describe("a list nobody could read", () => {
         onRetry={() => {}}
       />
     );
-    const refused = screen.getByText("Refused");
+    const refused = screen.getByText("Refused").closest("[data-read]");
     expect(refused).toHaveAttribute("data-read", "refused");
-    expect(refused).toHaveClass("text-warn");
+    expect(refused?.querySelector(".text-err")).toBeNull();
     unmount();
 
     render(
@@ -66,8 +68,8 @@ describe("a list nobody could read", () => {
         onRetry={() => {}}
       />
     );
-    const failed = screen.getByText("Failed");
+    const failed = screen.getByText("Failed").closest("[data-read]");
     expect(failed).toHaveAttribute("data-read", "failed");
-    expect(failed).toHaveClass("text-err");
+    expect(failed?.querySelector(".text-err")).toBeNull();
   });
 });

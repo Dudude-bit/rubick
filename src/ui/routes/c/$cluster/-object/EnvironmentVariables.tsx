@@ -28,7 +28,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Lock,
   Unlink,
 } from "lucide-react";
@@ -48,6 +47,7 @@ import {
 import { MaskedValue } from "@/components/ui/masked-value";
 import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { withheldWords } from "@/lib/certificates";
@@ -141,7 +141,7 @@ function SourceCell({
   const isSecret = type === "secret" || type === "envFromSecret";
   const isConfigMap = type === "configmap" || type === "envFromConfigMap";
   return (
-    <span className="text-[11px] text-fg-fnt">
+    <span className="text-caption text-fg-fnt">
       {/* The word already says the kind, so the reference does not repeat
           it — `configmap app-config`, not `configmap ConfigMap/app-config`. */}
       {t("readings", SOURCE_LABEL[type])}
@@ -190,7 +190,7 @@ function RefState({
   if (verdict.verdict === "reading") {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-fg-fnt">
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         {t("settings", "loading")}
       </span>
     );
@@ -650,7 +650,7 @@ export function EnvironmentVariables({
 
     if (ev.isFromEnvFrom && ev.name.endsWith("*")) {
       if (isSecret && !showSecrets) {
-        return t("empty", "enableShowSecrets");
+        return t("empty", "valueHidden");
       }
       // No variable came of it: still reading, refused, failed, or it holds none.
       const names = isSecret ? allSecretNames : allConfigMapNames;
@@ -731,7 +731,7 @@ export function EnvironmentVariables({
       <Section>
         <SectionHeader
           title={t("columns", "environment")}
-          count={expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length}
+          count={expandedEnvVars.length}
           actions={
             <>
               {sources.size > 1 && (
@@ -743,7 +743,7 @@ export function EnvironmentVariables({
                       the canvas has no boxed controls. */}
                   <SelectTrigger
                     aria-label={t("action", "filterBySource")}
-                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-caption text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -764,9 +764,7 @@ export function EnvironmentVariables({
 
               {hasSecrets && (
                 <div className="flex items-center gap-2 ml-2">
-                  {loadingSecrets && (
-                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
-                  )}
+                  {loadingSecrets && <Spinner size="xs" aria-hidden="true" />}
                   <Switch
                     id={`show-secrets-${containerName}`}
                     checked={showSecrets}
@@ -783,7 +781,7 @@ export function EnvironmentVariables({
                   />
                   <Label
                     htmlFor={`show-secrets-${containerName}`}
-                    className="text-[11px] text-fg-mut"
+                    className="text-caption text-fg-mut"
                   >
                     {t("action", "showSecrets")}
                   </Label>
@@ -929,6 +927,19 @@ export function EnvironmentVariables({
               </TableBody>
             </Table>
           )}
+          {!showSecrets &&
+            filteredEnvVars.some(
+              (ev) =>
+                ev.isFromEnvFrom &&
+                ev.name.endsWith("*") &&
+                ev.sourceType === "envFromSecret"
+            ) && (
+              <p className="mt-1.5 text-caption text-fg-mut">
+                {t("empty", "secretKeysHidden", {
+                  toggle: t("action", "showSecrets"),
+                })}
+              </p>
+            )}
         </CollapsibleContent>
       </Section>
     </Collapsible>

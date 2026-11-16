@@ -295,7 +295,7 @@ describe("a tab strip wider than its row", () => {
    * see. Fails if a picked tab stays in the menu while the strip could show
    * it, or the tabs it displaces are not offered in its place.
    */
-  it("brings a picked tab into the strip and offers what it displaced", async () => {
+  it("keeps the strip as it was when a tab is picked from the menu, and names the pick on the menu button", async () => {
     rowOf(() => 260);
     render(<Page />);
     await userEvent.click(screen.getByRole("button", { name: /do not fit/ }));
@@ -304,11 +304,14 @@ describe("a tab strip wider than its row", () => {
     expect(screen.getByText("the yaml panel")).toBeInTheDocument();
     expect(["Overview", "Logs", "Events", "YAML"].map(inStrip)).toEqual([
       true,
-      false,
-      false,
       true,
+      false,
+      false,
     ]);
-    expect(await menuItems()).toEqual(["Logs", "Events"]);
+    expect(screen.getByRole("button", { name: /YAML/ })).toHaveTextContent(
+      "YAML"
+    );
+    expect(await menuItems()).toEqual(["Events", "YAML"]);
   });
 
   /**
@@ -496,5 +499,29 @@ describe("a page moved to another object", () => {
       />
     );
     expect(screen.queryByText("a live shell")).not.toBeInTheDocument();
+  });
+});
+
+describe("DetailTabs holds the place of a mark still being read", () => {
+  /**
+   * Counts arrived after first paint and shifted every label after them.
+   * Fails if a tab being read draws no slot, or keeps one once its mark lands.
+   */
+  it("reserves the mark's width while it is read and gives it to the count", () => {
+    const reading: DetailTab[] = [{ ...tabs[0], reading: true }, tabs[1]];
+    const { rerender } = render(
+      <DetailTabs tabs={reading} activeTab="overview" onTabChange={() => {}} />
+    );
+    expect(screen.getAllByTestId("tab-mark-slot")).toHaveLength(1);
+
+    rerender(
+      <DetailTabs
+        tabs={[{ ...tabs[0], mark: { shows: "count", of: "4" } }, tabs[1]]}
+        activeTab="overview"
+        onTabChange={() => {}}
+      />
+    );
+    expect(screen.queryByTestId("tab-mark-slot")).toBeNull();
+    expect(screen.getByText("4")).toBeInTheDocument();
   });
 });

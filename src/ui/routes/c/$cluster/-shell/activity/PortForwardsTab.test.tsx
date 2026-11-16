@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ----- Mocks -----
@@ -35,6 +35,7 @@ vi.mock("@/lib/commands", () => ({
     createPortForwardConfig: vi.fn(),
     portForwardPod: vi.fn(),
     stopPortForward: vi.fn(),
+    forgetDiscovery: vi.fn(async () => undefined),
   },
 }));
 
@@ -183,10 +184,63 @@ describe("PortForwardsTab", () => {
       screen.getByRole("button", { name: /More actions for Auth API/ })
     );
     await user.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+    expect(deletePortForwardConfig).not.toHaveBeenCalled();
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Delete",
+      })
+    );
 
     await waitFor(() =>
       expect(deletePortForwardConfig).toHaveBeenCalledWith("cfg-1")
     );
+  });
+
+  /**
+   * A rejected config read was only logged, and the bare spinner under it
+   * never ended. Fails if the failure is not said with a way to ask again,
+   * or if the retry does not bring the list in.
+   */
+  it("says the saved forwards could not be read and reads them again", async () => {
+    usePortForwardStore.setState({
+      configs: [],
+      sessions: [],
+      configsLoaded: false,
+    });
+    vi.mocked(commands.listPortForwardConfigs).mockRejectedValueOnce(
+      new Error("config is locked")
+    );
+    await mount();
+
+    expect(
+      await screen.findByText("Could not read the saved port forwards.")
+    ).toBeInTheDocument();
+
+    vi.mocked(commands.listPortForwardConfigs).mockResolvedValueOnce([]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Could not read the saved port forwards.")
+      ).toBeNull()
+    );
+  });
+
+  /**
+   * An empty port was refused with a toast that could be gone before it was
+   * read. Fails if the refusal is not drawn beside the fields.
+   */
+  it("refuses an invalid port beside the field, not in a toast", async () => {
+    const user = userEvent.setup();
+    await mount();
+    await user.click(screen.getByRole("button", { name: /New/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Save port forward" })
+    );
+
+    expect(await screen.findByLabelText("Local port")).toBeInvalid();
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("offers a new forward without sending the reader to another page", async () => {

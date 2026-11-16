@@ -149,14 +149,14 @@ export function PeerReach({
       return null;
     case "unevaluable":
       return (
-        <span className="text-[11px] text-warn">
+        <span className="text-caption text-warn">
           {t("empty", "peerCannotEvaluate")}
         </span>
       );
     case "cannotSay":
       return (
         <span
-          className="text-[11px] text-fg-fnt"
+          className="text-caption text-fg-fnt"
           title={match.why ?? undefined}
         >
           {match.why === null
@@ -171,7 +171,7 @@ export function PeerReach({
           ? match.namespaces
           : null;
       return (
-        <span className="inline-flex flex-wrap items-baseline gap-x-1.5 text-[11px]">
+        <span className="inline-flex flex-wrap items-baseline gap-x-1.5 text-caption">
           <span aria-hidden className="text-fg-fnt">
             →
           </span>

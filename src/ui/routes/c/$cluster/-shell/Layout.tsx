@@ -100,7 +100,7 @@ export function Layout({
         <div
           data-window-cluster="accent"
           role="status"
-          className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-canvas"
+          className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-caption font-semibold uppercase tracking-[0.08em] text-canvas"
         >
           <TriangleAlert className="h-3 w-3" aria-hidden="true" />
           {t("cluster", "criticalStripe", { context: currentContext })}
@@ -111,6 +111,18 @@ export function Layout({
           className="h-0.5 flex-none bg-(--cluster)"
         />
       )}
+      <a
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+        // In the flow, not over it: while focused it is a strip above the
+        // window's rows, so it covers nothing a reader needs.
+        className="sr-only flex-none focus:not-sr-only focus:flex focus:h-7 focus:items-center focus:border-b focus:border-hair focus:bg-raise focus:px-3 focus:text-xs focus:text-fg focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-info"
+      >
+        {t("action", "skipToContent")}
+      </a>
       <div className="flex flex-1 overflow-hidden">
         {!lost && <Sidebar missing={missing} />}
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -120,7 +132,9 @@ export function Layout({
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <main
-              className="flex-1 overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-4 pl-4 pr-2"
+              id="main-content"
+              tabIndex={-1}
+              className="flex-1 outline-hidden overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-4 pl-4 pr-2"
               style={dock}
             >
               {/* `h-full` is what lets a page opt out of the page scroll: a page

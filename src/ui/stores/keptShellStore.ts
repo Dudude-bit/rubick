@@ -67,9 +67,14 @@ export function scrollbackOf(id: string | null): string {
 }
 
 /** End a shell on purpose: let go of it at once, and have the backend hang it up. */
-export function endShell(id: string): Promise<void> {
+export function closeShell(id: string): Promise<void> {
   useKeptShellStore.getState().forget(id);
-  return commands.closeTerminal(id).catch(() => undefined);
+  return commands.closeTerminal(id);
+}
+
+/** {@link closeShell} for a caller with nowhere to say it failed. */
+export function endShell(id: string): Promise<void> {
+  return closeShell(id).catch(() => undefined);
 }
 
 export interface ShellPlace {

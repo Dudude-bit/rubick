@@ -40,6 +40,7 @@ import { describeProbe, PROBE_LABEL } from "@/lib/probe-words";
 import { containerRestartsAreNews, loopingNow } from "@/lib/crash-loop";
 import { declaredQuantity } from "@/lib/metric-format";
 import { T } from "@/i18n/T";
+import { Eyebrow } from "@/components/ui/states";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -214,13 +215,13 @@ export function ContainerRows(props: ContainerRowsProps) {
       {groups.map((group) => (
         <div key={group.phase} className="flex flex-col gap-2.5">
           {grouped && (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+            <Eyebrow>
               {group.title}
               <span className="font-normal normal-case tracking-normal">
                 {" · "}
                 {group.caption}
               </span>
-            </p>
+            </Eyebrow>
           )}
           <div className="flex flex-col gap-[22px]">
             {group.rows.map((row, index) => (
@@ -292,7 +293,7 @@ function probeRows(
       value: (
         <span className="flex flex-col">
           <span>{target}</span>
-          <span className="text-[11px] text-fg-mut">{timing}</span>
+          <span className="text-caption text-fg-mut">{timing}</span>
         </span>
       ),
     };

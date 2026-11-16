@@ -26,6 +26,7 @@ import {
   useCronJobRuns,
 } from "../../../-peek/cron-runs";
 import { LastRunCause } from "../../../-peek/peek-workload-diagnosis";
+import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Unknown } from "@/components/ui/unknown";
@@ -77,6 +78,7 @@ import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
 import type { JobStatus } from "@/lib/status-meaning";
 import { useT, type T } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 
@@ -378,7 +380,6 @@ export function CronJobDetail() {
       void queryClient.invalidateQueries({
         queryKey: cronJobRunsKey(namespace, name),
       });
-      setRunOpen(false);
     },
     onError: (error: Error) => {
       noteDenied("create", runs, error);
@@ -440,6 +441,7 @@ export function CronJobDetail() {
     data: jobPods = NO_PODS,
     error: listError,
     isPending: podsPending,
+    refetch: refetchJobPods,
   } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
     queryFn: async () => {
@@ -559,6 +561,9 @@ export function CronJobDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={inFlight ? podsPending : !cronJob}
+                  onRetryPods={() =>
+                    Promise.all([refetchJobPods(), refetchJobs()])
+                  }
                   idle={idle}
                 />
               }
@@ -603,7 +608,11 @@ export function CronJobDetail() {
         label: "Jobs",
         glyph: kindGlyph(ResourceType.Job),
         mark: jobsError
-          ? readCountMark(null, t("empty", "couldNotReadCronJobRuns"))
+          ? readCountMark(
+              null,
+              t("empty", "couldNotReadCronJobRuns"),
+              jobsError
+            )
           : readCountMark(jobsRead ? jobsRead.length : null, null),
         content: (
           <Section>
@@ -667,6 +676,7 @@ export function CronJobDetail() {
       jobsRead,
       jobsError,
       refetchJobs,
+      refetchJobPods,
       pods,
       podsError,
       podsPending,
@@ -716,6 +726,7 @@ export function CronJobDetail() {
                 // Offered, not imposed — and unique, because two runs in one
                 // minute are a normal thing to want.
                 setRunName(`${name}-${Math.floor(Date.now() / 1000)}`);
+                runMutation.reset();
                 setRunOpen(true);
               }}
               busy={runMutation.isPending}
@@ -742,8 +753,8 @@ export function CronJobDetail() {
         title={t("action", "runNowTitle")}
         description={t("action", "runNowBody", { name: name ?? "" })}
         confirmLabel={t("action", "runNow")}
-        confirmDisabled={runName.trim() === "" || runMutation.isPending}
-        onConfirm={() => runMutation.mutate()}
+        confirmDisabled={runName.trim() === ""}
+        onConfirm={() => runMutation.mutateAsync()}
       >
         <Input
           value={runName}
@@ -751,6 +762,9 @@ export function CronJobDetail() {
           aria-label={t("action", "runNowName")}
           className="font-mono"
         />
+        {runMutation.isError && (
+          <Alert variant="destructive">{errorToShow(runMutation.error)}</Alert>
+        )}
       </ConfirmDialog>
     </>
   );

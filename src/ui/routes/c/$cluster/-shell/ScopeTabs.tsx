@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import {
   Fragment,
   useEffect,
@@ -119,8 +120,78 @@ import {
  * whole in the strip or named in the menu beside it, and the tabs in the
  * strip stay put while the open one is among them.
  */
+const BAR_STOPS = "button:not([disabled])";
+
+/**
+ * The bar is one tab stop: Left, Right, Home and End walk its controls and
+ * Tab leaves for the page. The stop follows focus and falls back to the open
+ * tab's first control.
+ */
+function useRovingBar(bar: RefObject<HTMLElement | null>) {
+  const stop = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = bar.current;
+    if (!root) return;
+    const stops = () =>
+      [...root.querySelectorAll<HTMLElement>(BAR_STOPS)].filter(
+        (each) => !each.closest("[data-overflow=true]")
+      );
+    const apply = () => {
+      const all = stops();
+      if (!stop.current || !all.includes(stop.current))
+        stop.current =
+          all.find((each) => each.closest("[data-active=true]")) ??
+          all[0] ??
+          null;
+      for (const each of all) each.tabIndex = each === stop.current ? 0 : -1;
+    };
+    const onFocus = (event: FocusEvent) => {
+      const at = (event.target as HTMLElement).closest<HTMLElement>(BAR_STOPS);
+      if (!at || !root.contains(at)) return;
+      stop.current = at;
+      apply();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+      if (!keys.includes(event.key) || event.altKey || event.metaKey) return;
+      const all = stops();
+      const at = all.indexOf(document.activeElement as HTMLElement);
+      if (at === -1) return;
+      event.preventDefault();
+      const last = all.length - 1;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? last
+            : Math.min(
+                Math.max(at + (event.key === "ArrowRight" ? 1 : -1), 0),
+                last
+              );
+      all[next].focus();
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-active", "data-overflow"],
+    });
+    root.addEventListener("focusin", onFocus);
+    root.addEventListener("keydown", onKey);
+    return () => {
+      observer.disconnect();
+      root.removeEventListener("focusin", onFocus);
+      root.removeEventListener("keydown", onKey);
+    };
+  }, [bar]);
+}
+
 export function ScopeTabs() {
   const t = useT();
+  const barRef = useRef<HTMLDivElement>(null);
+  useRovingBar(barRef);
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useClusterStore((s) => s.namespaceScope);
@@ -161,7 +232,10 @@ export function ScopeTabs() {
   });
 
   return (
-    <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
+    <div
+      ref={barRef}
+      className="flex h-[38px] flex-none select-none items-center gap-1 border-b border-hair px-2.5"
+    >
       <NewTabButton />
 
       <div
@@ -201,7 +275,7 @@ export function ScopeTabs() {
         onClick={() =>
           window.dispatchEvent(new CustomEvent("command-palette-open"))
         }
-        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
+        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-caption leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
       >
         {t("action", "search")}
         <Kbd shortcut="mod+K" className="leading-[13px]" />
@@ -237,9 +311,9 @@ function useHiddenTabs({
   ids,
   open,
 }: {
-  room: React.RefObject<HTMLDivElement | null>;
-  strip: React.RefObject<HTMLDivElement | null>;
-  menu: React.RefObject<HTMLButtonElement | null>;
+  room: RefObject<HTMLDivElement | null>;
+  strip: RefObject<HTMLDivElement | null>;
+  menu: RefObject<HTMLButtonElement | null>;
   ids: readonly string[];
   open: number;
 }): boolean[] {
@@ -334,7 +408,7 @@ function HiddenScopeTabs({
   tabs: ScopeTab[];
   activeId: string | null;
   namesCluster: boolean;
-  buttonRef: React.RefObject<HTMLButtonElement | null>;
+  buttonRef: RefObject<HTMLButtonElement | null>;
 }) {
   const t = useT();
   const named = useListNamer();
@@ -353,7 +427,7 @@ function HiddenScopeTabs({
               : label
           }
           className={cn(
-            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] transition-colors hover:bg-hover hover:text-fg",
+            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-caption leading-[14px] transition-colors hover:bg-hover hover:text-fg",
             open ? "bg-sel text-fg" : "text-fg-mut"
           )}
         >
@@ -521,7 +595,7 @@ function NewTabButton() {
               aria-label={t("action", "newTabAria")}
               aria-haspopup="menu"
               onClick={() => openTab()}
-              className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+              className="flex-none rounded-md px-[7px] py-[3px] text-xs leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
             >
               +
             </button>
@@ -542,7 +616,7 @@ function NewTabButton() {
       >
         <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
         {contexts.length === 0 && (
-          <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+          <p className="px-[7px] py-2 text-caption text-fg-fnt">
             {t("empty", "noContextsInKubeconfig")}
           </p>
         )}
@@ -695,7 +769,7 @@ function ScopeTabItem({
           closeTab(tab.id);
         }}
         className={cn(
-          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]",
+          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-xs leading-[15px]",
           OVERFLOW
         )}
       >
@@ -761,7 +835,7 @@ function ScopeTabItem({
             // As wide as its label: the strip cuts the parts marked
             // `data-cut`, never the tab, so no tab holds empty room. The
             // label clips as a backstop; the close button sits outside it.
-            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-xs leading-[15px] transition-colors",
             OVERFLOW,
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
@@ -774,10 +848,7 @@ function ScopeTabItem({
               activeContext={context}
               onSelect={pickCluster}
             >
-              {/* Right, not Down: the strip is walked with Left and Right, but
-                this is the one segment where a menu is the point, and Down
-                is already spoken for by the `+` beside it. */}
-              <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
+              <ClusterMenu context={context ?? ""}>
                 <button
                   type="button"
                   aria-haspopup="menu"
@@ -822,7 +893,7 @@ function ScopeTabItem({
               cannot be made live and nothing about it is going to change
               until the kubeconfig does. */}
             {tab.missing && (
-              <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
+              <span className="flex-none rounded border border-hair px-1 text-micro uppercase leading-[13px] tracking-wider text-fg-fnt">
                 {t("cluster", "missingBadge")}
               </span>
             )}
@@ -845,7 +916,7 @@ function ScopeTabItem({
                 <span data-cut={CUT_FLOOR.scope} className="truncate">
                   {scopeLabel(scope, t)}
                 </span>
-                <span aria-hidden="true" className="flex-none text-[9px]">
+                <span aria-hidden="true" className="flex-none text-micro">
                   ▾
                 </span>
               </button>
@@ -952,7 +1023,7 @@ function ContextPopover({
           className="max-h-[420px] overflow-auto"
         >
           {contexts.length === 0 && (
-            <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+            <p className="px-[7px] py-2 text-caption text-fg-fnt">
               {t("empty", "noContextsInKubeconfig")}
             </p>
           )}
@@ -975,7 +1046,7 @@ function ContextPopover({
                   selected={selected}
                   meta={
                     <span className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-wider">
+                      <span className="text-micro uppercase tracking-wider">
                         {providerLabel(detectProvider(ctx.name))}
                       </span>
                       {selected ? (
@@ -1095,7 +1166,12 @@ function NamespacePopover({
     () => [...seedScope(contextNamespace), ...recent],
     [contextNamespace, recent]
   );
-  const { namespaces, podCount, namespaceList } = useClusterSummary({
+  const {
+    namespaces,
+    podCount,
+    problems: clusterProblems,
+    namespaceList,
+  } = useClusterSummary({
     enabled: open,
     problems: true,
     alsoCount: seeds,
@@ -1180,11 +1256,18 @@ function NamespacePopover({
     .filter((name) => !drawn.includes(name));
   if (open && !opening && undrawn.length > 0) setDrawn([...drawn, ...undrawn]);
 
-  // By name, and nothing else: a row ordered by its problems or floated for
-  // being selected sat elsewhere at the next opening, and a click aimed from
-  // memory landed on another namespace. The counts and checks say the rest.
-  const ordered = [...shown].sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  // By name, a typed filter's prefix matches first; nothing else. A row
+  // ordered by its problems or floated for being selected sat elsewhere at
+  // the next opening, and a click aimed from memory landed on another
+  // namespace. The counts and checks say the rest.
+  const byName = (a: { name: string }, b: { name: string }) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  const startsWithNeedle = (name: string) =>
+    needle !== "" && name.toLowerCase().startsWith(needle);
+  const ordered = [...shown].sort(
+    (a, b) =>
+      Number(startsWithNeedle(b.name)) - Number(startsWithNeedle(a.name)) ||
+      byName(a, b)
   );
 
   const full = scope.length >= SCOPE_LIMIT;
@@ -1197,7 +1280,7 @@ function NamespacePopover({
       label: t("cluster", "allNamespaces"),
       mono: false,
       podCount,
-      problems: null,
+      problems: clusterProblems ?? null,
       selected: scope.length === 0,
       closed: false,
     },
@@ -1228,8 +1311,28 @@ function NamespacePopover({
         ]),
   ];
 
+  // What Enter takes with nothing arrowed onto, drawn as the active row so
+  // the reader sees it before pressing: a listed name typed in full, then
+  // "All namespaces" for its own first letters (typing "all" scoped the app
+  // to a namespace of that name nobody has), then the first row the filter
+  // left, prefix matches first, the typed row only when nothing listed
+  // matches. With no filter, the scope the window is on.
+  const exact = ordered.findIndex((ns) => ns.name === typedName);
+  const meansAll =
+    needle.length >= 2 &&
+    t("cluster", "allNamespaces").toLowerCase().startsWith(needle);
+  const pick =
+    needle === ""
+      ? rows.findIndex((row) => row.selected)
+      : exact >= 0
+        ? exact + 1
+        : meansAll
+          ? 0
+          : rows.length > 1
+            ? 1
+            : -1;
   // A cursor left pointing past a list the filter has shortened is not a row.
-  const at = cursor < rows.length ? cursor : -1;
+  const at = cursor >= 0 && cursor < rows.length ? cursor : pick;
 
   // The caret stays in the input, so the browser will not bring the arrowed
   // row into view. Optional call because jsdom does not implement it.
@@ -1323,18 +1426,10 @@ function NamespacePopover({
                 return;
               }
               if (event.key !== "Enter") return;
-              // Enter with nothing arrowed onto is the filter's own answer:
-              // type three letters, press it, and you are in that namespace —
-              // which is the frequent job done without touching the mouse.
-              // A listed namespace before the typed text: the typed row is
-              // always an exact match, and took "lena" over lena-sandbox.
-              const exact = ordered.findIndex((ns) => ns.name === typedName);
-              const row =
-                at >= 0
-                  ? rows[at]
-                  : needle !== ""
-                    ? rows[exact >= 0 ? exact + 1 : 1]
-                    : undefined;
+              // Enter with nothing arrowed onto is the filter's own answer,
+              // the row drawn active above: type three letters, press it, and
+              // you are in that namespace without touching the mouse.
+              const row = at >= 0 ? rows[at] : undefined;
               if (!row) return;
               event.preventDefault();
               if (event.metaKey || event.ctrlKey) toggle(row);
@@ -1405,7 +1500,7 @@ function NamespacePopover({
             <button
               type="button"
               onClick={() => setShowBlocked(true)}
-              className="flex w-full items-center justify-between gap-2 px-[7px] py-1.5 text-left text-[11px] text-fg-fnt"
+              className="flex w-full items-center justify-between gap-2 px-[7px] py-1.5 text-left text-caption text-fg-fnt"
             >
               <span>{t("count", "namespacesHidden", { n: hiddenCount })}</span>
               <span className="underline underline-offset-2">
@@ -1421,22 +1516,28 @@ function NamespacePopover({
           id={noteId}
           aria-live="polite"
           className={cn(
-            "border-t border-hair px-2.5 py-1.5 text-[10px] leading-[13px]",
+            "border-t border-hair px-2.5 py-1.5 text-micro leading-[13px]",
             refused ? "text-warn" : "text-fg-fnt"
           )}
         >
           {note}
         </p>
-        <Link
-          {...pageLink("my-access", undefined, context ?? undefined)}
-          onClick={() => onOpenChange(false)}
-          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-[11px] text-info transition-colors hover:bg-hover"
-        >
-          <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
-          {scope.length === 1
-            ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
-            : t("cluster", "whatCanIDo")}
-        </Link>
+        {!(
+          listed &&
+          scope.length === 1 &&
+          !namespaces.some((ns) => ns.name === scope[0])
+        ) && (
+          <Link
+            {...pageLink("my-access", undefined, context ?? undefined)}
+            onClick={() => onOpenChange(false)}
+            className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-caption text-info transition-colors hover:bg-hover"
+          >
+            <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
+            {scope.length === 1
+              ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
+              : t("cluster", "whatCanIDo")}
+          </Link>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -1480,7 +1581,7 @@ function NamespaceRow({
       role="option"
       aria-selected={row.selected}
       // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
-      aria-label={[row.label, note ?? pods, problems?.spoken]
+      aria-label={[row.label, note ?? pods, problems?.shown]
         .filter(Boolean)
         .join(", ")}
       // The one thing about the row that cannot be read off the row itself:
@@ -1498,7 +1599,7 @@ function NamespaceRow({
           : onReplace()
       }
       className={cn(
-        "grid w-full cursor-default select-none grid-cols-[14px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
+        "grid w-full cursor-default select-none grid-cols-[14px_minmax(7rem,1fr)_minmax(0,auto)] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
         active && "bg-hover",
         row.selected && "text-fg"
       )}
@@ -1527,7 +1628,7 @@ function NamespaceRow({
         {row.label}
       </span>
       {note !== null && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-fg-fnt">
+        <span className="inline-flex items-center gap-1 text-caption text-fg-fnt">
           {row.refused && (
             <Lock aria-hidden="true" className="h-2.5 w-2.5 flex-none" />
           )}
@@ -1535,8 +1636,9 @@ function NamespaceRow({
         </span>
       )}
       <span
+        title={problems?.shown}
         className={cn(
-          "font-mono text-[11px]",
+          "min-w-0 truncate text-caption tabular-nums",
           row.podCount !== null && problems ? problems.tone : "text-fg-fnt",
           note !== null && "hidden"
         )}
@@ -1559,12 +1661,7 @@ function problemWords(problems: NamespaceAttention | null, t: T) {
   if (!problems || (problems.complete && problems.total === 0)) return null;
   const { total: n, complete, worst } = problems;
   return {
-    shown: complete
-      ? t("cluster", "problemCount", { n })
-      : n > 0
-        ? t("cluster", "problemCountAtLeast", { n })
-        : t("cluster", "problemsNotAllChecked"),
-    spoken: attentionWords({ total: n, complete }, t),
+    shown: attentionWords({ total: n, complete }, t),
     tone: worst ? ATTENTION_TEXT[worst] : "text-fg-mut",
   };
 }
@@ -1576,7 +1673,7 @@ function ListNote({ state }: { state: Exclude<NamespaceListState, "listed"> }) {
   return (
     <p
       className={cn(
-        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-[11px] leading-[14px]",
+        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-caption leading-[14px]",
         tone
       )}
     >
@@ -1612,7 +1709,7 @@ function EmptyNote({
     <p
       role={typed !== "" ? "alert" : undefined}
       className={cn(
-        "px-[7px] py-2 text-[11px]",
+        "px-[7px] py-2 text-caption",
         typed !== "" ? "text-warn" : "text-fg-fnt"
       )}
     >

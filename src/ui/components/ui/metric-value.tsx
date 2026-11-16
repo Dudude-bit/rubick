@@ -7,6 +7,8 @@
  * the number when a limit is known, so "is this close to the edge" is
  * answered without reading a percentage.
  */
+import { Lock, TriangleAlert } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import {
   formatUsage,
@@ -65,6 +67,56 @@ function UsageBar({ ratio, className }: UsageBarProps) {
   );
 }
 
+/**
+ * A metric nobody could read, drawn one way wherever it is missing: the
+ * could-not-look glyph, with the reason on hover. A refusal is the lock.
+ */
+export function UnreadMetric({
+  className,
+  reason: given,
+}: {
+  className?: string;
+  reason?: string;
+}) {
+  const t = useT();
+  const absence = useMetricsAbsence();
+  const Glyph = absence === "forbidden" ? Lock : TriangleAlert;
+  const reason =
+    given ??
+    t(
+      "cluster",
+      absence === null ? "metricNoSampleYet" : ABSENCE_SHORT[absence]
+    );
+  return (
+    <span
+      role="img"
+      aria-label={reason}
+      title={reason}
+      className={cn("inline-flex items-center text-fg-fnt", className)}
+    >
+      <Glyph className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  );
+}
+
+/** What a metric cell says of an object nothing of which runs: the whole words where the cell has room, their first word where it has not. */
+export function NothingRunning({ className }: { className?: string }) {
+  const t = useT();
+  return (
+    <span
+      className={cn("@container block min-w-0 text-fg-fnt", className)}
+      title={t("empty", "nothingRunning")}
+    >
+      <span className="@max-[105px]:hidden">
+        {t("empty", "nothingRunning")}
+      </span>
+      <span className="hidden @max-[105px]:inline">
+        {t("empty", "nothingRunningShort")}
+      </span>
+    </span>
+  );
+}
+
 export interface MetricValueProps {
   /** Millicores for `cpu`, bytes for `memory`. */
   used: number | null | undefined;
@@ -73,6 +125,8 @@ export interface MetricValueProps {
   /** Shown in the title when there is no limit; never drives the bar. */
   request?: number | null | undefined;
   type: "cpu" | "memory";
+  /** What `limit` is: a node's figure is its capacity, never a limit. */
+  of?: "limit" | "capacity";
   className?: string;
 }
 
@@ -86,25 +140,12 @@ export function MetricValue({
   limit,
   request,
   type,
+  of = "limit",
   className,
 }: MetricValueProps) {
   const t = useT();
-  const absence = useMetricsAbsence();
   const usedNum = typeof used === "number" ? used : null;
-  if (usedNum === null) {
-    return absence === null ? (
-      <span className="text-fg-fnt" title={t("cluster", "metricNoSampleYet")}>
-        {t("cluster", "metricNoSample")}
-      </span>
-    ) : (
-      <span
-        className="text-fg-fnt"
-        title={t("cluster", ABSENCE_SHORT[absence])}
-      >
-        {t("cluster", "metricNotAvailable")}
-      </span>
-    );
-  }
+  if (usedNum === null) return <UnreadMetric />;
 
   const limitNum = typeof limit === "number" && limit > 0 ? limit : null;
   const requestNum =
@@ -114,7 +155,7 @@ export function MetricValue({
   const display = formatUsage(usedNum, type);
   const title =
     ratio !== null
-      ? t("empty", "metricOfLimit", {
+      ? t("empty", of === "capacity" ? "metricOfCapacity" : "metricOfLimit", {
           used: display,
           limit: formatUsage(limitNum!, type),
           percent: Math.round(ratio * 100),
@@ -124,7 +165,9 @@ export function MetricValue({
             used: display,
             requested: formatUsage(requestNum, type),
           })
-        : t("empty", "metricNoLimit", { used: display });
+        : t("empty", of === "capacity" ? "metricNoCapacity" : "metricNoLimit", {
+            used: display,
+          });
 
   return (
     <span

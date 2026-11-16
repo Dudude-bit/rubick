@@ -21,6 +21,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { columnHeader } from "@/i18n/column-header";
 import { kindNoun } from "@/lib/resource-registry";
 import { actionsColumnSize } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
@@ -48,6 +49,19 @@ import {
   ScreenShareProvider,
   useScreenSections,
 } from "@/components/share/screen-share";
+
+const deferral = vi.hoisted(() => ({ held: null as string | null }));
+
+vi.mock("react", async (importOriginal) => {
+  const original = await importOriginal<typeof import("react")>();
+  const useDeferredValue = <T,>(value: T): T => {
+    const settled = original.useDeferredValue(value);
+    return deferral.held !== null && typeof value === "string"
+      ? (deferral.held as T)
+      : settled;
+  };
+  return { ...original, default: original, useDeferredValue };
+});
 
 vi.mock("./data-table-rows", async (importOriginal) => {
   const original = await importOriginal<typeof import("./data-table-rows")>();
@@ -785,6 +799,24 @@ describe("DataTable rows", () => {
         </>
       );
 
+    /** Space scrolled the page under a focused row instead of opening it. Fails if Space on the row is not Enter's peek with the page's own scroll held back. */
+    it("peeks at the focused row on Space and holds the page's scroll", async () => {
+      await renderTable();
+      const notPrevented = fireEvent.keyDown(row(), { key: " " });
+      expect(notPrevented).toBe(false);
+      await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+    });
+
+    /** Fails if Space on a button inside a row stops pressing that button and opens the row. */
+    it("leaves Space on a control inside the row to the control", async () => {
+      await wrap(
+        <DataTable<Item> columns={withControls} data={DATA} getRowHref={href} />
+      );
+      const copy = screen.getByRole("button", { name: "copy a-1" });
+      expect(fireEvent.keyDown(copy, { key: " " })).toBe(true);
+      await staysAt();
+    });
+
     /** Dana pressed Shift+Tab twelve times in Events and never left the table: every link in every row was a stop. Fails if a link or button inside a row is back in the Tab order. */
     it("is one stop in the Tab order, so Tab and Shift+Tab leave the table", async () => {
       await between(
@@ -942,6 +974,30 @@ describe("the list keys, from anywhere on a list page", () => {
     await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
   });
 
+  /** Fails if Space with nothing focused scrolls the page rather than opening the selected row. */
+  it("opens the selected row on Space with the focus on nothing", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    away();
+    press(" ");
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+  });
+
+  /** Fails if Space typed in a field elsewhere opens the selected row under it. */
+  it("leaves Space to a focused control elsewhere on the page", async () => {
+    await wrap(
+      <>
+        {page()}
+        <div tabIndex={0} data-testid="elsewhere" />
+      </>
+    );
+    press("ArrowDown");
+    const elsewhere = screen.getByTestId("elsewhere");
+    elsewhere.focus();
+    press(" ", elsewhere);
+    await staysAt();
+  });
+
   /** Whatever holds the focus owns its Enter; the row must not open underneath it. */
   it("leaves Enter to a focused control elsewhere on the page", async () => {
     await wrap(
@@ -1001,6 +1057,32 @@ describe("the list keys, from anywhere on a list page", () => {
     press("ArrowDown", search());
     expect(document.activeElement).toBe(rowAt(0));
     expect(selected()).toEqual(["a-1"]);
+  });
+
+  /**
+   * The rows narrow a render after the box does, so Down pressed in that gap
+   * focused a row of the old list that then left the page, and the Enter
+   * after it found no row. Fails if Down selects before the filter settles.
+   */
+  it("takes Down pressed before the filter settled to the first row of the narrowed list", async () => {
+    deferral.held = "";
+    try {
+      const { rerender } = await wrapRerenderable(page());
+      press("/");
+      fireEvent.change(search(), { target: { value: "b-" } });
+      press("ArrowDown", search());
+      expect(selected()).toEqual([]);
+
+      deferral.held = null;
+      rerender(page());
+      await waitFor(() => expect(rowAt(1)).toBeFalsy());
+      await waitFor(() => expect(selected()).toEqual(["b-2"]));
+      expect(document.activeElement).toBe(rowAt(0));
+      press("Enter", rowAt(0)!);
+      await goesTo("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    } finally {
+      deferral.held = null;
+    }
   });
 
   /** Fails if Escape leaves the text in and the list narrowed. */
@@ -1433,6 +1515,60 @@ describe("column widths", () => {
   });
 
   /**
+   * Columns moved 4 to 11px when a search dropped the widest row, because
+   * their floors were measured from the rows left. Fails if a floor or an
+   * ideal is read from anything but every row the table holds.
+   */
+  it("keeps every column's width when a search drops the widest row", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(600);
+    try {
+      const wide = (rows: readonly Item[]) =>
+        Math.max(...rows.map((item) => item.name.length)) * 10;
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            columns[0],
+            {
+              ...columns[1],
+              size: 100,
+              meta: {
+                floor: (_t: unknown, rows: readonly never[]) =>
+                  wide(rows as unknown as readonly Item[]),
+                ideal: (_t: unknown, rows: readonly never[]) =>
+                  wide(rows as unknown as readonly Item[]) + 80,
+              },
+            },
+          ]}
+          data={[
+            { name: "short", namespace: "ns" },
+            { name: "a-much-longer-name-than-the-rest", namespace: "ns" },
+          ]}
+        />
+      );
+      const before = [widthOf("Name"), widthOf("Status")];
+      await userEvent.type(search(), "short");
+      await waitFor(() =>
+        expect(
+          screen.queryByText("a-much-longer-name-than-the-rest")
+        ).toBeNull()
+      );
+      expect([widthOf("Name"), widthOf("Status")]).toEqual(before);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /** A search that leaves few rows took the scrollbar lane away and widened every column by it. Fails if a filled table's port stops keeping its vertical lane. */
+  it("keeps the vertical scrollbar lane of a filled table whatever the row count", async () => {
+    await wrap(<DataTable<Item> columns={columns} data={DATA} fill />);
+    expect(screen.getByRole("table").parentElement?.style.overflowY).toBe(
+      "scroll"
+    );
+  });
+
+  /**
    * A ClusterIP column's share of a 1160px table was 136px, and a 14-digit
    * address ended "10.111.219.1...". Fails if a column's floor stops reaching
    * its header once the table has been measured.
@@ -1684,7 +1820,8 @@ describe("column widths", () => {
    * Lena's Pods list at 1024 in Russian scrolled sideways and cut a header.
    * Fails if a port too narrow for every floor keeps a column that yields
    * instead of hiding it, keeps it hidden once there is room, or hides it
-   * without naming it under the table and in that note's tooltip.
+   * without naming it under the table and in that note's tooltip, or tells
+   * the reader to close a panel when none is open.
    */
   it("hides a yielding column where the port is too narrow and names it under the table", async () => {
     const columnsOf: ColumnDef<Item>[] = [
@@ -1711,6 +1848,9 @@ describe("column widths", () => {
         "title",
         expect.stringMatching(/^Hidden at this width: Namespace\. Widen/)
       );
+      expect(
+        screen.getByTestId("columns-yielded").getAttribute("title")
+      ).not.toMatch(/panel/);
       expect(screen.getByRole("table").parentElement!.style.overflowX).toBe("");
     } finally {
       narrow.mockRestore();
@@ -1727,6 +1867,65 @@ describe("column widths", () => {
       expect(screen.queryByTestId("columns-yielded")).toBeNull();
     } finally {
       roomy.mockRestore();
+    }
+  });
+
+  /**
+   * With the pointer resting on Pods during a refusal the rows held and the
+   * columns still reflowed: Node vanished and the rest widened. Fails if a
+   * floor that grows while the pointer is on the table hides a column, or if
+   * the column stays hidden once the pointer leaves.
+   */
+  it("keeps its columns where they were while the pointer is on the table, and lets go after", async () => {
+    const grown = { px: 100 };
+    const columnsOf = (floor: number): ColumnDef<Item>[] => [
+      { ...columns[0], size: 300, meta: { floor: 100 } },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        size: 200,
+        meta: { floor, yields: 1 },
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 200,
+        meta: { floor: () => grown.px },
+        cell: () => "x",
+      },
+    ];
+    const port = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      const view = await wrapRerenderable(
+        <DataTable<Item> columns={columnsOf(100)} data={DATA} />
+      );
+      expect(
+        screen.getByRole("columnheader", { name: "Namespace" })
+      ).toBeInTheDocument();
+      fireEvent.pointerMove(screen.getByRole("table"), {
+        clientX: 10,
+        clientY: 10,
+      });
+      grown.px = 450;
+      view.rerender(
+        <DataTable<Item> columns={columnsOf(100)} data={[...DATA]} />
+      );
+      expect(
+        screen.getByRole("columnheader", { name: "Namespace" })
+      ).toBeInTheDocument();
+      fireEvent.pointerMove(document.body, { clientX: 900, clientY: 900 });
+      view.rerender(
+        <DataTable<Item> columns={columnsOf(100)} data={[...DATA]} />
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("columnheader", { name: "Namespace" })
+        ).toBeNull()
+      );
+    } finally {
+      port.mockRestore();
     }
   });
 
@@ -2501,6 +2700,20 @@ describe("a list past the virtualisation threshold", () => {
     expect(screen.queryByText(/To trim the list/)).toBeNull();
   });
 
+  /**
+   * "102 rows. To trim the list, narrow the scope or search"
+   * sat beside "0 of 102" while a search was on. Fails if the advice to search
+   * is still given once a search is typed.
+   */
+  it("gives no advice to search while a search is on", async () => {
+    await long();
+    expect(screen.getByText(/To trim the list/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "zzz-nothing" },
+    });
+    expect(screen.queryByText(/To trim the list/)).toBeNull();
+  });
+
   /** Rebuilding descriptors or sorting on scroll makes windowing cost the entire list. */
   it.each([false, true])(
     "reuses descriptors and navigation indexes when the scroll offset changes with grouping %s",
@@ -3110,5 +3323,100 @@ describe("a table offered to the screen's Share", () => {
     expect(a.count).toBeNull();
     expect(b.unread).toBe("Still being read when the report was made.");
     expect(c.partial).toBe("Could not read pods in team-c.");
+  });
+});
+
+describe("sorting a column that is not the name", () => {
+  interface Load {
+    name: string;
+    namespace: string;
+    restarts: number;
+  }
+
+  const LOADS: Load[] = [
+    { name: "a-1", namespace: "alpha", restarts: 0 },
+    { name: "a-2", namespace: "alpha", restarts: 1 },
+    { name: "b-1", namespace: "beta", restarts: 9 },
+    { name: "b-2", namespace: "beta", restarts: 4 },
+  ];
+
+  const loadColumns: ColumnDef<Load>[] = [
+    { accessorKey: "name", header: columnHeader("columns", "name") },
+    {
+      id: "restarts",
+      header: columnHeader("columns", "restarts"),
+      meta: { sort: (row: Load) => row.restarts },
+      cell: ({ row }) => String(row.original.restarts),
+    },
+    { id: "namespace", accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  const byNs = byNamespace<Load>(kindNoun("Pods"));
+
+  const draw = () =>
+    wrap(
+      <DataTable<Load> columns={loadColumns} data={LOADS} grouping={byNs} />
+    );
+
+  const names = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.textContent ?? "");
+
+  /**
+   * The worst restarter sat under its namespace caption instead of on top.
+   * Fails if a sort on another column still ranks only inside each group, or
+   * if a column drawn by a derived cell cannot be sorted at all.
+   */
+  it("ranks every row across the groups and says so", async () => {
+    await draw();
+    expect(screen.getByText(/alpha/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Restarts/ }));
+
+    expect(names()[0]).toContain("b-1");
+    expect(names()[1]).toContain("b-2");
+    expect(screen.queryByText(/alpha ·/)).toBeNull();
+    expect(screen.getByText("Ungrouped")).toBeInTheDocument();
+  });
+
+  /** Fails if sorting by name, which the groups already respect, drops the captions. */
+  it("keeps the groups while the sort is on the name", async () => {
+    await draw();
+    await userEvent.click(screen.getByRole("button", { name: /Name/ }));
+    expect(screen.getByText(/alpha/)).toBeInTheDocument();
+    expect(screen.queryByText("Ungrouped")).toBeNull();
+  });
+});
+
+describe("the loading skeleton", () => {
+  const loading = (props: {
+    loadingRows?: number | null;
+    loadingGrouped?: boolean;
+  }) =>
+    wrap(<DataTable<Item> columns={columns} data={[]} isLoading {...props} />);
+
+  /**
+   * A flat five-row list drew fifteen grouped rows while it loaded, and the
+   * page shrank when the rows came. Fails if the skeleton ignores the count
+   * the sidebar already knows, or captions a list that will not group.
+   */
+  it("holds as many rows as are known, without captions for a flat list", async () => {
+    await loading({ loadingRows: 5, loadingGrouped: false });
+    expect(screen.getAllByTestId("skeleton-row")).toHaveLength(5);
+    expect(screen.queryByTestId("skeleton-caption")).toBeNull();
+  });
+
+  /** Fails if a list that will group loses the caption lines the rows will have. */
+  it("holds caption lines where the list will group", async () => {
+    await loading({ loadingRows: 6, loadingGrouped: true });
+    expect(screen.getAllByTestId("skeleton-caption").length).toBeGreaterThan(0);
+  });
+
+  /** Fails if a thousand-row list draws a thousand placeholders. */
+  it("never draws more rows than the window holds", async () => {
+    await loading({ loadingRows: 5000 });
+    expect(screen.getAllByTestId("skeleton-row").length).toBeLessThan(60);
   });
 });

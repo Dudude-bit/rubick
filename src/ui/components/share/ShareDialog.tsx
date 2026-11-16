@@ -20,10 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { errorToShow } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
 import {
   carriesLogLines,
@@ -41,7 +42,7 @@ import {
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT } from "@/i18n/useT";
 import { openExternal } from "@/lib/open-external";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 
 function WebLink({ url, className }: { url: string; className?: string }) {
   const t = useT();
@@ -246,7 +247,7 @@ export function ShareDialog({
         ),
       });
     },
-    onError: (error) => toastError(t("share", "publishFailed"), error),
+    onError: (error) => toastWriteError(t("share", "publishFailed"), error),
   });
 
   const handleSave = async () => {
@@ -263,7 +264,7 @@ export function ShareDialog({
         title: t("share", "saved", { path: shownPath(destination) }),
       });
     } catch (error) {
-      toastError(t("share", "saveFailed"), error);
+      toastWriteError(t("share", "saveFailed"), error);
     } finally {
       setSaving(false);
     }
@@ -331,14 +332,14 @@ export function ShareDialog({
                 </span>
               </li>
             </ul>
-            <p className="text-[11px] text-fg-fnt">
+            <p className="text-caption text-fg-fnt">
               {t("share", "charactersLong", { n: html.length })} ·{" "}
               {shared && carriesLogLines(shared)
                 ? t("share", "noSecretsLogs")
                 : t("share", "noSecrets")}
             </p>
             <p
-              className="truncate font-mono text-[11px] text-fg-fnt"
+              className="truncate font-mono text-caption text-fg-fnt"
               title={report.link}
             >
               {report.link}
@@ -350,16 +351,13 @@ export function ShareDialog({
         {report && (targets.error || !hasTargets || needsAck || link) ? (
           <div className="flex flex-col gap-2 border-t border-hair pt-3 text-xs">
             {targets.error ? (
-              // A list the app could not read is not a list with nothing in
-              // it: "you have not added one yet" sends the reader to add a
-              // target they already have.
-              <p className="text-warn">
-                {t("share", "targetsUnread", {
-                  reason: errorToShow(targets.error),
-                })}
-              </p>
+              <Unknown
+                question={t("share", "targetsUnread")}
+                error={targets.error}
+                onRetry={() => targets.refetch()}
+              />
             ) : targets.isPending ? (
-              <p className="text-fg-fnt">{t("share", "targetsReading")}</p>
+              <Reading>{t("share", "targetsReading")}</Reading>
             ) : !hasTargets ? (
               <p className="text-fg-fnt">{t("share", "noTargets")}</p>
             ) : null}
@@ -395,7 +393,7 @@ export function ShareDialog({
               <div className="flex items-center gap-2">
                 <WebLink
                   url={link}
-                  className="min-w-0 flex-1 truncate font-mono text-[11px] text-info hover:underline"
+                  className="min-w-0 flex-1 truncate font-mono text-caption text-info hover:underline"
                 />
                 <Button
                   size="sm"
@@ -431,7 +429,7 @@ export function ShareDialog({
                           style={{ background: targetColor(entry) }}
                         />
                         {entry.label}
-                        <span className="font-mono text-[11px] text-fg-fnt">
+                        <span className="font-mono text-caption text-fg-fnt">
                           {entry.host}
                         </span>
                       </span>
@@ -455,20 +453,17 @@ export function ShareDialog({
                 const sent = needsAck ? (acknowledged ? ack.sent : null) : now;
                 if (sent) publish.mutate(sent);
               }}
-              disabled={
-                !readyToPublish(target) ||
-                publish.isPending ||
-                (needsAck && !acknowledged)
-              }
+              pending={publish.isPending}
+              disabled={!readyToPublish(target) || (needsAck && !acknowledged)}
             >
-              <Upload aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+              <Upload aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
               {publish.isPending
                 ? t("share", "publishing")
                 : t("share", "publishTo", { target: target.label })}
             </Button>
           ) : null}
-          <Button onClick={handleSave} disabled={!report || saving}>
-            <Download aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+          <Button onClick={handleSave} pending={saving} disabled={!report}>
+            <Download aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
             {t("share", "saveHtml")}
           </Button>
         </DialogFooter>

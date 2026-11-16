@@ -41,6 +41,7 @@ import type { ListQuery } from "@/generated/types";
 import { askListAccess } from "@/hooks/useListAccess";
 import { commands } from "@/lib/commands";
 import { pageLink, vendorLink, type AppLink } from "@/lib/links";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { heldWhileAskedAgain, queryKeys } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -166,6 +167,7 @@ export type {
   DeliveryQuery,
   DeliveryRevision,
   DeliverySource,
+  DeliveryThrough,
   GitLink,
 } from "./gitops";
 
@@ -525,6 +527,11 @@ export function vendorIcon(vendorId: string): LucideIcon | null {
   );
 }
 
+/** The name a vendor goes by, or `null` for an id this registry does not know. */
+export function vendorName(vendorId: string): string | null {
+  return VENDORS.find((vendor) => vendor.id === vendorId)?.name ?? null;
+}
+
 /**
  * A detected extension's facts, or the reason there are none.
  *
@@ -622,8 +629,11 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
   isPending: boolean;
   error: Error | null;
+  hasScan: boolean;
+  scannedAt: number;
+  rescan: () => unknown;
 } {
-  const { data, isPending, error } = useDetected();
+  const { data, isPending, error, dataUpdatedAt, refetch } = useDetected();
   const connections = useConnections();
   const context = useClusterStore((state) => state.currentContext);
 
@@ -683,6 +693,9 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
     }),
     isPending,
     error,
+    hasScan: data !== undefined,
+    scannedAt: dataUpdatedAt,
+    rescan: refetch,
   };
 }
 
@@ -734,6 +747,8 @@ export function useConnectionEditor(vendorId: string): {
   forget: () => Promise<void>;
   test: (draft: ConnectionDraft) => Promise<ProbeResult>;
   isSaving: boolean;
+  readError: Error | null;
+  reread: () => unknown;
 } {
   const t = useT();
   const context = useClusterStore((state) => state.currentContext);
@@ -771,7 +786,11 @@ export function useConnectionEditor(vendorId: string): {
     },
   });
 
-  const { data: saved = null } = useQuery({
+  const {
+    data: saved = null,
+    error: readError,
+    refetch: reread,
+  } = useQuery({
     queryKey: queryKeys.integrationConnection(vendorId, context),
     queryFn: () => vendor!.connect.read(),
     enabled: vendor !== undefined && context !== null,
@@ -815,6 +834,8 @@ export function useConnectionEditor(vendorId: string): {
             },
           }),
     isSaving: saving.isPending,
+    readError: saved === null ? readError : null,
+    reread,
   };
 }
 
@@ -872,6 +893,10 @@ export interface IntegrationPageEntry {
   link: AppLink;
   /** `null` while it is being read, and where the cluster refused to say. */
   count: number | null;
+  /** The count is of the window's namespaces, so a scope with no namespace has none. */
+  scoped: boolean;
+  /** The row carries a count at all; one that does is read in a scope that may not exist. */
+  counted: boolean;
   /**
    * The dot beside the count — the worst thing on the vendor's page, or
    * nothing. `null` wherever {@link count} is, and for a vendor whose page
@@ -964,6 +989,7 @@ export function useIntegrationPages(): {
   const connections = useConnections();
 
   const context = useClusterStore((state) => state.currentContext);
+  const scope = useClusterStore((state) => state.namespaceScope);
   const isConnected = useClusterStore((state) => state.isConnected);
   const saved = useClusterForwardStore((state) => state.forwards);
   const forwarded = new Set(
@@ -1010,8 +1036,12 @@ export function useIntegrationPages(): {
         // read cluster A's numbers, which is the same rule the detection
         // scan states. A page sharing this cache entry prefixes the same
         // way — see PageCount.
-        queryKey: [context, ...declared.queryKey],
-        queryFn: declared.queryFn,
+        queryKey: [
+          context,
+          ...declared.queryKey,
+          ...(declared.scoped ? [scopeCacheKey(scope)] : []),
+        ],
+        queryFn: () => declared.queryFn(scope),
         staleTime: declared.staleTime,
         select: measureOf(declared),
       } as UseQueryOptions<unknown, Error, Measured>;
@@ -1103,6 +1133,8 @@ export function useIntegrationPages(): {
         forwarded.has(vendor.id) &&
         connections.get(vendor.id)?.state !== "connected",
       count: measured?.count ?? null,
+      scoped: vendor.page?.count?.scoped === true,
+      counted: vendor.page?.count !== undefined,
       tone: measured?.tone ?? null,
       own: index !== -1,
       operator: vendor.extension.operator === true,
@@ -1140,7 +1172,13 @@ export type IntegrationPageState =
   | { state: "unknown" }
   | { state: "absent"; name: string; icon: LucideIcon }
   /** The scan was refused; neither presence nor absence was established. */
-  | { state: "cannotTell"; name: string; icon: LucideIcon }
+  | {
+      state: "cannotTell";
+      name: string;
+      icon: LucideIcon;
+      error: unknown;
+      retry: () => unknown;
+    }
   | { state: "notConfigured"; name: string; icon: LucideIcon }
   | {
       state: "ready";
@@ -1152,7 +1190,7 @@ export type IntegrationPageState =
 export function useIntegrationPage(
   slug: string | undefined
 ): IntegrationPageState {
-  const { data } = useDetected();
+  const { data, error, refetch } = useDetected();
   const connections = useConnections();
   const vendor = PAGES.find((candidate) => candidate.id === slug);
 
@@ -1167,8 +1205,15 @@ export function useIntegrationPage(
       return { state: "unknown" };
     case "detecting":
       return { state: "detecting" };
-    case "absent":
     case "cannotTell":
+      return {
+        state: decision,
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+        error,
+        retry: refetch,
+      };
+    case "absent":
     case "notConfigured":
       return {
         state: decision,

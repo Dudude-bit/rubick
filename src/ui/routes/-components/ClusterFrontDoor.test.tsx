@@ -338,3 +338,23 @@ describe("a cluster that could not be reached", () => {
     ).toBeVisible();
   });
 });
+
+describe("a front door whose kubeconfig could not be read", () => {
+  /**
+   * A failed source read left `source` undefined, which the screen took for
+   * "no kubeconfig found" and sent the reader to install a cluster. Fails if
+   * the failure is said as an absent file.
+   */
+  it("says the kubeconfig could not be read, not that none was found", async () => {
+    useClusterStore.setState({ contexts: [] });
+    vi.mocked(commands.getKubeconfigSource).mockRejectedValueOnce(
+      new Error("permission denied")
+    );
+    await renderWithRouter(<ClusterFrontDoor />);
+
+    expect(
+      await screen.findByText("Could not read the kubeconfig.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(t("empty", "notConnectedYet"))).toBeNull();
+  });
+});

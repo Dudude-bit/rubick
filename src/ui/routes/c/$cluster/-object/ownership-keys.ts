@@ -13,8 +13,8 @@ import type { ServedResource } from "./served";
 
 /**
  * Alt and the arrows move along ownership the way they move through a file
- * tree: up to the owner, down to the first thing owned, sideways to the
- * owner's other objects of this kind. A key that has nowhere to go does
+ * tree: up to the owner, down to the first thing owned, and with Shift
+ * sideways to the owner's other objects of this kind (Alt+Left alone is Back). A key that has nowhere to go does
  * nothing; it never guesses.
  */
 export function useOwnershipKeys(
@@ -37,8 +37,9 @@ export function useOwnershipKeys(
     const owner = lineage.ancestors[0];
 
     const onKey = async (event: KeyboardEvent) => {
-      if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey)
-        return;
+      if (!event.altKey || event.metaKey || event.ctrlKey) return;
+      const sideways = event.key === "ArrowLeft" || event.key === "ArrowRight";
+      if (sideways !== event.shiftKey) return;
       if (claimedByTarget(event.target) || claimedByLayer(event.target)) return;
       const go = (link: ReturnType<typeof servedObjectLink>) => {
         if (link) void navigate(link);
@@ -50,11 +51,7 @@ export function useOwnershipKeys(
         event.preventDefault();
         const first = (await dependentsOf(lineage.uid)).dependents[0];
         if (first) go(servedObjectLink(first));
-      } else if (
-        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-        owner &&
-        lineage.uid
-      ) {
+      } else if (sideways && owner && lineage.uid) {
         event.preventDefault();
         const beside = await commands.listDependentsBeside(
           owner.uid,

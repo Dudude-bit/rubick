@@ -112,13 +112,14 @@ describe("the Overview while Needs attention changes", () => {
     stop();
   });
 
-  /** Fails if the card moves while the pointer is on it, even with the list's start on screen above it. */
-  it("keeps what is under the pointer in place, from the top of the page too", () => {
+  /** Fails if the card moves while the pointer is on it, once the page is scrolled at all. */
+  it("keeps what is under the pointer in place once the page is scrolled", () => {
     vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => {
       run(0);
       return 1;
     });
     const { port, page, card, grow } = overview(4);
+    port.scrollTop = 40;
     const stop = holdScroll(page);
     port.dispatchEvent(
       new PointerEvent("pointermove", { clientY: card() + 10 })
@@ -136,5 +137,52 @@ describe("the Overview while Needs attention changes", () => {
     grow(8);
     expect(port.scrollTop).toBe(0);
     stop();
+  });
+
+  /**
+   * Under a Deployments 500 the page scrolled itself 65 px with the pointer
+   * resting lower down, and the title and its "partly unread" left the
+   * screen. Fails if a row arriving at the top of the page moves the page.
+   */
+  it("stays at the top when a row arrives, wherever the pointer rests", () => {
+    vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => {
+      run(0);
+      return 1;
+    });
+    const { port, page, card, grow } = overview(4);
+    const stop = holdScroll(page);
+    port.dispatchEvent(
+      new PointerEvent("pointermove", { clientY: card() + 10 })
+    );
+    grow(6);
+    expect(port.scrollTop).toBe(0);
+    stop();
+  });
+
+  /**
+   * A row the reader was not pointing at went where the ranking moved it,
+   * and the page jumped after it. Fails if a reordered row is followed
+   * rather than what lies below the list.
+   */
+  it("follows the page's growth, not a row the ranking moved, with the pointer elsewhere", () => {
+    const { port, page, card, grow } = overview(12);
+    port.scrollTop = 200;
+    const stop = holdScroll(page);
+    const before = card();
+    const list = document.querySelector(`[${ANCHOR_ROWS}]`)!;
+    list.append(list.children[5]);
+    grow(13);
+    expect(card()).toBe(before);
+    expect(port.scrollTop).toBe(200 + ROW);
+    stop();
+  });
+
+  /** Fails if the browser's own scroll anchoring stays on to make up the same move a second time, or stays off once the page is gone. */
+  it("turns the browser's own anchoring off while it holds, and back after", () => {
+    const { port, page } = overview(4);
+    const stop = holdScroll(page);
+    expect(port.style.overflowAnchor).toBe("none");
+    stop();
+    expect(port.style.overflowAnchor).toBe("");
   });
 });

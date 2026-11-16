@@ -28,7 +28,7 @@ export function ActivityGroup({
 }) {
   return (
     <section>
-      <div className="flex items-baseline gap-2 px-3 pb-1 pt-3 text-[11px] text-fg-fnt">
+      <div className="flex items-baseline gap-2 px-3 pb-1 pt-3 text-caption text-fg-fnt">
         <span>{title}</span>
         {count != null && <span>{count}</span>}
         {action && <span className="ml-auto">{action}</span>}
@@ -51,7 +51,7 @@ export function ActivityEmpty({
     <div className="flex flex-col items-center gap-1.5 px-3 py-10 text-center">
       <Icon className="h-5 w-5 text-fg-fnt" />
       <p className="text-xs text-fg-mut">{title}</p>
-      {hint && <p className="text-[11px] text-fg-fnt">{hint}</p>}
+      {hint && <p className="text-caption text-fg-fnt">{hint}</p>}
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function ActivityAction({
     <button
       type="button"
       className={cn(
-        "flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-fg-mut transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50",
+        "flex items-center gap-1.5 rounded px-1.5 py-1 text-caption text-fg-mut transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50",
         className
       )}
       {...props}

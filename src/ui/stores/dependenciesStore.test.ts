@@ -36,6 +36,7 @@ beforeEach(async () => {
   useDependenciesStore.setState({
     helm: null,
     kubectl: null,
+    unread: { helm: null, kubectl: null },
     isChecking: false,
   });
 });
@@ -74,5 +75,32 @@ describe("the tool availability check", () => {
     await after;
     expect(checkKubectlAvailability).toHaveBeenCalledTimes(2);
     expect(useDependenciesStore.getState().kubectl?.path).toBe("/new/kubectl");
+  });
+});
+
+describe("a check that could not be answered", () => {
+  /**
+   * A rejected check was stored as `available: false`, so a failed read said
+   * "not found" and sent the reader to install a binary they had. Fails if
+   * the failure is stored as an answer instead of as a third state.
+   */
+  it("is kept as unread, never as not found", async () => {
+    checkKubectlAvailability.mockRejectedValueOnce(new Error("spawn failed"));
+    await useDependenciesStore.getState().checkKubectlAvailability();
+    const state = useDependenciesStore.getState();
+    expect(state.kubectl).toBeNull();
+    expect(state.unread.kubectl).toMatch(/spawn failed/);
+    expect(state.isChecking).toBe(false);
+  });
+
+  it("clears the unread state when the next check answers", async () => {
+    useDependenciesStore.setState({
+      unread: { helm: null, kubectl: "spawn failed" },
+    });
+    const asked = useDependenciesStore.getState().checkKubectlAvailability();
+    await answerAll();
+    await asked;
+    expect(useDependenciesStore.getState().unread.kubectl).toBeNull();
+    expect(useDependenciesStore.getState().kubectl?.available).toBe(true);
   });
 });

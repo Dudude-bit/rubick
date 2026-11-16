@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { failedWithNothing } from "../../kit";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
@@ -7,7 +8,16 @@ import type { T } from "@/i18n/useT";
 import type { RowTone } from "./words";
 import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
+import {
+  Finding,
+  FilterBox,
+  StaleRead,
+  VendorReadFailure,
+} from "../../page-kit";
+import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { Alert } from "@/components/ui/alert";
+import { NoneHere } from "../NoneHere";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { ladderSection, ladderUnread } from "./share";
@@ -131,7 +141,7 @@ export default function Monitors() {
     }
   };
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("monitors", "couldNotReadMonitors")}
@@ -141,12 +151,17 @@ export default function Monitors() {
     );
   }
   if (!picture.data || !rows) {
-    return <p className="text-[11px] text-fg-fnt">…</p>;
+    return <Reading>{t("action", "readingEllipsis")}</Reading>;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <Header picture={picture.data} rows={rows} />
+      <Header
+        picture={picture.data}
+        rows={rows}
+        onRetry={() => void picture.refetch()}
+      />
+      <StaleRead read={picture} label="Prometheus" />
       <Notices picture={picture.data} />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
@@ -168,11 +183,12 @@ export default function Monitors() {
               key={keyOf(selected)}
               row={selected}
               picture={picture.data}
+              onRetry={() => void picture.refetch()}
             />
           ) : (
             // The list beside this already says why it is empty. Saying it
             // again here put the same sentence on the screen twice.
-            <p className="text-[11.5px] text-fg-mut">
+            <p className="text-xs text-fg-mut">
               {rows.length === 0 ? null : t("monitors", "pickOne")}
             </p>
           )}
@@ -182,14 +198,22 @@ export default function Monitors() {
   );
 }
 
-function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
+function Header({
+  picture,
+  rows,
+  onRetry,
+}: {
+  picture: Picture;
+  rows: MonitorRow[];
+  onRetry: () => void;
+}) {
   const t = useT();
   const attention = rows.filter((row) => row.worst !== null).length;
   const says = headlineKey(picture, rows);
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
       <div className="min-w-0 max-w-[60ch]">
-        <p className="text-[13px] font-semibold tracking-tight text-fg">
+        <p className="text-title font-semibold tracking-tight text-fg">
           {says === "someUnread"
             ? t("monitors", "someUnread")
             : says === "needAttention"
@@ -203,16 +227,22 @@ function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
           {t("monitors", "pageHint")}
         </p>
       </div>
-      <ScrapeTruth targets={picture.targets} />
+      <ScrapeTruth targets={picture.targets} onRetry={onRetry} />
     </div>
   );
 }
 
-function ScrapeTruth({ targets }: { targets: TargetsRead }) {
+function ScrapeTruth({
+  targets,
+  onRetry,
+}: {
+  targets: TargetsRead;
+  onRetry: () => void;
+}) {
   const t = useT();
   if (targets.state === "notConnected") {
     return (
-      <Note tone="info">
+      <Note>
         {t("monitors", "notConnected")}{" "}
         <Link
           {...pageLink("integrations", { vendor: "prometheus" })}
@@ -225,9 +255,12 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
   }
   if (targets.state === "unanswered") {
     return (
-      <Note tone="warn">
-        {t("monitors", "unanswered", { reason: targets.reason })}
-      </Note>
+      <Unknown
+        className="max-w-[52ch]"
+        question={t("monitors", "scrapeUnanswered")}
+        error={targets.reason}
+        onRetry={onRetry}
+      />
     );
   }
   const up = targets.targets.filter((x) => x.health === "up").length;
@@ -282,15 +315,15 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
             strokeDasharray={`${c * share} ${c}`}
           />
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center font-mono text-[12.5px] leading-none text-fg">
+        <div className="absolute inset-0 flex flex-col items-center justify-center font-mono text-xs leading-none text-fg">
           {up}
-          <span className="mt-0.5 font-sans text-[9px] text-fg-fnt">
+          <span className="mt-0.5 font-sans text-micro text-fg-fnt">
             {t("monitors", "ofTotal", { total })}
           </span>
         </div>
       </div>
       <div className="flex min-w-[230px] flex-col gap-1.5">
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("monitors", "targetsRead", { n: total })}
         </p>
         <div className="flex h-[7px] gap-px overflow-hidden rounded">
@@ -298,7 +331,7 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
           {down > 0 && <i className="bg-err" style={{ flex: down }} />}
           {unknown > 0 && <i className="bg-fg-fnt" style={{ flex: unknown }} />}
         </div>
-        <p className="flex gap-3 font-mono text-[11px] text-fg-mut">
+        <p className="flex gap-3 font-mono text-caption text-fg-mut">
           <span>
             <b className="font-medium text-fg">{up}</b> up
           </span>
@@ -314,24 +347,11 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
   );
 }
 
-function Note({
-  tone,
-  children,
-}: {
-  tone: "info" | "warn";
-  children: React.ReactNode;
-}) {
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className={cn(
-        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-[11.5px] leading-relaxed text-fg-mut",
-        tone === "warn"
-          ? "border-warn/45 bg-warn/5"
-          : "border-info/40 bg-info/5"
-      )}
-    >
+    <Alert variant="info" className="max-w-[52ch]">
       {children}
-    </p>
+    </Alert>
   );
 }
 
@@ -346,7 +366,7 @@ function Notices({ picture }: { picture: Picture }) {
   for (const [kind, read] of kinds) {
     if (read.state === "absent")
       notices.push(
-        <p key={kind} className="text-[11.5px] text-fg-fnt">
+        <p key={kind} className="text-xs text-fg-fnt">
           {t("monitors", "kindAbsent", { kind })}
         </p>
       );
@@ -362,7 +382,7 @@ function Notices({ picture }: { picture: Picture }) {
   const instances = picture.prometheuses;
   if (instances.state === "absent")
     notices.push(
-      <p key="prometheus" className="text-[11.5px] text-fg-fnt">
+      <p key="prometheus" className="text-xs text-fg-fnt">
         {t("monitors", "prometheusKindAbsent")}
       </p>
     );
@@ -377,7 +397,7 @@ function Notices({ picture }: { picture: Picture }) {
     );
   else if (instances.items.length === 0)
     notices.push(
-      <p key="prometheus" className="text-[11.5px] text-fg-fnt">
+      <p key="prometheus" className="text-xs text-fg-fnt">
         {t("monitors", "noInstances")}
       </p>
     );
@@ -438,7 +458,7 @@ function Ladder({
             onClick={() => onOnly(group)}
             aria-pressed={only === group}
             className={cn(
-              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-[11px] whitespace-nowrap",
+              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-caption whitespace-nowrap",
               only === group
                 ? "border-transparent bg-sel text-fg"
                 : "border-hair text-fg-mut hover:bg-hover"
@@ -461,20 +481,20 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-lane outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => groupOf(row) === group);
           if (members.length === 0) return null;
           return (
             <div key={group} className="flex flex-col">
-              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              <Eyebrow className="flex items-center gap-2 px-2 pb-0.5 pt-2.5">
                 {t("monitors", groupKey(group, targets))}
                 <b className="font-mono font-medium normal-case tracking-normal text-fg-mut">
                   {members.length}
                 </b>
                 <i className="h-px flex-1 bg-hair" />
-              </p>
+              </Eyebrow>
               {members.map((row) => (
                 <Row
                   key={row.monitor.uid}
@@ -489,18 +509,24 @@ function Ladder({
             </div>
           );
         })}
-        {shown.length === 0 && (
-          <p className="px-2 py-3 text-[11.5px] text-fg-mut">
-            {rows.length === 0
-              ? t("monitors", "none")
-              : t("monitors", "noneMatch")}
-          </p>
-        )}
+        {shown.length === 0 &&
+          (rows.length === 0 ? (
+            <NoneHere
+              inCluster={t("monitors", "none")}
+              inScope={t("monitors", "noneInScope")}
+            />
+          ) : (
+            <p className="px-2 py-3 text-xs text-fg-mut">
+              {t("monitors", "noneMatch")}
+            </p>
+          ))}
       </div>
-      <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-[10.5px] text-fg-fnt">
-        <span>{t("monitors", "keysMove")}</span>
-        <span>{t("monitors", "keysOpen")}</span>
-      </p>
+      {shown.length > 0 && (
+        <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
+          <span>{t("monitors", "keysMove")}</span>
+          <span>{t("monitors", "keysOpen")}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -569,7 +595,7 @@ function Row({
         "relative mx-1 grid cursor-pointer grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-[5px] py-1.5 pl-2.5 pr-2 transition-colors",
         on ? SELECTED[tone] : "hover:bg-hover",
         on &&
-          "after:absolute after:-right-[17px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
+          "after:absolute after:-right-[5px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
       )}
     >
       <i
@@ -579,22 +605,22 @@ function Row({
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-mono text-[12px] leading-4",
+            "truncate font-mono text-xs leading-4",
             on ? "text-fg" : "text-fg-mid"
           )}
           title={row.monitor.name}
         >
           {shortName}
           {row.monitor.kind === "PodMonitor" && (
-            <span className="ml-1.5 rounded-[3px] border border-hair px-1 align-[1px] font-sans text-[9.5px] text-fg-fnt">
+            <span className="ml-1.5 rounded-[3px] border border-hair px-1 align-[1px] font-sans text-micro text-fg-fnt">
               PodMonitor
             </span>
           )}
         </p>
-        <p className="truncate text-[11px] leading-[15px] text-fg-fnt">
+        <p className="truncate text-caption leading-[15px] text-fg-fnt">
           {row.monitor.namespace}
           {folded && (
-            <span className="font-mono text-[10px] opacity-70">
+            <span className="font-mono text-micro opacity-70">
               {" · "}
               {prefix.replace(/-$/, "")}
             </span>
@@ -603,13 +629,13 @@ function Row({
       </div>
       <div
         className={cn(
-          "text-right font-mono text-[11px] leading-4 whitespace-nowrap",
+          "text-right font-mono text-caption leading-4 whitespace-nowrap",
           WORDS[tone]
         )}
       >
         {rowWords(row, t)}
         {ago !== null && (
-          <span className="block font-sans text-[10px] leading-[14px] text-fg-fnt">
+          <span className="block font-sans text-micro leading-[14px] text-fg-fnt">
             {t("monitors", "scrapedAgo", { ago })}
           </span>
         )}

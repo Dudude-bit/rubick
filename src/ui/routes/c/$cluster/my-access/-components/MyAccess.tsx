@@ -7,7 +7,10 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section";
 import { TextSkeleton } from "@/components/ui/skeleton";
+import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import { SegmentedControl } from "@/components/ui/states";
 import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import type { OwnRules } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -16,7 +19,6 @@ import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { openNamespacePicker } from "@/lib/read-deadline";
-import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -44,29 +46,14 @@ export function MyAccess() {
         })}
       />
       {scope.length > 1 && (
-        <div
-          role="tablist"
-          aria-label={t("cluster", "namespaces")}
-          className="flex flex-wrap gap-1.5"
-        >
-          {scope.map((name) => (
-            <button
-              key={name}
-              type="button"
-              role="tab"
-              aria-selected={name === namespace}
-              onClick={() => setPicked(name)}
-              className={cn(
-                "rounded-md border px-2 py-0.5 font-mono text-[11px] transition-colors",
-                name === namespace
-                  ? "border-info bg-sel text-fg"
-                  : "border-hair text-fg-mut hover:bg-hover"
-              )}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label={t("cluster", "namespaces")}
+          value={namespace}
+          onChange={setPicked}
+          mono
+          className="flex-wrap"
+          segments={scope.map((name) => ({ value: name, label: name }))}
+        />
       )}
       {namespace ? (
         <RulesIn namespace={namespace} />
@@ -111,10 +98,23 @@ function RulesIn({ namespace }: { namespace: string }) {
         onRetry={() => void review.refetch()}
       />
     );
+  if (!review.data && review.fetchStatus === "idle") {
+    return <ConnectClusterEmptyState resourceLabel={t("nav", "myAccess")} />;
+  }
   if (!review.data) return <TextSkeleton lines={6} />;
   const { rules, incomplete, evaluationError } = review.data;
   return (
     <div className="flex flex-col gap-3">
+      {review.error && (
+        <StaleRows
+          label={t("myAccess", "rulesIn", { namespace })}
+          object
+          since={review.dataUpdatedAt}
+          error={review.error}
+          onRetry={() => void review.refetch()}
+          className=""
+        />
+      )}
       {(incomplete || evaluationError) && (
         <Alert variant="warn">
           <AlertTriangle aria-hidden />
@@ -125,7 +125,7 @@ function RulesIn({ namespace }: { namespace: string }) {
                 : t("myAccess", "evaluationError")}
             </p>
             {evaluationError && (
-              <p className="select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+              <p className="select-text wrap-break-word font-mono text-caption text-fg-mut">
                 {evaluationError}
               </p>
             )}
@@ -142,7 +142,7 @@ function RulesIn({ namespace }: { namespace: string }) {
           incomplete ? t("myAccess", "noneListed") : t("myAccess", "none")
         }
       />
-      <p className="flex items-start gap-1.5 text-[11px] text-fg-fnt">
+      <p className="flex items-start gap-1.5 text-caption text-fg-fnt">
         <Info className="mt-px h-3 w-3 flex-none" aria-hidden />
         {t("myAccess", "caveat")}
       </p>

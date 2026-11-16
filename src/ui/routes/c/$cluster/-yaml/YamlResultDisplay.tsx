@@ -55,14 +55,14 @@ export function YamlResultDisplay({ result }: YamlResultDisplayProps) {
       {/* Bounded: a line per object squeezed the editor and pushed the
        *  dialog's buttons past the window. */}
       {result.stdout && (
-        <pre className="mt-1.5 max-h-40 overflow-y-auto scrollbar-lane whitespace-pre-wrap font-mono text-[11px] text-fg-mid">
+        <pre className="mt-1.5 max-h-40 overflow-y-auto scrollbar-lane whitespace-pre-wrap font-mono text-caption text-fg-mid">
           {result.stdout}
         </pre>
       )}
       {result.stderr && (
         <pre
           className={cn(
-            "mt-1.5 max-h-40 overflow-y-auto scrollbar-lane whitespace-pre-wrap font-mono text-[11px]",
+            "mt-1.5 max-h-40 overflow-y-auto scrollbar-lane whitespace-pre-wrap font-mono text-caption",
             result.verdict === "unanswered" ? "text-warn" : "text-err"
           )}
         >

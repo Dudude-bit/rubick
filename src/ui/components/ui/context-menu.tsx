@@ -119,7 +119,7 @@ const ContextMenuLabel = React.forwardRef<
   <ContextMenuPrimitive.Label
     ref={ref}
     className={cn(
-      "px-[7px] pb-[3px] pt-[7px] text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt",
+      "px-[7px] pb-[3px] pt-[7px] text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt",
       className
     )}
     {...props}

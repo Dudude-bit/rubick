@@ -28,12 +28,14 @@ export const DOT: Record<RowTone, string> = {
   mut: "border-[1.5px] border-fg-fnt",
 };
 
+const SELECTION = "bg-sel ring-1 ring-inset ring-info/50";
+
 export const SELECTED: Record<RowTone, string> = {
-  err: "bg-err/8 ring-1 ring-inset ring-err/40",
-  warn: "bg-warn/8 ring-1 ring-inset ring-warn/40",
-  ok: "bg-ok/8 ring-1 ring-inset ring-ok/40",
-  none: "bg-err/8 ring-1 ring-inset ring-err/40",
-  mut: "bg-sel outline-dashed outline-1 -outline-offset-1 outline-fg-fnt",
+  err: SELECTION,
+  warn: SELECTION,
+  ok: SELECTION,
+  none: SELECTION,
+  mut: SELECTION,
 };
 
 export const RING: Record<RowTone, string> = {
@@ -138,6 +140,7 @@ export function picksUpWords(
 export type Headline =
   | "someUnread"
   | "needAttention"
+  | "noMonitors"
   | "allScraped"
   | "scrapeUnchecked";
 
@@ -148,6 +151,7 @@ export function headlineKey(picture: Picture, rows: MonitorRow[]): Headline {
   // A refused kind is not missing from `rows` — it is invisible in it, so
   // the count alone would read as the whole picture.
   if (unread) return "someUnread";
+  if (rows.length === 0) return "noMonitors";
   if (rows.some((row) => row.worst !== null)) return "needAttention";
   // Without targets nothing is known about scraping: every row says so, and
   // this line used to say "all scraped" over them.

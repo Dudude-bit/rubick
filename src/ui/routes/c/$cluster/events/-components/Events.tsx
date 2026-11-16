@@ -53,7 +53,9 @@ import { registryKindNamed, useNameHolders } from "./name-holders";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
-import { StaleRows } from "../../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
+import { Unknown } from "@/components/ui/unknown";
+import { useOverviewUnreadOf } from "../../-list/overview-unread";
 import { KindAbout } from "@/components/object/KindAbout";
 import { HeldLines } from "../../-list/HeldLines";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -105,6 +107,7 @@ import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { formatCount } from "@/lib/count";
+import { SegmentedControl } from "@/components/ui/states";
 
 const TYPE_FILTERS: Array<{
   value: string;
@@ -114,6 +117,8 @@ const TYPE_FILTERS: Array<{
   { value: "Warning", label: "eventsWarnings" },
   { value: "Normal", label: "eventsNormal" },
 ];
+
+const VIEWS = ["stories", "list"] as const;
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
 
@@ -230,7 +235,7 @@ function filtersFor(
 const keyOfStory = (story: Story) => story.key;
 
 const TOGGLE =
-  "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover";
+  "h-6 whitespace-nowrap rounded px-1.5 text-caption transition-colors hover:bg-hover";
 
 /** The heading's own word and the gaps either side of the count. */
 const TITLE_PX = 64;
@@ -263,7 +268,10 @@ function useFolded(
   const [countPx, setCountPx] = useState(0);
   useLayoutEffect(() => {
     if (!count) return;
-    const read = () => setCountPx(count.scrollWidth + TITLE_PX);
+    const read = () => {
+      if (count.hasAttribute("data-wrapped")) return;
+      setCountPx(count.scrollWidth + TITLE_PX);
+    };
     read();
     const observer = new MutationObserver(read);
     observer.observe(count, {
@@ -273,8 +281,31 @@ function useFolded(
     });
     return () => observer.disconnect();
   }, [count]);
+  const [cut, setCut] = useState<{
+    layout: string;
+    width: number;
+    countPx: number;
+  } | null>(null);
+  const cutHere =
+    cut !== null &&
+    cut.layout === layout &&
+    width <= cut.width &&
+    countPx >= cut.countPx;
   const folded =
-    width > 0 && need?.layout === layout && need.px + countPx > width;
+    width > 0 &&
+    ((need?.layout === layout && need.px + countPx > width) || cutHere);
+  useLayoutEffect(() => {
+    if (!count || !page || folded) return;
+    const read = () => {
+      if (count.scrollWidth <= count.clientWidth + 1) return;
+      setCut({ layout, width: page.clientWidth, countPx });
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(count);
+    return () => observer.disconnect();
+  }, [count, page, folded, layout, countPx]);
   useLayoutEffect(() => {
     if (!bar || folded) return;
     const read = () => {
@@ -351,7 +382,6 @@ export function Events() {
     subscribe,
     queryKey: watchKey,
     detail: NO_DETAIL,
-    reportFailure: toPlural(ResourceType.Event),
     order: newerEvent,
     keep: whole ? undefined : EVENTS_KEPT,
     // The overview counts events too, and re-reading it on every one of them
@@ -425,6 +455,22 @@ export function Events() {
     })),
   });
 
+  // Its own one-row read while the watch is live: the overview's answer is
+  // kept thirty seconds and polled at its own rate, so a feed every list of
+  // which failed read "live" for up to a minute.
+  const probe = useLiveQueries<LatestEvents>({
+    refresh: "fast",
+    queries: (watching ? (several ? scope.scope : [currentNamespace]) : []).map(
+      (namespace) => ({
+        queryKey: [...queryKeys.events(namespace), "probe"],
+        queryFn: () => read(filtersFor(namespace, "all", 1)),
+        enabled: isConnected,
+        staleTime: STALE_TIMES.fast,
+        refetchOnWindowFocus: false,
+      })
+    ),
+  });
+
   const answers = parts.data;
   const polled = useMemo(
     () =>
@@ -465,6 +511,11 @@ export function Events() {
   // Refused now, the feed is refused, whatever an earlier read showed.
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = useRefusedAt(refused ? failed : null);
+  const freshList = useOverviewUnreadOf(ResourceType.Event);
+  const warmRead = watching && !watch.resyncing && !refused && failed === null;
+  const probed = warmRead ? probe.error : null;
+  const probeRefusedAt = useRefusedAt(probed);
+  const warm = probed ?? (warmRead ? freshList.unread : null);
   // `others` is what the type filter left out, where the read held it: a
   // polled read asked the cluster for the one type alone.
   const { pool, windowFull, others } = useMemo(() => {
@@ -693,13 +744,16 @@ export function Events() {
           showSkeleton || nothingRead ? undefined : (
             <HeaderCount
               measure={setCount}
+              wrap={narrow}
               parts={summarise(
                 t,
                 warningCount,
                 normalCount,
                 // Beside a peek the list says the cut in its own notice, and
                 // in the header too it pushed the toolbar down a row.
-                windowFull && !(narrow && view === "list") ? eventLimit : null,
+                windowFull && (stale || short || !(narrow && view === "list"))
+                  ? eventLimit
+                  : null,
                 view === "stories" ? { n: stories.length, window } : null,
                 eventType === "all"
                   ? null
@@ -719,76 +773,42 @@ export function Events() {
           >
             {!nothingRead && (
               <>
-                <span
-                  role="tablist"
-                  aria-label={t("columns", "view")}
-                  className="flex items-center gap-0.5"
-                >
-                  {(["stories", "list"] as const).map((candidate) => (
-                    <button
-                      key={candidate}
-                      type="button"
-                      role="tab"
-                      aria-selected={view === candidate}
-                      onClick={() => {
-                        setRemembered(candidate);
-                        setSearch({ view: candidate });
-                      }}
-                      className={cn(
-                        TOGGLE,
-                        view === candidate ? "bg-sel text-fg" : "text-fg-mut"
-                      )}
-                    >
-                      {t(
-                        "action",
-                        candidate === "stories" ? "eventsStories" : "eventsAll"
-                      )}
-                    </button>
-                  ))}
-                </span>
+                <SegmentedControl
+                  label={t("columns", "view")}
+                  value={view}
+                  onChange={(candidate) => {
+                    setRemembered(candidate);
+                    setSearch({ view: candidate });
+                  }}
+                  segments={VIEWS.map((candidate) => ({
+                    value: candidate,
+                    label: t(
+                      "action",
+                      candidate === "stories" ? "eventsStories" : "eventsAll"
+                    ),
+                  }))}
+                />
                 {view === "stories" && !narrow && (
                   <>
-                    <div
-                      className="flex items-center gap-0.5"
-                      role="group"
-                      aria-label={t("action", "storyWindow")}
-                    >
-                      {STORY_WINDOWS.map((candidate) => (
-                        <button
-                          key={candidate}
-                          type="button"
-                          aria-pressed={window === candidate}
-                          onClick={() => setWindow(candidate)}
-                          className={cn(
-                            TOGGLE,
-                            "font-mono",
-                            window === candidate
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {windowWords(candidate)}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5" role="group">
-                      {ORDERS.map((candidate) => (
-                        <button
-                          key={candidate.value}
-                          type="button"
-                          aria-pressed={order === candidate.value}
-                          onClick={() => setOrder(candidate.value)}
-                          className={cn(
-                            TOGGLE,
-                            order === candidate.value
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {t("action", candidate.label)}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      label={t("action", "storyWindow")}
+                      value={window}
+                      onChange={setWindow}
+                      mono
+                      segments={STORY_WINDOWS.map((candidate) => ({
+                        value: candidate,
+                        label: windowWords(candidate),
+                      }))}
+                    />
+                    <SegmentedControl
+                      label={t("action", "storyOrder")}
+                      value={order}
+                      onChange={setOrder}
+                      segments={ORDERS.map((candidate) => ({
+                        value: candidate.value,
+                        label: t("action", candidate.label),
+                      }))}
+                    />
                   </>
                 )}
                 {/* Same shape as the lists' search box: a text entry, not a
@@ -806,7 +826,7 @@ export function Events() {
                     aria-label={t("action", "filterEventsPlaceholder")}
                     placeholder={t("action", "filterEventsPlaceholder")}
                     className={cn(
-                      "bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt",
+                      "bg-transparent text-caption text-fg outline-hidden placeholder:text-fg-fnt",
                       narrow ? "w-24" : "w-36"
                     )}
                   />
@@ -825,32 +845,19 @@ export function Events() {
                   />
                 ) : (
                   <>
-                    <div
-                      className="flex items-center gap-0.5"
-                      role="group"
-                      aria-label={t("action", "eventType")}
-                    >
-                      {TYPE_FILTERS.map((filter) => (
-                        <button
-                          key={filter.value}
-                          type="button"
-                          aria-pressed={eventType === filter.value}
-                          onClick={() => setEventType(filter.value)}
-                          className={cn(
-                            TOGGLE,
-                            eventType === filter.value
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {t("action", filter.label)}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      label={t("action", "eventType")}
+                      value={eventType}
+                      onChange={setEventType}
+                      segments={TYPE_FILTERS.map((filter) => ({
+                        value: filter.value,
+                        label: t("action", filter.label),
+                      }))}
+                    />
                     <Select value={eventLimit} onValueChange={setEventLimit}>
                       <SelectTrigger
                         aria-label={t("action", "eventsFetched")}
-                        className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                        className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-caption text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -867,16 +874,29 @@ export function Events() {
               </>
             )}
             <DataFreshness
-              dataUpdatedAt={freshness.dataUpdatedAt}
-              live={watching && !watch.resyncing}
+              dataUpdatedAt={
+                warm
+                  ? probed
+                    ? probe.freshness.dataUpdatedAt
+                    : freshList.since
+                  : freshness.dataUpdatedAt
+              }
+              live={watching && !watch.resyncing && !warm}
               slowed={!fromWatch && freshness.slowed}
               slowRead={!fromWatch && freshness.slowRead}
-              stale={stale || (nothingRead && !isRefusal(failed))}
-              refusedAt={refused ? refusedAt : undefined}
+              stale={stale || !!warm || (nothingRead && !isRefusal(failed))}
+              refusedAt={
+                refused
+                  ? refusedAt
+                  : warm && isRefusal(warm)
+                    ? probed
+                      ? probeRefusedAt
+                      : freshList.since || undefined
+                    : undefined
+              }
             />
             <ShareScreenAction
               screen={{ title: "Events", scope: scope.scope }}
-              look={narrow ? "icon" : "button"}
             />
           </div>
         }
@@ -894,7 +914,22 @@ export function Events() {
               }
             />
           )}
-          {short && !showSkeleton && (
+          {warm && (
+            <Unknown
+              compact
+              className="mb-2"
+              question={t("empty", "watchLiveListFailing", {
+                label: "events",
+              })}
+              error={
+                warm instanceof Error
+                  ? warm
+                  : Object.assign(new Error(warm.message), { code: warm.code })
+              }
+              onRetry={probed ? probe.refetch : freshList.retry}
+            />
+          )}
+          {short && !stale && !showSkeleton && (
             <p
               className="px-1.5 py-1 text-xs text-warn"
               data-testid="events-feed-short"
@@ -940,7 +975,7 @@ export function Events() {
                       })}
               </p>
             ) : (
-              <div className="flex flex-col gap-2 p-1.5">
+              <div className="flex flex-col">
                 {shownStories.map((story) => (
                   <StoryCard
                     key={story.key}
@@ -950,7 +985,7 @@ export function Events() {
                     showNamespace={!currentNamespace}
                   />
                 ))}
-                <p className="px-1 text-[11px] text-fg-fnt">
+                <p className="px-1 text-caption text-fg-fnt">
                   {t("readings", "storiesExplained")}
                 </p>
               </div>
@@ -963,7 +998,11 @@ export function Events() {
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}
-              cutAt={windowFull && limit !== null ? limit : undefined}
+              cutAt={
+                windowFull && limit !== null && !stale && !warm && !short
+                  ? limit
+                  : undefined
+              }
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query
@@ -1017,19 +1056,17 @@ function UnreadFeed({
   const t = useT();
   const refusal = useListRefusal(failed, everyNamespace, EVENTS);
   return (
-    <div className="px-1.5">
-      <UnreadList
-        error={failed}
-        words={
-          isRefusal(failed)
-            ? refusal.words
-            : t("empty", "eventsRefused", { scope: scopeWords })
-        }
-        onRetry={onRetry}
-      >
-        <RefusalWayOut refusal={refusal} />
-      </UnreadList>
-    </div>
+    <UnreadList
+      error={failed}
+      words={
+        isRefusal(failed)
+          ? refusal.words
+          : t("empty", "eventsRefused", { scope: scopeWords })
+      }
+      onRetry={onRetry}
+    >
+      <RefusalWayOut refusal={refusal} />
+    </UnreadList>
   );
 }
 
@@ -1071,6 +1108,8 @@ function summarise(
       type: "Normal",
       n: normal,
     });
+  if (stories !== null && warnings + normal > 0)
+    parts.push({ words: t("count", "inThoseStories") });
   if (parts.length === 0) parts.push({ words: t("empty", "noneInline") });
   if (filter && filter.hidden !== 0)
     parts.push({
@@ -1094,16 +1133,19 @@ function summarise(
 function HeaderCount({
   parts,
   measure,
+  wrap,
 }: {
   parts: CountPart[];
   measure: (element: HTMLElement | null) => void;
+  wrap: boolean;
 }) {
   const words = parts.map((part) => part.words).join(" · ");
   return (
     <span
       ref={measure}
       data-events-count
-      className="block truncate"
+      data-wrapped={wrap || undefined}
+      className={wrap ? "block" : "block truncate"}
       title={words}
     >
       <span className="sr-only">{words}</span>
@@ -1117,13 +1159,13 @@ function HeaderCount({
                   part.type === "Warning" && part.n ? "text-warn" : undefined
                 }
               >
-                <span className="text-[9px]">
+                <span className="text-micro">
                   {part.type === "Warning" ? "▲" : "●"}
                 </span>{" "}
                 {formatCount(part.n)}
               </span>
             ) : (
-              part.words
+              <span className="whitespace-nowrap">{part.words}</span>
             )}
           </Fragment>
         ))}

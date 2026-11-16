@@ -7,7 +7,11 @@ import { Crosshair } from "lucide-react";
 import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NAME_CELL_PX, createAgeColumn } from "../../../-list/columns";
+import {
+  createAgeColumn,
+  nameCellPx,
+  nameFloorPx,
+} from "../../../-list/columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
@@ -15,7 +19,7 @@ import { hrefOf, objectLink } from "@/lib/links";
 import { whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -39,7 +43,7 @@ function NameCell({ row }: CellContext<NamespaceInfo>) {
         showKind={false}
       />
       {row.original.name === currentNamespace && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           <T section="cluster" k="currentScope" />
         </span>
       )}
@@ -68,7 +72,7 @@ export const columns: ColumnDef<NamespaceInfo>[] = [
   {
     size: 420,
     accessorKey: "name",
-    meta: { floor: NAME_CELL_PX },
+    meta: { floor: nameFloorPx, ideal: nameCellPx },
     header: columnHeader("columns", "name"),
     cell: NameCell,
   },
@@ -123,7 +127,6 @@ export function NamespaceList() {
     subscribe: subscribeNamespaces,
     queryKey,
     detail: NAMESPACE_DETAIL,
-    reportFailure: toPlural(ResourceType.Namespace),
   });
 
   const podCounts = useMemo(

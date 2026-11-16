@@ -15,6 +15,8 @@ import {
 } from "./peek-sources-kit";
 import { flatten, objectFacets, stateOf } from "../-object/facets";
 import { servedOfKind } from "../-object/ownership";
+import { listedKindOf } from "../-object/problem";
+import { OwnedPodsTrouble } from "../-object/PodsTrouble";
 import { CLUSTER_SOURCES } from "./peek-sources-cluster";
 import { GATEWAY_SOURCES } from "./peek-sources-gateway";
 import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
@@ -111,18 +113,39 @@ function customResourceSource(crdName: string): PeekSource {
   const vendor = vendorPeek(crdName);
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
-    (resource: CustomResourceDetailInfo, _target, t, kind) => {
+    (resource: CustomResourceDetailInfo, target, t, kind) => {
       const owners = controlledBy(
         resource.ownerReferences,
         resource.namespace,
         t
       );
+      // An Argo Rollout read "Healthy" over a pod failing its probe on every
+      // other screen: an owner of pods carries their rows, as a Deployment does.
+      const owner = listedKindOf(target);
+      const pods = owner && (
+        <OwnedPodsTrouble
+          kind={owner}
+          namespace={resource.namespace ?? undefined}
+          name={resource.name}
+          className="mt-3"
+        />
+      );
       const body = vendor?.(resource, t);
       if (!body) {
         const facets = objectFacets(asObject(resource), t, kind?.hasStatus);
-        return { ...facets, groups: [...owners, ...facets.groups] };
+        return {
+          ...facets,
+          lead: (
+            <>
+              {facets.lead}
+              {pods}
+            </>
+          ),
+          groups: [...owners, ...facets.groups],
+        };
       }
       return {
+        lead: pods,
         status:
           body.status ??
           stateOf(resource.status as Record<string, unknown> | null),

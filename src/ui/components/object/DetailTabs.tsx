@@ -22,7 +22,7 @@ import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { CaptionScope } from "@/components/ui/section";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
-import { TabGlyph, TabMark } from "./tab-marks";
+import { TabGlyph, TabMark, TabMarkSlot } from "./tab-marks";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 import { fitTabs } from "./tab-fit";
 
@@ -98,7 +98,11 @@ function DetailTabTrigger({
           truncates; a tab that does not fit goes to the menu whole. */}
       <TabGlyph glyph={tab.glyph} isActive={isActive} />
       <span className="whitespace-nowrap">{tab.label}</span>
-      {tab.mark && <TabMark mark={tab.mark} isActive={isActive} />}
+      {tab.mark ? (
+        <TabMark mark={tab.mark} isActive={isActive} />
+      ) : (
+        tab.reading && <TabMarkSlot />
+      )}
     </TabsTrigger>
   );
 }
@@ -180,7 +184,7 @@ function useFittedTabs({
         room: box.clientWidth,
         gap: GAP_PX,
         menu: menu.current?.getBoundingClientRect().width || MENU_PX,
-        open: tabs.findIndex((tab) => tab.dataset.tab === open),
+        open: -1,
       });
       const next: Fit = {
         hidden: tabs
@@ -256,7 +260,11 @@ function HiddenTabs({
             open ? "border-fg font-medium text-fg" : "border-hair text-fg-mut"
           )}
         >
-          {t("action", "tabsMore", { n: tabs.length })}
+          {open ? (
+            <span className="max-w-[16ch] truncate">{open.label}</span>
+          ) : (
+            t("action", "tabsMore", { n: tabs.length })
+          )}
           <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>

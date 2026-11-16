@@ -171,7 +171,7 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
         className="text-fg-mid"
       />
       {ips.length > 1 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("count", "plusMore", { n: ips.length - 1 })}
         </span>
       )}
@@ -384,7 +384,6 @@ export function IngressList() {
     subscribe,
     queryKey,
     detail: INGRESS_DETAIL,
-    reportFailure: toPlural(ResourceType.Ingress),
   });
 
   // A second observer on the list's own cache entry, so the rows cost one

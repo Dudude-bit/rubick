@@ -20,7 +20,9 @@ import {
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Eyebrow } from "@/components/ui/states";
 import {
   ATTENTION_TEXT,
   attentionFigure,
@@ -111,7 +113,7 @@ type NavItem = NavName & {
 const ROW_FOCUS_CLASS =
   "transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
 // The scroll margin outdoes the rail's 24px fades, so a focused row lands clear of them.
-const ROW_BASE_CLASS = `group flex scroll-my-7 items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] ${ROW_FOCUS_CLASS}`;
+const ROW_BASE_CLASS = `group flex scroll-my-7 items-center gap-[9px] rounded-[5px] px-2 py-1 text-xs leading-[15px] ${ROW_FOCUS_CLASS}`;
 const ROW_SHUT_CLASS = "text-fg-mid";
 const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
@@ -351,12 +353,76 @@ function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
       type="button"
       tabIndex={-1}
       onClick={onClick}
-      className="absolute bottom-0 left-0 right-2 flex h-[18px] items-center justify-end gap-1 bg-canvas px-1.5 text-[10px] leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+      className="absolute bottom-0 left-0 right-2 flex h-[18px] items-center justify-end gap-1 bg-canvas px-1.5 text-micro leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
     >
       <ChevronsDown className="h-3 w-3" aria-hidden="true" />
       {t("count", "railRowsBelow", { n })}
     </button>
   );
+}
+
+const ROVING_ROWS = "a[href], button";
+
+/**
+ * The rail is one tab stop. Rows are reached with Up and Down, Home and End,
+ * and Tab leaves for the content instead of walking every row. The stop
+ * follows focus, and falls back to the open row, then the first.
+ */
+function useRovingRows(rail: React.RefObject<HTMLElement | null>) {
+  const stop = React.useRef<HTMLElement | null>(null);
+  React.useEffect(() => {
+    const nav = rail.current;
+    if (!nav) return;
+    const rows = () =>
+      [...nav.querySelectorAll<HTMLElement>(ROVING_ROWS)].filter(
+        (row) => !row.hasAttribute("disabled")
+      );
+    const apply = () => {
+      const all = rows();
+      if (!stop.current || !all.includes(stop.current))
+        stop.current =
+          all.find((row) => row.getAttribute("aria-current") === "page") ??
+          all[0] ??
+          null;
+      for (const row of all) row.tabIndex = row === stop.current ? 0 : -1;
+    };
+    const onFocus = (event: FocusEvent) => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ROVING_ROWS
+      );
+      if (!row || !nav.contains(row)) return;
+      stop.current = row;
+      apply();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+      if (!keys.includes(event.key) || event.altKey || event.metaKey) return;
+      const all = rows();
+      const at = all.indexOf(document.activeElement as HTMLElement);
+      if (at === -1) return;
+      event.preventDefault();
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? all.length - 1
+            : Math.min(
+                Math.max(at + (event.key === "ArrowDown" ? 1 : -1), 0),
+                all.length - 1
+              );
+      all[next].focus();
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(nav, { childList: true, subtree: true });
+    nav.addEventListener("focusin", onFocus);
+    nav.addEventListener("keydown", onKey);
+    return () => {
+      observer.disconnect();
+      nav.removeEventListener("focusin", onFocus);
+      nav.removeEventListener("keydown", onKey);
+    };
+  }, [rail]);
 }
 
 export function Sidebar({
@@ -366,16 +432,21 @@ export function Sidebar({
   missing?: ScopeMissing;
 }) {
   const [attachRail, railFade, rowsPast, scrollRail] = useRailFade();
+  const railRef = React.useRef<HTMLElement | null>(null);
+  useRovingRows(railRef);
   const counts = useShellCounts();
   const locks = useListLocks(NAV_KINDS);
   const servedLocks = useLocks(NAV_QUERIES);
 
   return (
-    <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
+    <aside className="flex w-52 select-none flex-col overflow-hidden border-r border-hair">
       <ClusterRow />
       <div className="relative flex min-h-0 flex-1 flex-col">
         <nav
-          ref={attachRail}
+          ref={(node) => {
+            railRef.current = node;
+            return attachRail(node);
+          }}
           className={cn(
             // In a lane: WebKit's overlay scrollbar lay over the counts and
             // lock marks and took their pointer.
@@ -405,7 +476,7 @@ export function Sidebar({
                 {group.caption === "network" && <GatewayRows />}
               </div>
             ))}
-            <IntegrationsGroup />
+            <IntegrationsGroup missing={missing} />
           </div>
         </nav>
         <RailMore n={rowsPast} onClick={scrollRail} />
@@ -503,8 +574,10 @@ function GatewayRows() {
 function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
   const t = useT();
   return (
-    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
-      <T section="nav" k={k} />
+    <div className="flex items-center justify-between px-2 pb-1 pt-3">
+      <Eyebrow as="span" className="leading-[13px]">
+        <T section="nav" k={k} />
+      </Eyebrow>
       {busy && (
         <Spinner
           aria-label={t("action", "readingGroup", {
@@ -530,16 +603,20 @@ function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
  * decide their own highlight from the query string rather than letting
  * the router light all of them at once.
  */
-function IntegrationsGroup() {
+function IntegrationsGroup({ missing }: { missing: ScopeMissing }) {
   const t = useT();
   const onCatalog = useRouterState({ select: isCatalogLocation });
   const vendor = useAppSearchValue("vendor") ?? null;
   const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
+  const scope = useClusterStore((state) => state.namespaceScope);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
   const [waking, setWaking] = React.useState<string | null>(null);
-  const [failed, setFailed] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState<{
+    id: string;
+    words: string;
+  } | null>(null);
 
   // The catalog is the category's own door — the inventory of everything
   // the app knows, installed or not — so the group always draws, even on a
@@ -599,7 +676,7 @@ function IntegrationsGroup() {
       // the address itself if the forward moved ports. A row that stayed
       // "asleep" after a successful wake is this cache, not the tunnel.
       .then(() => queryClient.invalidateQueries())
-      .catch((error: unknown) => setFailed(errorWords(error, t)))
+      .catch((error: unknown) => setFailed({ id, words: errorWords(error, t) }))
       .finally(() => setWaking(null));
   };
 
@@ -608,6 +685,12 @@ function IntegrationsGroup() {
       key={page.id}
       item={{ label: page.name, path: page.link, icon: page.icon }}
       value={page.count}
+      scopeGone={page.counted ? missing : undefined}
+      wideNote={
+        page.counted && !page.scoped && scope.length > 0
+          ? t("cluster", "countClusterWide")
+          : undefined
+      }
       mark={page.tone ?? undefined}
       // Detected but refused: the row is drawn disabled with a vendor
       // reason instead of linking to a page that only errors.
@@ -641,7 +724,19 @@ function IntegrationsGroup() {
       {operators.length > 0 && <GroupCaption k="operators" />}
       {operators.map(row)}
       {failed && (
-        <p className="px-2 pb-1 text-[10px] leading-snug text-err">{failed}</p>
+        <div className="flex flex-wrap items-center gap-x-2 px-2 pb-1">
+          <p className="min-w-0 text-caption leading-snug text-err">
+            {failed.words}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            pending={waking === failed.id}
+            onClick={() => press(failed.id)}
+          >
+            {t("action", "retry")}
+          </Button>
+        </div>
       )}
       {catalog}
     </div>
@@ -687,7 +782,7 @@ function ClusterRow() {
         style={{ color: "var(--cluster)" }}
       />
       <span className="flex min-w-0 flex-col text-left">
-        <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
+        <span className="truncate text-xs font-semibold leading-[15px] text-fg">
           {alias ?? currentContext ?? t("cluster", "noCluster")}
         </span>
         {alias && currentContext && (
@@ -698,7 +793,7 @@ function ClusterRow() {
           // prod from staging. `direction: rtl` moves the ellipsis to the
           // start and leaves the run itself in order, because the name is
           // ASCII from end to end.
-          <span className="truncate text-left font-mono text-[10px] leading-[12px] text-fg-fnt [direction:rtl]">
+          <span className="truncate text-left font-mono text-micro leading-[12px] text-fg-fnt [direction:rtl]">
             {currentContext}
           </span>
         )}
@@ -707,9 +802,14 @@ function ClusterRow() {
           which is the only way this indicator is ever looked at. */}
       <span
         data-window-cluster="dot"
-        aria-label={
-          connected ? "connected" : connecting ? "connecting" : "disconnected"
-        }
+        aria-label={t(
+          "cluster",
+          connected
+            ? "dotConnected"
+            : connecting
+              ? "dotConnecting"
+              : "dotDisconnected"
+        )}
         className={cn(
           "ml-auto h-[7px] w-[7px] flex-none rounded-full",
           !connected && (connecting ? "bg-warn" : "bg-fg-fnt")
@@ -801,6 +901,8 @@ function NavRow({
   counts,
   missing,
   value,
+  scopeGone,
+  wideNote,
   mark,
   note,
   lock,
@@ -811,6 +913,10 @@ function NavRow({
   item: NavItem;
   counts?: ShellCounts;
   missing?: ScopeMissing;
+  /** For a row that carries its own count of the scope: where the scope has no namespace, the count is not read. */
+  scopeGone?: ScopeMissing;
+  /** For a count that is of the whole cluster while the window is scoped to namespaces. */
+  wideNote?: string;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
   /**
@@ -883,18 +989,33 @@ function NavRow({
           </span>
           {lock && <LockMark lock={lock} reason={deniedReason} />}
           {note !== undefined ? (
-            <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
+            <span className="ml-auto text-caption text-fg-fnt">{note}</span>
+          ) : scopeGone?.whole ? (
+            <ScopeMissingMark missing={scopeGone} />
           ) : value === undefined ? (
             counts &&
             (item.count === "events" ? (
-              <EventsNavCount item={item} counts={counts} missing={missing} />
+              <EventsNavCount
+                item={item}
+                counts={counts}
+                missing={missing}
+                refused={lock !== undefined && !readableIn(lock)}
+              />
             ) : (
-              <NavCount item={item} counts={counts} missing={missing} />
+              <NavCount
+                item={item}
+                counts={counts}
+                missing={missing}
+                refused={lock !== undefined && !readableIn(lock)}
+              />
             ))
           ) : (
             // A count nobody could finish still sits beside a break that was read.
             (value !== null || mark) && (
-              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
+              <span
+                title={wideNote}
+                className="ml-auto flex items-center gap-1.5 text-caption text-fg-fnt"
+              >
                 {mark && (
                   // A hollow ring for "could not be checked", the same shape
                   // the tab strip wears: a page that says nobody looked had
@@ -949,14 +1070,14 @@ function AttentionCount({
   return (
     <span
       className={cn(
-        "ml-auto flex items-center gap-1 text-[11px]",
+        "ml-auto flex items-center gap-1 text-caption",
         worst ? ATTENTION_TEXT[worst] : "text-fg-fnt",
         behind && HELD_CLASS
       )}
       title={
         behind || complete
           ? countAge(counts, false, counts.readAt, t)
-          : t("cluster", "problemsNotAllChecked")
+          : attentionWords({ total: n, complete }, t)
       }
       aria-label={attentionWords({ total: n, complete }, t)}
     >
@@ -967,7 +1088,7 @@ function AttentionCount({
           className="h-1.5 w-1.5 flex-none rounded-full border border-fg-fnt"
         />
       )}
-      {attentionFigure(attention)}
+      {(complete || n > 0) && attentionFigure(attention)}
     </span>
   );
 }
@@ -977,6 +1098,7 @@ function EventsNavCount(props: {
   item: NavItem;
   counts: ShellCounts;
   missing?: ScopeMissing;
+  refused?: boolean;
 }) {
   const latest = useEventsHeld(false);
   const whole = useEventsHeld(true);
@@ -1009,10 +1131,13 @@ function NavCount({
   counts,
   missing,
   watched,
+  refused = false,
 }: {
   item: NavItem;
   counts: ShellCounts;
   missing?: ScopeMissing;
+  /** The kind's list is refused: the number is the last one read, not a current one. */
+  refused?: boolean;
   /** The count a page's own live watch holds, which this row follows instead of the overview's. */
   watched?: number;
 }) {
@@ -1034,6 +1159,7 @@ function NavCount({
 
   const count = watched ?? (item.count && overview.counts[item.count]);
   const age = [
+    refused ? t("cluster", "countsKindRefused") : null,
     watched === undefined
       ? countAge(
           counts,
@@ -1047,7 +1173,7 @@ function NavCount({
   ]
     .filter(Boolean)
     .join("\n");
-  const behind = (heldAt !== null || late || failed) && HELD_CLASS;
+  const behind = (heldAt !== null || late || failed || refused) && HELD_CLASS;
   if (count == null) {
     const partial = overview.countsPartial?.find(
       (each) => each.count === item.count
@@ -1058,7 +1184,7 @@ function NavCount({
   }
   return (
     <span
-      className={cn("ml-auto text-[11px] text-fg-fnt", behind)}
+      className={cn("ml-auto text-caption text-fg-fnt", behind)}
       title={[
         age,
         scoped && missing && missing.missing.length > 0
@@ -1100,7 +1226,7 @@ function PartialCountMark({
   return (
     <span
       className={cn(
-        "ml-auto flex items-center gap-1 text-[11px] text-fg-fnt",
+        "ml-auto flex items-center gap-1 text-caption text-fg-fnt",
         className
       )}
       title={[...said, age].filter(Boolean).join("\n")}
@@ -1108,7 +1234,7 @@ function PartialCountMark({
       data-testid="partial-count"
     >
       <Lock className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
-      {`${partial.counted}+`}
+      {partial.counted > 0 && partial.counted}
     </span>
   );
 }

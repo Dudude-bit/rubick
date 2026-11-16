@@ -10,8 +10,10 @@ import type {
   PersistentVolumeClaimInfo,
   PodCause,
   ServiceHealthGroup,
+  ServiceHealthInputs,
 } from "@/generated/types";
 import {
+  itemIsStale,
   attentionLines,
   attentionOf,
   checkKey,
@@ -20,8 +22,14 @@ import {
   eventsChecks,
   foldedWords,
   namespaceAttention,
+  problemsKept,
+  ranked,
   reasonWord,
+  regainedUnder,
+  servicesKept,
+  LONG_STANDING_HOURS,
   type AttentionInputs,
+  type AttentionItem,
   type GatewayApiInputs,
 } from "./attention";
 import type { RouteRow } from "./route-rows";
@@ -31,6 +39,8 @@ import {
   type NamespaceBacking,
 } from "./ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "./service-health";
+import { namesRebound } from "./kept-by-name";
+import rankCorpus from "../../contracts/attention-rank-conformance.json";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -57,6 +67,7 @@ function services(
       {
         namespace: "net",
         networks: [],
+        unread: [],
         groups: groups.map(
           ([
             names,
@@ -291,7 +302,9 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [web] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [web] },
+        ],
         unread: [],
       },
     });
@@ -333,7 +346,9 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [shut] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [shut] },
+        ],
         unread: [],
       },
     });
@@ -404,7 +419,9 @@ describe("what Needs attention lists beyond pods", () => {
       });
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [idle, empty] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [idle, empty] },
+        ],
         unread: [],
       },
       ingresses: {
@@ -483,7 +500,7 @@ describe("what Needs attention lists beyond pods", () => {
       });
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups }],
+        answered: [{ namespace: "net", networks: [], unread: [], groups }],
         unread: [],
       },
       ingresses: {
@@ -555,13 +572,256 @@ describe("what Needs attention lists beyond pods", () => {
     ];
     const listed = attention({
       services: {
-        answered: [{ namespace: "shop", networks: [], groups }],
+        answered: [{ namespace: "shop", networks: [], unread: [], groups }],
         unread: [],
       },
     });
     expect(listed.items.map((item) => [item.name, item.reason])).toEqual([
       ["orphan", "no endpoints"],
     ]);
+  });
+
+  const LOST_PODS = [
+    {
+      kind: "Pod",
+      namespace: null,
+      code: "PERMISSION_DENIED",
+      message: "pods is forbidden",
+    },
+  ];
+  const nothingPublished = (podsUnread: boolean): ServiceHealthInputs => ({
+    namespace: "shop",
+    networks: [],
+    unread: [],
+    groups: [
+      {
+        names: ["ledger"],
+        type: "ClusterIP",
+        selectorless: false,
+        targets: [],
+        ready: 0,
+        draining: 0,
+        notReady: 0,
+        unrouted: 0,
+        stop: {
+          reason: "publishesNothingYet" as const,
+          service: {
+            kind: "Service",
+            name: "ledger",
+            namespace: "shop",
+            existence: "present" as const,
+            facts: null,
+          },
+          selector: "app=ledger",
+          podsUnread,
+        },
+      },
+    ],
+  });
+
+  /**
+   * With Pods refused, three healthy Services turned red with "Nothing is
+   * published behind". Fails if a verdict the backend marks as waiting on the
+   * lost pod read is raised, or if the Services check then says it read.
+   */
+  it("withholds a no-pods verdict the backend marks as waiting on a lost read and says the check did not finish", () => {
+    const listed = attention({
+      overview: overview({ unread: LOST_PODS }),
+      services: { answered: [nothingPublished(true)], unread: [] },
+    });
+    expect(listed.items.filter((item) => item.kind === "Service")).toEqual([]);
+    const pods = listed.checks.find((each) => each.kind === "Pod");
+    expect(pods?.state).toBe("unread");
+    expect(pods?.unread).toEqual(LOST_PODS);
+    expect(listed.complete).toBe(false);
+  });
+
+  const refusedInShop = {
+    kind: "Pod",
+    namespace: "shop",
+    code: "PERMISSION_DENIED",
+    message:
+      'pods is forbidden: User "jane" cannot list resource "pods" in API group "" in the namespace "shop"',
+  };
+
+  /**
+   * With pods refused the Overview said "Services could not be read in api
+   * and gmp-system", with a triangle: the Services were read, the pods
+   * behind them were not. Fails if the read that failed is not named by its
+   * kind and code where the Services' answer names it, or if the Services
+   * are then called unread.
+   */
+  it("names the read behind a Service's verdict that failed, not the Services", () => {
+    const listed = attention({
+      services: {
+        answered: [{ ...nothingPublished(true), unread: [refusedInShop] }],
+        unread: [],
+      },
+    });
+    const pods = listed.checks.find((each) => each.kind === "Pod");
+    expect(pods?.state).toBe("unread");
+    expect(checkRefused(pods!)).toBe(true);
+    expect(checkSaid(pods!, t)).toBe("list is forbidden in shop");
+    expect(listed.checks.find((each) => each.kind === "Service")?.state).toBe(
+      "read"
+    );
+    expect(listed.complete).toBe(false);
+  });
+
+  /**
+   * The frontend used to hide every pod-dependent Service row once any pod
+   * read was lost, which hid four real faults. Fails if a Service the
+   * backend still calls a fault, since reading the pods could only make it
+   * red, disappears beside a lost pod read.
+   */
+  it("keeps a Service fault that no pod read could excuse", () => {
+    const listed = attention({
+      overview: overview({ unread: LOST_PODS }),
+      services: { answered: [nothingPublished(false)], unread: [] },
+    });
+    expect(
+      listed.items
+        .filter((item) => item.kind === "Service")
+        .map((item) => item.name)
+    ).toEqual(["ledger"]);
+  });
+
+  /** Fails if a Service waiting on unread pods, with no failed read named anywhere, is counted as checked. */
+  it("counts a Service waiting on unread pods as not checked even when nothing names the read that failed", () => {
+    const listed = attention({
+      overview: overview({ unread: [] }),
+      services: { answered: [nothingPublished(true)], unread: [] },
+    });
+    const check = listed.checks.find((each) => each.kind === "Service");
+    expect(check?.state).toBe("unread");
+    expect(check?.unread[0]?.namespace).toBe("shop");
+  });
+
+  /**
+   * Under a pods refusal the four Services with no endpoints vanished from
+   * Needs attention. Fails if the last answer about a Service whose verdict
+   * cannot be told now is dropped, is not marked stale, or outlives a read
+   * that tells it again.
+   */
+  it("keeps a Service's last verdict, stale, while its pods go unread, and lets it go once they answer", () => {
+    const key = "keeps-a-services-last-verdict";
+    const told = nothingPublished(false);
+    const untold = { ...nothingPublished(true), unread: [refusedInShop] };
+    const serving = {
+      ...told,
+      groups: [{ ...told.groups[0], ready: 1, stop: undefined }],
+    };
+    let at = 0;
+    const listedWith = (answered: ServiceHealthInputs[]) =>
+      attention({
+        services: {
+          answered,
+          unread: [],
+          kept: servicesKept(key, answered, (at += 1000)),
+        },
+      });
+
+    expect(
+      listedWith([told]).items.find((item) => item.name === "ledger")?.stale
+    ).toBeUndefined();
+    const kept = listedWith([untold]);
+    const ledger = kept.items.find((item) => item.name === "ledger");
+    expect(ledger?.stale).toBe(true);
+    expect(itemIsStale(kept, ledger!)).toBe(true);
+    expect(kept.complete).toBe(false);
+    expect(listedWith([serving]).items).toEqual([]);
+    expect(listedWith([untold]).items).toEqual([]);
+  });
+
+  /**
+   * "none ready · not rechecked" stood with no time under a pod row that
+   * had one. Fails if a kept Service row loses when the answer that last
+   * told it came, or whether the reads since were refused.
+   */
+  it("dates a kept Service row by the answer that last told it", () => {
+    const key = "dates-a-kept-service";
+    const told = nothingPublished(false);
+    const untold = { ...nothingPublished(true), unread: [refusedInShop] };
+    servicesKept(key, [told], 1000);
+    const kept = attention({
+      services: {
+        answered: [untold],
+        unread: [],
+        kept: servicesKept(key, [untold], 2000),
+      },
+    });
+    expect(
+      kept.items.find((item) => item.name === "ledger")?.lastKnown
+    ).toEqual({ at: 1000, refused: true });
+  });
+
+  /**
+   * A crash-looping pod's row said "not rechecked" with no time when a
+   * Service's answer named its pods refused. Fails if a row marked by a lost
+   * reach of its kind is not stale, or not dated by the answer it came from.
+   */
+  it("dates a row its kind's lost reach marks by the answer it came from", () => {
+    const crashing: ClusterProblem = {
+      severity: "critical",
+      kind: "Pod",
+      name: "api-1",
+      namespace: "shop",
+      reason: "CrashLoopBackOff",
+      detail: null,
+      since: null,
+      restarts: 3,
+      foldedPods: null,
+      replaced: false,
+    };
+    const listed = attention({
+      overview: overview({ problems: [crashing] }),
+      overviewAt: 5000,
+      services: {
+        answered: [{ ...nothingPublished(true), unread: [refusedInShop] }],
+        unread: [],
+        at: 6000,
+      },
+    });
+    expect(listed.items.find((item) => item.kind === "Pod")).toMatchObject({
+      tone: "err",
+      stale: true,
+      lastKnown: { at: 5000, refused: true },
+    });
+  });
+
+  /**
+   * For fifteen seconds after a pods 403 lifted, Not checked said "Pods list
+   * is forbidden" and pod rows "not rechecked" under a Pods tile that had
+   * answered. Fails if a Services answer older than the overview that read
+   * the pods again still draws them unread, or if a newer one that still
+   * names them refused stops doing so.
+   */
+  it("asks the Services again rather than draw pods unread that the overview read again since", () => {
+    const key = "pods-read-again";
+    problemsKept(key, overview({ unread: LOST_PODS }), 1000);
+    problemsKept(key, overview(), 3000);
+    const heldBack = { ...nothingPublished(true), unread: [refusedInShop] };
+    const at = (servicesAt: number) =>
+      attention({
+        overview: overview(),
+        overviewAt: 3000,
+        regained: regainedUnder(key),
+        services: { answered: [heldBack], unread: [], at: servicesAt },
+      });
+
+    const asking = at(2000);
+    expect(asking.checks.find((each) => each.kind === "Pod")?.state).toBe(
+      "read"
+    );
+    expect(asking.checks.find((each) => each.kind === "Service")?.state).toBe(
+      "reading"
+    );
+    expect(asking.complete).toBe(false);
+
+    const still = at(4000);
+    expect(still.checks.find((each) => each.kind === "Pod")?.state).toBe(
+      "unread"
+    );
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
@@ -708,7 +968,7 @@ describe("what Needs attention lists beyond pods", () => {
     });
   });
 
-  /** The worst row leads whichever reader found it, and the backend's cut still counts. */
+  /** Inside one tier the worst row leads whichever reader found it, and the backend's cut still counts. */
   it("ranks errors before warnings and counts what the backend cut", () => {
     const warning: ClusterProblem = {
       severity: "warning",
@@ -717,7 +977,7 @@ describe("what Needs attention lists beyond pods", () => {
       namespace: "shop",
       reason: "Restarting",
       detail: null,
-      since: "2026-10-05T10:00:00Z",
+      since: null,
       restarts: 7,
       foldedPods: null,
       replaced: false,
@@ -730,6 +990,147 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items.map((item) => item.name)).toEqual(["web", "flappy"]);
     expect(listed.total).toBe(5);
     expect(listed.worst).toBe("err");
+  });
+
+  /**
+   * What began today now ranks above a failure that has stood for days, so
+   * the first row is no longer the worst. Fails if the panel's dot, the
+   * sidebar's tone or a namespace's verdict is read off the first row again
+   * and turns a cluster with a red row amber.
+   */
+  it("calls a list with a days-old error in it red, though a newer warning leads", () => {
+    const row = (
+      severity: ClusterProblem["severity"],
+      name: string,
+      since: string
+    ): ClusterProblem => ({
+      severity,
+      kind: "Pod",
+      name,
+      namespace: "shop",
+      reason: severity === "critical" ? "Failed" : "Unhealthy",
+      detail: null,
+      since,
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+    });
+    const listed = attention({
+      overview: overview({
+        problems: [
+          row("critical", "old", "2026-09-01T00:00:00Z"),
+          row("warning", "new", "2026-10-05T11:59:00Z"),
+        ],
+      }),
+    });
+
+    expect(listed.items.map((item) => item.name)).toEqual(["new", "old"]);
+    expect(listed.worst).toBe("err");
+    expect(namespaceAttention(listed, "shop").worst).toBe("err");
+  });
+
+  /**
+   * The ranking both halves apply, held to one corpus: this side re-ranks
+   * the backend's rows with its own beside them. Fails if this side's order
+   * or its long-standing line drifts from the file the Rust side reads.
+   */
+  it("ranks as the shared corpus says", () => {
+    expect(LONG_STANDING_HOURS).toBe(rankCorpus.longStandingHours);
+    const now = Date.parse(rankCorpus.now);
+    for (const { name, rows, order } of rankCorpus.cases) {
+      const items = rows.map((row): AttentionItem => ({
+        key: row.id,
+        tone: row.severity === "warning" ? "warn" : "err",
+        kind: row.kind,
+        name: row.id,
+        namespace: null,
+        reason: row.reason,
+        detail: null,
+        since: row.since,
+        restarts: null,
+        foldedPods: null,
+        replaced: row.replaced ?? false,
+        opens: { kind: row.kind, name: row.id, namespace: null },
+      }));
+      expect(
+        ranked(items, now).map((item) => item.name),
+        name
+      ).toEqual(order);
+    }
+  });
+
+  /**
+   * A spot node went NotReady and its pods were
+   * terminated for its shutdown, while Needs attention led with a Service's
+   * "no endpoints" and a Job failure 38 days old, and the node sat at row 17.
+   * Fails if the node does not lead, if a pod it took down is not drawn
+   * under it (its own workload's row included), or if the days-old failure
+   * is not last.
+   */
+  it("leads with a node that went down and draws the pods it took down under it", () => {
+    const at = (minutesAgo: number) =>
+      new Date(NOW - minutesAgo * 60_000).toISOString();
+    const row = (over: Partial<ClusterProblem>): ClusterProblem => ({
+      severity: "critical",
+      kind: "Pod",
+      name: "",
+      namespace: "shop",
+      reason: "Terminated",
+      detail: null,
+      since: at(1),
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+      ...over,
+    });
+    const api = { kind: "Deployment", name: "api" };
+    const lines = attentionLines(
+      attention({
+        overview: overview({
+          problems: [
+            row({
+              kind: "Job",
+              name: "parser-29857320",
+              reason: "BackoffLimitExceeded",
+              since: at(38 * 24 * 60),
+            }),
+            row({ name: "api-1", workload: api, node: "spot-1" }),
+            row({ kind: "Deployment", name: "api", reason: "Unavailable" }),
+            row({ name: "api-2", workload: api, node: "spot-1", since: at(2) }),
+            row({
+              kind: "Node",
+              name: "spot-1",
+              namespace: null,
+              reason: "NotReady",
+              since: at(5),
+            }),
+            row({
+              name: "nats-box-1",
+              namespace: "nats",
+              node: "spot-1",
+              replaced: true,
+            }),
+            row({ name: "web-1", node: "spot-2", reason: "CrashLoopBackOff" }),
+          ],
+        }),
+        services: services([["web"], 0]),
+      }).items
+    );
+
+    expect(
+      lines.map((line) =>
+        line.at === "item" ? [line.item.name, line.under] : line.at
+      )
+    ).toEqual([
+      ["spot-1", null],
+      ["api-1", "node"],
+      ["api-2", "node"],
+      ["nats-box-1", "node"],
+      ["api", null],
+      ["web-1", null],
+      ["web", null],
+      ["parser-29857320", null],
+    ]);
   });
 
   /**
@@ -858,8 +1259,8 @@ describe("what Needs attention lists beyond pods", () => {
       )
     ).toEqual([
       ["app", null, false],
-      ["app-1", "workload", true],
       ["app-2", "workload", false],
+      ["app-1", "workload", true],
       ["lonely", null, false],
     ]);
   });
@@ -1483,5 +1884,182 @@ describe("the word a row's reason is printed in", () => {
     expect(reasonWord({ kind: "Pod", reason: "Restarting" }, ru)).toBe(
       "Перезапускается"
     );
+  });
+});
+
+describe("which rows rest on a read that failed", () => {
+  const failed = (kind: string, namespace: string | null) => ({
+    kind,
+    state: "unread" as const,
+    unread: [{ namespace, code: "KUBE_API", message: "timed out" }],
+  });
+  const row = { kind: "Deployment", namespace: "shop" };
+
+  /**
+   * A row of a kind whose read failed is last known. Fails if a failed kind's
+   * rows are treated as current.
+   */
+  it("calls a row stale when its kind was unread across the cluster", () => {
+    expect(itemIsStale({ checks: [failed("Deployment", null)] }, row)).toBe(
+      true
+    );
+  });
+
+  /**
+   * An unread namespace stales only its own rows. Fails if one namespace's
+   * refusal spreads to the others.
+   */
+  it("calls a row stale only in the namespaces that were unread", () => {
+    const checks = [failed("Deployment", "billing")];
+    expect(itemIsStale({ checks }, row)).toBe(false);
+    expect(itemIsStale({ checks }, { ...row, namespace: "billing" })).toBe(
+      true
+    );
+  });
+
+  /**
+   * A read that was only cut short has not lost the rows it found. Fails if a
+   * partial check stales them, or a kind that was read does.
+   */
+  it("leaves a partial read, and a kind that was read, as current", () => {
+    expect(
+      itemIsStale(
+        { checks: [{ ...failed("Deployment", null), partial: true }] },
+        row
+      )
+    ).toBe(false);
+    expect(
+      itemIsStale(
+        { checks: [{ kind: "Deployment", state: "read", unread: [] }] },
+        row
+      )
+    ).toBe(false);
+  });
+});
+
+describe("a problem whose read went unread since it was told", () => {
+  const probing: ClusterProblem = {
+    severity: "warning",
+    kind: "Pod",
+    name: "node-5skbg",
+    namespace: "chat",
+    reason: "Unhealthy",
+    detail: null,
+    since: null,
+    restarts: 1,
+    foldedPods: null,
+    replaced: false,
+  };
+  const told = overview({ problems: [probing] });
+  const refused = overview({
+    unread: [
+      {
+        kind: "Pod",
+        namespace: null,
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ],
+  });
+  const failedIn = (namespace: string) =>
+    overview({
+      unread: [{ kind: "Pod", namespace, code: "KUBE_API_ERROR", message: "" }],
+    });
+
+  /**
+   * With pods refused the pod's row turned green "Running" and its peek lost
+   * the problem: the read was refused, the pod had not recovered. Fails if
+   * the last told problem is dropped, is not marked stale, or loses when it
+   * was told and that the read was refused.
+   */
+  it("keeps a pod's last told problem, stale, while its pods are refused", () => {
+    const key = "keeps-while-refused";
+    expect(problemsKept(key, told, 1000)).toEqual([]);
+    const kept = problemsKept(key, refused, 2000);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({
+      kind: "Pod",
+      name: "node-5skbg",
+      stale: true,
+      lastKnown: { at: 1000, refused: true },
+    });
+
+    const listed = attention({ overview: refused, kept });
+    expect(listed.items.map((item) => item.name)).toEqual(["node-5skbg"]);
+    expect(listed.total).toBe(1);
+    expect(listed.complete).toBe(false);
+    expect(itemIsStale(listed, listed.items[0])).toBe(true);
+    expect(listed.byNamespace.get("chat")).toBe(1);
+  });
+
+  /** Fails if a kept problem outlives the read that answers for its kind again. */
+  it("lets it go once the pods are read again", () => {
+    const key = "lets-go-once-read";
+    problemsKept(key, told, 1000);
+    expect(problemsKept(key, refused, 2000)).toHaveLength(1);
+    expect(problemsKept(key, overview(), 3000)).toEqual([]);
+    expect(problemsKept(key, refused, 4000)).toEqual([]);
+  });
+
+  /** Fails if a failure in another namespace keeps this one's problem, or a failure says it was refused. */
+  it("keeps it only where its kind went unread, and says the read failed", () => {
+    const key = "keeps-where-unread";
+    problemsKept(key, told, 1000);
+    expect(problemsKept(key, failedIn("web"), 2000)).toEqual([]);
+    problemsKept(key, told, 3000);
+    expect(problemsKept(key, failedIn("chat"), 4000)[0]?.lastKnown).toEqual({
+      at: 3000,
+      refused: false,
+    });
+  });
+
+  /** Fails if a later answer telling the same problem again does not move when it was last known. */
+  it("dates it by the last answer that told it", () => {
+    const key = "dates-by-last-answer";
+    problemsKept(key, told, 1000);
+    problemsKept(key, told, 5000);
+    expect(problemsKept(key, refused, 6000)[0]?.lastKnown?.at).toBe(5000);
+  });
+
+  /**
+   * Under a Deployments 500 the Overview quoted the Deployment's status as
+   * current while its tile said "not read". Fails if a problem the answer
+   * still tells beside its unread kind is not kept, dated by the last answer
+   * that read it, or is counted twice.
+   */
+  it("keeps a problem still told beside its unread kind, dated by the last read of it", () => {
+    const key = "still-told-while-unread";
+    problemsKept(key, told, 1000);
+    const stillTold = overview({
+      problems: [probing],
+      unread: [
+        { kind: "Pod", namespace: "chat", code: "KUBE_API_ERROR", message: "" },
+      ],
+    });
+    const kept = problemsKept(key, stillTold, 2000);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.lastKnown).toEqual({ at: 1000, refused: false });
+    expect(problemsKept(key, { ...stillTold }, 3000)[0]?.lastKnown?.at).toBe(
+      1000
+    );
+
+    const listed = attention({ overview: stillTold, kept });
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]?.stale).toBe(true);
+    expect(listed.total).toBe(1);
+    expect(listed.byNamespace.get("chat")).toBe(1);
+  });
+
+  /** Fails if a refusal invents a problem nobody ever saw. */
+  it("keeps nothing where nothing was told", () => {
+    expect(problemsKept("nothing-told", refused, 1000)).toEqual([]);
+  });
+
+  /** Another cluster behind the name: fails if its window inherits the old cluster's pod. */
+  it("forgets what it kept when the kubeconfig puts another cluster behind the name", () => {
+    const key = "forgets-on-rebind";
+    problemsKept(key, told, 1000);
+    namesRebound();
+    expect(problemsKept(key, refused, 2000)).toEqual([]);
   });
 });

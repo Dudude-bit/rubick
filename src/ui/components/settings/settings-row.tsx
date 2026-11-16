@@ -35,7 +35,7 @@ export function SettingsGroup({
       >
         {/* A section named once by the nav does not name itself again. */}
         {title && (
-          <h2 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+          <h2 className="pb-1 text-caption font-semibold uppercase tracking-[0.07em] text-fg-fnt">
             {title}
           </h2>
         )}
@@ -95,7 +95,7 @@ export function SettingRow({
           <Label htmlFor={htmlFor} className="text-xs text-fg-mid">
             {label}
           </Label>
-          {hint && <span className="text-[11px] text-fg-mut">{hint}</span>}
+          {hint && <span className="text-caption text-fg-mut">{hint}</span>}
         </div>
         {control && (
           <div className="flex flex-none items-center gap-1.5">{control}</div>

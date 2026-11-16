@@ -6,6 +6,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
+import { Button } from "@/components/ui/button";
 import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
 import { objectLink } from "@/lib/links";
@@ -24,7 +25,7 @@ export function Fact({
 }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="w-28 flex-none text-[11px] text-fg-fnt">{label}</span>
+      <span className="w-28 flex-none text-caption text-fg-fnt">{label}</span>
       <span className="min-w-0">{children}</span>
     </div>
   );
@@ -99,6 +100,7 @@ export function OperatorActionButton<
   label,
   explained,
   busy,
+  running = false,
   onPick,
 }: {
   action: A;
@@ -106,13 +108,16 @@ export function OperatorActionButton<
   /** The explanation in full, where `explains` has a placeholder to fill. */
   explained?: string;
   busy: boolean;
+  running?: boolean;
   onPick: (action: A) => void;
 }) {
   const t = useT();
   const blocked = busy || action.reason !== null;
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      size="sm"
+      pending={running}
       disabled={blocked}
       onClick={() => onPick(action)}
       title={
@@ -121,11 +126,10 @@ export function OperatorActionButton<
           : (explained ?? t("operators", action.explains))
       }
       className={cn(
-        "rounded border border-hair px-1.5 py-0.5 transition-colors",
+        "text-caption",
         action.danger
-          ? "text-err hover:bg-err/10"
-          : "text-fg-mut hover:bg-hover hover:text-fg",
-        blocked && "cursor-not-allowed opacity-50"
+          ? "text-err hover:bg-err/10 hover:text-err"
+          : "text-fg-mut"
       )}
     >
       {label}
@@ -134,6 +138,6 @@ export function OperatorActionButton<
           · {t("operators", action.reason)}
         </span>
       )}
-    </button>
+    </Button>
   );
 }

@@ -1,5 +1,5 @@
 import { keepPreviousData } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { createContext, Fragment, useContext, useMemo, useState } from "react";
 
 import { EmptyPage } from "../../../../-components/NotFound";
 import { AgeHeader } from "@/components/ui/sortable-header";
@@ -8,15 +8,22 @@ import {
   ageOrder,
   createNamespaceColumn,
   nameCellPx,
+  nameFloorPx,
 } from "../../-list/columns";
 import type { Catalogue } from "@/i18n/catalogue";
 import { widestText } from "@/lib/text-width";
 import { withoutCredentials } from "@/lib/hints";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
+import { WithProblem } from "../../-object/ProblemTone";
+import type { Problem } from "../../-object/problem";
+import { problemOfRow, rowProblems } from "../../-object/row-items";
+import { useAttention } from "@/hooks/useAttention";
 import { Unserved } from "../../-object/Unserved";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { RealtimeAge } from "@/components/ui/realtime";
+import { UnreadMetric } from "@/components/ui/metric-value";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import type { ColumnDef } from "@/components/ui/table-features";
 import type {
@@ -85,6 +92,9 @@ const CREATION = /creationTimestamp/i;
 const isAge = (column: TableColumn) =>
   CREATION.test(column.description) || column.columnType === "date";
 
+/** kubectl's word for a metric an autoscaler could not read. */
+const UNREAD_WORD = "<unknown>";
+
 const cellText = (value: unknown) =>
   value === null || value === undefined
     ? ""
@@ -98,7 +108,9 @@ const textFloor =
     Math.min(
       TEXT_FLOOR_PX,
       widestText(
-        rows.map((row) => cellText(row.cells[index])),
+        rows.map((row) =>
+          cellText(row.cells[index]).replaceAll(UNREAD_WORD, "?")
+        ),
         "sans",
         7.2
       ) + 20
@@ -203,6 +215,9 @@ async function readPages(
   return printed;
 }
 
+/** The shell's problems by row, beside the columns rather than in them, which are built once. */
+const RowProblems = createContext<ReadonlyMap<string, Problem>>(new Map());
+
 function PrintedTable({
   resource,
   entry,
@@ -243,6 +258,11 @@ function PrintedTable({
     [serverColumns, showNamespace, targetOf]
   );
   const rows = printed.data?.rows;
+  const attention = useAttention();
+  const problems = useMemo(
+    () => rowProblems(attention?.items ?? []),
+    [attention]
+  );
   const access = accessKind(entry.kind);
   const plural = listTitleOf(entry);
   const noun = useMemo(
@@ -251,57 +271,59 @@ function PrintedTable({
   );
 
   return (
-    <ResourceList<PrintedRow>
-      title={plural}
-      kind={registryKindOf(entry)}
-      description={
-        isExplained(entry.kind) && access?.group === entry.group ? (
-          <KindAbout kind={entry.kind} />
-        ) : undefined
-      }
-      noun={noun}
-      data={rows}
-      unread={printed.data?.unread}
-      isLoading={printed.isLoading}
-      error={printed.error}
-      dataUpdatedAt={printed.dataUpdatedAt}
-      slowed={printed.freshness.slowed}
-      onRetry={() => void printed.refetch()}
-      placeholder={printed.isPlaceholderData}
-      more={printed.data?.more}
-      columns={columns}
-      emptyStateLabel={plural}
-      widthsKey={`printed:${resource}`}
-      narrowingHelps={entry.namespaced}
-      listQuery={{
-        group: entry.group,
-        resource: entry.plural,
-        namespaced: entry.namespaced,
-      }}
-      getRowId={(row) => row.uid ?? `${row.namespace}/${row.name}`}
-      getRowHref={(row) => {
-        const link = objectLink(targetOf(row));
-        return link ? hrefOf(link) : "";
-      }}
-      getRowPeek={targetOf}
-      headerContent={
-        printed.data?.more ? (
-          <div className="flex items-center gap-3 text-sm text-fg-mut">
-            <span>
-              {t("empty", "printedMore", { count: rows?.length ?? 0 })}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={printed.isPlaceholderData}
-              onClick={() => setPages((n) => n + PAGES_PER_STEP)}
-            >
-              {t("empty", "showMore")}
-            </Button>
-          </div>
-        ) : null
-      }
-    />
+    <RowProblems.Provider value={problems}>
+      <ResourceList<PrintedRow>
+        title={plural}
+        kind={registryKindOf(entry)}
+        description={
+          isExplained(entry.kind) && access?.group === entry.group ? (
+            <KindAbout kind={entry.kind} />
+          ) : undefined
+        }
+        noun={noun}
+        data={rows}
+        unread={printed.data?.unread}
+        isLoading={printed.isLoading}
+        error={printed.error}
+        dataUpdatedAt={printed.dataUpdatedAt}
+        slowed={printed.freshness.slowed}
+        onRetry={() => void printed.refetch()}
+        placeholder={printed.isPlaceholderData}
+        more={printed.data?.more}
+        columns={columns}
+        emptyStateLabel={plural}
+        widthsKey={`printed:${resource}`}
+        narrowingHelps={entry.namespaced}
+        listQuery={{
+          group: entry.group,
+          resource: entry.plural,
+          namespaced: entry.namespaced,
+        }}
+        getRowId={(row) => row.uid ?? `${row.namespace}/${row.name}`}
+        getRowHref={(row) => {
+          const link = objectLink(targetOf(row));
+          return link ? hrefOf(link) : "";
+        }}
+        getRowPeek={targetOf}
+        headerContent={
+          printed.data?.more ? (
+            <Alert variant="warn" className="flex items-center gap-3">
+              <span>
+                {t("empty", "printedMore", { count: rows?.length ?? 0 })}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                pending={printed.isPlaceholderData}
+                onClick={() => setPages((n) => n + PAGES_PER_STEP)}
+              >
+                {t("empty", "showMore")}
+              </Button>
+            </Alert>
+          ) : null
+        }
+      />
+    </RowProblems.Provider>
   );
 }
 
@@ -332,7 +354,8 @@ function columnsOf(
       id: `printed-${index}`,
       size: sizeOf(column),
       meta: {
-        floor: named ? nameCellPx : text ? textFloor(index) : undefined,
+        floor: named ? nameFloorPx : text ? textFloor(index) : undefined,
+        ...(named ? { ideal: nameCellPx } : {}),
         yields,
         ...(byAge ? { label: AGE_LABEL } : {}),
       },
@@ -374,17 +397,35 @@ function Cell({
   target: PeekTarget | null;
   createdAt: string | null;
 }) {
+  const t = useT();
+  const problems = useContext(RowProblems);
   if (value === null || value === undefined || value === "") return <None />;
   // A printed column is a path into the object, and an address is one.
   const text = withoutCredentials(
     typeof value === "object" ? JSON.stringify(value) : String(value)
   );
-  if (target)
-    return (
+  if (target) {
+    const link = (
       <ObjectLink {...target} className="font-mono text-info hover:underline">
         {text}
       </ObjectLink>
     );
+    const problem = problemOfRow(
+      problems,
+      target.kind,
+      target.namespace ?? "",
+      target.name
+    );
+    return problem ? (
+      <div className="@container min-w-0">
+        <WithProblem problem={problem} role={null}>
+          {link}
+        </WithProblem>
+      </div>
+    ) : (
+      link
+    );
+  }
   // The server's own Age is an English duration ("8m38s"), typed "string".
   const at = CREATION.test(column.description)
     ? createdAt
@@ -401,5 +442,18 @@ function Cell({
     return <span className="text-fg-fnt">{text}</span>;
   if (column.columnType === "integer" || column.columnType === "number")
     return <span className="tabular-nums">{text}</span>;
+  if (text.includes(UNREAD_WORD))
+    return (
+      <span title={text}>
+        {text.split(UNREAD_WORD).map((part, index) => (
+          <Fragment key={index}>
+            {index > 0 && (
+              <UnreadMetric reason={t("cluster", "metricPrintedUnknown")} />
+            )}
+            {part}
+          </Fragment>
+        ))}
+      </span>
+    );
   return <span title={text}>{text}</span>;
 }

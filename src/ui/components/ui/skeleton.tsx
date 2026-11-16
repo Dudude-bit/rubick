@@ -40,13 +40,16 @@ interface TableSkeletonProps {
   grouped?: boolean;
 }
 
+/** What a list nobody has counted draws: most lists a skeleton stands in for are short, and a short one that lands under eight bars jumps. */
+const UNKNOWN_ROWS = 5;
+
 /** How full a cell's bar draws, cycled so columns read organically. */
 const BAR_FRACTIONS = [0.72, 0.45, 0.6, 0.38, 0.52];
 
 function TableSkeleton({
   widths,
-  columns = widths?.length ?? 4,
-  rows = 14,
+  columns = widths?.length || 4,
+  rows = UNKNOWN_ROWS,
   showSearch = true,
   compact = false,
   grouped = false,
@@ -64,7 +67,7 @@ function TableSkeleton({
   };
 
   const caption = (key: string) => (
-    <div key={key} className="px-2.5 pb-1 pt-3">
+    <div key={key} data-testid="skeleton-caption" className="px-2.5 pb-1 pt-3">
       <Skeleton className="h-2.5 w-24" />
     </div>
   );
@@ -91,6 +94,7 @@ function TableSkeleton({
         ...(grouped && row % 5 === 0 ? [caption(`caption-${row}`)] : []),
         <div
           key={row}
+          data-testid="skeleton-row"
           className={cn("flex items-center border-b border-hair", cellPadding)}
         >
           {Array.from({ length: columns }).map((_, column) => (
@@ -136,7 +140,8 @@ function BlockSkeleton({ showHeader = true, lines = 3 }: BlockSkeletonProps) {
 }
 
 /**
- * Skeleton for detail pages: title, tab strip, then blocks of rows.
+ * Skeleton for detail pages: title, tab strip, then the overview's single
+ * column of sections, as narrow as the real ones.
  */
 interface DetailSkeletonProps {
   tabCount?: number;
@@ -153,13 +158,15 @@ function DetailSkeleton({
     <div data-testid="detail-skeleton" className="space-y-4" aria-hidden>
       {showHeader && <Skeleton className="h-3.5 w-64" />}
 
-      <div className="flex gap-1">
-        {Array.from({ length: tabCount }).map((_, i) => (
-          <Skeleton key={i} className="h-6 w-20" />
-        ))}
-      </div>
+      {tabCount > 0 && (
+        <div className="flex gap-1">
+          {Array.from({ length: tabCount }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-20" />
+          ))}
+        </div>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="flex max-w-lg flex-col gap-[22px]">
         {Array.from({ length: rows }).map((_, i) => (
           <BlockSkeleton key={i} />
         ))}

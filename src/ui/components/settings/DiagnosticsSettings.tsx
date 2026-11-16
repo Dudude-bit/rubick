@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
+import { Unknown } from "@/components/ui/unknown";
 import {
   EnvironmentBlocks,
   EnvironmentBlocksReading,
@@ -78,14 +78,12 @@ export function DiagnosticsSettings() {
           <EnvironmentBlocks diagnostics={data} />
         </>
       ) : error ? (
-        <div className="text-xs" data-testid="diagnostics-unread">
-          <p className="flex items-center gap-1.5 text-err">
-            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-            {t("settings", "diagnosticsUnread")}
-          </p>
-          <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {errorToShow(error)}
-          </p>
+        <div data-testid="diagnostics-unread">
+          <Unknown
+            question={t("settings", "diagnosticsUnread")}
+            error={error}
+            onRetry={() => refetch()}
+          />
         </div>
       ) : (
         <Reading />
@@ -109,13 +107,10 @@ export function DiagnosticsSettings() {
         <Button
           variant="outline"
           size="sm"
-          disabled={isFetching}
+          pending={isFetching}
           onClick={() => void refetch()}
         >
-          <RefreshCw
-            className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           {t("settings", "readDiagnosticsAgain")}
         </Button>
 
@@ -131,7 +126,7 @@ export function DiagnosticsSettings() {
         {asked && (
           <span
             className={cn(
-              "ml-auto flex items-center gap-1 text-[11px] tabular-nums",
+              "ml-auto flex items-center gap-1 text-caption tabular-nums",
               error ? "text-err" : "text-fg-fnt"
             )}
           >
@@ -146,7 +141,7 @@ export function DiagnosticsSettings() {
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-[11px] text-fg-fnt">
+      <p className="mt-1.5 text-caption text-fg-fnt">
         {t("settings", "redactEverywhere")}
       </p>
 

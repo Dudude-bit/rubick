@@ -63,7 +63,7 @@ describe("the last button of a hand-built Helm table", () => {
       <HelmChartsTab
         searchKeyword="nginx"
         onSearchKeywordChange={vi.fn()}
-        results={[chart]}
+        search={{ keyword: "nginx", results: [chart], error: null }}
         isSearching={false}
         onSearch={vi.fn()}
         onInstall={vi.fn()}

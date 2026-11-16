@@ -149,7 +149,7 @@ describe("what the signed-in user may do", () => {
     scoped(["team-checkout", "payments"]);
     await renderWithRouter(<MyAccess />);
     await screen.findByText("In team-checkout");
-    fireEvent.click(screen.getByRole("tab", { name: "payments" }));
+    fireEvent.click(screen.getByRole("button", { name: "payments" }));
     expect(await screen.findByText("In payments")).toBeInTheDocument();
     expect(answers.asked).toContain("payments");
   });

@@ -1,6 +1,9 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { Spinner } from "@/components/ui/spinner";
+import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
 
@@ -191,7 +194,7 @@ function Door({ children }: { children: React.ReactNode }) {
 function Heading({ title, sub }: { title: string; sub?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-[3px]">
-      <h1 className="text-[13px] font-semibold tracking-tight text-fg">
+      <h1 className="text-title font-semibold tracking-tight text-fg">
         {title}
       </h1>
       {sub && <p className="text-xs text-fg-mut">{sub}</p>}
@@ -214,7 +217,7 @@ function Machine({
   return (
     <p
       className={cn(
-        "mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]",
+        "mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-caption",
         tone === "error" ? "text-err" : "text-fg-fnt"
       )}
     >
@@ -250,18 +253,42 @@ function Act({
   );
 }
 
-/** The kubeconfig as provenance, with both ways to change it in reach. */
-function SourceLine({
+type Kubeconfig = ReturnType<typeof useKubeconfigPath>;
+
+function ReloadAct({
   kubeconfig,
+  children,
 }: {
-  kubeconfig: ReturnType<typeof useKubeconfigPath>;
+  kubeconfig: Kubeconfig;
+  children: React.ReactNode;
 }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Act
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void Promise.resolve(kubeconfig.reload())
+          .catch(() => undefined)
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy && (
+        <Spinner size="xs" aria-hidden className="mr-1 inline align-middle" />
+      )}
+      {children}
+    </Act>
+  );
+}
+
+/** The kubeconfig as provenance, with both ways to change it in reach. */
+function SourceLine({ kubeconfig }: { kubeconfig: Kubeconfig }) {
   const t = useT();
   const show = useShownPath();
   const read = readFile(kubeconfig.source);
 
   return (
-    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-[11px] text-fg-fnt">
+    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-caption text-fg-fnt">
       <span>{t("cluster", "readFrom")}</span>
       <span className="break-all font-mono text-fg-mut">
         {read ? show(read) : t("cluster", "defaultLookup")}
@@ -272,9 +299,7 @@ function SourceLine({
       >
         {t("action", "change")}
       </Act>
-      <Act onClick={() => void kubeconfig.reload()}>
-        {t("action", "reload")}
-      </Act>
+      <ReloadAct kubeconfig={kubeconfig}>{t("action", "reload")}</ReloadAct>
       {kubeconfig.overridePath && (
         <Act
           onClick={() => kubeconfig.clearPath()}
@@ -296,11 +321,7 @@ function SourceLine({
  * column where reading stopped. The two call for opposite next moves: point
  * the app somewhere else, or go fix line 6.
  */
-function NoClusters({
-  kubeconfig,
-}: {
-  kubeconfig: ReturnType<typeof useKubeconfigPath>;
-}) {
+function NoClusters({ kubeconfig }: { kubeconfig: Kubeconfig }) {
   const t = useT();
   const source = kubeconfig.source;
   const found = source?.candidates.some((c) => c.exists) ?? false;
@@ -308,6 +329,25 @@ function NoClusters({
   // A file that did not parse was never read, whatever is on disk.
   const unreadable = Boolean(source?.error);
   const show = useShownPath();
+
+  if (kubeconfig.sourceError) {
+    return (
+      <>
+        <Unknown
+          question={t("settings", "kubeconfigUnreadable")}
+          error={kubeconfig.sourceError}
+          onRetry={() => kubeconfig.reload()}
+        />
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
+          <Act onClick={() => void kubeconfig.choose()}>
+            {t("action", "chooseFile")}
+          </Act>
+        </div>
+      </>
+    );
+  }
+
+  if (!source) return <Reading>{t("cluster", "readingKubeconfig")}</Reading>;
 
   if (found) {
     return (
@@ -322,13 +362,11 @@ function NoClusters({
             unreadable ? "configWillNotParseSub" : "configHasNoClustersSub"
           )}
         />
-        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
           <Act onClick={() => void kubeconfig.choose()}>
             {t("action", "chooseDifferentFile")}
           </Act>
-          <Act onClick={() => void kubeconfig.reload()}>
-            {t("action", "reload")}
-          </Act>
+          <ReloadAct kubeconfig={kubeconfig}>{t("action", "reload")}</ReloadAct>
         </div>
         <Machine>
           <span>{t("cluster", "wasRead")}</span>
@@ -352,9 +390,7 @@ function NoClusters({
         title={t("empty", "notConnectedYet")}
         sub={t("empty", "noKubeconfigFound")}
       />
-      <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
-        {t("empty", "getOneRunning")}
-      </p>
+      <Eyebrow className="mb-1 mt-5">{t("empty", "getOneRunning")}</Eyebrow>
       <Route name="Docker Desktop" hint={t("empty", "dockerDesktopHint")} />
       <Route
         name="minikube · kind · k3d"
@@ -364,13 +400,13 @@ function NoClusters({
         name={t("empty", "haveOneElsewhere")}
         hint={t("empty", "pointAtConfigHint")}
       />
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
         <Act onClick={() => void kubeconfig.choose()}>
           {t("action", "chooseFile")}
         </Act>
-        <Act onClick={() => void kubeconfig.reload()}>
+        <ReloadAct kubeconfig={kubeconfig}>
           {t("action", "lookAgain")}
-        </Act>
+        </ReloadAct>
       </div>
       <Machine>
         <span>{t("empty", "lookedAt")}</span>
@@ -406,7 +442,7 @@ function Route({ name, hint }: { name: string; hint: string }) {
     <div className="grid grid-cols-[6px_1fr_auto] items-center gap-[9px] px-[7px] py-[5px] text-xs">
       <span className="h-1.5 w-1.5 rounded-full border border-fg-fnt" />
       <span className="truncate text-fg-mid">{name}</span>
-      <span className="whitespace-nowrap text-[11px] text-fg-fnt">{hint}</span>
+      <span className="whitespace-nowrap text-caption text-fg-fnt">{hint}</span>
     </div>
   );
 }
@@ -448,7 +484,7 @@ function Connecting({
           }
         />
       </div>
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption text-fg-fnt">
         <Act onClick={onCancel}>{t("action", "cancel")}</Act>
         {startedAt && <span className="font-mono">{elapsed}</span>}
       </div>
@@ -539,7 +575,7 @@ function Failed({
           )}
         />
       </div>
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption text-fg-fnt">
         <Act onClick={onRetry}>{t("action", "retry")}</Act>
         {wayBack && (
           <Act onClick={() => onBack(wayBack)}>

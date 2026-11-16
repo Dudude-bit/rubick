@@ -11,6 +11,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 
 import { DETAIL_TAB_OPEN, TYPING_MS } from "@/lib/shortcuts";
 import { renderWithRouter } from "@/test/render";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { useShortcuts } from "./useShortcuts";
@@ -230,5 +231,30 @@ describe("the keys that are the same on every screen", () => {
     expect(
       (asked.mock.calls[0][0] as CustomEvent<{ tab: string }>).detail.tab
     ).toBe("logs");
+  });
+});
+
+describe("Alt+Left", () => {
+  /**
+   * Alt+Left did nothing on a detail page: only the arrow button went back.
+   * Fails if the key stops asking the tab to go back, or if it fires from a
+   * field, where it moves the caret.
+   */
+  it("goes back in the tab, and leaves a field to its caret", async () => {
+    await mount();
+    const goBack = vi
+      .spyOn(useScopeTabStore.getState(), "goBack")
+      .mockImplementation(() => {});
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+    });
+    expect(goBack).toHaveBeenCalledTimes(1);
+    act(() => {
+      fireEvent.keyDown(screen.getByLabelText("search"), {
+        key: "ArrowLeft",
+        altKey: true,
+      });
+    });
+    expect(goBack).toHaveBeenCalledTimes(1);
   });
 });

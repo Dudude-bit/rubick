@@ -145,7 +145,6 @@ export function PersistentVolumeClaimList() {
       subscribe,
       queryKey,
       detail: PVC_DETAIL,
-      reportFailure: toPlural(ResourceType.PersistentVolumeClaim),
     });
   const queryFn = () => commands.listPersistentVolumeClaimsIn(scope.wire);
   // Following the list the table reads, not asking it: what explains a

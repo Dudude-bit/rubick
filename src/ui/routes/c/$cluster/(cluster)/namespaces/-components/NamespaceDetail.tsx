@@ -27,6 +27,8 @@ import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { NamespaceInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { NamespaceContents } from "../../../-object/NamespaceContents";
 
 export function NamespaceDetail() {
   const t = useT();
@@ -41,6 +43,7 @@ export function NamespaceDetail() {
     setActiveTab,
     goBack,
     freshness,
+    refetch,
   } = useResourceDetail<NamespaceInfo>({
     resourceKind: ResourceType.Namespace,
     isClusterScoped: true,
@@ -78,10 +81,18 @@ export function NamespaceDetail() {
       content: (
         <>
           <KeyValueSection
-            title="Namespace"
+            title={t("columns", "namespace")}
             items={facts}
             className="max-w-lg"
           />
+          {name && (
+            <Section className="max-w-lg">
+              <NamespaceContents
+                namespace={name}
+                heading={(title) => <SectionHeader title={title} />}
+              />
+            </Section>
+          )}
           <KeyValueSection
             title={t("columns", "labels")}
             count={Object.keys(ns?.labels ?? {}).length}
@@ -93,7 +104,7 @@ export function NamespaceDetail() {
     },
     eventsTab(events, t, { kind: ResourceType.Namespace, name: name ?? "" }),
     yamlTab({
-      title: "Namespace YAML",
+      title: t("action", "kindYaml", { kind: ResourceType.Namespace }),
       yaml,
       resourceKind: ResourceType.Namespace,
       resourceName: name || "",
@@ -109,13 +120,16 @@ export function NamespaceDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.Namespace}
       title={ns?.name || name || ""}
       createdAt={ns?.createdAt}
       badges={
         ns &&
         ns.status !== "Active" && (
-          <span className="text-[11px] font-medium text-warn">{ns.status}</span>
+          <span className="text-caption font-medium text-warn">
+            {ns.status}
+          </span>
         )
       }
       onBack={goBack}

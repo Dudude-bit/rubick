@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { sortableColumn } from "@/components/ui/sortable-columns";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import {
   useColumnWidthsStore,
@@ -68,6 +69,8 @@ import {
 } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
 import { holdTitles } from "@/lib/hold-titles";
+import { usePointerOnTable } from "@/lib/pointer-hold";
+import { useTableSelection } from "./use-table-selection";
 import { columnFloor, columnIdeal, columnLabel } from "@/lib/column-label";
 import { useMetricsAbsence } from "@/lib/metrics-absence";
 import type { RowGrouping } from "@/components/ui/row-grouping";
@@ -130,8 +133,16 @@ interface DataTableProps<TData extends RowData> {
   /** Shown when the cluster genuinely has none of this resource. The
    *  "no search matches" case is handled separately. */
   emptyMessage?: string;
+  /** The next step beside `emptyMessage`: clearing what narrowed the rows to none. */
+  emptyAction?: React.ReactNode;
   /** Opt in to caption rows above runs of related rows. */
   grouping?: RowGrouping<TData> | null;
+  /** Told how many rows a search leaves, and `null` when none narrows them, so a title can say "5 of 89". */
+  onMatched?: (count: number | null) => void;
+  /** How many rows the first read will bring, where something already knows: the skeleton holds that many, up to a screen. */
+  loadingRows?: number | null;
+  /** The list will group its rows once they arrive: the skeleton holds caption lines. */
+  loadingGrouped?: boolean;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
   /** The kind the footer counts, where the label is not a kind the registry knows. */
@@ -140,6 +151,8 @@ interface DataTableProps<TData extends RowData> {
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
   partial?: boolean;
+  /** Why they are not, where it is not an unread namespace: the footer says so. */
+  partialWhy?: "previousScope" | "deadline";
   /** The read stopped at this many objects, so older ones are not among the rows. */
   cutAt?: number;
   /** The rows are the first of a longer list: no total, and a search has not seen the rest. */
@@ -206,6 +219,13 @@ const CONTROL_COLUMNS = new Set([ACTIONS_COLUMN_ID, "actions"]);
  */
 const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 
+/** The rows a skeleton may draw: what is known, but no more than the window holds under the header. */
+function screenRows(known: number, compact: boolean) {
+  const pitch = ESTIMATED_ROW_PX[compact ? "compact" : "comfortable"];
+  const fits = Math.max(1, Math.floor((window.innerHeight - 200) / pitch));
+  return Math.max(1, Math.min(known, fits));
+}
+
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
 
@@ -235,6 +255,9 @@ const SIDEWAYS_LANE = { overflowX: "scroll", paddingBottom: 6 } as const;
 const PINNED = "sticky left-0 z-[1] bg-canvas";
 /** The actions cell's right padding, which the table sets: a page's overlay scrollbar reaches over it, a port's laned one does not. */
 const ACTIONS_GUTTER = { paddingRight: "var(--actions-gutter)" };
+const ROW_RING =
+  "bg-hover [&>td]:shadow-[inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)] [&>td:first-child]:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)] [&>td:last-child]:shadow-[inset_-1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
+
 /** Opaque, so the row's own tint and selection ring are drawn again on top of it. */
 const PINNED_ROW_TINT =
   "group-hover:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
@@ -339,7 +362,9 @@ function BodyRowView<TData extends RowData>({
       tabIndex={keyboard ? (tabStop ? 0 : -1) : undefined}
       className={cn(
         clickable && "cursor-pointer",
-        selected && "bg-hover ring-1 ring-inset ring-info",
+        // Drawn on the cells: WebKitGTK does not position a row's own
+        // pseudo-element, so a ring there landed on the first cell only.
+        selected && ROW_RING,
         "relative group"
       )}
       onFocus={
@@ -602,6 +627,13 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
 
 const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
 
+const plainKey = (event: {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}) => !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+
 /**
  * Widgets that walk with Up and Down themselves; the list leaves those keys
  * to them. A tab strip walks with Left and Right, and nothing here uses j/k.
@@ -685,11 +717,16 @@ function DataTableInner<TData extends RowData>({
   enableKeyboardNav,
   getRowId,
   emptyMessage,
+  emptyAction,
   grouping = null,
+  loadingRows = null,
+  loadingGrouped = false,
+  onMatched,
   rowLabel,
   rowNoun,
   widthsKey,
   partial = false,
+  partialWhy,
   cutAt,
   more = false,
   share,
@@ -699,7 +736,7 @@ function DataTableInner<TData extends RowData>({
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
-  const { open: openPeek } = usePeek();
+  const { open: openPeek, target: openedPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -729,6 +766,7 @@ function DataTableInner<TData extends RowData>({
   // Narrowed in the deferred render itself, not in one more render at full
   // priority that an effect copying it into state used to cost per keystroke.
   const globalFilter = React.useDeferredValue(searchValue);
+  const settling = searchValue !== globalFilter;
 
   // Compact rows stay strictly single-line — a pod name like
   // `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the row
@@ -740,7 +778,8 @@ function DataTableInner<TData extends RowData>({
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
   // page exactly the flat list it was.
-  const groupingActive = React.useMemo(() => {
+  const rankedAcrossGroups = sorting.some((sort) => sort.id !== "name");
+  const groupable = React.useMemo(() => {
     if (!grouping) return false;
     const sizes = new Map<string, number>();
     for (const item of data) {
@@ -752,6 +791,7 @@ function DataTableInner<TData extends RowData>({
     ).length;
     return sizes.size >= (grouping.minGroups ?? 1) && full * 2 > sizes.size;
   }, [data, grouping]);
+  const groupingActive = groupable && !rankedAcrossGroups;
 
   // One namespace chosen is the same word on every row, and the scope bar
   // above already says it; several are grouped, and the caption says it.
@@ -900,16 +940,17 @@ function DataTableInner<TData extends RowData>({
   const actionCount = quickActions?.length ?? 0;
   const dataColumns = React.useMemo(
     () =>
-      actionCount === 0
+      (actionCount === 0
         ? columns
-        : columns.filter((col) => !CONTROL_COLUMNS.has(col.id ?? "")),
+        : columns.filter((col) => !CONTROL_COLUMNS.has(col.id ?? ""))
+      ).map(sortableColumn),
     [columns, actionCount]
   );
 
   // Per column, from every row the table holds rather than the ones a
   // search leaves, so typing does not move the columns.
   const absence = useMetricsAbsence();
-  const dataBounds = React.useMemo(() => {
+  const liveBounds = React.useMemo(() => {
     void fonts;
     return new Map(
       dataColumns.map((column) => [
@@ -921,6 +962,29 @@ function DataTableInner<TData extends RowData>({
       ])
     );
   }, [dataColumns, data, t, fonts, absence]);
+  const pointed = usePointerOnTable();
+  const columnIds = dataColumns.map(columnIdOf).join("\n");
+  const [lastLaidOut, setLastLaidOut] = React.useState({
+    columnIds,
+    bounds: liveBounds,
+    visibility: columnVisibility,
+  });
+  if (
+    !pointed &&
+    (lastLaidOut.bounds !== liveBounds ||
+      lastLaidOut.visibility !== columnVisibility)
+  ) {
+    setLastLaidOut({
+      columnIds,
+      bounds: liveBounds,
+      visibility: columnVisibility,
+    });
+  }
+  const columnsHeld = pointed && lastLaidOut.columnIds === columnIds;
+  const dataBounds = columnsHeld ? lastLaidOut.bounds : liveBounds;
+  const shownVisibility = columnsHeld
+    ? lastLaidOut.visibility
+    : columnVisibility;
 
   // A filled table's port draws its own scrollbar in a lane, so only a table
   // the page scrolls keeps the room the page's overlay scrollbar reaches over.
@@ -943,7 +1007,7 @@ function DataTableInner<TData extends RowData>({
       dataColumns
         .flatMap((column) => {
           const id = columnIdOf(column);
-          if (columnVisibility[id] === false) return [];
+          if (shownVisibility[id] === false) return [];
           const meta = column.meta as AppColumnMeta | undefined;
           const floor = dataBounds.get(id)?.floor ?? 0;
           return [{ id, floor, yields: meta?.yields }];
@@ -953,7 +1017,7 @@ function DataTableInner<TData extends RowData>({
             ? { ...column, floor: Math.min(column.floor, pinnedRoom) }
             : column
         ),
-    [dataColumns, columnVisibility, dataBounds, pinnedRoom]
+    [dataColumns, shownVisibility, dataBounds, pinnedRoom]
   );
   const pinnedId = dataYields[0]?.id;
   // The row's buttons fold into one that opens its menu, which offers them
@@ -1010,14 +1074,14 @@ function DataTableInner<TData extends RowData>({
   const visibility = React.useMemo<ColumnVisibilityState>(
     () =>
       yieldedKey === ""
-        ? columnVisibility
+        ? shownVisibility
         : {
-            ...columnVisibility,
+            ...shownVisibility,
             ...Object.fromEntries(
               yieldedKey.split("\n").map((id) => [id, false])
             ),
           },
-    [columnVisibility, yieldedKey]
+    [shownVisibility, yieldedKey]
   );
 
   const table = useTable({
@@ -1077,10 +1141,16 @@ function DataTableInner<TData extends RowData>({
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
   const containerRef = React.useRef<HTMLDivElement>(null);
   useRowControlsParked(containerRef, keyboardNavEnabled);
+  useTableSelection(containerRef);
   const filterRef = React.useRef<HTMLInputElement>(null);
 
-  const filteredRows = table.getFilteredRowModel().rows.length;
+  const matched = table.getFilteredRowModel().rows.length;
+  const filteredRows =
+    settling && matched === 0 ? table.getCoreRowModel().rows.length : matched;
   const totalRows = data.length;
+  const narrowedTo = searchValue && !settling ? matched : null;
+  React.useEffect(() => onMatched?.(narrowedTo), [onMatched, narrowedTo]);
+  React.useEffect(() => () => onMatched?.(null), [onMatched]);
   const nounsOf = (n: number) =>
     rowNoun ? { n, ...rowNoun } : rowNouns(rowLabel ?? "", n);
 
@@ -1203,6 +1273,13 @@ function DataTableInner<TData extends RowData>({
       pendingFocus.current = null;
       focusRow(row);
     }
+  });
+
+  const firstWhenSettled = React.useRef(false);
+  React.useEffect(() => {
+    if (!firstWhenSettled.current || settling) return;
+    firstWhenSettled.current = false;
+    select(0);
   });
 
   const isDrawn = (rowIndex: number) => {
@@ -1346,6 +1423,12 @@ function DataTableInner<TData extends RowData>({
         return;
       case "Enter":
         if (isClickable) handleRowGesture(row, event);
+        return;
+      case " ":
+        if (isClickable && target === rowAt && plainKey(event)) {
+          event.preventDefault();
+          handleRowGesture(row, event);
+        }
     }
   };
 
@@ -1380,6 +1463,12 @@ function DataTableInner<TData extends RowData>({
     // A focused button or link owns its own Enter.
     if (event.key === "Enter" && isClickable) {
       if (target && target !== document.body && !inside) return false;
+      handleRowGesture(row.original, event);
+      return true;
+    }
+    if (event.key === " " && isClickable && plainKey(event)) {
+      if (target && target !== document.body) return false;
+      event.preventDefault();
       handleRowGesture(row.original, event);
       return true;
     }
@@ -1508,7 +1597,7 @@ function DataTableInner<TData extends RowData>({
       >
         <TableCell
           colSpan={visibleColumnCount}
-          className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+          className="px-2.5 pb-1 pt-3 text-caption text-fg-fnt"
         >
           {pinned ? (
             <span className="sticky left-2.5 inline-block">{item.caption}</span>
@@ -1540,9 +1629,12 @@ function DataTableInner<TData extends RowData>({
   if (isLoading) {
     return (
       <TableSkeleton
-        widths={columns.map((column) => column.size ?? 100)}
+        widths={table.getVisibleFlatColumns().map((column) => column.getSize())}
         compact={isCompact}
-        grouped={grouping !== null}
+        grouped={loadingGrouped}
+        rows={
+          loadingRows === null ? undefined : screenRows(loadingRows, isCompact)
+        }
       />
     );
   }
@@ -1558,7 +1650,10 @@ function DataTableInner<TData extends RowData>({
       actions={quickActions}
       folded={foldActions ? openRowMenuAt : null}
     >
-      <div className={cn("flex flex-col gap-2", fill && "min-h-0")}>
+      <div
+        data-pointer-hold=""
+        className={cn("flex flex-col gap-2", fill && "min-h-0")}
+      >
         <div className="flex flex-none flex-wrap items-center justify-between gap-2">
           {/* A search field is a text entry, not a panel: the box only
             appears once it has focus or a value. */}
@@ -1586,7 +1681,8 @@ function DataTableInner<TData extends RowData>({
                     else event.currentTarget.blur();
                   } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
                     event.preventDefault();
-                    select(0);
+                    if (settling) firstWhenSettled.current = true;
+                    else select(0);
                   }
                 }}
                 className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
@@ -1598,7 +1694,7 @@ function DataTableInner<TData extends RowData>({
               whole is only advice: "why is this list slow" and "why is my
               pod not here" have the same answer often enough. */}
             {cutAt !== undefined ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-fg-mut">
+              <div className="flex items-center gap-1.5 text-caption text-fg-mut">
                 <AlertTriangle
                   className="h-3.5 w-3.5 shrink-0 text-warn"
                   aria-hidden="true"
@@ -1608,11 +1704,20 @@ function DataTableInner<TData extends RowData>({
                 </span>
               </div>
             ) : (
-              isLong && (
-                <span className="text-[11px] text-fg-fnt">
+              isLong &&
+              searchValue.trim() === "" && (
+                <span className="text-caption text-fg-fnt">
                   {t("readings", "longListTrim", { n: data.length })}
                 </span>
               )
+            )}
+            {groupable && rankedAcrossGroups && (
+              <span
+                className="text-caption text-fg-fnt"
+                title={t("readings", "ungroupedByTitle")}
+              >
+                {t("readings", "ungroupedBy")}
+              </span>
             )}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1670,6 +1775,12 @@ function DataTableInner<TData extends RowData>({
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
             containerStyle={{
+              scrollbarGutter: "stable",
+              // The lane is always there: one that comes and goes with the
+              // row count moves every column by its width.
+              ...(fill || shouldVirtualScroll
+                ? { overflowY: "scroll" as const }
+                : undefined),
               ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
                 : undefined),
@@ -1794,7 +1905,7 @@ function DataTableInner<TData extends RowData>({
                        * none of these" are different problems with different
                        * fixes; saying "No results." for both leaves the user
                        * guessing which one they're looking at. */}
-                      {searchValue ? (
+                      {settling ? null : searchValue ? (
                         <div className="flex flex-col items-center gap-2">
                           <SearchX
                             className="h-5 w-5 text-fg-mut"
@@ -1807,13 +1918,13 @@ function DataTableInner<TData extends RowData>({
                             </span>
                           </p>
                           {more && (
-                            <p className="max-w-md text-[11px] text-balance text-fg-fnt">
+                            <p className="max-w-md text-caption text-balance text-fg-fnt">
                               {t("empty", "notAllSearched")}
                             </p>
                           )}
                           {searched && (
                             <p
-                              className="max-w-md text-[11px] text-balance text-fg-fnt"
+                              className="max-w-md text-caption text-balance text-fg-fnt"
                               data-testid="searched-columns"
                             >
                               {t("empty", "searchedColumns", {
@@ -1822,9 +1933,8 @@ function DataTableInner<TData extends RowData>({
                             </p>
                           )}
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 text-xs"
                             onClick={() => changeSearch("")}
                           >
                             {t("action", "clearSearch")}
@@ -1841,6 +1951,7 @@ function DataTableInner<TData extends RowData>({
                               <T section="empty" k="noResourcesInScope" />
                             )}
                           </p>
+                          {emptyAction}
                         </div>
                       )}
                     </div>
@@ -1870,7 +1981,7 @@ function DataTableInner<TData extends RowData>({
           stable page 2 — objects appear and vanish under the reader, so a row
           moves to another page they have to go and find — and Ctrl-F would
           only search the rows on screen. */}
-        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-[11px] text-fg-fnt">
+        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-caption text-fg-fnt">
           <div>
             {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one
@@ -1884,7 +1995,15 @@ function DataTableInner<TData extends RowData>({
               : more
                 ? t("readings", "rowsSoFar", nounsOf(filteredRows))
                 : partial
-                  ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                  ? t(
+                      "readings",
+                      partialWhy === "previousScope"
+                        ? "rowsPreviousScope"
+                        : partialWhy === "deadline"
+                          ? "rowsBeforeDeadline"
+                          : "rowsWhereAnswered",
+                      nounsOf(filteredRows)
+                    )
                   : filteredRows === totalRows
                     ? t("readings", "objectCount", nounsOf(totalRows))
                     : t("readings", "rowsOfTotal", {
@@ -1895,9 +2014,11 @@ function DataTableInner<TData extends RowData>({
           {yieldedNames && (
             <span
               className="flex min-w-0 max-w-full items-center gap-1"
-              title={t("readings", "columnsYieldedHint", {
-                columns: yieldedNames,
-              })}
+              title={t(
+                "readings",
+                openedPeek ? "columnsYieldedHint" : "columnsYieldedHintNoPanel",
+                { columns: yieldedNames }
+              )}
               data-testid="columns-yielded"
             >
               <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />

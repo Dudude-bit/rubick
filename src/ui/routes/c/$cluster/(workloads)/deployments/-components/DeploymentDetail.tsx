@@ -3,14 +3,7 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import {
-  AlignLeft,
-  BadgeCheck,
-  Info,
-  Layers2,
-  Scale,
-  History,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2, History } from "lucide-react";
 
 import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -50,7 +43,11 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
+import { PodsTroubleLines } from "../../../-object/PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../../../-object/pods-trouble";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   readCountMark,
@@ -63,7 +60,7 @@ import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { useRollback } from "../../../-object/useRollback";
 import { revisionOfReplicaSet } from "@/lib/changes";
-import { ScaleDialog } from "../../../-object/ScaleDialog";
+import { ScaleControl } from "../../../-object/ScaleControl";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
@@ -82,7 +79,6 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
-  ReasonedAction,
   ReasonTip,
 } from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
@@ -109,7 +105,7 @@ function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px]",
+        "inline-flex items-center gap-1 text-caption",
         ROLE_TEXT[role]
       )}
       data-testid="pods-ahead"
@@ -124,7 +120,6 @@ function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
 
 export function DeploymentDetail() {
   const t = useT();
-  const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
   const [selectedContainer, setSelectedContainer] = useState("");
@@ -157,6 +152,8 @@ export function DeploymentDetail() {
 
   const chain = useChainAnswer(ResourceType.Deployment, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
+  const podsTrouble = usePodsTrouble(ResourceType.Deployment, namespace, name);
 
   const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
   const podsQuery = useLiveQuery({
@@ -296,7 +293,6 @@ export function DeploymentDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
           : [],
-      onSuccess: () => setScaleDialogOpen(false),
     }
   );
 
@@ -365,10 +361,6 @@ export function DeploymentDetail() {
       },
     }
   );
-
-  const openScaleDialog = () => {
-    if (deployment) setScaleDialogOpen(true);
-  };
 
   const openImageDialog = (containerName: string, currentImage: string) => {
     setSelectedContainer(containerName);
@@ -500,6 +492,7 @@ export function DeploymentDetail() {
                 pods={pods}
                 podsError={podsError}
                 podsPending={podsPending}
+                onRetryPods={() => void refetchPods()}
                 idle={
                   desired === 0
                     ? t("empty", "kindScaledToZero", {
@@ -559,6 +552,7 @@ export function DeploymentDetail() {
       id: toPlural(ResourceType.Pod),
       label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
+      reading: podsPending,
       mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
       content: (
         <PodListCard
@@ -576,7 +570,7 @@ export function DeploymentDetail() {
       // A count rather than a severity: an old revision at zero is what a
       // rollout leaves behind, not a fault.
       mark: revisionsError
-        ? readCountMark(null, t("empty", "revisionsUnread"))
+        ? readCountMark(null, t("empty", "revisionsUnread"), revisionsError)
         : readCountMark(revisionsRead ? revisionsRead.length : null, null),
       content: revisionsError ? (
         <Unknown
@@ -680,12 +674,20 @@ export function DeploymentDetail() {
         title={deployment?.name || ""}
         namespace={deployment?.namespace}
         createdAt={deployment?.createdAt}
+        findings={findings}
+        trouble={withPodsTrouble(findings, podsTrouble)}
+        statusRole={rollout && workloadRole(rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+          [t("nav", "revisions"), revisionsError],
+        ])}
         statusBadge={rollout && <RolloutBadge rollout={rollout} />}
         badges={
           rollout &&
           replicas && (
             <>
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {readyBesideBadge(replicas.ready, replicas.desired, rollout, t)}
               </span>
               {ahead && <PodsAhead {...ahead} />}
@@ -696,11 +698,16 @@ export function DeploymentDetail() {
         actions={
           <>
             <PinAction kind="Deployment" namespace={namespace} name={name} />
-            <ReasonedAction
-              label={t("action", "scale")}
+            <ScaleControl
+              kind={ResourceType.Deployment}
+              name={name ?? ""}
+              namespace={namespace || null}
+              current={deployment?.replicas.desired}
+              ready={!!deployment}
               reason={patchDenied}
-              icon={Scale}
-              onClick={openScaleDialog}
+              warnings={scaleWarnings(connections, intercept("Scale"), t)}
+              reading={connections.isPending}
+              mutation={scaleMutation}
             />
             <RestartAction
               kind={ResourceType.Deployment}
@@ -740,6 +747,7 @@ export function DeploymentDetail() {
                 refused={deployment?.podsRefused ?? null}
                 className="mb-1"
               />
+              <PodsTroubleLines pods={podsTrouble} />
               <RolloutSummary
                 rollout={rollout}
                 subject={{ kind: ResourceType.Deployment, name, namespace }}
@@ -756,17 +764,6 @@ export function DeploymentDetail() {
       {/* Both are opened from the strip's row, and so from whichever tab the
           reader is on. Inside the Overview's panel they would be unmounted the
           moment that tab was not the open one. */}
-      <ScaleDialog
-        warnings={scaleWarnings(connections, intercept("Scale"), t)}
-        open={scaleDialogOpen}
-        onOpenChange={setScaleDialogOpen}
-        kind={ResourceType.Deployment}
-        name={name ?? ""}
-        namespace={namespace || null}
-        current={deployment?.replicas.desired}
-        busy={scaleMutation.isPending}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
 
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent>
@@ -791,18 +788,18 @@ export function DeploymentDetail() {
             {imageGate.input}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setImageDialogOpen(false)}
+              disabled={updateImageMutation.isPending}
+            >
               {t("action", "cancel")}
             </Button>
             <ReasonTip reason={patchDenied}>
               <Button
                 onClick={() => !patchDenied && updateImageMutation.mutate()}
-                disabled={
-                  !patchDenied &&
-                  (updateImageMutation.isPending ||
-                    !newImage ||
-                    imageGate.blocked)
-                }
+                pending={updateImageMutation.isPending}
+                disabled={!patchDenied && (!newImage || imageGate.blocked)}
                 aria-disabled={patchDenied ? true : undefined}
                 className={cn(patchDenied && "cursor-default opacity-40")}
               >

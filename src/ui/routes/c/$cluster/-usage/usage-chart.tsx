@@ -26,6 +26,8 @@ import {
   type UsageSample,
 } from "@/lib/usage-history";
 import { useT } from "@/i18n/useT";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { BAND_H } from "./band-frame";
 import type { en } from "@/i18n/catalogue";
 
@@ -43,6 +45,12 @@ const Band = React.lazy(() => import("./usage-band"));
  */
 export const WATCHING_NOTE = "watchingFromNow" as const;
 export const NO_LIMIT_NOTE = "noLimitSet" as const;
+
+/** What a block says of a missing ceiling: a pod's, a workload template's, or one that could not be read. */
+export type NoLimitNote =
+  | typeof NO_LIMIT_NOTE
+  | "noLimitsDeclared"
+  | "limitsNotKnown";
 
 export interface UsageChartProps {
   label: string;
@@ -74,6 +82,8 @@ export interface UsageChartProps {
    * window nobody is watching.
    */
   live?: boolean;
+  /** Nothing runs behind this object, so a missing reading is the expected one. */
+  idle?: boolean;
   /**
    * A supplier's window is on screen rather than the watched buffer. The
    * number on the right then carries the window's average and peak as well,
@@ -128,6 +138,7 @@ function UsageChartInner({
   current,
   suppressNote = false,
   live = true,
+  idle = false,
   ranged = false,
   request = null,
   declared,
@@ -145,6 +156,7 @@ function UsageChartInner({
   const ratio =
     limit !== null && limit > 0 && value !== null ? value / limit : null;
   const average = ranged ? averageOf(points) : null;
+  const firstAt = points.find((p) => p.v !== null)?.t ?? null;
   const peak = ranged && live ? peakOf(points) : null;
   const peakAt = peak === null ? null : points.find((p) => p.v === peak)?.t;
 
@@ -154,7 +166,7 @@ function UsageChartInner({
        *  own top margin — any tighter and it reads as a caption on the band
        *  above it. */}
       <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2">
-        <span className="text-[11px] text-fg-mut">{label}</span>
+        <span className="text-caption text-fg-mut">{label}</span>
         {/* No reading at all draws no band. A band with nothing in it is the
          *  empty plot this replaced, one size larger. */}
         {value === null && drawn === 0 ? (
@@ -175,16 +187,19 @@ function UsageChartInner({
             />
           </React.Suspense>
         )}
-        <span className="text-right text-[11px] text-fg-mut">
+        <span className="text-right text-caption text-fg-mut">
           {value === null ? (
             // The block only draws bands while metrics-server is available,
             // so a missing value here is the server having nothing to say
-            // about this object — usually a container that is not running.
+            // about this object. Where nothing runs behind the window that is
+            // the answer, not a fault.
             <span
               className="text-fg-fnt"
-              title={t("empty", "noMetricsReading")}
+              title={idle ? undefined : t("empty", "noMetricsReading")}
             >
-              {t("readings", "usageNotReporting")}
+              {idle
+                ? t("empty", "nothingRunning")
+                : t("readings", "usageNotReporting")}
             </span>
           ) : (
             <>
@@ -217,7 +232,7 @@ function UsageChartInner({
         </span>
       </div>
       {ranged && average !== null && (
-        <p className="-mt-1 pb-1 pr-1.5 text-right font-mono text-[10px] tabular-nums text-fg-fnt">
+        <p className="-mt-1 pb-1 pr-1.5 text-right font-mono text-micro tabular-nums text-fg-fnt">
           {t("readings", "usageAvg", { value: formatQuantity(average, type) })}
           {peak !== null && (
             <>
@@ -232,25 +247,61 @@ function UsageChartInner({
           )}
         </p>
       )}
-      <Note>
+      <UsageNote>
         {suppressNote || (drawn === 0 && value === null)
           ? null
-          : drawn <= 1 && live
-            ? t("empty", WATCHING_NOTE)
+          : drawn <= 1 && live && firstAt !== null
+            ? t("empty", WATCHING_NOTE, { time: clockOf(firstAt) })
             : (limit === null || limit <= 0) && noLimitNote !== null
               ? t("empty", noLimitNote)
               : null}
-      </Note>
+      </UsageNote>
     </div>
   );
 }
 
-/** Sits under the band, in the plot's own column. */
-function Note({ children }: { children?: React.ReactNode }) {
+const PLOT_GUTTER_PX = 104;
+
+/** A line under the bands, aligned to the plot's own column. */
+export function UsageNote({
+  children,
+  tone = "fnt",
+}: {
+  children?: React.ReactNode;
+  tone?: "fnt" | "mut" | "warn";
+}) {
   if (!children) return null;
   return (
-    <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+    <p
+      style={{ paddingLeft: PLOT_GUTTER_PX }}
+      className={cn(
+        "pb-1 pr-1.5 text-caption leading-snug",
+        tone === "warn"
+          ? "text-warn"
+          : tone === "mut"
+            ? "text-fg-mut"
+            : "text-fg-fnt"
+      )}
+    >
       {children}
     </p>
+  );
+}
+
+/** Two rows in the shape of the bands, held while the first reading is on its way. */
+export function UsageRowsSkeleton() {
+  return (
+    <div role="status" aria-busy="true">
+      {[0, 1].map((row) => (
+        <div
+          key={row}
+          className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2"
+        >
+          <Skeleton className="h-3 w-14" />
+          <Skeleton style={{ height: BAND_H }} />
+          <Skeleton className="ml-auto h-3 w-24" />
+        </div>
+      ))}
+    </div>
   );
 }

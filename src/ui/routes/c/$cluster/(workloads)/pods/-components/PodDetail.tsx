@@ -82,6 +82,8 @@ import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { podForwardPorts } from "@/lib/port-forward";
 import { PodNetworkPolicies } from "./PodNetworkPolicies";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
+import { probeFailure, probeFailureHeadline } from "@/lib/probe-failure";
+import { unreadOf, type Problem } from "../../../-object/problem";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -93,6 +95,7 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { ExitWords, RestartsWords } from "../../../-object/ExitAgo";
+import { ProbeFailureDetail } from "../../../-object/FindingLine";
 import { RunLogWords } from "../../../-object/RunLogWords";
 import { parts } from "@/i18n/parts";
 import { commands } from "@/lib/commands";
@@ -139,11 +142,7 @@ import type {
   PodInfo,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import {
-  toastedUnanswered,
-  toastError,
-  toastWriteError,
-} from "@/lib/toast-error";
+import { toastError, toastWriteError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
 import { TONE_TEXT } from "@/lib/tone";
 
@@ -272,6 +271,28 @@ function crashLoop(
   };
 }
 
+/** A container the kubelet keeps restarting while its events say a probe fails: the exit it left and the probe's own words, the link between them named as the guess it is. */
+function probeProblem(
+  pod: PodInfo,
+  events: readonly EventInfo[] | undefined,
+  t: ReturnType<typeof useT>
+): Omit<PodProblem, "tab"> | null {
+  const containers = podContainers(pod);
+  const failure = probeFailure(
+    containers.map((c) => ({ container: c.name, n: c.restartCount })),
+    events,
+    Date.now()
+  );
+  if (!failure || !containers.some((c) => c.name === failure.container))
+    return null;
+  return {
+    reason: failure.probe,
+    headline: probeFailureHeadline(failure, t),
+    detail: <ProbeFailureDetail pod={pod} failure={failure} />,
+    tone: "warn",
+  };
+}
+
 /**
  * What is wrong with this pod, in one sentence, or nothing.
  *
@@ -283,6 +304,7 @@ function crashLoop(
 function podProblem(
   pod: PodInfo | null | undefined,
   waiting: boolean,
+  events: readonly EventInfo[] | undefined,
   t: ReturnType<typeof useT>
 ): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
@@ -360,6 +382,9 @@ function podProblem(
       tab: "containers",
     };
   }
+
+  const probing = probeProblem(pod, events, t);
+  if (probing) return { ...probing, tab: "containers" };
 
   const condition = failingCondition(pod.status.conditions, [
     "Ready",
@@ -532,7 +557,7 @@ export function PodDetail() {
     name ?? null
   );
 
-  const { podMetrics, podStatus, podSampledAt } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt, podMetricsQuery } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     enabled: !!pod && !gone,
@@ -562,16 +587,11 @@ export function PodDetail() {
       });
       refetch();
     },
-    onError: (err) => {
-      if (toastedUnanswered(err)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "failedToRestartPod", {
-          error: errorToShow(err),
-        }),
-        variant: "destructive",
-      });
-    },
+    onError: (err) =>
+      toastWriteError(
+        t("action", "failedToRestartPod", { name: name ?? "" }),
+        err
+      ),
   });
 
   const podKey = `${namespace}/${name}`;
@@ -790,11 +810,14 @@ export function PodDetail() {
         })
     : undefined;
 
+  const podEnded =
+    pod?.status.phase === "Succeeded" || pod?.status.phase === "Failed";
+  const podIdle = podEnded || podWithMetrics?.idle === true;
   const placement: KeyValue[] = [
     {
       label: t("columns", "node"),
       value: pod?.nodeName ? (
-        <span className="inline-flex items-baseline gap-2">
+        <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-2">
           <NodeRef name={pod.nodeName} />
           {nodeIsSpot && <SpotMark says="spot" />}
         </span>
@@ -852,8 +875,24 @@ export function PodDetail() {
     serviceAccountRow(pod?.serviceAccountName, pod?.namespace, t),
   ];
 
-  const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
+  const eventsRead = podEvents.error ? undefined : podEvents.data;
+  const problem = useMemo(
+    () => podProblem(pod, waiting, eventsRead, t),
+    [pod, waiting, eventsRead, t]
+  );
   const causeSaid = cause && causeWords(cause, t);
+  const toneSaid = causeSaid?.tone ?? problem?.tone;
+  const badgeRole = statusRole(pod?.status.display ?? "");
+  const chipProblem: Problem | null =
+    (toneSaid === "err" || toneSaid === "warn") &&
+    badgeRole !== "err" &&
+    badgeRole !== "warn"
+      ? {
+          tone: toneSaid,
+          n: 1,
+          title: causeSaid?.sentence ?? problem?.headline ?? "",
+        }
+      : null;
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -867,6 +906,22 @@ export function PodDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Pod, pod);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const likely = (part: "panel" | "actions" = "panel") =>
+    pod && (
+      <MostLikelyPanel
+        part={part}
+        pod={pod}
+        cause={cause}
+        events={podEvents.data ?? []}
+        eventsError={podEvents.error ? errorToShow(podEvents.error) : null}
+        // The log tab opened on the current run with no container selected
+        // landed on whatever the pane happened to be showing.
+        onOpenTab={(tab, container) =>
+          tab === "logs" && container ? openLogs(container) : openTab(tab)
+        }
+      />
+    );
+
   return (
     <>
       <ChainWatches services={chain.services} reads={[chain.key]} />
@@ -878,6 +933,9 @@ export function PodDetail() {
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.Pod}
+        unread={unreadOf([[t("columns", "events"), podEvents.error]])}
+        trouble={chipProblem}
+        statusRole={badgeRole}
         title={pod?.name || name || "Pod"}
         namespace={pod?.namespace || namespace}
         createdAt={pod?.createdAt}
@@ -903,13 +961,13 @@ export function PodDetail() {
               // `endsWith`: `Init:CrashLoopBackOff` already ends in the init
               // container's own reason, and both would say it twice.
               !pod?.status.display?.endsWith(problem.reason) && (
-                <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
+                <span className={`text-caption ${TONE_TEXT[problem.tone]}`}>
                   {problem.reason}
                 </span>
               )}
             {pod?.status.failedAt && <EndedAgo at={pod.status.failedAt} />}
             {pod?.status.gone === "replaced" && (
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {t("cluster", "attentionReplacedPod")}
               </span>
             )}
@@ -925,6 +983,7 @@ export function PodDetail() {
             </p>
           )
         }
+        tellsCause={Boolean(problem || causeSaid)}
         summary={
           (problem || causeSaid || pod?.status.gone === "replaced") && (
             <>
@@ -940,16 +999,21 @@ export function PodDetail() {
                   }
                   tone={causeSaid?.tone ?? problem?.tone}
                   action={
-                    <DetailAction
-                      label={t(
-                        "action",
-                        (problem?.tab ?? "conditions") === "containers"
-                          ? "seeContainers"
-                          : "seeConditions"
-                      )}
-                      icon={ArrowRight}
-                      onClick={() => setActiveTab(problem?.tab ?? "conditions")}
-                    />
+                    <>
+                      <DetailAction
+                        label={t(
+                          "action",
+                          (problem?.tab ?? "conditions") === "containers"
+                            ? "seeContainers"
+                            : "seeConditions"
+                        )}
+                        icon={ArrowRight}
+                        onClick={() =>
+                          setActiveTab(problem?.tab ?? "conditions")
+                        }
+                      />
+                      {likely("actions")}
+                    </>
                   }
                 />
               )}
@@ -1004,25 +1068,7 @@ export function PodDetail() {
                 {podStatus?.status !== "available" && (
                   <MetricsStatusBanner status={podStatus} />
                 )}
-                {pod && (
-                  <MostLikelyPanel
-                    pod={pod}
-                    cause={cause}
-                    events={podEvents.data ?? []}
-                    eventsError={
-                      podEvents.error ? errorToShow(podEvents.error) : null
-                    }
-                    // The log tab opened on the current run with no
-                    // container selected, so the row that says "read the
-                    // last lines of X before the exit" landed on whatever
-                    // the pane happened to be showing.
-                    onOpenTab={(tab, container) =>
-                      tab === "logs" && container
-                        ? openLogs(container)
-                        : openTab(tab)
-                    }
-                  />
-                )}
+                {likely()}
 
                 {/* A Pod is the only member of the family with no count block: it
                   does not have a replica count, it *is* one, and the page that
@@ -1049,6 +1095,14 @@ export function PodDetail() {
                     <UsageBlock
                       kind={ResourceType.Pod}
                       uid={pod?.uid}
+                      live={!podIdle}
+                      scope={podIdle ? t("empty", "nothingRunning") : undefined}
+                      idleNote={t(
+                        "empty",
+                        podEnded
+                          ? "usagePodEndedNote"
+                          : "usagePodNotRunningNote"
+                      )}
                       cpu={podWithMetrics?.cpuMillicores}
                       memory={podWithMetrics?.memoryBytes}
                       cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
@@ -1066,6 +1120,13 @@ export function PodDetail() {
                       restarts={pod?.restartCount ?? null}
                       sampledAt={podSampledAt}
                       status={podStatus}
+                      reading={{
+                        pending: podMetricsQuery.isPending,
+                        error: podMetricsQuery.data
+                          ? null
+                          : podMetricsQuery.error,
+                        retry: podMetricsQuery.refetch,
+                      }}
                       connections={connections.data}
                       history={
                         pod?.namespace && pod?.name

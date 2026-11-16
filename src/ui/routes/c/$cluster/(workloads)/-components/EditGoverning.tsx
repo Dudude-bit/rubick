@@ -22,7 +22,7 @@ export function EditGoverning({
       })}
       resourceKey={{ kind: object.kind, name: object.name, namespace }}
       fetchYaml={() => fetchResourceYaml(object.kind, object.name, namespace)}
-      className="ml-1.5 h-5 px-1.5 text-[11px]"
+      className="ml-1.5 h-5 px-1.5 text-caption"
     />
   );
 }

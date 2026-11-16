@@ -19,6 +19,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   badgeCellPx,
+  statusCellPx,
   nodeCellPx,
   yielding,
 } from "../../../-list/columns";
@@ -44,9 +45,24 @@ import { PodSelectorBanner } from "./PodSelectorBanner";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { useShellAskStore } from "@/stores/shellAskStore";
 import { NodeRef } from "../../../-object/NodeRef";
+import { WithProblem } from "../../../-object/ProblemTone";
+import {
+  PROBLEM_MARK_COMPACT_PX,
+  PROBLEM_MARK_PX,
+  PROBLEM_STALE_PX,
+  type Problem,
+} from "../../../-object/problem";
+import { problemOfRow, rowProblems } from "../../../-object/row-items";
+import { useAttention } from "@/hooks/useAttention";
+import { statusRole } from "@/lib/status-role";
+
+const STATUS_FLOOR_GLYPHS = 15;
+
+const cappedBadgePx = (words: readonly string[]) =>
+  Math.min(badgeCellPx(words), statusCellPx(STATUS_FLOOR_GLYPHS));
 
 /** A pod row that also knows whether its node is still reporting. */
-type PodRow = WithNodeSilence<PodWithMetrics>;
+type PodRow = WithNodeSilence<PodWithMetrics> & { problem?: Problem | null };
 
 /**
  * How long ago the last restart was.
@@ -82,6 +98,17 @@ function restartsCellPx(t: Translate, rows: readonly PodRow[]): number {
       ? `${most} (${t("action", "agoSuffix", { age: formatTimeUnit(59, "minute") })})`
       : "0";
   return widestText([said], "mono", 7.2) + 20;
+}
+
+const RESTARTS_AGE_GLYPHS = 6;
+
+/** The count and the start of its age, the rest whole on hover: what a port with no column left to give up still has to hold. */
+function restartsFloorPx(t: Translate, rows: readonly PodRow[]): number {
+  const most = Math.max(...rows.map((pod) => pod.restartCount));
+  return Math.min(
+    restartsCellPx(t, rows),
+    Math.ceil((String(most).length + RESTARTS_AGE_GLYPHS) * 7.2) + 20
+  );
 }
 
 function readyText(pod: PodRow): string {
@@ -122,23 +149,48 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
-      // The widest status its rows say; "CreateContainerConfigError" before any row is read.
+      // The widest status its rows say, up to STATUS_FLOOR_GLYPHS (the rest
+      // is whole on hover), with a problem's mark at its narrowest: one long
+      // status must not take the room Node and IP need for every row. A mark
+      // that was not rechecked needs no more: its words give way to the count.
       floor: (_t, rows: readonly PodRow[]) =>
         rows.length === 0
           ? 224
-          : badgeCellPx(rows.map((pod) => pod.status.display)),
-      // Room for "already replaced" beside the badge while the port has it.
+          : Math.max(
+              cappedBadgePx(rows.map((pod) => pod.status.display)),
+              ...rows
+                .filter((pod) => pod.problem)
+                .map(
+                  (pod) =>
+                    cappedBadgePx([pod.status.display]) +
+                    PROBLEM_MARK_COMPACT_PX
+                )
+            ),
+      // The mark's words and "already replaced" beside the badge while the port has room.
       ideal: (t, rows: readonly PodRow[]) => {
+        const widest = badgeCellPx(rows.map((pod) => pod.status.display));
         const replaced = rows.filter((pod) => pod.status.gone === "replaced");
-        return replaced.length === 0
-          ? 0
-          : badgeCellPx(replaced.map((pod) => pod.status.display)) +
-              6 +
-              widestText(
-                [t("cluster", "attentionReplacedPod")],
-                "caption",
-                6.2
-              );
+        const troubled = rows.filter((pod) => pod.problem);
+        return Math.max(
+          widest,
+          replaced.length === 0
+            ? 0
+            : badgeCellPx(replaced.map((pod) => pod.status.display)) +
+                6 +
+                widestText(
+                  [t("cluster", "attentionReplacedPod")],
+                  "caption",
+                  6.2
+                ),
+          troubled.length === 0
+            ? 0
+            : badgeCellPx(troubled.map((pod) => pod.status.display)) +
+                6 +
+                PROBLEM_MARK_PX +
+                (troubled.some((pod) => pod.problem?.stale)
+                  ? PROBLEM_STALE_PX
+                  : 0)
+        );
       },
       label: { section: "columns", key: "status" },
       share: (pod: PodRow, t) =>
@@ -149,15 +201,20 @@ export const columns: ColumnDef<PodRow>[] = [
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
     cell: ({ row }) => (
-      <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
-        <span className="flex-none">
-          <PodStatusBadge
-            pod={row.original}
-            silence={row.original.nodeSilence ?? null}
-          />
+      <span className="@container flex min-w-0 max-w-full items-baseline gap-1.5">
+        <span className="min-w-0">
+          <WithProblem
+            problem={row.original.problem ?? null}
+            role={statusRole(row.original.status.display)}
+          >
+            <PodStatusBadge
+              pod={row.original}
+              silence={row.original.nodeSilence ?? null}
+            />
+          </WithProblem>
         </span>
         {row.original.status.gone === "replaced" && (
-          <span className="truncate text-[11px] text-fg-mut">
+          <span className="shrink-[10] truncate text-caption text-fg-mut">
             <T section="cluster" k="attentionReplacedPod" />
           </span>
         )}
@@ -202,7 +259,9 @@ export const columns: ColumnDef<PodRow>[] = [
     enableSorting: true,
     meta: {
       floor: (t, rows: readonly PodRow[]) =>
-        rows.length === 0 ? 136 : restartsCellPx(t, rows),
+        rows.length === 0 ? 136 : restartsFloorPx(t, rows),
+      ideal: (t, rows: readonly PodRow[]) =>
+        rows.length === 0 ? 0 : restartsCellPx(t, rows),
       label: { section: "columns", key: "restarts" },
       share: (pod: PodRow) => ({
         text: String(pod.restartCount),
@@ -223,6 +282,7 @@ export const columns: ColumnDef<PodRow>[] = [
     header: columnHeader("columns", "node"),
     meta: {
       yields: 2,
+      sort: (pod: PodRow) => pod.nodeName,
       floor: (_t, rows: readonly PodRow[]) =>
         nodeCellPx(rows, (pod) => pod.nodeName),
       share: (pod: PodRow, t) =>
@@ -246,6 +306,7 @@ export const columns: ColumnDef<PodRow>[] = [
     header: columnHeader("columns", "ip"),
     meta: {
       yields: 1,
+      sort: (pod: PodRow) => pod.podIp,
       floor: IPV4_CELL_PX,
       share: (pod: PodRow, t) =>
         pod.podIp
@@ -276,10 +337,25 @@ export function PodList() {
     refetch,
   } = usePodsWithMetrics();
   const filter = usePodFilter();
-  const rows = useMemo(
-    () => narrowPods(podsWithMetrics, filter),
-    [podsWithMetrics, filter]
+  const attention = useAttention();
+  const problems = useMemo(
+    () => rowProblems(attention?.items ?? [], ResourceType.Pod),
+    [attention]
   );
+  const rows = useMemo(() => {
+    const narrowed = narrowPods(podsWithMetrics, filter);
+    if (problems.size === 0) return narrowed;
+    // Only a pod with a problem is a new object: the rest keep their identity.
+    return narrowed.map((pod) => {
+      const problem = problemOfRow(
+        problems,
+        ResourceType.Pod,
+        pod.namespace,
+        pod.name
+      );
+      return problem ? { ...pod, problem } : pod;
+    });
+  }, [podsWithMetrics, filter, problems]);
 
   const quickActions = useMemo<
     (

@@ -1,9 +1,13 @@
 import { AlertCircle, Download, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ReadAgain } from "@/components/ui/read-again";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
+import { toastError } from "@/lib/toast-error";
 import { OutLink } from "@/components/ui/out-link";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { RUBICK_DOCS } from "@/lib/docs";
@@ -68,7 +72,33 @@ export function AboutSettings() {
     downloadAndInstall,
   } = useUpdaterStore();
 
-  const { data: appInfo } = useAppInfo();
+  const appInfoQuery = useAppInfo();
+  const appInfo = appInfoQuery.data;
+  const appInfoValue = (
+    value: string | undefined,
+    retry: boolean
+  ): ReactNode =>
+    appInfoQuery.isPending ? (
+      <Spinner
+        size="xs"
+        role="status"
+        aria-label={t("action", "reading")}
+        className="text-fg-fnt"
+      />
+    ) : appInfoQuery.isError ? (
+      retry ? (
+        <ReadAgain
+          error={appInfoQuery.error}
+          onRetry={() => appInfoQuery.refetch()}
+        />
+      ) : (
+        <span className="text-caption text-fg-fnt">
+          {t("settings", "notRead")}
+        </span>
+      )
+    ) : (
+      value
+    );
 
   return (
     <div className="flex flex-col gap-5">
@@ -78,7 +108,7 @@ export function AboutSettings() {
           keywords={t("settings", "searchVersionWords")}
           control={
             <span className="font-mono text-xs text-fg">
-              {appInfo?.version ?? "…"}
+              {appInfoValue(appInfo?.version, true)}
             </span>
           }
         />
@@ -114,7 +144,7 @@ export function AboutSettings() {
           keywords={t("settings", "searchRuntimeWords")}
           control={
             <span className="font-mono text-xs text-fg-mut">
-              {appInfo?.tauriVersion ?? "…"}
+              {appInfoValue(appInfo?.tauriVersion, false)}
             </span>
           }
         />
@@ -146,22 +176,23 @@ export function AboutSettings() {
           control={
             canInstall === false ? (
               // No button where pressing it can only end in a failed install.
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {t("settings", "managedUpdates")}
               </span>
-            ) : available && !downloading ? (
+            ) : available ? (
               <Button
                 size="sm"
-                onClick={() => {
-                  toast({
-                    title: t("settings", "downloadingUpdate"),
-                    description: t("settings", "downloadingUpdateHint"),
-                  });
-                  downloadAndInstall();
-                }}
+                pending={downloading}
+                onClick={() =>
+                  void downloadAndInstall().catch((failure) =>
+                    toastError(t("settings", "installationFailed"), failure)
+                  )
+                }
               >
-                <Download className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                {t("settings", "downloadAndInstall")}
+                <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                {downloading
+                  ? t("settings", "downloadingUpdate")
+                  : t("settings", "downloadAndInstall")}
               </Button>
             ) : (
               <Button
@@ -183,12 +214,10 @@ export function AboutSettings() {
                     });
                   }
                 }}
-                disabled={checking || downloading}
+                pending={checking}
+                disabled={downloading}
               >
-                <RefreshCw
-                  className={`mr-1.5 h-3 w-3 ${checking ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 {checking
                   ? t("settings", "checkingUpdates")
                   : t("settings", "checkForUpdates")}
@@ -199,13 +228,16 @@ export function AboutSettings() {
           {downloading && (
             <div className="flex items-center gap-2">
               <Progress value={progress} className="max-w-xs" />
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {progress}%
+              </span>
+              <span className="text-caption text-fg-fnt">
+                {t("settings", "downloadingUpdateHint")}
               </span>
             </div>
           )}
           {error && (
-            <p className="flex items-center gap-1.5 text-[11px] text-err">
+            <p className="flex items-center gap-1.5 text-caption text-err">
               <AlertCircle className="h-3 w-3 flex-none" aria-hidden="true" />
               {error}
             </p>

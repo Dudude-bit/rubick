@@ -1,20 +1,21 @@
 import { useState } from "react";
-import { CircleX, Lock } from "lucide-react";
 
 import { useT } from "@/i18n/useT";
 import { EventRows } from "@/components/object/detail-blocks";
-import { ReadAgain } from "@/components/ui/read-again";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import type { EventInfo } from "@/generated/types";
 import {
   aboutAnother,
   eventsUnreadWords,
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
-import { errorToShow, isRefusal } from "@/lib/error-utils";
-import { cn, formatWhen } from "@/lib/utils";
+import { isRefusal } from "@/lib/error-utils";
+import { formatWhen } from "@/lib/utils";
 import { useHeldRows } from "../-list/held-rows";
 import { HeldUpdates } from "../-list/HeldUpdates";
+import { useObjectUnread } from "./object-unread";
+import { WaitsOnObject } from "./WaitsOnObject";
 
 const NO_EVENTS: EventInfo[] = [];
 
@@ -38,6 +39,7 @@ export function ObjectEventsBody({
   compact?: boolean;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const { data, error } = query;
   const [pointed, setPointed] = useState(false);
   const rows = shown ?? data ?? NO_EVENTS;
@@ -46,41 +48,29 @@ export function ObjectEventsBody({
   const about = everyObject
     ? (rows[0]?.namespace ?? "")
     : `${subject.kind}/${subject.namespace}/${subject.name}`;
-  const held = useHeldRows(rows, pointed && rows.length > 0, about);
-  if (error) {
-    const refused = isRefusal(error);
+  const held = useHeldRows(
+    rows,
+    pointed && rows.length > 0,
+    about,
+    (event) => event.uid
+  );
+  if (error)
     return (
-      <div className="py-1" data-testid="events-unread">
-        <p
-          data-read={refused ? "refused" : "failed"}
-          className={cn(
-            "flex items-center gap-1.5 text-xs",
-            refused ? "text-warn" : "text-err"
-          )}
-        >
-          {refused ? (
-            <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          ) : (
-            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          )}
-          {t("empty", eventsUnreadWords(error))}
-        </p>
-        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-          {errorToShow(error)}
-        </p>
-        <ReadAgain
+      <div
+        data-testid="events-unread"
+        data-read={isRefusal(error) ? "refused" : "failed"}
+      >
+        <Unknown
+          question={t("empty", eventsUnreadWords(error))}
           error={error}
-          onRetry={() => void query.refetch()}
-          className="mt-1.5"
+          onRetry={() => query.refetch()}
         />
       </div>
     );
-  }
   if (!data)
     return (
-      <div className="flex flex-col gap-1.5" data-testid="events-reading">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-3/4" />
+      <div data-testid="events-reading">
+        <TextSkeleton lines={2} />
       </div>
     );
   return (
@@ -104,7 +94,7 @@ export function ObjectEventsBody({
                 "empty",
                 everyObject ? "noEventsInNamespace" : "noEventsForObject"
               )}
-            <span className="mt-0.5 block text-[11px]">
+            <span className="mt-0.5 block text-caption">
               {t("empty", "eventsNoneReadAt", {
                 time: formatWhen(query.dataUpdatedAt, "clock"),
               })}
@@ -118,28 +108,21 @@ export function ObjectEventsBody({
         </p>
       )}
       {query.ownedUnread && (
-        <p
-          className={cn(
-            "mt-1.5 flex items-start gap-1.5 text-xs",
-            isRefusal(query.ownedUnread.error) ? "text-warn" : "text-err"
-          )}
+        <div
+          className="mt-1.5"
           data-testid="owned-events-unread"
+          data-read={isRefusal(query.ownedUnread.error) ? "refused" : "failed"}
         >
-          {isRefusal(query.ownedUnread.error) ? (
-            <Lock className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          {unreadObject ? (
+            <WaitsOnObject ownedEvents unread={unreadObject} />
           ) : (
-            <CircleX
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
+            <Unknown
+              question={t("empty", query.ownedUnread.unread)}
+              error={query.ownedUnread.error}
+              onRetry={() => query.refetch()}
             />
           )}
-          <span>
-            {t("empty", query.ownedUnread.unread)}{" "}
-            <span className="font-mono text-fg-fnt">
-              {errorToShow(query.ownedUnread.error)}
-            </span>
-          </span>
-        </p>
+        </div>
       )}
     </div>
   );

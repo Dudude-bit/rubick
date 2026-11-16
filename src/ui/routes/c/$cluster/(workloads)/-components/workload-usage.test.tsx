@@ -1,9 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getPodsMetrics: vi.fn() },
+  commands: {
+    getPodsMetrics: vi.fn(),
+    forgetDiscovery: () => Promise.resolve(),
+  },
 }));
 
 vi.mock("@/integrations", async (importOriginal) => ({
@@ -124,6 +128,45 @@ describe("WorkloadUsage with nothing running", () => {
   });
 });
 
+describe("WorkloadUsage whose pods all run no container", () => {
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+    vi.mocked(commands.getPodsMetrics).mockResolvedValue({
+      status: "ok",
+      data: { items: [], sampledAt: null },
+    } as never);
+  });
+
+  /**
+   * A Deployment whose only pod crash-loops counted that pod as running, summed
+   * nothing and said "not reporting", where the pod's own page says nothing
+   * runs. Fails if the page says "not reporting" for it, or loses the words the
+   * Pod page and the list use.
+   */
+  it("says nothing is running, in the words the pod uses, and not that it is not reporting", () => {
+    const looping = {
+      ...pod("api-1", "Running"),
+      containers: [
+        {
+          state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
+        },
+      ],
+    } as unknown as PodInfo;
+    view({
+      kind: "Deployment",
+      pods: [looping],
+      idle: "None of this Deployment's pods is running.",
+    });
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "nothing running"
+    );
+    expect(screen.queryByText(/not reporting/i)).toBeNull();
+    expect(screen.getByText(/has a container running now/)).toBeVisible();
+    expect(screen.queryByText(/None of this Deployment/)).toBeNull();
+  });
+});
+
 describe("WorkloadUsage whose pods were not read", () => {
   beforeEach(() => {
     useUsageHistoryStore.getState().clear();
@@ -146,7 +189,8 @@ describe("WorkloadUsage whose pods were not read", () => {
     expect(screen.queryByText(/None of this Deployment/)).toBeNull();
     const count = screen.getByTestId("section-count");
     expect(count).toHaveTextContent("pods not read");
-    expect(count.querySelector("svg")).toHaveClass("lucide-eye-off");
+    // A refusal wears the lock every could-not-look wears.
+    expect(count.querySelector("svg")).toHaveClass("lucide-lock");
     expect(
       screen.getByText(
         /summed from this Deployment's pods, and they could not be read/
@@ -164,6 +208,68 @@ describe("WorkloadUsage whose pods were not read", () => {
     );
   });
 
+  /**
+   * A Deployment scaled to zero showed "still reading" for
+   * about 10 s before "nothing running", with 0/0 already on screen. Fails
+   * if a workload that asks for no pods waits on its pod read to say so, or
+   * if one that asks for some stops waiting.
+   */
+  it("says nothing runs at once for a workload that asks for no pods", () => {
+    const replica = {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    };
+    const scaled = (desired: number) =>
+      view({
+        kind: "Deployment",
+        podsPending: true,
+        template: { replica, replicas: { desired } },
+        idle: "This Deployment is scaled to zero.",
+      });
+    const { unmount } = scaled(0);
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "nothing running"
+    );
+    expect(screen.getByText(/scaled to zero/)).toBeVisible();
+    unmount();
+
+    scaled(2);
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "still reading"
+    );
+  });
+
+  /** Fails if a refused pod read is a dead end with no way to ask again. */
+  it("offers to read the pods again", async () => {
+    const onRetryPods = vi.fn();
+    view({
+      kind: "Deployment",
+      podsError: new Error("pods is forbidden"),
+      onRetryPods,
+    });
+    await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    await waitFor(() => expect(onRetryPods).toHaveBeenCalled());
+  });
+
+  /** Fails if the wait for the pods is drawn as a bare header that grows two rows when they arrive. */
+  it("holds the shape of the rows while the pods have not answered", () => {
+    view({ podsPending: true });
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+
+  /**
+   * The chart arrives with a note under it where no history supplier
+   * answers, and the block grew about 38 px when it landed. Fails if the
+   * wait does not hold a line for it.
+   */
+  it("holds the line the chart's note will take while the pods have not answered", () => {
+    const { container } = view({ podsPending: true });
+    expect(container.querySelector("[data-held-note]")).not.toBeNull();
+  });
+
   /** Fails if a failed re-read hides pods the last read found. */
   it("keeps the pods a read found before the next one failed", () => {
     view({
@@ -173,6 +279,26 @@ describe("WorkloadUsage whose pods were not read", () => {
       idle: "This Job has finished.",
     });
     expect(screen.getByText(/This Job has finished/i)).toBeInTheDocument();
+  });
+});
+
+describe("WorkloadUsage whose pods run but whose metrics read failed", () => {
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+  });
+
+  /**
+   * Running pods and a metrics read that threw drew "not reporting" on both
+   * rows. Fails if the failure is said as the pods reporting nothing.
+   */
+  it("says the metrics could not be read instead of not reporting", async () => {
+    vi.mocked(commands.getPodsMetrics).mockRejectedValue(new Error("boom"));
+    view({ pods: [pod("api-1", "Running")] });
+    expect(
+      await screen.findByText(/Could not read CPU and memory/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("not reporting")).toBeNull();
   });
 });
 
@@ -219,7 +345,9 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getByText(/from prometheus.monitoring:9090/i)).toBeVisible();
     expect(screen.getByText(/This Job has finished/i)).toBeVisible();
   });
@@ -237,11 +365,11 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.queryByText(/watching from now/i)).toBeNull();
-    expect(
-      screen.queryByText(/watched since you opened this page/i)
-    ).toBeNull();
+    expect(screen.queryByText(/watched since \d{1,2}:\d{2}/i)).toBeNull();
     expect(screen.queryByText(/so far/i)).toBeNull();
   });
 
@@ -258,7 +386,9 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getAllByText(/^peak$/)).toHaveLength(2);
   });
 
@@ -375,7 +505,9 @@ describe("WorkloadUsage with a pod running", () => {
       pods: [pod("stateful-demo-0", "Running")],
       idle: "This StatefulSet is scaled to zero.",
     });
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getByText(/summed over 1 pod/i)).toBeInTheDocument();
     expect(screen.queryByText(/scaled to zero/i)).not.toBeInTheDocument();
   });

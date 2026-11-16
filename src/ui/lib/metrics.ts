@@ -1,9 +1,12 @@
 import type { PodMetrics, NodeMetrics, NodeInfo } from "@/generated/types";
 import type { PodRow } from "@/lib/pod-rows";
+import { hasTerminated } from "@/lib/pod-status";
 
 export interface PodWithMetrics extends PodRow {
   cpuMillicores: number | null;
   memoryBytes: number | null;
+  /** It has finished or runs no container now: nothing to measure, which is neither a zero nor a reading that failed. */
+  idle?: boolean;
 }
 
 export interface NodeWithMetrics extends NodeInfo {
@@ -14,7 +17,14 @@ export interface NodeWithMetrics extends NodeInfo {
 export interface ResourceMetrics {
   cpuMillicores: number | null;
   memoryBytes: number | null;
+  /** No pod of it runs, by a pod read that answered: nothing to measure, which is neither a zero nor a reading that failed. */
+  idle?: boolean;
 }
+
+/** Nothing of it is running now, between crashes or still starting: metrics-server has no sample for it and will not until a container runs. */
+const runsNothing = (pod: PodRow) =>
+  pod.containers.length > 0 &&
+  !pod.containers.some((container) => container.state.type === "running");
 
 const podRows = new WeakMap<PodRow, PodWithMetrics>();
 
@@ -43,6 +53,10 @@ export function mergePodsWithMetrics(
       ...pod,
       cpuMillicores,
       memoryBytes,
+      ...((hasTerminated(pod) ||
+        (runsNothing(pod) && memoryBytes === null)) && {
+        idle: true,
+      }),
     };
     podRows.set(pod, row);
     return row;
@@ -116,10 +130,15 @@ export function attachAggregatedPodMetrics<
 >(
   resources: T[],
   pods: PodWithMetrics[],
-  ownerOf: PodOwner
+  ownerOf: PodOwner,
+  /** The pod list answered: a workload with none of them running then has nothing to measure, not an unknown amount. */
+  podsRead = false
 ): Array<T & ResourceMetrics> {
   const byOwner = new Map<string, PodWithMetrics[]>();
   for (const pod of pods) {
+    // A finished pod uses nothing and metrics-server has dropped it, as the
+    // workload's Usage block counts only its running pods.
+    if (hasTerminated(pod)) continue;
     const owner = ownerOf(pod);
     if (owner === null) continue;
     const at = key(pod.namespace, owner);
@@ -135,6 +154,7 @@ export function attachAggregatedPodMetrics<
       ...resource,
       cpuMillicores: aggregated.cpuMillicores,
       memoryBytes: aggregated.memoryBytes,
+      ...(podsRead && own.every((pod) => pod.idle) && { idle: true }),
     };
   });
 }

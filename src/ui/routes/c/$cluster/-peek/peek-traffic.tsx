@@ -35,7 +35,9 @@ import {
 import { PeekHeading } from "./peek-heading";
 import { ChainWatches } from "../-object/ChainWatches";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
+import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "../-object/object-unread";
+import { WaitsOnObject } from "../-object/WaitsOnObject";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -85,6 +87,7 @@ function TrafficPath({
   chain: ConnectionsRead;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
   const isServiceish = kind === "Service" || kind === "Endpoints";
@@ -183,10 +186,10 @@ function TrafficPath({
     // reads in — this line is the router, not its hostname.
     ...shownRoutes.map((route) => (
       <div key={`route/${route.host}${route.path}`}>
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           <RouteSource route={route} /> ({route.source.kind})
         </p>
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           <CopyableAddress
             value={routeAddress(route)}
             label={t("columns", "address")}
@@ -197,7 +200,7 @@ function TrafficPath({
     )),
     ...(vendorRoutes.length > shownRoutes.length
       ? [
-          <p key="more" className="text-[11px] text-fg-fnt">
+          <p key="more" className="text-caption text-fg-fnt">
             {t("empty", "andMore", {
               n: vendorRoutes.length - shownRoutes.length,
             })}
@@ -220,7 +223,7 @@ function TrafficPath({
       key: `entry/${entry.object.kind}/${entry.object.namespace ?? ""}/${entry.object.name}`,
       entries: [
         <div key="entry">
-          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt">
+          <p className="flex flex-wrap items-baseline gap-x-1.5 text-caption text-fg-fnt">
             <ResourceRef
               kind={entry.object.kind}
               name={entry.object.name}
@@ -233,7 +236,7 @@ function TrafficPath({
                   kind: entry.object.kind,
                   name: entry.object.name,
                 })}
-                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
+                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-micro leading-none"
               >
                 ?
               </span>
@@ -262,7 +265,7 @@ function TrafficPath({
               >
                 <span
                   className={cn(
-                    "text-[8px] leading-relaxed",
+                    "text-micro leading-relaxed",
                     // Three readings, not two. A door nobody judged is not
                     // a door that is fine: an Ingress way in is built without
                     // asking who serves its class, and it wore this dot green
@@ -297,7 +300,7 @@ function TrafficPath({
                     door.host
                   )}
                 </span>
-                <span className="whitespace-nowrap text-[11px] text-fg-fnt">
+                <span className="whitespace-nowrap text-caption text-fg-fnt">
                   {door.broken ? (
                     <span className="text-err">{door.broken}</span>
                   ) : (
@@ -317,7 +320,7 @@ function TrafficPath({
               </div>
             ))}
             {entry.moreDoors > 0 && (
-              <p className="pl-[16px] text-[11px] text-fg-fnt">
+              <p className="pl-[16px] text-caption text-fg-fnt">
                 {t("empty", "andMore", { n: entry.moreDoors })}…
               </p>
             )}
@@ -333,7 +336,7 @@ function TrafficPath({
       entries: services.map((entry) => (
         <p
           key={`${entry.namespace}/${entry.name}`}
-          className="text-[11px] text-fg-fnt"
+          className="text-caption text-fg-fnt"
         >
           <ResourceRef
             kind="Service"
@@ -350,7 +353,7 @@ function TrafficPath({
     levels.push({
       key: "publishes",
       entries: [
-        <p key="publishes" className="text-[11px] text-fg-fnt">
+        <p key="publishes" className="text-caption text-fg-fnt">
           <ResourceRef
             kind="Service"
             name={target.name}
@@ -365,7 +368,7 @@ function TrafficPath({
   levels.push({
     key: "self",
     entries: [
-      <p key="self" className="text-[11px] text-fg-fnt">
+      <p key="self" className="text-caption text-fg-fnt">
         {/* The selection tint the app already means "current" by. */}
         <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
           <ResourceName kind={kind} name={target.name} showKind={false} />
@@ -379,7 +382,7 @@ function TrafficPath({
       key: "behind",
       tone: stop ? stopTone(stop) : undefined,
       entries: [
-        <p key="endpoints" className="text-[11px] text-fg-fnt">
+        <p key="endpoints" className="text-caption text-fg-fnt">
           <ResourceRef
             kind="Endpoints"
             name={target.name}
@@ -395,7 +398,7 @@ function TrafficPath({
         ...(nearMiss ? [<ClosestPods key="near" near={nearMiss} />] : []),
         ...(behind
           ? [
-              <p key="proxy" className="text-[11px] text-fg-fnt">
+              <p key="proxy" className="text-caption text-fg-fnt">
                 {t("count", "vendorProxyHosts", {
                   vendor: behind.vendor,
                   n: behind.hosts,
@@ -429,25 +432,31 @@ function TrafficPath({
   return (
     <div>
       <PeekHeading title={t("nav", "trafficPath")} />
-      {conns.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadConnections", {
-            reason: errorToShow(conns.error),
-          })}
-        </p>
-      )}
+      {conns.error &&
+        (unreadObject ? (
+          <WaitsOnObject className="my-1" unread={unreadObject} />
+        ) : (
+          <Unknown
+            className="my-1"
+            question={t("empty", "couldNotReadConnections")}
+            error={conns.error}
+            onRetry={() => conns.refetch()}
+          />
+        ))}
       {routed.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotAskRoutes")}{" "}
-          <span className="text-fg-fnt">{errorToShow(routed.error)}</span>
-        </p>
+        <Unknown
+          className="my-1"
+          question={t("empty", "couldNotAskRoutes")}
+          error={routed.error}
+        />
       )}
       {gatewaysQuery.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadGateways", {
-            message: errorToShow(gatewaysQuery.error),
-          })}
-        </p>
+        <Unknown
+          className="my-1"
+          question={t("empty", "couldNotReadGateways")}
+          error={gatewaysQuery.error}
+          onRetry={() => gatewaysQuery.refetch()}
+        />
       )}
       <div className="pb-1">
         {levels.map((level, index) => {
@@ -472,7 +481,7 @@ function TrafficPath({
         })}
       </div>
       {doors.unresolved.length > 0 && (
-        <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
+        <p className="mt-1 border-t border-hair pt-2 text-caption text-fg-fnt">
           {doors.unresolved.map((route, index) => (
             <span key={`${route.kind}/${route.name}`}>
               {index > 0 && ", "}
@@ -488,7 +497,7 @@ function TrafficPath({
         </p>
       )}
       {doors.mesh.length > 0 && (
-        <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
+        <p className="mt-1 border-t border-hair pt-2 text-caption text-fg-fnt">
           {doors.mesh.map((route, index) => (
             <span key={`${route.kind}/${route.name}`}>
               {index > 0 && ", "}
@@ -512,7 +521,7 @@ function ClosestPods({ near }: { near: NearMiss }) {
   const t = useT();
   const shown = near.pods.slice(0, 3);
   return (
-    <p className="text-[11px] text-fg-mut">
+    <p className="text-caption text-fg-mut">
       {parts(t("nav", "stopNearMissNote", { lacks: near.lacks }), {
         pods: (
           <>

@@ -32,9 +32,12 @@ import { useLocaleStore } from "@/stores/localeStore";
 import {
   AGE_CELL_PX,
   NAME_CELL_PX,
+  badgeCellPx,
   NODE_CELL_PX,
   statusCellPx,
 } from "./columns";
+
+import { DELIVERY_COLUMN } from "./delivery-list-column";
 
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
@@ -280,15 +283,60 @@ describe("the Pods status column", () => {
       "CreateContainerConfigError".length * 7.2 + 14 + 20
     );
   });
+
+  /**
+   * A Running pod with a failing probe drew its mark past the column's edge;
+   * then the whole mark in the floor pushed Node and IP off a 1280 window.
+   * Fails if the floor stops holding the mark at its narrowest, grows to the
+   * mark's words, or the ideal stops asking for them.
+   */
+  it("holds a problem's mark at its narrowest and asks for its words while there is room", () => {
+    const status = pods.find((c) => c.id === "status") ?? {};
+    const troubled = [
+      {
+        status: { display: "Running" },
+        problem: { tone: "err", n: 1, title: "probe" },
+      },
+    ];
+    const floor = columnFloor(status, en, troubled);
+    expect(floor).toBeGreaterThanOrEqual(badgeCellPx(["Running"]) + 36);
+    expect(floor).toBeLessThan(
+      badgeCellPx(["Running"]) + 6 + Math.ceil(13 * 6.6)
+    );
+    expect(columnIdeal(status, en, troubled)).toBeGreaterThanOrEqual(
+      badgeCellPx(["Running"]) + 6 + Math.ceil(13 * 6.6)
+    );
+  });
 });
 
 describe("the Name column", () => {
-  /** The name is what a reader aims at; fails if a list's Name column can be drawn narrower than a pod's name. */
+  /** The name is what a reader aims at; fails if a list's Name column stops asking for a pod's whole name while the port has room for it. */
   it.each(PAGES)(
-    "%s never draws its Name under the shared floor",
+    "%s asks for the shared width of a Name while the port has room",
     (_page, columns) => {
       const name = columns.find((c) => c.accessorKey === "name");
-      expect(columnFloor(name ?? {}, en)).toBeGreaterThanOrEqual(NAME_CELL_PX);
+      expect(columnIdeal(name ?? {}, en, [])).toBeGreaterThanOrEqual(
+        NAME_CELL_PX
+      );
+    }
+  );
+
+  /**
+   * The Deployments list beside a peek scrolled sideways because its Name
+   * alone held 280px. Fails if a list's Name floor goes back over 20 glyphs
+   * and the icon and copy mark, or under 18 (`argocd-repo-server`) of them.
+   */
+  it.each(PAGES)(
+    "%s lets its Name give way to 20 glyphs beside a peek",
+    (_page, columns) => {
+      const name = columns.find((c) => c.accessorKey === "name") ?? {};
+      const floor = columnFloor(name, en, [{ name: "x".repeat(40) }]);
+      expect(floor).toBeLessThanOrEqual(
+        Math.ceil(20 * 7.2 + 2 * (14 + 4) + 20)
+      );
+      expect(floor).toBeGreaterThanOrEqual(
+        Math.ceil("argocd-repo-server".length * 7.2 + 2 * (14 + 4) + 20)
+      );
     }
   );
 
@@ -608,19 +656,33 @@ describe("a value a cell says in words", () => {
 
   const unmeasured = [{ name: "web-0" }];
 
-  /** Lena read "нет зам…" under Память on Nodes: fails if a metric column stops holding the words it says when there is no value. */
+  /** Fails if a metric column stops holding the could-not-look glyph it draws when there is no value. */
   it.each([
     ["Nodes", nodes(new Map())],
     ["Pods", pods],
   ] as const)(
-    "%s holds a metric's no-sample words in Russian",
+    "%s holds a metric's could-not-look glyph in Russian",
     (_page, columns) => {
       for (const id of ["cpu", "memory"])
         expect(floorOf(columns, id, ru, unmeasured)).toBeGreaterThanOrEqual(
-          Math.ceil("нет замера".length * 7.2 + 20)
+          14 + 20
         );
     }
   );
+
+  /**
+   * When a refusal turned CPU and Memory into locks the
+   * table reflowed and hid Node. Fails if a lock cell needs more width than
+   * the figure it stands in for, in either metric column.
+   */
+  it("never asks a lock for more room than a figure", () => {
+    const measured = [{ name: "web-0", cpuMillicores: 12, memoryBytes: 3e7 }];
+    for (const id of ["cpu", "memory"])
+      for (const absence of ["notInstalled", "forbidden", "error"] as const)
+        expect(floorOf(pods, id, en, unmeasured, absence)).toBeLessThanOrEqual(
+          floorOf(pods, id, en, measured)
+        );
+  });
 
   /**
    * With metrics-server not installed every CronJob row said "n/a" in a
@@ -633,15 +695,14 @@ describe("a value a cell says in words", () => {
     ["Pods", pods],
     ["CronJobs", cronJobs() as Column[]],
   ] as const)(
-    "%s keeps only the room n/a takes where metrics-server is missing",
+    "%s keeps only the room the glyph takes where metrics-server is missing",
     (_page, columns) => {
       for (const id of ["cpu", "memory"]) {
         const column = columns.find((c) => nameOf(c) === id) ?? {};
-        expect(
-          floorOf(columns, id, en, unmeasured, "notInstalled")
-        ).toBeLessThanOrEqual(
-          Math.max(headerFloor(column, en), Math.ceil("n/a".length * 7.2 + 20))
-        );
+        for (const absence of ["notInstalled", "forbidden", "error"] as const)
+          expect(
+            floorOf(columns, id, en, unmeasured, absence)
+          ).toBeLessThanOrEqual(Math.max(headerFloor(column, en), 14 + 20));
       }
     }
   );
@@ -835,20 +896,62 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
 
   /**
    * Lena read "15 (13 мин наза…" on Pods with room beside the column. Fails
-   * if the Restarts floor stops holding the most restarts its rows count
-   * with the widest age a restart is told in, in the reader's language.
+   * if the Restarts ideal stops holding the most restarts its rows count
+   * with the widest age a restart is told in, in the reader's language, or if
+   * its floor stops giving the age up (the list beside a peek scrolled
+   * sideways because nothing else could).
    */
   it("holds a restart count and the age of the last one whole on Pods", () => {
     useLocaleStore.setState({ choice: "ru" });
     const restarts = (pods as Column[]).find((c) => nameOf(c) === "restarts")!;
-    expect(columnFloor(restarts, ru, LENAS_ROWS)).toBeGreaterThanOrEqual(
+    expect(columnIdeal(restarts, ru, LENAS_ROWS)).toBeGreaterThanOrEqual(
+      "15 (59 мин назад)".length * 7.2 + 20
+    );
+    expect(columnFloor(restarts, ru, LENAS_ROWS)).toBeLessThan(
       "15 (59 мин назад)".length * 7.2 + 20
     );
     useLocaleStore.setState({ choice: null });
   });
 
-  /** Fails if the Pods status column keeps room for "CreateContainerConfigError" its rows never say, or stops holding the widest they do. */
-  it("holds the Pods status column to the widest status its rows say", () => {
+  /**
+   * lab's Pods beside the peek (about 560px) kept Name, Status and Restarts at
+   * floors that summed past the port, with nothing left to hide: a sideways
+   * scroll and "Init:CrashLoopBa" cut. Fails if the columns that cannot yield
+   * stop fitting that port for a crash-looping pod.
+   */
+  it("fits Name, Status and Restarts of a crash-looping pod beside a peek without a sideways scroll", () => {
+    const rows = [
+      {
+        name: "api-794978b95b-g7jpd",
+        namespace: "lab",
+        status: { display: "Init:CrashLoopBackOff" },
+        problem: { tone: "err", n: 1, title: "migrate" },
+        nodeName: "gke-prod-pool-1-a3f9-x2kd",
+        restartCount: 17,
+      },
+    ];
+    const shown = pods.filter((c) => nameOf(c) !== "namespace");
+    const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+    const specs = [...shown, folded].map((c, index) => ({
+      id: index < shown.length ? nameOf(c) : "actions",
+      floor: columnFloor(c, en, rows),
+      yields: (c as Column).meta?.yields,
+    }));
+    const port = 560;
+    const hidden = yieldedColumns(specs, port);
+    const kept = specs.filter((spec) => !hidden.includes(spec.id));
+    expect(kept.reduce((sum, spec) => sum + spec.floor, 0)).toBeLessThanOrEqual(
+      port
+    );
+    expect(hidden).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^(name|status|restarts)$/),
+      ])
+    );
+  });
+
+  /** Fails if one long status in the list makes the Pods status floor grow past 15 glyphs, which hides Node for every row, or if the ideal stops asking for the whole word. */
+  it("caps the Pods status floor and asks for the whole word only while there is room", () => {
     const status = (pods as Column[]).find((c) => nameOf(c) === "status")!;
     const running = [{ status: { display: "Running" } }];
     const failing = [
@@ -858,7 +961,10 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(columnFloor(status, en, running)).toBeLessThan(
       columnFloor(status, en, failing)
     );
-    expect(columnFloor(status, en, failing)).toBeGreaterThanOrEqual(
+    expect(columnFloor(status, en, failing)).toBeLessThanOrEqual(
+      statusCellPx(15)
+    );
+    expect(columnIdeal(status, en, failing)).toBeGreaterThanOrEqual(
       Math.ceil("CreateContainerConfigError".length * 6.6 + 14 + 20)
     );
   });
@@ -895,7 +1001,7 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(columnFloor(name, ru, short)).toBe(
       Math.ceil("recommendations".length * 7.2 + 2 * (14 + 4) + 20)
     );
-    expect(columnFloor(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
+    expect(columnIdeal(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
       NAME_CELL_PX
     );
   });
@@ -999,7 +1105,7 @@ describe("the Ingresses list beside a cause", () => {
         size: c.size ?? 150,
         floor: columnFloor(c, en, rows),
         ideal: columnIdeal(c, en, rows),
-        yields: c.meta?.yields,
+        yields: (c as Column).meta?.yields,
       }));
       const hidden = yieldedColumns(specs, port);
       const kept = specs.filter((spec) => !hidden.includes(spec.id));
@@ -1216,6 +1322,51 @@ describe("the NetworkPolicies list beside the peek", () => {
           );
         }
       }
+    }
+  );
+});
+
+describe("the Deployments list beside the peek", () => {
+  const rows = [
+    "argocd-applicationset-controller",
+    "argocd-notifications-controller",
+    "kube-dns-autoscaler",
+  ].map((name) => ({ name, namespace: "argo-rollouts" }));
+
+  /**
+   * Beside the peek the table scrolled sideways onto a Delivery column the
+   * "Hidden at this width" footer did not name, and cut "Ready" at the edge.
+   * Fails if Deployments with its Delivery and Namespace columns scrolls at
+   * the peek's width rather than hide a column, or hides one that is not
+   * among what `yieldedColumns` hid, which is what the footer names.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "hides Delivery and names it rather than scroll in %s",
+    (_language, t) => {
+      const base = deployments() as Column[];
+      const columns = [
+        ...base.slice(0, -1),
+        DELIVERY_COLUMN as Column,
+        ...base.slice(-1),
+      ];
+      const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+      const specs = [...columns, folded].map((c, index) => ({
+        id: index < columns.length ? nameOf(c) : "actions",
+        size: c.size ?? 150,
+        floor: columnFloor(c, t, rows),
+        yields: (c as Column).meta?.yields,
+      }));
+      for (const port of [560, 640]) {
+        const hidden = yieldedColumns(specs, port);
+        const kept = specs.filter((spec) => !hidden.includes(spec.id));
+        expect(tableLayout(kept, port).scrolls, `at ${port}`).toBe(false);
+      }
+      expect(yieldedColumns(specs, 560)).toEqual(
+        expect.arrayContaining(["delivery", "namespace"])
+      );
     }
   );
 });

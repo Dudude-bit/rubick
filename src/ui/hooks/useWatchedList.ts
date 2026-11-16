@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueryKey } from "@tanstack/react-query";
 import { create } from "zustand";
 
-import { useToast } from "@/components/ui/use-toast";
 import { useResourceWatch, type Keep } from "@/hooks/useResourceWatch";
-import { useT } from "@/i18n/useT";
 import { isRefusal } from "@/lib/error-utils";
 import {
   currentConnection,
@@ -60,13 +58,13 @@ function useRegistered(
 /**
  * A list kept current by a watch, and polled whenever it is not.
  *
- * A refused or broken watch falls back to polling; a broken one says so
- * once, in the app's words. A recovered one stops the polling again. `enabled` is whether a watch can
- * run at all. Several namespaces are one stream, which fails when any of
- * them does.
+ * A refused or broken watch falls back to polling, and the list's
+ * freshness mark says so; a recovered one stops the polling again. `enabled`
+ * is whether a watch can run at all. Several namespaces are one stream, which
+ * fails when any of them does.
  *
- * `reportFailure` is the name the toast gives the list, or a function for a
- * caller that reports several watches as one.
+ * `reportFailure` hears why a watch broke. A list's failure is not said in a
+ * toast: one sat over the last rows, and its freshness mark already says it.
  */
 export function useWatchedList<
   T extends { name: string; namespace?: string | null },
@@ -86,14 +84,12 @@ export function useWatchedList<
   queryKey: QueryKey;
   /** Where a row's own object is cached; see `useResourceWatch`. */
   detail: (row: T) => readonly QueryKey[];
-  reportFailure: string | ((message: string) => void);
+  reportFailure?: (message: string) => void;
   order?: (a: T, b: T) => boolean;
   keep?: Keep<T>;
   recount?: boolean;
   onChange?: () => void;
 }): WatchedList {
-  const t = useT();
-  const { toast } = useToast();
   // Which subscription failed, not whether one did: a new scope is a new
   // stream, and a failure held over from the last one kept a healthy list
   // polling with nothing left to clear it.
@@ -118,20 +114,9 @@ export function useWatchedList<
       if (failed.current === subscription) return;
       failed.current = subscription;
       setFailedFor(subscription);
-      if (typeof reportFailure === "function") {
-        reportFailure(message);
-        return;
-      }
-      // A refused watch is the list's own refusal, which the page states.
-      if (refused) return;
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "fallingBackToPolling", {
-          title: reportFailure,
-        }),
-      });
+      reportFailure?.(message);
     },
-    [reportFailure, subscription, t, toast]
+    [reportFailure, subscription]
   );
   const onRecovered = useCallback(() => {
     failed.current = null;

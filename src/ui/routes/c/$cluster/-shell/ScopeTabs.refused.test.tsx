@@ -10,7 +10,7 @@ import {
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { forgetRefusals } from "@/lib/refusals";
+import { forgetRefusals, KEPT_FOR } from "@/lib/refusals";
 import { setTransport, transport } from "@/lib/transport";
 import { fakeTransport } from "@/lib/transport/fake";
 import { renderWithRouter } from "@/test/render";
@@ -151,10 +151,11 @@ describe("the namespace picker for a reader of one namespace", () => {
 
   /**
    * A reader who may list namespaces but not every pod: the counts are asked
-   * once, refused, and not again while the connection stands. Fails if a
-   * reopened picker, or the minute it stays open, asks again.
+   * once, refused, and not again until the refusal has been kept KEPT_FOR,
+   * so a grant that came back is seen. Fails if a reopened picker, or the
+   * minute it stays open, asks again, or if the refusal is never let go.
    */
-  it("asks the whole cluster once per connection when it refuses", async () => {
+  it("asks the whole cluster once per KEPT_FOR when it refuses", async () => {
     cluster.namespaces = "listed";
     const { toggle, wait } = await marco();
     await wait(1_000);
@@ -163,9 +164,11 @@ describe("the namespace picker for a reader of one namespace", () => {
     await toggle();
     await wait(1_000);
     await toggle();
-    await wait(60_000);
-
+    await wait(50_000);
     expect(wholeClusterAsks()).toBe(1);
+
+    await wait(KEPT_FOR);
+    expect(wholeClusterAsks()).toBe(2);
   });
 });
 

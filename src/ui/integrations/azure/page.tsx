@@ -15,6 +15,8 @@
  * it is an annotation over here and half is a label over there.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { useMemo } from "react";
 import { KeyRound } from "lucide-react";
 
@@ -32,6 +34,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { accountsKnown, useAksPicture } from "./data";
 import {
@@ -74,7 +77,7 @@ export default function AksAddonsPage() {
     danglingSection(picture.data, picture.error, t)
   );
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadIdentities")}
@@ -100,6 +103,7 @@ export default function AksAddonsPage() {
           />
         }
       />
+      <StaleRead read={picture} label="AKS add-ons" />
 
       {unread.map((read) => (
         <Finding
@@ -157,14 +161,12 @@ export default function AksAddonsPage() {
 
       <Section>
         {picture.isPending ? (
-          <p className="text-xs text-fg-fnt">
-            {t("empty", "readingIdentities")}
-          </p>
+          <Reading>{t("empty", "readingIdentities")}</Reading>
         ) : accounts.length === 0 ? (
           // No pod carries the label — unless the pods were not read, and
           // then the finding above says so and nothing here claims more.
           podsKnown && (
-            <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
+            <p className="max-w-[72ch] text-xs text-fg-mut">
               {t("empty", "noPodCarries")}{" "}
               <span className="font-mono">
                 azure.workload.identity/use: true

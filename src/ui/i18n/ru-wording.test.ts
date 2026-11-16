@@ -78,11 +78,11 @@ describe("an open-ended count", () => {
       )
     );
     expect(byNumber).toEqual([]);
-    expect(translate("ru", "cluster", "problemCountAtLeast", { n: 3 })).toBe(
-      "3+ проблем"
+    expect(translate("ru", "cluster", "problemCountPartial", { n: 3 })).toBe(
+      "3 проблемы · проверено не всё"
     );
-    expect(translate("ru", "cluster", "problemCountAtLeast", { n: 1 })).toBe(
-      "1+ проблем"
+    expect(translate("ru", "cluster", "problemCountPartial", { n: 1 })).toBe(
+      "1 проблема · проверено не всё"
     );
   });
 });

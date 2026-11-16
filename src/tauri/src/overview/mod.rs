@@ -31,7 +31,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::{broadcast, Notify};
 use tokio_util::sync::CancellationToken;
 
-use crate::commands::overview::KeptSides;
+use crate::commands::overview::{KeptSides, OverviewUnread};
 use crate::state::AppEvent;
 
 pub mod holders;
@@ -43,6 +43,9 @@ const BROKEN_STREAK: u32 = 3;
 const GIVE_UP_STREAK: u32 = 10;
 /// How long a dropped cluster waits before a request may start it again.
 const COOLDOWN: Duration = Duration::from_mins(5);
+/// What is left of that wait once a whole listing has answered: the cluster
+/// is back, and the Overview said "polling" for minutes after every fault.
+const EASED: Duration = Duration::from_secs(30);
 /// Watches nobody has asked for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
@@ -69,10 +72,19 @@ pub struct OverviewCache {
     holders: DashMap<String, Arc<HolderMemo>>,
     /// What each cluster's last whole read of a scope found beside the stores.
     beside: DashMap<(String, Option<Vec<String>>), Arc<KeptSides>>,
+    /// What the last probe of each scope's lists found, and when: a retry
+    /// on a struggling API server asked five lists per namespace each time.
+    probed: DashMap<ScopeKey, (Instant, Vec<OverviewUnread>)>,
     /// Where a change the stores took is announced, so a screen showing the
     /// overview reads it again then rather than a ten-second poll later.
     events: Option<broadcast::Sender<AppEvent>>,
 }
+
+/// A cluster's name and the namespaces a read reached, `None` for all of them.
+type ScopeKey = (String, Option<Vec<String>>);
+
+/// How long a probe of a scope's lists answers for it.
+pub const PROBE_EVERY: Duration = Duration::from_secs(30);
 
 /// The steady rate a cluster's changes are announced at under churn.
 /// Changes past it are gathered into the next announcement, never dropped.
@@ -356,6 +368,7 @@ impl OverviewCache {
         self.refused_counts.remove(context);
         self.holders.remove(context);
         self.beside.retain(|(of, _), _| of != context);
+        self.probed.retain(|(of, _), _| of != context);
     }
 
     pub fn forget_all(&self) {
@@ -368,6 +381,7 @@ impl OverviewCache {
         self.refused_counts.clear();
         self.holders.clear();
         self.beside.clear();
+        self.probed.clear();
     }
 
     /// The counts `context` refused on this connection.
@@ -412,10 +426,52 @@ impl OverviewCache {
             .map(|kept| kept.clone())
     }
 
+    /// What the last probe of `scope`'s lists found, while it is younger than [`PROBE_EVERY`].
+    #[must_use]
+    pub fn probed(
+        &self,
+        context: &str,
+        scope: &Option<Vec<String>>,
+    ) -> Option<Vec<OverviewUnread>> {
+        self.probed
+            .get(&(context.to_string(), scope.clone()))
+            .filter(|kept| kept.0.elapsed() < PROBE_EVERY)
+            .map(|kept| kept.1.clone())
+    }
+
+    pub fn keep_probe(
+        &self,
+        context: &str,
+        scope: &Option<Vec<String>>,
+        lost: Vec<OverviewUnread>,
+    ) {
+        let key = (context.to_string(), scope.clone());
+        if self.probed.len() >= KEPT_SCOPES && !self.probed.contains_key(&key) {
+            self.probed.clear();
+        }
+        self.probed.insert(key, (Instant::now(), lost));
+    }
+
     /// The watches this process holds, for diagnostics.
     #[must_use]
     pub fn watching(&self) -> Vec<String> {
         self.clusters.iter().map(|e| e.key().clone()).collect()
+    }
+
+    /// A listing of the whole overview answered for `context`: what is left
+    /// of a pause after the watches gave up is cut to [`EASED`], so they
+    /// start again soon rather than five minutes after the cluster is back,
+    /// and a watch refusal is asked again, since every kind it watches just
+    /// listed (a pods 403 kept the Overview polling until a reconnect).
+    pub fn listed_whole(&self, context: &str) {
+        self.refused.remove(context);
+        self.ease_cooldown(context, Instant::now());
+    }
+
+    fn ease_cooldown(&self, context: &str, now: Instant) {
+        if let Some(mut until) = self.cooldown.get_mut(context) {
+            *until = (*until).min(now + EASED);
+        }
     }
 
     fn cooling_down(&self, context: &str) -> bool {
@@ -566,7 +622,7 @@ impl WatchConfigs {
         K: Resource + Clone + DeserializeOwned + Debug + Send + Sync + 'static,
         K::DynamicType: Default + Eq + Hash + Clone,
     {
-        let (store, writer) = reflector::store();
+        let (store, mut writer) = reflector::store();
         let health = self.health.clone();
         let stop = self.stop.clone();
         let context = self.context.clone();
@@ -575,13 +631,13 @@ impl WatchConfigs {
         let refused = self.refused.clone();
         let changes = self.changes.clone();
         tokio::spawn(async move {
-            let events = reflector::reflector(
-                writer,
-                watcher::watcher(api, config)
+            let fresh = || {
+                watcher::watcher(api.clone(), config.clone())
                     .modify(strip)
-                    .default_backoff(),
-            );
-            futures::pin_mut!(events);
+                    .default_backoff()
+                    .boxed()
+            };
+            let mut events = fresh();
             loop {
                 let next = tokio::select! {
                     biased;
@@ -590,6 +646,7 @@ impl WatchConfigs {
                 };
                 match next {
                     Some(Ok(event)) => {
+                        writer.apply_watcher_event(&event);
                         health.lock().saw(kind, &event);
                         changes.note(&event);
                     }
@@ -612,6 +669,10 @@ impl WatchConfigs {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {
                             tracing::warn!(context, kind, %error, "overview watch broken; listing instead");
+                            // A watch kube resumes from its resourceVersion
+                            // answers nothing on a quiet kind, so the streak
+                            // never ends; a list's answer does end it.
+                            events = fresh();
                         }
                         if streak >= GIVE_UP_STREAK {
                             tracing::warn!(
@@ -873,6 +934,67 @@ mod tests {
         cluster.stop.cancel();
     }
 
+    /// The Overview said "polling" for minutes after Deployments came back from
+    /// a 500: kube resumed the watch in silence and the streak never ended.
+    /// Fails if a broken kind is not listed again, which is what ends it.
+    #[tokio::test]
+    async fn a_broken_kind_lists_again_and_serves_once_the_list_answers() {
+        use http::{Request, Response};
+        use kube::client::Body;
+
+        let lists = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let listed = lists.clone();
+        let service = tower::service_fn(move |request: Request<Body>| {
+            let watching = request.uri().query().unwrap_or_default().contains("watch=");
+            if !watching {
+                listed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+            async move {
+                let (code, body) = if watching {
+                    (
+                        500,
+                        r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"chaos","code":500}"#,
+                    )
+                } else {
+                    (
+                        200,
+                        r#"{"kind":"DeploymentList","apiVersion":"apps/v1","metadata":{"resourceVersion":"5"},"items":[]}"#,
+                    )
+                };
+                Ok::<_, std::convert::Infallible>(
+                    Response::builder()
+                        .status(code)
+                        .body(Body::from(body.as_bytes().to_vec()))
+                        .unwrap(),
+                )
+            }
+        });
+        let cluster = WatchConfigs {
+            context: "prod".to_string(),
+            health: Arc::new(Mutex::new(Health::new(KINDS))),
+            stop: CancellationToken::new(),
+            clusters: Arc::default(),
+            cooldown: Arc::default(),
+            refused: Arc::default(),
+            changes: Arc::new(Changes::default()),
+        };
+        let _store = cluster.spawn::<Deployment>(
+            "Deployment",
+            Api::all(Client::new(service, "default")),
+            WatcherConfig::default(),
+            |_| {},
+        );
+        let health = cluster.health.clone();
+        let came_back = tokio::time::timeout(Duration::from_secs(30), async {
+            while lists.load(std::sync::atomic::Ordering::SeqCst) < 2 || !health.lock().serves() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
+        cluster.stop.cancel();
+        assert!(came_back.is_ok(), "a broken kind never served again");
+    }
+
     /// When each change in `noted` (ms) is announced under [`Pace`], as the announcer spends it.
     fn announced(noted: &[u64]) -> Vec<u64> {
         let zero = tokio::time::Instant::now();
@@ -991,6 +1113,73 @@ mod tests {
     /// plausibly fixes whatever made the watches give up. Leaving the
     /// cooldown behind made `forget`'s own promise — "the next request
     /// starts them again" — false for the next five minutes.
+    /// A retry on an API server that was already timing out asked five lists
+    /// per namespace on every read. Fails if a probe younger than the window
+    /// is not reused, an older one is, or a reconnect keeps it.
+    #[test]
+    fn a_probe_answers_for_its_scope_until_it_ages_or_the_cluster_is_forgotten() {
+        let cache = OverviewCache::default();
+        let scope = Some(vec!["shop".to_string()]);
+        let lost = vec![OverviewUnread {
+            kind: "Deployment".to_string(),
+            namespace: Some("shop".to_string()),
+            code: "NO_ANSWER".to_string(),
+            message: "etcdserver: request timed out".to_string(),
+        }];
+        assert_eq!(cache.probed("prod", &scope), None);
+        cache.keep_probe("prod", &scope, lost.clone());
+        assert_eq!(cache.probed("prod", &scope), Some(lost.clone()));
+        assert_eq!(cache.probed("prod", &None), None);
+        cache.forget("prod");
+        assert_eq!(cache.probed("prod", &scope), None);
+        let aged = Instant::now()
+            .checked_sub(PROBE_EVERY + Duration::from_secs(1))
+            .expect("an instant past the window");
+        cache
+            .probed
+            .insert(("prod".to_string(), scope.clone()), (aged, lost));
+        assert_eq!(cache.probed("prod", &scope), None);
+    }
+
+    /// After a fault cleared the Overview polled for up to five minutes,
+    /// grey "polling" beside every list's "live". Fails if a whole listing
+    /// does not cut the pause to the eased wait, or lengthens a shorter one.
+    #[test]
+    fn a_whole_listing_cuts_the_pause_after_the_watches_gave_up() {
+        let cache = OverviewCache::default();
+        let now = Instant::now();
+        cache.cooldown.insert("prod".to_string(), now + COOLDOWN);
+        cache.ease_cooldown("prod", now);
+        assert_eq!(
+            cache.cooldown.get("prod").map(|until| *until),
+            Some(now + EASED)
+        );
+        cache
+            .cooldown
+            .insert("prod".to_string(), now + Duration::from_secs(5));
+        cache.ease_cooldown("prod", now);
+        assert_eq!(
+            cache.cooldown.get("prod").map(|until| *until),
+            Some(now + Duration::from_secs(5))
+        );
+        cache.ease_cooldown("stage", now);
+        assert!(cache.cooldown.get("stage").is_none());
+    }
+
+    /// A pods 403 for a few seconds kept the Overview polling for the rest of
+    /// the connection. Fails if a whole listing does not ask a refused watch
+    /// again, or clears another cluster's refusal.
+    #[test]
+    fn a_whole_listing_asks_a_refused_watch_again() {
+        let cache = OverviewCache::default();
+        cache.refused.insert("prod".to_string());
+        cache.refused.insert("stage".to_string());
+        assert!(cache.cooling_down("prod"));
+        cache.listed_whole("prod");
+        assert!(!cache.cooling_down("prod"));
+        assert!(cache.cooling_down("stage"));
+    }
+
     #[test]
     fn forgetting_a_cluster_lifts_the_pause_it_was_holding() {
         let cache = OverviewCache::default();

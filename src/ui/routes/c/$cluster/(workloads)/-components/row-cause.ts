@@ -11,6 +11,8 @@ import { kubeletWarned, sharedText } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
 import { createRefusal, refusalText, refusedUid } from "@/lib/create-refusal";
 import { causeTextPx } from "../../-list/columns";
+import type { Problem } from "../../-object/problem";
+import { ownerKey } from "../../-object/row-items";
 
 /** What a list row says of the cause its pods share: still reading them, could not read them, or what they told; first, that the API server refuses them. */
 export type RowCause =
@@ -20,7 +22,8 @@ export type RowCause =
   | { says: "read"; shared: SharedCause | null };
 
 /** A workload list's row as its columns read it. */
-export type WorkloadRow<Row> = Row & ResourceMetrics & { podsCause: RowCause };
+export type WorkloadRow<Row> = Row &
+  ResourceMetrics & { podsCause: RowCause; problem: Problem | null };
 
 /**
  * Where a row's verdict leaves its pods' cause: unsaid once it is settled,
@@ -56,9 +59,6 @@ export const PODS_UNREAD: RowPods = {
   deadlines: [],
   unread: { has: () => true },
 };
-
-const ownerKey = (kind: string, namespace: string, name: string) =>
-  `${kind}\0${namespace}\0${name}`;
 
 /** Each pod under the workload Rust read off its owner, as the list's verdicts count them. */
 export function rowPods(

@@ -157,21 +157,20 @@ export function useServiceWatch(
   const podsOn = on && !!selector;
   // A watch that fails before it lists would leave every reader of the
   // Service, the peek's trace beside its status row included, waiting on it.
-  const unlisted = (message: string) =>
-    client.setQueryData<Scoped<unknown>>(
-      podsKey,
-      (prev) =>
-        prev ?? {
-          rows: [],
-          unread: [
-            {
-              namespace: namespace ?? "",
-              code: ERROR_CODES.LIST_UNREAD,
-              message,
-            },
-          ],
-        }
-    );
+  // Only onto nothing: rewriting a list that is there would call it fresh.
+  const unlisted = (message: string) => {
+    if (client.getQueryData(podsKey) !== undefined) return;
+    client.setQueryData<Scoped<unknown>>(podsKey, {
+      rows: [],
+      unread: [
+        {
+          namespace: namespace ?? "",
+          code: ERROR_CODES.LIST_UNREAD,
+          message,
+        },
+      ],
+    });
+  };
   useResourceWatch({
     enabled: follow && podsOn,
     subscribe: subscribePods,

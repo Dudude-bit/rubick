@@ -1,9 +1,11 @@
+import { hashKey } from "@tanstack/react-query";
 import { CircleOff, History, Monitor, Moon, Sun } from "lucide-react";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -25,6 +27,8 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
+import { useListLocks } from "@/hooks/useListAccess";
+import { ResourceType } from "@/lib/resource-registry";
 import { countedAt, useShellCounts } from "./useShellCounts";
 import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
 import { listWords } from "@/i18n/say";
@@ -32,6 +36,12 @@ import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT, type T } from "@/i18n/useT";
+import { KEPT_FOR, useRefusedAt } from "@/lib/refusals";
+import {
+  readWords,
+  useUnreadOnScreen,
+  type UnreadRead,
+} from "./unread-on-screen";
 
 /**
  * Which renewal states put a sign-in hint in the strip, as a total map.
@@ -71,6 +81,8 @@ const SIGN_IN_HINT: Record<
  * left here is the only thing this line knew that they did not: whether
  * the connection behind them is actually up.
  */
+const POD_KINDS = [ResourceType.Pod];
+
 export function StatusBar({
   missing = NOTHING_MISSING,
 }: {
@@ -89,6 +101,11 @@ export function StatusBar({
   const connect = useClusterStore((s) => s.connect);
   const scope = useClusterStore((s) => s.namespaceScope);
   const counts = useShellCounts();
+  const unreadHere = useUnreadOnScreen();
+  const podLock = useListLocks(POD_KINDS)[ResourceType.Pod];
+  const podsRefused =
+    podLock !== undefined &&
+    !(podLock.says === "clusterWide" && podLock.readableIn.length > 0);
   // A placeholder is the last scope's answer, and under this scope's label it
   // would count the wrong namespaces; it has no attention, so it stays out.
   const here =
@@ -108,7 +125,7 @@ export function StatusBar({
   const connecting = isLoading || isAuthenticating;
 
   return (
-    <footer className="@container flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
+    <footer className="@container flex h-6 flex-none select-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-caption text-fg-fnt">
       {/* Gives way first. A hint with no room wraps onto the clipped second
           line; reversed, so the note never does. The note keeps its whole
           sentence up to its cap, and the controls give way to it. The empty
@@ -130,18 +147,7 @@ export function StatusBar({
         </span>
       </div>
 
-      {/* Gives way next, the theme first, so the counts never do. The empty
-          item holds line one, so a control that cannot fit wraps too. */}
-      <div
-        data-testid="status-controls"
-        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
-      >
-        <span aria-hidden="true" className="-mr-3.5 h-6" />
-        <StallIndicator />
-        <ActivityPanel />
-        <ThemeControl />
-      </div>
-      {/* The app's own chrome to the left, the cluster's health to the right. */}
+      {/* The app's own chrome to the left, the cluster's health beside it, the controls at the edge. */}
       <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
 
       {connecting ? (
@@ -217,7 +223,10 @@ export function StatusBar({
                 data-testid="scope-counts"
                 className={cn(
                   "flex cursor-default items-center gap-1.5",
-                  (counts.heldAt !== null || counts.late || counts.failed) &&
+                  (counts.heldAt !== null ||
+                    counts.late ||
+                    counts.failed ||
+                    podsRefused) &&
                     "opacity-60"
                 )}
               >
@@ -257,13 +266,14 @@ export function StatusBar({
                     {here.pods && !here.pods.complete && <span>·</span>}
                     {!here.pods?.complete && (
                       <span className="text-fg-fnt">
-                        {t("cluster", "podsNotCounted", {
-                          where: podsUnreadIn(here.unread, t),
-                        })}
+                        {podsUnreadIn(here.unread, scope, t)}
                       </span>
                     )}
                     <span>·</span>
-                    <ProblemCount attention={here.attention} />
+                    <ProblemCount
+                      attention={here.attention}
+                      allRead={unreadHere.length === 0}
+                    />
                   </>
                 )}
                 {!missing.whole && (
@@ -297,6 +307,14 @@ export function StatusBar({
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
               {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
+              {podsRefused && (
+                <p className="mb-1 text-warn">
+                  {t("cluster", "countsKindRefused")}
+                </p>
+              )}
+              {unreadHere.length > 0 && (
+                <UnreadHere reads={unreadHere} context={currentContext} />
+              )}
               {(counts.late || counts.failed) && counts.readAt !== null && (
                 <p className="mb-1 text-warn">
                   {t(
@@ -318,6 +336,19 @@ export function StatusBar({
       ) : (
         <span>{t("cluster", "notConnectedLower")}</span>
       )}
+      <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
+      {/* Last, so the cluster's counts growing or shrinking never moves them.
+          They give way next, the theme first. The empty item holds line one,
+          so a control that cannot fit wraps too. */}
+      <div
+        data-testid="status-controls"
+        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
+      >
+        <span aria-hidden="true" className="-mr-3.5 h-6" />
+        <StallIndicator />
+        <ActivityPanel />
+        <ThemeControl />
+      </div>
     </footer>
   );
 }
@@ -333,8 +364,12 @@ function HeldAt({ at }: { at: number }) {
   );
 }
 
-/** Where the pods went unread, in the strip's own short words. */
-function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
+/** Where the pods went unread, in the strip's own short words; the strip's own scope is said once, at its end. */
+function podsUnreadIn(
+  unread: readonly OverviewUnread[],
+  scope: readonly string[],
+  t: T
+): string {
   const named = [
     ...new Set(
       unread.flatMap((entry) =>
@@ -342,13 +377,26 @@ function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
       )
     ),
   ];
-  return named.length === 0
-    ? t("cluster", "countsInAll")
-    : t("cluster", "countsIn", { scope: scopeLabel(named, t) });
+  const asScope =
+    named.length === scope.length && named.every((n) => scope.includes(n));
+  return named.length === 0 || asScope
+    ? t("cluster", "podsNotCountedBare")
+    : t("cluster", "podsNotCounted", {
+        where: t("cluster", "countsIn", { scope: scopeLabel(named, t) }),
+      });
 }
 
-/** The count the Overview's panel heads, in the colour of its worst row. */
-function ProblemCount({ attention }: { attention: Attention }) {
+/**
+ * The count the Overview's panel heads, in the colour of its worst row; not
+ * whole while a read on screen was refused or failed, whichever page it is.
+ */
+function ProblemCount({
+  attention,
+  allRead,
+}: {
+  attention: Attention;
+  allRead: boolean;
+}) {
   const t = useT();
   const { total, complete, worst } = attention;
   return (
@@ -358,8 +406,61 @@ function ProblemCount({ attention }: { attention: Attention }) {
         worst === "warn" && "text-warn"
       )}
     >
-      {attentionWords({ total, complete }, t)}
+      {attentionWords({ total, complete: complete && allRead }, t)}
     </span>
+  );
+}
+
+const UNREAD_NAMED = 4;
+
+/** What on screen could not be read, by name, so "not all checked" says what it means. */
+function UnreadHere({
+  reads,
+  context,
+}: {
+  reads: readonly UnreadRead[];
+  context: string | null;
+}) {
+  const t = useT();
+  const named = reads.slice(0, UNREAD_NAMED);
+  return (
+    <div className="mb-1 text-warn" data-testid="unread-on-screen">
+      <p>{t("cluster", "unreadOnScreen")}</p>
+      <ul>
+        {named.map((read) => (
+          <UnreadEntry key={hashKey(read.key)} read={read} context={context} />
+        ))}
+      </ul>
+      {reads.length > named.length && (
+        <p>{t("empty", "andMore", { n: reads.length - named.length })}</p>
+      )}
+    </div>
+  );
+}
+
+/** One read by what it was of and when it last answered; a refusal by when it was said and when it is asked again. */
+function UnreadEntry({
+  read,
+  context,
+}: {
+  read: UnreadRead;
+  context: string | null;
+}) {
+  const t = useT();
+  const at = useRefusedAt(read.refused ? read.error : null) ?? read.at;
+  const age = useRealtimeAge(new Date(at).toISOString());
+  const name = readWords(read.key, context, t);
+  const ago = t("action", "agoSuffix", { age });
+  return (
+    <li>
+      {read.refused
+        ? t("cluster", "unreadOnScreenRefused", {
+            name,
+            ago,
+            time: formatWhen(at + KEPT_FOR, "clock"),
+          })
+        : t("cluster", "unreadOnScreenFailed", { name, ago })}
+    </li>
   );
 }
 
@@ -407,29 +508,33 @@ function ThemeControl() {
   const Icon = current.icon;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
           aria-label={t("settings", "themeNamed", {
             theme: t("settings", current.k),
           })}
-          className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
+          className="flex items-center gap-1.5 rounded px-1.5 text-caption text-fg-fnt transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <Icon className="h-3 w-3" />
           {t("settings", current.k).toLowerCase()}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top">
-        {THEMES.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onClick={() => setTheme(option.value)}
-          >
-            <option.icon className="mr-2 h-4 w-4" />
-            {t("settings", option.k)}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) =>
+            setTheme(value as (typeof THEMES)[number]["value"])
+          }
+        >
+          {THEMES.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              <option.icon className="mr-2 h-3.5 w-3.5" />
+              {t("settings", option.k)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

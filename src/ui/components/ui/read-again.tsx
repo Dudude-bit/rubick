@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,8 @@ import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { forgetRefusals } from "@/lib/refusals";
 import { cn } from "@/lib/utils";
+
+const ASKING_AT_MOST_MS = 20_000;
 
 /**
  * Asks a read that did not answer once more. A refused read is offered it
@@ -19,20 +22,33 @@ export function ReadAgain({
   className,
 }: {
   error: unknown;
-  onRetry: () => void;
+  onRetry: () => unknown;
   className?: string;
 }) {
   const t = useT();
+  // Busy until the answer replaces the error it was pressed on: a refetch's
+  // promise can settle before the read lands, and a second press asks twice.
+  const [asked, setAsked] = useState<{ about: unknown } | null>(null);
+  const asking = asked !== null && asked.about === error;
+  useEffect(() => {
+    if (!asking) return;
+    const id = setTimeout(() => setAsked(null), ASKING_AT_MOST_MS);
+    return () => clearTimeout(id);
+  }, [asking]);
   return (
     <Button
       variant="outline"
       size="sm"
+      disabled={asking}
+      aria-busy={asking || undefined}
       onClick={() => {
         if (isRefusal(error)) forgetRefusals();
+        setAsked({ about: error });
         void commands
           .forgetDiscovery()
           .catch(() => undefined)
-          .then(onRetry);
+          .then(onRetry)
+          .catch(() => setAsked(null));
       }}
       // Russian runs longer than English: the label wraps inside the button.
       className={cn(
@@ -41,7 +57,10 @@ export function ReadAgain({
       )}
     >
       <RefreshCw
-        className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
+        className={cn(
+          "mr-1.5 mt-0.5 h-3 w-3 flex-none",
+          asking && "animate-spin"
+        )}
         aria-hidden="true"
       />
       {t("empty", "unknownRetry")}

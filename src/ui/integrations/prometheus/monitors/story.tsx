@@ -52,7 +52,7 @@ export function Step({
       <div className="min-w-0">
         <p
           className={cn(
-            "flex items-baseline gap-2 text-[12.5px] font-medium leading-[22px]",
+            "flex items-baseline gap-2 text-xs font-medium leading-[22px]",
             tone === "err" || tone === "none"
               ? "text-err"
               : tone === "warn"
@@ -62,7 +62,7 @@ export function Step({
         >
           {title}
           {count && (
-            <span className="font-mono text-[11.5px] font-medium text-fg-mut">
+            <span className="font-mono text-xs font-medium text-fg-mut">
               {count}
             </span>
           )}
@@ -89,7 +89,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 font-mono text-[11px]",
+        "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 font-mono text-caption",
         tone === "err"
           ? "border-err/45 text-err"
           : tone === "mut"
@@ -104,5 +104,5 @@ export function Chip({
 }
 
 export function Sub({ children }: { children: ReactNode }) {
-  return <span className="font-sans text-[10px] text-fg-fnt">{children}</span>;
+  return <span className="font-sans text-micro text-fg-fnt">{children}</span>;
 }

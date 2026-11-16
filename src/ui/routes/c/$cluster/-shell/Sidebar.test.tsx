@@ -323,7 +323,7 @@ describe("the counts at the end of each row", () => {
     const pods = within(
       await screen.findByRole("link", { name: /^Pods/ })
     ).getByTestId("partial-count");
-    expect(pods).toHaveTextContent("4+");
+    expect(pods).toHaveTextContent(/^4$/);
     expect(pods).toHaveAccessibleName(
       "at least 4, not every namespace counted"
     );
@@ -383,8 +383,8 @@ describe("the counts at the end of each row", () => {
 
     const picker = namespaceAttention(whole, "team-checkout");
     const badge = await screen.findByText(attentionFigure(picker));
-    expect(badge).toHaveTextContent("3+");
-    expect(badge).toHaveAccessibleName("3+ problems, not all checked");
+    expect(badge).toHaveTextContent(/^3$/);
+    expect(badge).toHaveAccessibleName("3 problems · not all checked");
     attention = null;
   });
 
@@ -397,7 +397,7 @@ describe("the counts at the end of each row", () => {
     overview = overviewWithPods(4);
     attention = { total: 3, worst: "err", complete: false };
     const partial = await wrap(<Sidebar />);
-    const badge = await screen.findByText("3+");
+    const badge = await screen.findByText("3");
     expect(
       within(badge).getByTestId("attention-unchecked-ring")
     ).toBeInTheDocument();
@@ -655,6 +655,31 @@ describe("the keyboard focus in the rail", () => {
       screen.getByRole("button", { name: "Rename or recolour prod" })
     ).toHaveClass(...ring);
     expect(screen.getByRole("link", { name: /Overview/ })).toHaveClass(...ring);
+  });
+});
+
+describe("the rail as one tab stop", () => {
+  /**
+   * Tab walked through every row, about 35 stops before the content. Fails
+   * if more than one row is in the tab order, or if the arrow keys stop
+   * moving between rows.
+   */
+  it("keeps one row in the tab order and moves between rows with the arrows", async () => {
+    await wrap(<Sidebar />);
+    const nav = screen.getByRole("navigation");
+    await waitFor(() =>
+      expect(nav.querySelectorAll('a[href][tabindex="0"]')).toHaveLength(1)
+    );
+    const rows = [...nav.querySelectorAll<HTMLElement>("a[href]")];
+    expect(rows.filter((row) => row.tabIndex === 0)).toHaveLength(1);
+
+    rows[0].focus();
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(rows[1]);
+    expect(rows[1].tabIndex).toBe(0);
+    expect(rows[0].tabIndex).toBe(-1);
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    expect(document.activeElement).toBe(rows[0]);
   });
 });
 

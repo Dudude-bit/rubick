@@ -6,6 +6,7 @@ import {
   currentConnection,
   forgetIfAskedAgain,
   isRead,
+  noteAnswer,
   noteRefusal,
   readOf,
   refusalOf,
@@ -31,22 +32,30 @@ type Wrapped<T> = {
  */
 const SLOW_COMMAND_MS = 500;
 
+/** A read answered by a stream, whose `<thing>Subscribed` gate opens it: its own answer is only the stream's id. */
+const streamed = (name: string) =>
+  `${name.replace(/^[a-z]+([A-Z])/, (_, first: string) => first.toLowerCase())}Subscribed` in
+  generatedCommands;
+
 export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
   const withErrors = wrapErrors(fn, commandName);
   const name = commandName ?? fn.name;
   const reads = isRead(name);
+  const answers = reads && !streamed(name);
   return (async (...args: Parameters<T>) => {
     const read = reads ? readOf(name, args) : null;
     if (read !== null) forgetIfAskedAgain(read);
     const refused = read === null ? undefined : refusalOf(read);
     if (refused !== undefined) throw refused;
     const connection = currentConnection();
+    const askedAt = Date.now();
     const startedAt = performance.now();
     try {
       const value = perf.recording
         ? await measured(name, () => withErrors(...args))
         : await withErrors(...args);
       stallWatch.noteAnswer(name, value);
+      if (answers) noteAnswer(name, args, askedAt, connection);
       return value;
     } catch (error) {
       if (read !== null && isRefusal(error))

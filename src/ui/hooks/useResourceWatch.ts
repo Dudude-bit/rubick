@@ -204,35 +204,44 @@ export function useResourceWatch<
     /** The entry as the watch last wrote it. */
     let wrote: Kept<T> | undefined;
     /** `changes` written into the cached list; whether it grew or shrank. */
+    // Writes only what moved: React Query takes any write as a read that
+    // answered, so rewriting the same rows erased a failed read's error and
+    // restarted its age, and writing changes onto no list at all turned a
+    // read that failed into an empty one.
     const apply = (changes: Array<ResourceChange<T>>): boolean => {
-      let recounted = false;
-      wrote = queryClient.setQueryData<Kept<T>>(queryKey, (prev) => {
-        if (prev?.rows !== indexedList) {
-          held.clear();
-          prev?.rows.forEach((row, at) => held.set(identify(row), { row, at }));
-        }
-        const keep = keepRef.current;
-        const cut = new Set(prev?.cut);
-        const rows = applyChanges(
-          prev?.rows ?? [],
-          changes,
-          held,
-          orderRef.current,
-          keep,
-          cut
-        );
-        if (prev && rows === prev.rows) return prev;
-        recounted = rows.length !== (prev?.rows.length ?? 0);
-        return watched({
+      const prev = queryClient.getQueryData<Kept<T>>(queryKey);
+      if (!prev) return false;
+      if (prev.rows !== indexedList) {
+        held.clear();
+        prev.rows.forEach((row, at) => held.set(identify(row), { row, at }));
+      }
+      const keep = keepRef.current;
+      const cut = new Set(prev.cut);
+      const rows = applyChanges(
+        prev.rows,
+        changes,
+        held,
+        orderRef.current,
+        keep,
+        cut
+      );
+      if (rows === prev.rows) {
+        wrote = prev;
+        indexedList = prev.rows;
+        return false;
+      }
+      wrote = queryClient.setQueryData<Kept<T>>(
+        queryKey,
+        watched({
           rows,
-          unread: prev?.unread ?? [],
+          unread: prev.unread,
           ...(keep && {
-            cut: prev?.cut?.length === cut.size ? prev.cut : [...cut].sort(),
+            cut: prev.cut?.length === cut.size ? prev.cut : [...cut].sort(),
           }),
-        });
-      });
+        })
+      );
       indexedList = wrote?.rows;
-      return recounted;
+      return rows.length !== prev.rows.length;
     };
 
     // A read of the list replaces the cached rows with an answer that may

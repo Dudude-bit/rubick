@@ -49,6 +49,12 @@ const CRON_VERDICT: Record<CronOutcome, RowVerdict> = {
   notSucceeded: "trouble",
 };
 
+const RUN_SEVERITY: Record<RowVerdict, number> = {
+  settled: 0,
+  open: 1,
+  trouble: 2,
+};
+
 /** A row's last run, told with the refusal of its run's pods its cause read. */
 const outcomeOf = (row: CronJobInfoWithMetrics) =>
   cronOutcome(row, row.podsCause.says === "refused");
@@ -75,6 +81,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "suspend",
     header: columnHeader("columns", "suspend"),
     meta: {
+      sort: (row: CronJobInfoWithMetrics) => (row.suspend ? 1 : 0),
       floor: statusCellPx(14),
       share: (row: CronJobInfoWithMetrics, t) =>
         row.suspend
@@ -97,6 +104,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "active",
     header: columnHeader("columns", "active"),
     meta: {
+      sort: (row: CronJobInfoWithMetrics) => row.active,
       yields: 4,
       share: (row: CronJobInfoWithMetrics) => String(row.active),
     },
@@ -108,6 +116,8 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "last_schedule",
     header: columnHeader("columns", "lastSchedule"),
     meta: {
+      sort: (row: CronJobInfoWithMetrics) =>
+        row.lastSchedule ? Date.parse(row.lastSchedule) : undefined,
       yields: 5,
       share: (row: CronJobInfoWithMetrics, t) =>
         row.lastSchedule
@@ -121,6 +131,8 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "last_run",
     header: columnHeader("columns", "lastRun"),
     meta: {
+      sort: (row: CronJobInfoWithMetrics) =>
+        RUN_SEVERITY[CRON_VERDICT[outcomeOf(row)]],
       floor: () => LAST_RUN_FLOOR,
       ideal: (t, rows: readonly CronJobInfoWithMetrics[]) =>
         LAST_RUN_FLOOR +
