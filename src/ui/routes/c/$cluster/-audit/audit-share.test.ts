@@ -201,4 +201,28 @@ describe("Audit in a shared file", () => {
       items: [{ mark: "notRead", title: "No PodDisruptionBudget" }],
     });
   });
+
+  /**
+   * A pod a Deployment stamps out is judged on the Deployment, which may hold
+   * high findings. Fails if its file shows an empty, clean list counted 0,
+   * where the tab says only where it was judged.
+   */
+  it("says where a pod judged on its workload was judged, and counts nothing", () => {
+    const section = auditObjectSection(
+      {
+        subject: { kind: "Pod", namespace: "shop", name: "web-7d9f-x" },
+        system: false,
+        findings: [],
+        unchecked: [],
+        judgedOn: { kind: "Deployment", namespace: "shop", name: "web" },
+      },
+      null,
+      t
+    );
+    expect(section.count).toBeNull();
+    expect(section.body).toEqual({
+      type: "text",
+      text: "This Pod's template is judged as part of Deployment web.",
+    });
+  });
 });

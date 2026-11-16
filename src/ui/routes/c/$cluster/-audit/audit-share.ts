@@ -138,19 +138,30 @@ export function auditObjectSection(
     mark: "notRead",
   }));
   const judgedOn = audit?.judgedOn;
-  return {
+  const section = {
     id: "audit",
     order: ORDER.own,
     title: t("audit", "tab"),
     icon: iconSvg(ShieldCheck),
-    count: audit && audit.unchecked.length === 0 ? audit.findings.length : null,
     unread: error ? errorToShow(error) : null,
-    caption: judgedOn
-      ? t("audit", "judgedOn", {
+  };
+  // Judged on its workload, the object has no answer of its own to count:
+  // an empty list would read as a clean one.
+  if (judgedOn)
+    return {
+      ...section,
+      count: null,
+      body: {
+        type: "text",
+        text: t("audit", "judgedOn", {
           kind: audit.subject.kind,
           object: `${judgedOn.kind} ${judgedOn.name}`,
-        })
-      : null,
+        }),
+      },
+    };
+  return {
+    ...section,
+    count: audit && audit.unchecked.length === 0 ? audit.findings.length : null,
     body: { type: "findings", items: [...items, ...blind] },
   };
 }
