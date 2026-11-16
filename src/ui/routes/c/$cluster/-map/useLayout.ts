@@ -6,6 +6,7 @@ import type {
   LayoutRequest,
   Point,
 } from "@/lib/map-layout";
+import { errorToShow } from "@/lib/error-utils";
 import { perf } from "@/lib/perf";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
 
@@ -240,7 +241,7 @@ export function useLayout(
         id: ask.request.id,
         groups: [],
         ms: 0,
-        failed: error instanceof Error ? error.message : String(error),
+        failed: errorToShow(error),
       }))
       .then((answer) => {
         flying.current = false;
