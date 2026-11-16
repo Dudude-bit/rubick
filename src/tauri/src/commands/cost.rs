@@ -428,7 +428,7 @@ fn claims_of<'a>(pod: &'a Pod, kept: Option<&KeptClaims>) -> Vec<String> {
         });
     let stored = kept
         .zip(pod.metadata.uid.as_deref())
-        .and_then(|(kept, uid): (&KeptClaims, &'a str)| kept.get(uid).map(|names| names.to_vec()))
+        .and_then(|(kept, uid): (&KeptClaims, &'a str)| kept.get(uid).map(|names| names.0.to_vec()))
         .into_iter()
         .flatten();
     mounted.chain(stored).collect()
