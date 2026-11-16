@@ -2122,7 +2122,7 @@ export const ru: Catalogue = {
       many: "автомасштабирование {autoscaler} держит не меньше {n} реплик",
       other: "автомасштабирование {autoscaler} держит не меньше {n} реплики",
     },
-    wBudget: "требует {required} здоровых из {selected} выбранных",
+    wBudget: "нужно здоровых: {required}, выбрано: {selected}",
     wTokenPod: "под задаёт automountServiceAccountToken: true",
     wTokenAccount:
       "ServiceAccount default задаёт automountServiceAccountToken: true",

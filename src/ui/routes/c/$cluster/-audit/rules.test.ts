@@ -280,6 +280,24 @@ describe("the words Audit draws its rules and findings with", () => {
   });
 
   /**
+   * Two counts in one Russian phrase cannot both agree with one noun, so the
+   * budget's witness names each with a colon. Fails if a budget of one pod
+   * reads "требует 1 здоровых из 1 выбранных".
+   */
+  it("words a budget's two counts in Russian without a noun to agree with", () => {
+    const t = tIn("ru");
+    for (const [required, selected] of [
+      [1, 1],
+      [2, 3],
+      [21, 25],
+    ]) {
+      expect(whatWords({ says: "budget", required, selected }, t)).toBe(
+        `нужно здоровых: ${required}, выбрано: ${selected}`
+      );
+    }
+  });
+
+  /**
    * A placeholder with no value reaches the screen as `{name}`. Fails if any
    * value of any finding leaves one unfilled in either language.
    */
