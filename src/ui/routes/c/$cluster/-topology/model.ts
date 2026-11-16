@@ -246,10 +246,10 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
 
 /**
  * What was drawn of each object the stream sent, kept by the object's own
- * identity: a batch that replaced one node costs that node's words and tone,
- * and every other node keeps the drawing it had. Valid for one grouping, one
- * overlay, one language and one set of tone inputs; the caller starts a new
- * one when any of them changes.
+ * identity: a batch that replaced one node costs that node's words, and every
+ * other node keeps the drawing it had unless its tone moved. Valid for one
+ * grouping, one overlay and one language; the caller starts a new one when
+ * any of them changes.
  */
 export interface ModelMemo {
   nodes: WeakMap<TopologyNode, { graph: GraphNode; optional: boolean }>;
@@ -290,8 +290,17 @@ export function modelOf(
       node.ref.existence === "missing" &&
       softly.has(node.id) &&
       !firmly.has(node.id);
-    let graph = memo.nodes.get(node)?.graph;
-    if (!graph || memo.nodes.get(node)?.optional !== optional) {
+    // The tone is asked of every node on every build, so what it reads (an
+    // Ingress's health, a stale kind) may change without throwing away every
+    // node's drawing; a node whose tone did not change keeps its object.
+    const tone = optional ? "warn" : toneOf(node);
+    const kept = memo.nodes.get(node);
+    let graph = kept?.graph;
+    if (graph && kept?.optional === optional && graph.tone !== tone) {
+      graph = { ...graph, tone };
+      memo.nodes.set(node, { graph, optional });
+    }
+    if (!graph || kept?.optional !== optional) {
       const sub = subOf(node, t);
       graph = {
         id: node.id,
@@ -305,7 +314,7 @@ export function modelOf(
         sub: optional
           ? [sub, t("readings", "envRefOptional")].filter(Boolean).join(" · ")
           : sub,
-        tone: optional ? "warn" : toneOf(node),
+        tone,
         badge: settings.policies ? coverBadge(node, t) : undefined,
         rank: RANK[kind] ?? WORKLOAD_RANK,
       };

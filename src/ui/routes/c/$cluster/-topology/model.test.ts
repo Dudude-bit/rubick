@@ -189,6 +189,38 @@ describe("the cluster map's model", () => {
     );
   });
 
+  /**
+   * One ReplicaSet moved and every node on the map was drawn anew, because a
+   * new Ingress verdict threw the whole memo away. Fails if a node whose
+   * tone did not change loses its object, or one whose tone did keeps it.
+   */
+  it("keeps every node whose tone did not change when what tones it changes", () => {
+    const memo = newMemo();
+    const nodes = new Map(
+      [node("Ingress", "shop"), node("Deployment", "cart")].map((each) => [
+        each.id,
+        each,
+      ])
+    );
+    const draw = (ingress: "ok" | "err") =>
+      modelOf(
+        nodes,
+        new Map(),
+        new Map([["shop", read("shop")]]),
+        settings(),
+        (each) => (each.ref.kind === "Ingress" ? ingress : "mute"),
+        t,
+        memo
+      ).nodes;
+    const before = draw("ok");
+    const after = draw("err");
+    const of = (drawn: typeof before, kind: string) =>
+      drawn.find((each) => each.kind === kind)!;
+    expect(of(after, "Deployment")).toBe(of(before, "Deployment"));
+    expect(of(after, "Ingress")).not.toBe(of(before, "Ingress"));
+    expect(of(after, "Ingress").tone).toBe("err");
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

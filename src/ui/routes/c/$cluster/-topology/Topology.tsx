@@ -125,8 +125,8 @@ function TopologyMap() {
   const several = scope.wire === null || scope.wire.length > 1;
   // What each object was drawn as, kept while nothing that decides it moves.
   const memo = useMemo(
-    () => ({ for: [toneInputs, t, policies, grouping], drawn: newMemo() }),
-    [toneInputs, t, policies, grouping]
+    () => ({ for: [t, policies, grouping], drawn: newMemo() }),
+    [t, policies, grouping]
   ).drawn;
   const collapsedAtFirst =
     several && (map.phase !== "ready" || map.nodes.size > COLLAPSE_ABOVE);
@@ -193,20 +193,24 @@ function TopologyMap() {
   const allNodes = [...model.nodes, ...shownVendor.map((each) => each.node)];
   const allEdges = [...model.edges, ...vendor.edges];
 
-  // Read every render: the vendor layers are, and this is one pass over memory.
-  const matches = (() => {
-    const asked = query.trim().toLowerCase();
-    if (!asked) return null;
-    return new Set(
-      allNodes
+  // Found every render, as the vendor layers are built, and kept as one Set
+  // while it names the same nodes: a new one lights every node again.
+  const asked = query.trim().toLowerCase();
+  const found = asked
+    ? allNodes
         .filter(
           (node) =>
             node.label.toLowerCase().includes(asked) ||
             node.kind.toLowerCase() === asked
         )
         .map((node) => node.id)
-    );
-  })();
+        .join("\n")
+    : null;
+  const matches = useMemo(
+    () =>
+      found === null ? null : new Set(found === "" ? [] : found.split("\n")),
+    [found]
+  );
 
   const goTo = useCallback(
     (id: string) => {
