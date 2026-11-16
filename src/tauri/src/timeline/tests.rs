@@ -468,6 +468,22 @@ fn series_row(event: EventInfo) -> TimelineRow {
     }
 }
 
+/// Every renewal hands each event over again. Fails if one held as it is
+/// takes a new number, which writes it to disk again and sends it to the
+/// window again, or a real repeat is not recorded.
+#[test]
+fn an_event_handed_over_again_as_it_is_held_is_not_recorded_again() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    let now = ClusterTimeline::now();
+    cluster.event(event("e1", "Warning", 3, now), now);
+    let newest = cluster.page(&query(Show::All)).newest;
+    cluster.event(event("e1", "Warning", 3, now), now + 1000);
+    assert_eq!(cluster.page(&query(Show::All)).newest, newest);
+    cluster.event(event("e1", "Warning", 4, now + 1000), now + 1000);
+    assert_eq!(cluster.page(&query(Show::All)).newest, newest + 1);
+}
+
 /// A repeat is the series' latest, not another row. Fails if each repeat
 /// adds a row, or the repeat keeps its old place for a reader of `after`.
 #[test]

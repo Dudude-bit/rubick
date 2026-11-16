@@ -226,7 +226,9 @@ impl ClusterTimeline {
         inner.told.rows = true;
     }
 
-    /// One of the cluster's events: a repeat replaces its series' row.
+    /// One of the cluster's events: a repeat replaces its series' row, and
+    /// one handed over again as it is held, by a list or a renewal, is not
+    /// recorded again.
     pub fn event(&self, event: EventInfo, seen: i64) {
         let at = [event.last_timestamp, event.first_timestamp]
             .into_iter()
@@ -247,6 +249,9 @@ impl ClusterTimeline {
             },
             at_relist: false,
         };
+        if self.inner.lock().store.holds(&row) {
+            return;
+        }
         self.change(row);
     }
 
