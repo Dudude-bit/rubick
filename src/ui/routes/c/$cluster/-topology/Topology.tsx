@@ -331,7 +331,30 @@ function TopologyMap() {
   useShareSection("topology", () =>
     topologySection(
       model,
-      notLooked.map((entry) => entry.kind),
+      {
+        unread:
+          map.error !== null
+            ? t("topology", "failed", { said: errorToShow(map.error) })
+            : map.phase === "opening"
+              ? t("topology", "shareStillOpening")
+              : null,
+        notes: [
+          notLooked.length > 0 &&
+            t("topology", "shareNotRead", {
+              kinds: notLooked.map((entry) => entry.kind).join(", "),
+            }),
+          ...notLooked
+            .filter((entry) => entry.edges)
+            .map((entry) => t("topology", "edgesAbsent", { kind: entry.kind })),
+          ...vendor.unread,
+          others.length > 0 &&
+            t("topology", "otherEngines", { kinds: others.join(", ") }),
+          syncing.length > 0 &&
+            t("topology", "stillListing", {
+              kinds: syncing.map((kind) => kind.kind).join(", "),
+            }),
+        ].filter((line): line is string => typeof line === "string"),
+      },
       t,
       caption
     )

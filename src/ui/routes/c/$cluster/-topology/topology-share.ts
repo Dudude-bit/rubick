@@ -17,12 +17,18 @@ const TONE_ROLE: Record<MapTone, StatusRole | undefined> = {
 
 /**
  * The map as one table: a row a group, what it holds and what was not read
- * in it. Every kind the map could not read is named above it, so the file
- * never reads as a cluster with fewer objects than it has.
+ * in it. What the screen says above the map goes above the table, and a map
+ * not drawn yet, or never opened, is said to be unread rather than handed
+ * over as a cluster holding nothing.
  */
 export function topologySection(
   model: Model,
-  notRead: readonly string[],
+  said: {
+    /** Why nothing of the map can be read: it failed, or is still opening. */
+    unread: string | null;
+    /** Every line the screen draws above the map about what it could not read. */
+    notes: readonly string[];
+  },
   t: T,
   caption: string
 ): PlacedSection {
@@ -31,11 +37,9 @@ export function topologySection(
     order: ORDER.own,
     title: t("topology", "title"),
     icon: iconSvg(Waypoints),
-    count: model.groups.length,
-    partial:
-      notRead.length > 0
-        ? t("topology", "shareNotRead", { kinds: notRead.join(", ") })
-        : null,
+    count: said.unread === null ? model.groups.length : null,
+    unread: said.unread,
+    partial: said.notes.length > 0 ? said.notes.join(" · ") : null,
     caption,
     body: {
       type: "table",

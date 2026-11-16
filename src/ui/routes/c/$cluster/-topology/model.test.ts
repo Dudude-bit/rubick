@@ -319,7 +319,12 @@ describe("the cluster map's model", () => {
       [node("Deployment", "cart")],
       [read("shop"), read("billing")]
     );
-    const section = topologySection(model, ["Secret"], t, "By namespace");
+    const section = topologySection(
+      model,
+      { unread: null, notes: ["Not read, so not on the map: Secret"] },
+      t,
+      "By namespace"
+    );
     expect(section.body.type).toBe("table");
     if (section.body.type !== "table") return;
     expect(section.body.rows.map((row) => row.cells[0].text)).toEqual([
@@ -327,5 +332,21 @@ describe("the cluster map's model", () => {
       "shop",
     ]);
     expect(section.partial).toContain("Secret");
+  });
+
+  /**
+   * Share pressed while the map was opening, or after it failed to open,
+   * published an empty cluster with nothing said unread. Fails if a map
+   * nobody could read yet is handed over with a count and no reason.
+   */
+  it("hands over a map not read yet as unread, not as an empty cluster", () => {
+    const section = topologySection(
+      of([], []),
+      { unread: "The map could not be read: refused", notes: [] },
+      t,
+      "By namespace"
+    );
+    expect(section.unread).toBe("The map could not be read: refused");
+    expect(section.count).toBeNull();
   });
 });

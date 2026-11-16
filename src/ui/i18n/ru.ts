@@ -1941,6 +1941,8 @@ export const ru: Catalogue = {
     nothingToDraw:
       "Рисовать нечего {scope}: нет ни маршрутов, ни Services, ни рабочих нагрузок.",
     shareNotRead: "Не прочитано, поэтому нет на карте: {kinds}",
+    shareStillOpening:
+      "Карта ещё открывалась: в ней ещё ничего не было прочитано.",
     shareGroup: "Группа",
     shareHolds: "Что в ней",
   },
