@@ -87,13 +87,13 @@ describe("the times a shared Changes report prints", () => {
       unwatched: ["DaemonSet"],
       kinds,
     };
-    const section = watchedSection(span, [span], [], t);
+    const section = watchedSection(span, [span], [], t, "all");
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toContain(
       "of the Deployments and StatefulSets this app watches here"
     );
     const whole = { from, seenAt: to, to: null, kinds };
-    const all = watchedSection(whole, [whole], [], t);
+    const all = watchedSection(whole, [whole], [], t, "all");
     expect(all.body.type === "text" && all.body.text).toContain(
       "of the Deployments, StatefulSets, and DaemonSets this app watches here"
     );
@@ -101,7 +101,7 @@ describe("the times a shared Changes report prints", () => {
 
   it("prints when watching started in UTC", () => {
     const span = { from, seenAt: to, to: null };
-    const section = watchedSection(span, [span], [], t);
+    const section = watchedSection(span, [span], [], t, "all");
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toMatch(/\b0?3:07\b.* UTC/);
   });
@@ -177,16 +177,86 @@ describe("what the shared Changes report says beyond the changes", () => {
   /** A session-only timeline is not one that was kept: fails if the file says nothing of it, or does not warn. */
   it("says the timeline was kept for this session only, as a warning", () => {
     const span = { from, seenAt: to, to: null };
-    const section = watchedSection(span, [span], [], t, {
+    const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
       keeping: { says: "off" },
+      identity: undefined,
       unreadable: 0,
       error: null,
       letGo: undefined,
+      readFrom: null,
     });
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toContain(
       "Kept for this session only: keeping between restarts is off in Settings."
     );
     expect(section.body.role).toBe("warn");
+  });
+
+  /**
+   * A busy cluster's first page is five hundred events, and the edit made
+   * before them is below the rows read. Fails if the file calls the watch
+   * quiet over rows nobody read.
+   */
+  it("calls no watch quiet over rows not read yet", () => {
+    const span = { from, seenAt: to, to: null };
+    const read = (readFrom: number | null) => ({
+      read: true,
+      keeping: { says: "kept" as const },
+      identity: undefined,
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom,
+    });
+    const unread = watchedSection(
+      span,
+      [span],
+      [],
+      t,
+      "all",
+      read(from + 60_000)
+    );
+    expect(unread.body.type === "text" && unread.body.text).not.toContain(
+      "No change recorded"
+    );
+    const whole = watchedSection(span, [span], [], t, "all", read(null));
+    expect(whole.body.type === "text" && whole.body.text).toContain(
+      "No change recorded"
+    );
+  });
+
+  /**
+   * kind made again under the same name, opened by someone who may not read
+   * kube-system: the rows kept from before may be the old cluster's. Fails if
+   * the file says nothing of it.
+   */
+  it("says the kept rows may be another cluster's where which cluster this is could not be checked", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
+      keeping: { says: "kept" },
+      identity: { says: "unknown", message: "namespaces is forbidden" },
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom: null,
+    });
+    expect(section.body.type === "text" && section.body.text).toContain(
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked (namespaces is forbidden)."
+    );
+  });
+
+  /**
+   * Under "Warnings only" the screen reads no change row at all, while forty
+   * Deployment edits sat in the timeline. Fails if the file sent on says none
+   * was made.
+   */
+  it("calls no watch quiet from a screen that read warnings only", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, "warnings");
+    expect(section.body.type === "text" && section.body.text).not.toContain(
+      "No change recorded"
+    );
   });
 });

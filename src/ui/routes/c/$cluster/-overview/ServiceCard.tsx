@@ -4,6 +4,8 @@ import { ExternalLink, PinOff } from "lucide-react";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import {
+  lastChangeOf,
+  lastChangeWords,
   pinShare,
   VERDICT_ROLE,
   verdictWords,
@@ -16,7 +18,7 @@ import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { ROLE_TEXT } from "@/lib/status-role";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
 import {
@@ -36,7 +38,7 @@ import {
 } from "@/lib/my-services";
 import { ASK_SHORT } from "@/lib/tell-me-when";
 import { useTimeline } from "@/hooks/useTimeline";
-import { isChange, rowWords } from "@/lib/changes";
+import { rowWords } from "@/lib/changes";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
 
@@ -123,10 +125,7 @@ export function ServiceCard({
   const ways = entryPointsOf(connections.data, chains);
   const unread = openQuestionsOf(connections.data);
   const waiting = useMemo(() => waitingFor(watches, pin), [watches, pin]);
-  // Not read yet, or not readable, is not "nothing seen".
-  const latest = timeline.read
-    ? (timeline.rows.find(isChange) ?? null)
-    : undefined;
+  const latest = lastChangeOf(timeline);
   const [allWays, setAllWays] = useState(false);
   const shownWays = allWays ? ways.entries : ways.entries.slice(0, WAYS_SHOWN);
 
@@ -222,10 +221,10 @@ export function ServiceCard({
 
         <dt className="text-fg-fnt">{t("services", "lastChange")}</dt>
         <dd className="min-w-0 truncate text-fg-mut">
-          {latest === undefined ? (
-            <span className="text-fg-fnt">{t("services", "notReadYet")}</span>
-          ) : latest === null ? (
-            <span className="text-fg-fnt">{t("services", "nothingSeen")}</span>
+          {!latest || "before" in latest ? (
+            <span className="text-fg-fnt">
+              {lastChangeWords(latest, t, (ms) => formatWhen(ms, "moment"))}
+            </span>
           ) : (
             <>
               <span className="font-mono">{rowWords(latest, t)}</span>

@@ -113,6 +113,15 @@ impl Store {
         }
     }
 
+    /// Whether a series' row is held just as `row` says: handed over again
+    /// with nothing new. One lookup, whatever is kept.
+    pub(super) fn holds(&self, row: &TimelineRow) -> bool {
+        self.series
+            .get(&row.id)
+            .and_then(|(class, key)| self.rows.get(class)?.get(key))
+            .is_some_and(|held| held.row.at == row.at && held.row.what == row.what)
+    }
+
     /// Numbers a row and keeps it: a series' repeat replaces its row. Costs
     /// the row, not a pass over what is kept.
     pub(super) fn record(&mut self, mut row: TimelineRow, now: i64) -> TimelineRow {

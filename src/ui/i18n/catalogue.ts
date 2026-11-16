@@ -2221,7 +2221,7 @@ export const en = {
     explained:
       "One clock for what changed: the controller's revisions, the delivery owner's history, Helm's history, what this app recorded of the object while it was connected, and the cluster's events about it. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching: no change made then is known, and its only events are those the cluster still held when this app looked again.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -2301,7 +2301,7 @@ export const en = {
     notWatchingNow: "Not watching this cluster right now.",
     watchingNow: "Watching since {since}",
     earlierRows:
-      "Rows before {since} were recorded by this app while it watched from {from} to {to}",
+      "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
@@ -2343,6 +2343,8 @@ export const en = {
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnknown:
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {
@@ -2807,6 +2809,9 @@ export const en = {
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",
+    nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
+    nothingSeenSinceCleared:
+      "nothing seen since {at}, when the timeline was cleared",
     waitingOn: "Waiting on",
     notLookedAt: "Not looked at",
     pinsFull: {

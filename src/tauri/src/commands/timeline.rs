@@ -35,9 +35,9 @@ pub struct Following {
 }
 
 /// Records the cluster on screen: the followed kinds and its events, on the
-/// shared watches, read across the cluster first and in the window's
-/// namespaces `scope` where the cluster refuses. Asked again with the same
-/// context, it moves the namespaces only.
+/// shared watches, read across the cluster, and in the window's namespaces
+/// `scope` where the cluster refuses a kind across it. Asked again with the
+/// same context, it moves those namespaces only.
 #[tauri::command]
 pub async fn timeline_follow(
     scope: Option<Vec<String>>,
@@ -53,18 +53,27 @@ pub async fn timeline_follow(
         let context = context.clone();
         off_main(move || Ok(timelines.cluster(&context))).await?
     };
-    // A reader who may not read kube-system cannot tell, and nothing is dropped.
-    let identity = kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
-        .get("kube-system")
-        .await
-        .ok()
-        .and_then(|namespace| namespace.metadata.uid);
-    let another_cluster = cluster.seen_cluster(identity);
+    // A reader who may not read kube-system cannot tell: nothing is dropped,
+    // and the rows kept before are said to be perhaps another cluster's.
+    let another_cluster =
+        match kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
+            .get("kube-system")
+            .await
+        {
+            Ok(namespace) => namespace
+                .metadata
+                .uid
+                .is_some_and(|identity| cluster.seen_cluster(identity)),
+            Err(error) => {
+                cluster.not_identified(Error::from(error).said());
+                false
+            }
+        };
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }
-    let subscription = state.feeds.subscribe(&here, ask(scope.clone())).await?;
-    timelines.follow(context, subscription, scope);
+    let subscription = state.feeds.subscribe(&here, ask(scope)).await?;
+    timelines.follow(context, subscription);
     Ok(Following { another_cluster })
 }
 
