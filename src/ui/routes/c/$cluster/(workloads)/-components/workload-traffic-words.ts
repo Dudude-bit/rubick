@@ -1,14 +1,19 @@
 /** The words of a workload's Traffic block, for the block and its Share. */
 import { ArrowRightLeft } from "lucide-react";
 
-import type { WorkloadKey } from "@/generated/types";
+import type { OwnerReference, WorkloadKey } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { formatShare } from "@/lib/cost";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
-import type { FlowRow, TrafficReading } from "@/lib/traffic";
+import {
+  heard,
+  silenceOf,
+  type FlowRow,
+  type TrafficReading,
+} from "@/lib/traffic";
 import {
   bytesRate,
+  cellText,
   endLabel,
   endSub,
   ms,
@@ -34,6 +39,18 @@ export function subjectOf(
     : null;
 }
 
+/**
+ * The CronJob a Job's flows are filed under: its pods are keyed to it, and
+ * Hubble strips the run's suffix too, so no flow ever names the Job.
+ */
+export function cronJobOf(owners: readonly OwnerReference[]): string | null {
+  return (
+    owners.find(
+      (owner) => owner.controller === true && owner.kind === "CronJob"
+    )?.name ?? null
+  );
+}
+
 /** A row's own rate, by the first family it has. */
 function rateWords(row: FlowRow, t: T): string {
   if (row.requests.value !== null)
@@ -50,25 +67,35 @@ export function rowWords(row: FlowRow, peer: "from" | "to", t: T): string[] {
     rateWords(row, t),
     row.errorShare.value === null
       ? ""
-      : t("traffic", "subErrors", { share: formatShare(row.errorShare.value) }),
+      : t("traffic", "subErrors", {
+          share: cellText(row.errorShare, "share", t),
+        }),
     row.p95.value === null ? "" : `p95 ${ms(row.p95.value, t)}`,
     row.requests.source ?? row.bytes.source ?? row.events.source ?? "",
   ];
 }
 
-/** What each source can say about a workload with no flows, or about its reach. */
+export interface BlockNote {
+  text: string;
+  /** `warn`: something was not looked at. */
+  tone: "warn" | "mute";
+}
+
+/** What each source can say about its reach, and why it has no flow where it has none. */
 export function subjectNotes(
   reading: TrafficReading,
-  quiet: boolean,
+  subject: WorkloadKey,
   window: string,
   t: T
-): string[] {
-  const out: string[] = [];
+): BlockNote[] {
+  const out: BlockNote[] = [];
+  const mute = (text: string) => out.push({ text, tone: "mute" });
+  const warn = (text: string) => out.push({ text, tone: "warn" });
   reading.sources.forEach((source, index) => {
     const seen = reading.answer.observed?.find((each) => each.source === index);
     if (source.marks && seen && seen.pods > 0) {
       if (seen.marked === 0) {
-        out.push(
+        mute(
           t("traffic", "notObserved", {
             source: source.name,
             pods: t("count", "itsPods", { n: seen.pods }),
@@ -77,7 +104,7 @@ export function subjectNotes(
         return;
       }
       if (seen.marked < seen.pods)
-        out.push(
+        mute(
           t("traffic", "partlyObserved", {
             source: source.name,
             marked: seen.marked,
@@ -85,16 +112,45 @@ export function subjectNotes(
           })
         );
     }
-    if (quiet)
-      out.push(
-        t("traffic", source.nodeAgent ? "quietNodeAgent" : "quiet", {
-          source: source.name,
-          window,
-        })
-      );
+    const silence = silenceOf(reading, index, subject.namespace);
+    if (heard(reading, index)) {
+      if (silence.says === "notRead")
+        warn(
+          t("traffic", "sourcePartly", {
+            source: source.name,
+            said: silence.said,
+          })
+        );
+      return;
+    }
+    switch (silence.says) {
+      case "notRead":
+        warn(
+          t("traffic", "quietNotRead", {
+            source: source.name,
+            said: silence.said,
+          })
+        );
+        return;
+      case "unmatched":
+        warn(
+          t("traffic", "quietUnmatched", {
+            source: source.name,
+            namespace: subject.namespace,
+          })
+        );
+        return;
+      case "quiet":
+        mute(
+          t("traffic", source.nodeAgent ? "quietNodeAgent" : "quiet", {
+            source: source.name,
+            window,
+          })
+        );
+    }
   });
   if (reading.answer.podsFailed)
-    out.push(
+    warn(
       t("traffic", "podsFailed", { said: reading.answer.podsFailed.message })
     );
   return out;
@@ -103,7 +159,7 @@ export function subjectNotes(
 export function trafficSection(
   callers: readonly FlowRow[],
   callees: readonly FlowRow[],
-  notes: readonly string[],
+  notes: readonly BlockNote[],
   t: T
 ): PlacedSection {
   const line = (row: FlowRow, peer: "from" | "to", way: string) => {
@@ -122,7 +178,7 @@ export function trafficSection(
     title: t("traffic", "title"),
     icon: iconSvg(ArrowRightLeft),
     count: callers.length + callees.length,
-    partial: notes.length > 0 ? notes.join(" ") : null,
+    partial: notes.length > 0 ? notes.map((note) => note.text).join(" ") : null,
     body: {
       type: "table",
       columns: [

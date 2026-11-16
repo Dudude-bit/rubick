@@ -17,6 +17,7 @@ import {
   MEASURES,
   pairRows,
   RowMemo,
+  silenceOf,
   weights,
   type FlowSource,
   type TrafficReading,
@@ -31,6 +32,8 @@ const source = (name: string, measures: readonly Measure[]): FlowSource => ({
   need: "needIstio",
   marks: false,
   nodeAgent: false,
+  needsPods: false,
+  grpcErrors: name === "Istio",
 });
 
 const ISTIO = source("Istio", [
@@ -141,6 +144,58 @@ describe("the rows the page and the block draw", () => {
     expect(idle.p95).toEqual({ value: null, source: null, state: "measured" });
   });
 
+  /**
+   * A source whose query failed has no flow on any pair, so a pair only
+   * another source saw would otherwise call its requests none, or not measured.
+   */
+  it("says not read where the source measuring it failed and so has no flow on the pair", () => {
+    const hubbleHttp = source("Hubble", ["events", "requests"]);
+    for (const other of [hubbleHttp, HUBBLE]) {
+      const [row] = pairRows(
+        reading(
+          [ISTIO, other],
+          [flow(1, { events: 3 })],
+          [failed(0, "requests")]
+        )
+      ).rows;
+      expect(row.requests).toEqual({
+        value: null,
+        source: "Istio",
+        state: "notRead",
+      });
+      expect(row.errorShare.state).toBe("notRead");
+    }
+  });
+
+  /** A read that fails with the pair's flows unchanged must not hand back the row that said "none". */
+  it("draws a row again when a read failed though its flows did not change", () => {
+    const memo = new RowMemo();
+    const flows = [flow(1, { events: 3 })];
+    const [before] = memo.rows(reading([ISTIO, HUBBLE], flows));
+    const [after] = memo.rows(
+      reading([ISTIO, HUBBLE], flows, [failed(0, "requests")])
+    );
+    expect(before.requests.state).toBe("notMeasured");
+    expect(after.requests.state).toBe("notRead");
+  });
+
+  /**
+   * Hubble's errors are HTTP 5xx: a pair that may carry gRPC has only a floor
+   * from it, while Istio counts gRPC statuses and vouches for its share.
+   */
+  it("takes a share as a floor from a source that cannot see gRPC fail", () => {
+    const hubble = source("Hubble", ["requests", "errors"]);
+    const on = (from: FlowSource, protocols: string[], errors = 0) =>
+      pairRows(
+        reading([from], [{ ...flow(0, { requests: 10, errors }), protocols }])
+      ).rows[0];
+    expect(on(hubble, ["HTTP/2"]).errorShare.floor).toBe(true);
+    expect(flowTone(on(hubble, ["HTTP/2"]))).toBe("mute");
+    expect(flowTone(on(hubble, ["HTTP/2"], 1))).toBe("err");
+    expect(on(hubble, ["HTTP/1.1"]).errorShare.floor).toBeUndefined();
+    expect(flowTone(on(ISTIO, ["grpc"]))).toBe("ok");
+  });
+
   /** The share of errors is over the same source's requests, and unknown where its errors were not read. */
   it("works the error share out of one source and leaves it unknown when its errors failed", () => {
     const [row] = pairRows(
@@ -244,6 +299,7 @@ describe("a live pair as a row", () => {
             name: "deny-all",
           },
         ],
+        l7: false,
       },
     ],
     requests: null,
@@ -275,6 +331,35 @@ describe("a live pair as a row", () => {
     expect(http.p95.value).toBe(12);
   });
 
+  /**
+   * A failed gRPC call answers HTTP 200: over HTTP/2 the share Hubble counts
+   * is only a floor, and a floor under the warning line is never green.
+   */
+  it("calls a share over HTTP/2 a floor and never paints it ok", () => {
+    const grpc = liveRow(
+      pair({
+        dropped: 0,
+        drops: [],
+        requests: 10,
+        errors: 0,
+        protocols: ["HTTP/2"],
+      })
+    );
+    expect(grpc.errorShare.floor).toBe(true);
+    expect(flowTone(grpc)).toBe("mute");
+    const plain = liveRow(
+      pair({
+        dropped: 0,
+        drops: [],
+        requests: 10,
+        errors: 0,
+        protocols: ["HTTP/1.1"],
+      })
+    );
+    expect(plain.errorShare.floor).toBeUndefined();
+    expect(flowTone(plain)).toBe("ok");
+  });
+
   /** A pair object the stream did not resend keeps its row, so it does not redraw. */
   it("keeps a row for as long as its pair object", () => {
     const rows = new LiveRows();
@@ -282,5 +367,77 @@ describe("a live pair as a row", () => {
     const [first] = rows.rows([one]);
     expect(rows.rows([one])[0]).toBe(first);
     expect(rows.rows([pair()])[0]).not.toBe(first);
+  });
+});
+
+describe("what a source with no flow allows saying", () => {
+  const withPods = (
+    sources: FlowSource[],
+    pods: Pick<TrafficReading["answer"], "podsUnread" | "podsFailed">
+  ): TrafficReading => {
+    const read = reading(sources, []);
+    return { ...read, answer: { ...read.answer, ...pods } };
+  };
+  const unreadShop = {
+    podsUnread: [
+      { namespace: "shop", code: "FORBIDDEN", message: "forbidden" },
+    ],
+    podsFailed: null,
+  };
+
+  /** Only a source every query of which answered saw nothing; a failed read is "could not look". */
+  it("is quiet only where every query answered", () => {
+    expect(silenceOf(reading([ISTIO], []), 0, null)).toEqual({ says: "quiet" });
+    expect(
+      silenceOf(
+        reading(
+          [ISTIO],
+          [],
+          [
+            { source: 0, measure: "requests", state: { says: "noSeries" } },
+            failed(0, "p95"),
+          ]
+        ),
+        0,
+        "shop"
+      )
+    ).toEqual({ says: "notRead", said: "timed out after 20s", all: false });
+    expect(
+      silenceOf(
+        reading([ISTIO], [], [failed(0, "requests"), failed(0, "bytes")]),
+        0,
+        null
+      )
+    ).toMatchObject({ says: "notRead", all: true });
+  });
+
+  /**
+   * A source whose names only the pods resolve cannot find a subject whose
+   * namespace's pods were not read; one that writes the kind can.
+   */
+  it("is unmatched for a source that needs the pods the subject's namespace hid", () => {
+    const istio = { ...ISTIO, needsPods: true };
+    expect(silenceOf(withPods([istio], unreadShop), 0, "shop")).toEqual({
+      says: "unmatched",
+    });
+    expect(
+      silenceOf(
+        withPods([istio], {
+          podsUnread: [],
+          podsFailed: { code: "FORBIDDEN", message: "forbidden" },
+        }),
+        0,
+        "shop"
+      )
+    ).toEqual({ says: "unmatched" });
+    expect(silenceOf(withPods([istio], unreadShop), 0, "web")).toEqual({
+      says: "quiet",
+    });
+    expect(silenceOf(withPods([CARETTA], unreadShop), 0, "shop")).toEqual({
+      says: "quiet",
+    });
+    expect(silenceOf(withPods([istio], unreadShop), 0, null)).toEqual({
+      says: "quiet",
+    });
   });
 });

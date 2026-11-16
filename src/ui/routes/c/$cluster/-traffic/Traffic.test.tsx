@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import {
   afterEach,
@@ -19,6 +19,7 @@ import {
   type TrafficReading,
 } from "@/lib/traffic";
 import { useClusterStore } from "@/stores/clusterStore";
+import { vendorLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 
 const traffic = vi.fn<() => TrafficState>();
@@ -80,6 +81,8 @@ const ISTIO: FlowSource = {
   need: "needIstio",
   marks: true,
   nodeAgent: false,
+  needsPods: false,
+  grpcErrors: true,
 };
 const HUBBLE: FlowSource = {
   ...ISTIO,
@@ -89,6 +92,7 @@ const HUBBLE: FlowSource = {
   need: "needHubble",
   marks: false,
   nodeAgent: true,
+  grpcErrors: false,
 };
 
 const workload = (name: string): FlowEnd => ({
@@ -96,7 +100,10 @@ const workload = (name: string): FlowEnd => ({
   key: { namespace: "shop", group: "apps", kind: "Deployment", name },
 });
 
-function read(set: Partial<Record<Measure, number>> | null): TrafficState {
+function read(
+  set: Partial<Record<Measure, number>> | null,
+  reads: TrafficReading["answer"]["reads"] = []
+): TrafficState {
   const reading: TrafficReading = {
     sources: [ISTIO],
     window: "5m",
@@ -114,7 +121,7 @@ function read(set: Partial<Record<Measure, number>> | null): TrafficState {
             },
           ]
         : [],
-      reads: [],
+      reads,
       observed: null,
       coverage: [],
       podsUnread: [],
@@ -131,6 +138,17 @@ function read(set: Partial<Record<Measure, number>> | null): TrafficState {
     lastFailed: null,
   };
 }
+
+/** A supplier that did not answer its probe, as the capability hands it over. */
+const down = (askAgain: () => void) => ({
+  state: "unreachable" as const,
+  vendor: "Prometheus",
+  endpoint: "prom.example.com",
+  reason: "connection refused",
+  askAgain,
+  asking: false,
+  settings: vendorLink("prometheus", { tab: "connection" }),
+});
 
 const open = () =>
   renderWithRouter(<Traffic />, {
@@ -180,9 +198,7 @@ describe("the Traffic page", () => {
     };
     const unreachable = await said({
       says: "unreachable",
-      vendor: "Prometheus",
-      endpoint: "prom.example.com",
-      reason: "connection refused",
+      power: down(() => {}),
     });
     const none = await said({
       says: "noSource",
@@ -208,6 +224,22 @@ describe("the Traffic page", () => {
     expect(stream.opened).toBe(0);
   });
 
+  /**
+   * A probe's answer is cached and never retried behind the reader's back:
+   * where the page says the supplier did not answer, it offers to ask again
+   * and its Connection tab, or it says so after the supplier is back.
+   */
+  it("offers to ask a supplier that did not answer again, and its connection", async () => {
+    const askAgain = vi.fn();
+    traffic.mockReturnValue({ says: "unreachable", power: down(askAgain) });
+    await open();
+    fireEvent.click(screen.getByTestId("ask-supplier-again"));
+    expect(askAgain).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("link", { name: "Prometheus connection" })
+    ).toBeTruthy();
+  });
+
   /** A reading draws the flows, holds the map's stream while on screen, and lets it go when left. */
   it("draws a reading's flows and lets the map's stream go when it is left", async () => {
     traffic.mockReturnValue(read({ requests: 12, errors: 0, p95: 7 }));
@@ -229,6 +261,33 @@ describe("the Traffic page", () => {
       ).length
     ).toBeGreaterThan(0);
   });
+
+  /**
+   * Every flow query refused by Prometheus is an answer of nothing, and the
+   * sentence over the map must say it could not be read, not that it was quiet.
+   */
+  it("says a source whose flow queries failed could not be read, never that it saw no flows", async () => {
+    const refused = {
+      says: "failed" as const,
+      code: "PROMETHEUS",
+      message: "query processing would load too many samples into memory",
+    };
+    traffic.mockReturnValue(
+      read(null, [
+        { source: 0, measure: "requests", state: refused },
+        { source: 0, measure: "errors", state: refused },
+      ])
+    );
+    await open();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/saw no flows/);
+    expect(text).toContain(
+      "Istio: flows could not be read, so whether there were any is not known."
+    );
+    expect(text).toContain(
+      "Istio's flows could not be read: query processing would load too many samples into memory"
+    );
+  });
 });
 
 describe("the Traffic page, live", () => {
@@ -243,6 +302,7 @@ describe("the Traffic page, live", () => {
     },
     lost: 0,
     untracked: 0,
+    unreached: [],
     end: null,
     error: null,
     ...over,
@@ -332,6 +392,32 @@ describe("the Traffic page, live", () => {
     );
     for (const text of [off, unread, tls, ca, unverified])
       expect(text).not.toMatch(/saw no flows/);
+  });
+
+  /**
+   * A node the relay cannot reach sends no flows: an empty map then is not
+   * a quiet cluster, and the page names the nodes and why.
+   */
+  it("names the nodes the relay cannot reach and never calls their silence no flows", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    live.mockReturnValue(
+      snapshot({
+        unreached: [
+          {
+            name: "kind/worker",
+            state: "NODE_UNAVAILABLE",
+            message: "connection refused",
+          },
+        ],
+      })
+    );
+    await open();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(
+      "Hubble Relay cannot reach kind/worker (connection refused)"
+    );
+    expect(text).toContain("on the nodes it reaches");
+    expect(text).not.toContain("saw no flows in any namespace in the");
   });
 
   /** Without anything live to read, there is no live switch to offer. */

@@ -86,17 +86,35 @@ const sum = (by: readonly string[], inner: string) =>
 const first = (...branches: string[]) =>
   branches.map((branch) => `(${branch})`).join(" or ");
 
+/**
+ * Each reporter's answer only on pairs no earlier reporter counted
+ * `requests` for: what is divided by requests comes from the same reporter.
+ */
+const sameReporterAs = (
+  pair: readonly string[],
+  requests: readonly string[],
+  answers: readonly string[]
+) =>
+  answers
+    .map((answer, i) =>
+      i === 0
+        ? `(${answer})`
+        : `((${answer}) unless on(${pair.join(", ")}) (${requests.slice(0, i).join(" or ")}))`
+    )
+    .join(" or ");
+
 interface Definition {
   id: string;
   name: string;
   need: TrafficWord;
   marks: boolean;
   nodeAgent: boolean;
+  grpcErrors: boolean;
   presence: string[];
   /** From what the presence queries found, its state and what it measures. */
   judge: (
     found: readonly string[][]
-  ) => Pick<FlowSource, "state" | "measures" | "found">;
+  ) => Pick<FlowSource, "state" | "measures" | "found" | "needsPods">;
   queries: (source: number, found: readonly string[], ask: Ask) => FlowQuery[];
   marker?: Omit<PodMarker, "source">;
 }
@@ -166,22 +184,19 @@ export function istioQueries(
     out.push(query(source, measure, promql, ISTIO_FROM, ISTIO_TO, more));
   if (found.includes("istio_requests_total")) {
     const metric = "istio_requests_total";
-    pair(
-      "requests",
-      first(
-        ...REPORTERS.map((r) =>
-          sum(
-            [...ISTIO_PAIR, "request_protocol"],
-            scoped(metric, [r], ISTIO_SCOPE, ask)
-          )
-        )
-      ),
-      { protocol: "request_protocol" }
+    const requests = REPORTERS.map((r) =>
+      sum(
+        [...ISTIO_PAIR, "request_protocol"],
+        scoped(metric, [r], ISTIO_SCOPE, ask)
+      )
     );
+    pair("requests", first(...requests), { protocol: "request_protocol" });
     pair(
       "errors",
-      first(
-        ...REPORTERS.map((r) =>
+      sameReporterAs(
+        ISTIO_PAIR,
+        requests,
+        REPORTERS.map((r) =>
           sum(
             ISTIO_PAIR,
             `${scoped(metric, [r, 'response_code=~"5.."'], ISTIO_SCOPE, ask)} or ${scoped(
@@ -318,22 +333,19 @@ export function hubbleQueries(
     );
   if (found.includes("hubble_http_requests_total")) {
     const reporters = ['reporter!="client"', 'reporter="client"'];
-    pair(
-      "requests",
-      first(
-        ...reporters.map((r) =>
-          sum(
-            [...pairs, "protocol"],
-            scoped("hubble_http_requests_total", [r], HUBBLE_SCOPE, ask)
-          )
-        )
-      ),
-      { protocol: "protocol" }
+    const requests = reporters.map((r) =>
+      sum(
+        [...pairs, "protocol"],
+        scoped("hubble_http_requests_total", [r], HUBBLE_SCOPE, ask)
+      )
     );
+    pair("requests", first(...requests), { protocol: "protocol" });
     pair(
       "errors",
-      first(
-        ...reporters.map((r) =>
+      sameReporterAs(
+        pairs,
+        requests,
+        reporters.map((r) =>
           sum(
             pairs,
             scoped(
@@ -438,8 +450,9 @@ export function carettaQueries(
   _found: readonly string[],
   ask: Ask
 ): FlowQuery[] {
-  // One connection is two series, one for each side's bytes; the client's
-  // is read, as Caretta's own README reads it.
+  // Each side's agent writes what its own socket sent, under the same
+  // client and server labels (links_tracer.go): both roles added are both
+  // directions, and a caller no agent runs beside is still seen by the server's.
   return [
     query(
       source,
@@ -448,7 +461,7 @@ export function carettaQueries(
         CARETTA_PAIR,
         scoped(
           "caretta_links_observed",
-          ['role="1"'],
+          [],
           ["client_namespace", "server_namespace"],
           ask
         )
@@ -474,6 +487,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needIstio",
     marks: true,
     nodeAgent: false,
+    grpcErrors: true,
     presence: [
       'count by (__name__) ({__name__=~"istio_requests_total|istio_tcp_sent_bytes_total"})',
     ],
@@ -488,6 +502,8 @@ export const DEFINITIONS: readonly Definition[] = [
         state: { says: http || tcp ? "present" : "absent" },
         measures,
         found: names,
+        // Its workload label is a pod label, matched through the pods.
+        needsPods: true,
       };
     },
     queries: istioQueries,
@@ -502,6 +518,7 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needHubble",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: [
       `count by (__name__) ({__name__=~"${HUBBLE_METRICS.join("|")}"})`,
       `count({__name__=~"${HUBBLE_METRICS.join("|")}", destination_workload!=""})`,
@@ -530,6 +547,7 @@ export const DEFINITIONS: readonly Definition[] = [
               ? ["source_pod"]
               : []),
         ],
+        needsPods: byWorkload.length === 0,
       };
     },
     queries: hubbleQueries,
@@ -540,11 +558,13 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needBeyla",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: [`count by (__name__) (${BEYLA_METRIC})`],
     judge: ([names]) => ({
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
+      needsPods: false,
     }),
     queries: beylaQueries,
   },
@@ -554,11 +574,13 @@ export const DEFINITIONS: readonly Definition[] = [
     need: "needCaretta",
     marks: false,
     nodeAgent: true,
+    grpcErrors: false,
     presence: ['count by (__name__) ({__name__="caretta_links_observed"})'],
     judge: ([names]) => ({
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
+      needsPods: false,
     }),
     queries: carettaQueries,
   },
@@ -574,6 +596,7 @@ export async function flowSources(): Promise<FlowSource[]> {
         need: definition.need,
         marks: definition.marks,
         nodeAgent: definition.nodeAgent,
+        grpcErrors: definition.grpcErrors,
       };
       try {
         const answers = await Promise.all(
@@ -591,6 +614,7 @@ export async function flowSources(): Promise<FlowSource[]> {
           state: { says: "failed", said: errorToShow(error) },
           measures: [],
           found: [],
+          needsPods: false,
         } satisfies FlowSource;
       }
     })

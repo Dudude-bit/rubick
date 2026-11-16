@@ -1059,6 +1059,7 @@ export interface LiveDrop {
   reason: string;
   rate: number;
   policies: PolicyRef[];
+  l7: boolean;
 }
 
 export interface PolicyRef {
@@ -3933,6 +3934,7 @@ export type AppEvent =
       relay: RelayAt | null;
       lost: number;
       untracked: number;
+      unreached: UnreachedNode[];
     }
   | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd }
   | {
@@ -3968,7 +3970,14 @@ export type FlowEnd =
   | { is: "service"; namespace: string | null; name: string }
   | { is: "node"; name: string }
   | { is: "address"; address: string }
-  | { is: "unidentified"; namespace: string | null; word: string };
+  | { is: "unidentified"; namespace: string | null; word: string }
+  | {
+      is: "remote";
+      cluster: string;
+      namespace: string;
+      kind: string;
+      name: string;
+    };
 
 export type NotListedWhy = "noSuch" | "podsUnread";
 
@@ -4188,4 +4197,10 @@ export type Show = "all" | "changes" | "warnings";
 
 export interface Following {
   anotherCluster: boolean;
+}
+
+export interface UnreachedNode {
+  name: string;
+  state: string;
+  message: string;
 }

@@ -502,6 +502,7 @@ pub enum AppEvent {
         relay: Option<crate::integrations::hubble::RelayAt>,
         lost: u64,
         untracked: u64,
+        unreached: Vec<crate::integrations::hubble::UnreachedNode>,
     },
     /// A live stream ended; exactly one per stream, on every path.
     HubbleFlowsEnded {
@@ -767,6 +768,7 @@ mod tests {
                 relay: None,
                 lost: 0,
                 untracked: 0,
+                unreached: vec![],
             },
             AppEvent::HubbleFlowsEnded {
                 stream_id: "hubble-1".into(),

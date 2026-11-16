@@ -2404,7 +2404,12 @@ export const en = {
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
+    liveUnreached:
+      "Hubble Relay cannot reach {nodes}: flows seen there do not arrive.",
+    nothingOnReached:
+      "{sources} saw no flows in {scope} on the nodes it reaches, in the {window}.",
     panelDenied: "denied by {policies}",
+    panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
     window1h: "last hour",
@@ -2426,12 +2431,15 @@ export const en = {
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
-    cut: "Showing the busiest {kept}; the quietest {cut} are left out.",
+    notReadInWindow:
+      "{sources}: flows could not be read, so whether there were any is not known.",
+    cut: "Showing {kept}: the busiest by requests, bytes, flow events and drops in turn; {cut} quieter are left out.",
     podsFailed:
       "Pods could not be read ({said}), so names the sources wrote are not matched to workloads.",
     podsLabel: "pods",
     sourceFailed: "{source} could not be looked for: {said}",
-    sourcePartly: "Some of {source}'s numbers could not be read.",
+    sourcePartly: "Some of {source}'s numbers could not be read: {said}",
+    sourceUnread: "{source}'s flows could not be read: {said}",
     groupNotOnMap: "Not on the map: only named by a flow",
     endAmbiguous: "a name shared by {kinds}",
     endNotListed: "named by a flow; not listed in {namespace}",
@@ -2441,12 +2449,15 @@ export const en = {
     endNode: "a node",
     endAddress: "an address no workload has",
     endUnidentified: "not identified by its source",
+    endRemote: "{namespace} in cluster {cluster} of the mesh",
     milliseconds: "{v} ms",
     cellNotRead: "not read",
     cellNone: "none",
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellFloor:
+      "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
     panelClose: "Close",
     panelSeenBy:
@@ -2455,6 +2466,8 @@ export const en = {
     panelNothing: "nothing in this window",
     panelRequests: "{v} requests/s",
     panelErrors: "{share} of them errors (5xx, or gRPC other than OK)",
+    panelErrorsHttp:
+      "{share} of them HTTP 5xx (a failed gRPC call is answered with a 200 and is not counted)",
     panelBytes: "{v}",
     panelEvents: "{v} flow events/s",
     panelDrops: "{v} drops/s",
@@ -2479,6 +2492,12 @@ export const en = {
     quiet: "{source} saw no flows to or from it in the {window}.",
     quietNodeAgent:
       "{source} saw no flows to or from it in the {window}; it sees only the nodes its agent runs on.",
+    ofCronJob:
+      "Flows are counted for CronJob {name}, which made this Job: the sources file every run under it.",
+    quietNotRead:
+      "Whether {source} saw flows to or from it is not known: they could not be read ({said}).",
+    quietUnmatched:
+      "{source} names workloads through their pods, and the pods in {namespace} could not be read, so its flows to or from it could not be found.",
     shareWay: "Way",
     sharePeer: "Workload",
     shareNumbers: "Numbers",

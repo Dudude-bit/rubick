@@ -8,6 +8,7 @@ import type { T } from "@/i18n/useT";
 import type { MapTone } from "@/integrations";
 import { flowTone, primaryOf, weights, type FlowRow } from "@/lib/traffic";
 import type { GraphEdge, GraphGroup, GraphNode } from "../-map/types";
+import { drawnCrd } from "@/lib/links";
 import { nodeId } from "../-map/ids";
 import { modelOf, OWNERLESS, type ModelMemo } from "../-topology/model";
 import { endKind, endLabel, endSub, edgeSub } from "./traffic-words";
@@ -53,6 +54,7 @@ const homeOf = (end: FlowEnd): string | null => {
       return end.namespace;
     case "node":
     case "address":
+    case "remote":
       return null;
   }
 };
@@ -131,6 +133,9 @@ export function trafficModel(input: {
       id,
       group: home,
       kind: endKind(end),
+      // A workload's own kind in its own group: a namesake of a built-in in
+      // another group is drawn as a kind of its own, not with the built-in's glyph.
+      crd: end.is === "workload" ? drawnCrd(end.key) : undefined,
       label: endLabel(end),
       sub: endSub(end, t),
       tone: "unknown",

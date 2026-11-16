@@ -11,7 +11,7 @@ vi.mock("@/integrations", async (importOriginal) => ({
   useCapabilityState: () => capability(),
 }));
 
-const { useTraffic } = await import("./useTraffic");
+const { sourcesRefresh, useTraffic } = await import("./useTraffic");
 
 const source = (says: "present" | "absent"): FlowSource => ({
   id: "istio",
@@ -22,6 +22,8 @@ const source = (says: "present" | "absent"): FlowSource => ({
   need: "needIstio",
   marks: true,
   nodeAgent: false,
+  needsPods: false,
+  grpcErrors: true,
 });
 
 const READING: TrafficReading = {
@@ -118,5 +120,43 @@ describe("reading traffic", () => {
     const { result } = run();
     await waitFor(() => expect(result.current.says).toBe("read"));
     expect(read).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("how often sources are asked about", () => {
+  /**
+   * Sources come with installs and are asked about rarely; one that could
+   * not be looked for is asked again soon, or the rail says it failed for
+   * minutes after Prometheus answers again.
+   */
+  it("asks again soon where a source could not be looked for", () => {
+    const failed: FlowSource = {
+      ...source("absent"),
+      state: { says: "failed", said: "bad_data" },
+    };
+    expect(sourcesRefresh(undefined)).toBe("unserved");
+    expect(sourcesRefresh([source("present"), source("absent")])).toBe(
+      "unserved"
+    );
+    expect(sourcesRefresh([source("present"), failed])).toBe("steady");
+  });
+
+  /** And the hook asks at that rate: a failed source is looked for again within a minute. */
+  it("looks for a failed source again without anyone reopening the page", async () => {
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+    });
+    try {
+      capability.mockReturnValue(ready);
+      sources.mockResolvedValue([
+        { ...source("present"), state: { says: "failed", said: "bad_data" } },
+      ]);
+      run();
+      await vi.waitFor(() => expect(sources).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(sources.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

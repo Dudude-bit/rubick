@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
+import { AskAgain } from "../-supplier/AskAgain";
 import {
   GraphCanvas,
   type GraphCanvasHandle,
@@ -45,7 +46,7 @@ import { FlowPanel } from "./FlowPanel";
 import { trafficModel } from "./model";
 import { SourceRail } from "./SourceRail";
 import { liveStopped } from "./live-words";
-import { WINDOW_WORD } from "./traffic-words";
+import { nothingWords, unreadNotes, WINDOW_WORD } from "./traffic-words";
 
 /** Who talks to whom, from the series a connected Prometheus holds. */
 export function Traffic() {
@@ -182,10 +183,15 @@ export function Stopped({
       case "checking":
         return t("traffic", "checking");
       case "unreachable":
-        return t("traffic", "unreachable", {
-          endpoint: state.endpoint,
-          reason: state.reason,
-        });
+        return (
+          <>
+            {t("traffic", "unreachable", {
+              endpoint: state.power.endpoint,
+              reason: state.power.reason,
+            })}{" "}
+            <AskAgain power={state.power} />
+          </>
+        );
       case "looking":
         return t("traffic", "looking", { endpoint: state.endpoint });
       case "noSource":
@@ -469,11 +475,7 @@ function WindowView({
       rail={<SourceRail sources={sources} reading={reading} />}
       notes={notes}
       unread={reading.answer.podsUnread}
-      quiet={t("traffic", "nothingInWindow", {
-        sources: reading.sources.map((each) => each.name).join(", "),
-        scope: scopeWords,
-        window: windowWords,
-      })}
+      quiet={nothingWords(reading, scopeWords, windowWords, t)}
       panelWindow={windowWords}
       cut={reading.answer.cut > 0}
       sharePartial={partialOf(reading, sources, t)}
@@ -535,6 +537,20 @@ function LiveView({
           },
         ]
       : []),
+    ...(live.unreached.length > 0
+      ? [
+          {
+            text: t("traffic", "liveUnreached", {
+              nodes: live.unreached
+                .map((node) =>
+                  node.message ? `${node.name} (${node.message})` : node.name
+                )
+                .join(", "),
+            }),
+            tone: "warn" as const,
+          },
+        ]
+      : []),
   ];
   return (
     <FlowsView
@@ -557,11 +573,11 @@ function LiveView({
         ...caveats,
       ]}
       unread={[]}
-      quiet={t("traffic", "nothingInWindow", {
-        sources: LIVE_SOURCE.name,
-        scope: scopeWords,
-        window: lastMinute,
-      })}
+      quiet={t(
+        "traffic",
+        live.unreached.length > 0 ? "nothingOnReached" : "nothingInWindow",
+        { sources: LIVE_SOURCE.name, scope: scopeWords, window: lastMinute }
+      )}
       panelWindow={lastMinute}
       cut={live.untracked > 0}
       sharePartial={
@@ -597,6 +613,7 @@ function notesOf(
           said: source.state.said,
         })
       );
+  out.push(...unreadNotes(reading, t));
   return out;
 }
 
@@ -605,14 +622,6 @@ function partialOf(
   sources: readonly FlowSource[],
   t: ReturnType<typeof useT>
 ): string | null {
-  const failed = reading.answer.reads
-    .filter((read) => read.state.says === "failed")
-    .map((read) => reading.sources[read.source]?.name ?? "");
-  const words = [
-    ...notesOf(reading, sources, t),
-    ...[...new Set(failed)].map((source) =>
-      t("traffic", "sourcePartly", { source })
-    ),
-  ];
+  const words = notesOf(reading, sources, t);
   return words.length > 0 ? words.join(" ") : null;
 }

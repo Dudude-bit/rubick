@@ -80,6 +80,23 @@ describe("Istio's queries", () => {
     expect(errors).toContain('grpc_response_status!="0",response_code!~"5.."');
   });
 
+  /**
+   * A share of errors over requests from another reporter can pass 100%:
+   * the client's errors count only where the server reported no requests.
+   */
+  it("takes the client's errors only for a pair the server reported no requests for", () => {
+    const errors = of(istio(), "errors");
+    const [server, rest] = errors.split(") or ((");
+    const [client, guard] = rest.split(" unless on(");
+    expect(server).toContain('reporter=~"destination|waypoint"');
+    expect(server).not.toContain('reporter="source"');
+    expect(client).toContain('reporter="source"');
+    expect(guard).toMatch(
+      /^source_workload_namespace, source_workload, destination_workload_namespace, destination_workload, destination_service_namespace, destination_service_name\) \(sum by \([^)]*request_protocol\) \(rate\(istio_requests_total\{reporter=~"destination\|waypoint"/
+    );
+    expect(guard).not.toContain('reporter="source"');
+  });
+
   /** `rate` drops a metric's name: sent and received are told apart before they are added. */
   it("adds sent and received bytes without one hiding the other", () => {
     const bytes = of(istio(), "bytes");
@@ -105,9 +122,17 @@ describe("the other sources' queries", () => {
     );
   });
 
-  /** One Caretta connection is a series per side: the client's is read, not both added. */
-  it("reads Caretta's client side only", () => {
-    expect(carettaQueries(0, [], ALL)[0].query).toContain('role="1"');
+  /**
+   * One Caretta connection is a series per side, each the bytes its own
+   * socket sent: read only the client's, a caller from outside the cluster
+   * is never seen, and the bytes are one direction where Istio's are both.
+   */
+  it("adds both sides of a Caretta connection under its pair", () => {
+    const [bytes] = carettaQueries(0, [], ALL);
+    expect(bytes.query).not.toContain("role");
+    expect(bytes.query).toMatch(
+      /^sum by \(client_namespace, client_name, client_kind, server_namespace, server_name, server_kind\)/
+    );
   });
 
   /** A flow Hubble saw arrive is preferred to the same flow seen leaving. */
@@ -127,6 +152,10 @@ describe("the other sources' queries", () => {
     );
     expect(of(queries, "p95")).toMatch(/\* 1000\)?$/);
     expect(events).toContain("source_workload_kind");
+    const [, client] = of(queries, "errors").split(") or ((");
+    expect(client).toMatch(
+      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind\) \(.*reporter!="client"/
+    );
   });
 });
 
@@ -166,6 +195,37 @@ describe("which sources a Prometheus holds", () => {
     });
   });
 
+  /**
+   * A source whose ends only the pods resolve must say so, or a subject in a
+   * namespace whose pods were not read is called quiet: Istio always (a pod
+   * label), Hubble by pod, never one that writes the workload's kind.
+   */
+  it("says which sources name workloads only through their pods", async () => {
+    const hubbleBy = async (label: "workload" | "pod") => {
+      prometheusQuery.mockImplementation(async (query) => {
+        if (query.includes("istio_requests_total"))
+          return named("istio_requests_total");
+        if (query.includes("hubble") && query.startsWith("count by"))
+          return named("hubble_flows_processed_total");
+        if (query.includes(`destination_${label}!=""`))
+          return [{ labels: {}, points: [{ t: 0, v: 3 }] }];
+        if (query.includes("beyla"))
+          return named("beyla_network_flow_bytes_total");
+        if (query.includes("caretta")) return named("caretta_links_observed");
+        return [];
+      });
+      const sources = await flowSources();
+      return Object.fromEntries(sources.map((s) => [s.id, s.needsPods]));
+    };
+    expect(await hubbleBy("workload")).toEqual({
+      istio: true,
+      hubble: false,
+      beyla: false,
+      caretta: false,
+    });
+    expect((await hubbleBy("pod")).hubble).toBe(true);
+  });
+
   /** Only the present sources are asked, positionally, and only Istio marks pods. */
   it("asks only present sources and numbers them as it hands them back", async () => {
     prometheusFlows.mockResolvedValue({ ends: [], flows: [] });
@@ -178,6 +238,8 @@ describe("which sources a Prometheus holds", () => {
       need: "needIstio",
       marks: id === "istio",
       nodeAgent: false,
+      needsPods: false,
+      grpcErrors: false,
     });
     const absent = {
       ...present("hubble", []),
