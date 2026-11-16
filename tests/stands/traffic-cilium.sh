@@ -3,7 +3,8 @@
 # ways the page reads it: Hubble's metrics in kube-prometheus-stack (with the
 # source and destination labels the page asks for) and Hubble Relay live.
 # A namespace `shop` holds a caller, two servers, an HTTP rule that gives
-# Hubble L7 visibility, a deny NetworkPolicy and a pod that trips it.
+# Hubble L7 visibility and denies a PUT, a deny NetworkPolicy and a pod that
+# trips it, and a gRPC server whose every call fails inside an HTTP 200.
 #
 #   RUBICK_KUBECONFIG=/path/to/sandbox/kubeconfig tests/stands/traffic-cilium.sh
 #
@@ -159,6 +160,7 @@ spec:
               while true; do
                 curl -s -o /dev/null http://web/
                 curl -s -o /dev/null http://web/missing
+                curl -s -o /dev/null -X PUT http://web/
                 curl -s -o /dev/null --max-time 2 http://db/
                 sleep 0.5
               done
@@ -205,6 +207,69 @@ spec:
       toPorts:
         - ports: [{ port: "80", protocol: TCP }]
           rules: { http: [{ method: GET }] }
+---
+# A gRPC server, and a caller of a method it does not have: each call is
+# answered HTTP 200 with grpc-status 12 (UNIMPLEMENTED) in its trailers.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: etcd, labels: { app: etcd } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: etcd } }
+  template:
+    metadata: { labels: { app: etcd } }
+    spec:
+      containers:
+        - name: etcd
+          image: registry.k8s.io/etcd:3.6.6-0
+          command:
+            - etcd
+            - --data-dir=/var/lib/etcd
+            - --listen-client-urls=http://0.0.0.0:2379
+            - --advertise-client-urls=http://etcd:2379
+          ports: [{ containerPort: 2379 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/etcd }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: etcd }
+spec: { selector: { app: etcd }, ports: [{ port: 2379 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: grpc-caller, labels: { app: grpc-caller } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grpc-caller } }
+  template:
+    metadata: { labels: { app: grpc-caller } }
+    spec:
+      containers:
+        - name: grpc-caller
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              printf '\000\000\000\000\000' > /tmp/frame
+              while true; do
+                curl -s -o /dev/null --http2-prior-knowledge -X POST \
+                  -H 'content-type: application/grpc' -H 'te: trailers' \
+                  --data-binary @/tmp/frame http://etcd:2379/etcdserverpb.KV/NoSuchMethod
+                sleep 0.5
+              done
+---
+# An HTTP rule on etcd's port: Hubble sees the gRPC calls as HTTP/2.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata: { name: etcd-http-visible }
+spec:
+  endpointSelector: { matchLabels: { app: etcd } }
+  ingress:
+    - fromEndpoints: [{}]
+      toPorts:
+        - ports: [{ port: "2379", protocol: TCP }]
+          rules: { http: [{}] }
 YAML
 k -n shop rollout status deploy --timeout=600s
 
@@ -218,5 +283,9 @@ monitoring/$PROM_SVC:9090, or forward it and give http://localhost:19090:
   kubectl --kubeconfig "$RUBICK_KUBECONFIG" --context $CONTEXT -n monitoring port-forward svc/$PROM_SVC 19090:9090
 Then, in shop:
   - caller -> web with requests/s, 404s (not errors) and p95 (L7 through the HTTP rule);
-  - caller -> db forwarded; intruder -> db dropped: POLICY_DENIED, denied by NetworkPolicy shop/db-from-caller-only.
+  - caller -> db forwarded; intruder -> db dropped: POLICY_DENIED, denied by NetworkPolicy shop/db-from-caller-only,
+    one drop per packet (not two);
+  - Live, caller -> web: a warn edge, the panel saying "HTTP requests an L7 rule denied" (the PUT);
+  - grpc-caller -> etcd: every call fails, yet answers HTTP/2 200: errors "≥0%", a grey edge, never
+    green, and Hubble's panel line says a failed gRPC call is not counted.
 EOF
