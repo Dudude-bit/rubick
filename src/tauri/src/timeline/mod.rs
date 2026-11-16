@@ -225,6 +225,12 @@ struct Inner {
     epoch: u64,
     /// What the files' own bounds let go, kept apart from what memory did.
     disk_let_go: LetGoes,
+    /// When rows were last taken to be written.
+    flushed_at: i64,
+    /// The stretches whose rows were dropped unwritten, keeping being off or
+    /// the disk refusing: spans written later leave them out, or a restart
+    /// would draw them watched and quiet.
+    unkept: Vec<(i64, i64)>,
     /// Something to tell the window and to write since the last flush.
     told: Told,
 }
@@ -465,6 +471,8 @@ impl Timelines {
                 },
                 epoch: 0,
                 disk_let_go,
+                flushed_at: now,
+                unkept: Vec::new(),
                 told: Told::default(),
             }),
         });
@@ -505,25 +513,26 @@ impl Timelines {
         let clusters: Vec<Arc<ClusterTimeline>> =
             self.clusters.iter().map(|held| held.clone()).collect();
         for cluster in clusters {
-            let (pending, told, state) = {
+            let now = ClusterTimeline::now();
+            let (pending, told, state, since) = {
                 let mut inner = cluster.inner.lock();
                 let told = std::mem::take(&mut inner.told);
                 let pending = std::mem::take(&mut inner.pending);
+                let since = std::mem::replace(&mut inner.flushed_at, now);
+                if !keep && cluster.dir.is_some() && !pending.rows.is_empty() {
+                    inner.unkept.push((since, now));
+                }
+                inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
                 let state = disk::State {
                     context: cluster.context.clone(),
                     identity: inner.identity.clone(),
-                    spans: inner.spans.clone(),
+                    spans: inner.spans.without(&inner.unkept),
                     let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
                 };
-                (pending, told, state)
+                (pending, told, state, since)
             };
             if let (Some(dir), true) = (&cluster.dir, keep || pending.wipe) {
-                let written = disk::write(
-                    dir,
-                    &pending,
-                    keep.then_some(&state),
-                    ClusterTimeline::now(),
-                );
+                let written = disk::write(dir, &pending, keep.then_some(&state), now);
                 let mut inner = cluster.inner.lock();
                 let next = match written {
                     Ok(let_go) => {
@@ -534,9 +543,15 @@ impl Timelines {
                             Keeping::Off
                         }
                     }
-                    Err(error) => Keeping::Failed {
-                        message: error.to_string(),
-                    },
+                    Err(error) => {
+                        if !pending.rows.is_empty() {
+                            inner.unkept.push((since, now));
+                            inner.told.spans = true;
+                        }
+                        Keeping::Failed {
+                            message: error.to_string(),
+                        }
+                    }
                 };
                 if inner.keeping != next {
                     inner.keeping = next;

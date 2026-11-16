@@ -175,6 +175,45 @@ impl SpanSets {
         }
     }
 
+    /// These spans with `holes` cut out, oldest hole first: what was recorded
+    /// in them was not kept, so read back they were not watched.
+    #[must_use]
+    pub fn without(&self, holes: &[(i64, i64)]) -> Self {
+        let cut = |spans: &[ObservedSpan]| {
+            let mut out = Vec::with_capacity(spans.len());
+            for span in spans {
+                let mut rest = Some(span.clone());
+                for &(from, to) in holes {
+                    let Some(mut piece) = rest.take() else {
+                        break;
+                    };
+                    let end = piece.to.unwrap_or(i64::MAX);
+                    if to <= piece.from || from >= end {
+                        rest = Some(piece);
+                        continue;
+                    }
+                    if from > piece.from {
+                        let mut before = piece.clone();
+                        before.seen_at = from;
+                        before.to = Some(from);
+                        out.push(before);
+                    }
+                    if to < end {
+                        piece.from = to;
+                        piece.seen_at = piece.seen_at.max(to);
+                        rest = Some(piece);
+                    }
+                }
+                out.extend(rest);
+            }
+            out
+        };
+        Self {
+            followed: cut(&self.followed),
+            meta: cut(&self.meta),
+        }
+    }
+
     pub fn prune(&mut self, now: i64) {
         self.followed = pruned(std::mem::take(&mut self.followed), now);
         self.meta = pruned(std::mem::take(&mut self.meta), now);

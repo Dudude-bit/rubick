@@ -825,6 +825,40 @@ fn with_keeping_off_nothing_is_written() {
     assert_eq!(timelines.kept().bytes, 0);
 }
 
+/// Keeping off from ten to eleven, then on again: the rows of that hour were
+/// never written, and the spans written after cover it. Fails if, read back
+/// after a restart, that hour is watched, which draws it quiet over the
+/// rollouts made in it.
+#[test]
+fn a_stretch_whose_rows_were_not_kept_is_not_written_as_watched() {
+    let root = tempfile::tempdir().unwrap();
+    let pause = || std::thread::sleep(std::time::Duration::from_millis(5));
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), false);
+    let cluster = timelines.cluster("kind");
+    cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+    pause();
+    let recorded = ClusterTimeline::now();
+    cluster.change(change("1", recorded, "Deployment", Some("shop"), "api"));
+    pause();
+    cluster.spans(SpanSets::heartbeat);
+    pause();
+    timelines.flush();
+    pause();
+    timelines.set_keep(true);
+    timelines.flush();
+    let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let read = again.cluster("kind").page(&query(Show::All));
+    assert!(read.rows.is_empty());
+    assert!(
+        read.spans
+            .followed
+            .iter()
+            .all(|span| recorded < span.from || span.to.is_some_and(|to| to < recorded)),
+        "{:?}",
+        read.spans.followed
+    );
+}
+
 /// A disk that refuses is said, and the session's rows stay. Fails if a
 /// write error passes as kept.
 #[test]
