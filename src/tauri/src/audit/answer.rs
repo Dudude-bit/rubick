@@ -560,9 +560,17 @@ fn pods(
             wanted.entry(key).or_insert((namespace, pod.name.clone()));
         }
     }
+    // Let go only of what this scope no longer wants: a judged pod of a
+    // namespace another caller reads is theirs to keep, or every object's
+    // read would make the page read its pods again.
     let held = {
         let mut pods = index.pods.lock();
-        pods.retain(|key, _| wanted.contains_key(key));
+        pods.retain(|key, held| {
+            wanted.contains_key(key)
+                || held
+                    .as_ref()
+                    .is_none_or(|pod| !in_scope(pod.subject.namespace.as_deref(), scope))
+        });
         pods.clone()
     };
     let mut seen: BTreeSet<Subject> = BTreeSet::new();
@@ -1376,6 +1384,51 @@ mod tests {
         );
         let held: Vec<String> = index.pods.lock().keys().cloned().collect();
         assert_eq!(held, vec!["controller/pg-1".to_string()]);
+        index.stop_for_test();
+    }
+
+    /// One namespace's read lets go of no pod another namespace's reader
+    /// judged. Fails if opening an object in `shop` drops the judged static
+    /// pods of `kube-system`, which the page then reads again, in a loop.
+    #[tokio::test]
+    async fn a_read_of_one_namespace_keeps_the_pods_judged_in_others() {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        owners.hold(
+            &pods(),
+            "Pod",
+            "etcd",
+            ("etcd-node", Some("kube-system")),
+            None,
+        );
+        owners.hold(&pods(), "Pod", "lone", ("lone", Some("shop")), None);
+        let judged = |namespace: &str, name: &str| crate::audit::index::PodJudged {
+            subject: Subject {
+                kind: POD.to_string(),
+                namespace: Some(namespace.to_string()),
+                name: name.to_string(),
+            },
+            system: false,
+            own: Vec::new(),
+            facts: super::super::template::TemplateFacts::default(),
+        };
+        {
+            let mut pods = index.pods.lock();
+            pods.insert(
+                "pod/etcd".to_string(),
+                Some(judged("kube-system", "etcd-node")),
+            );
+            pods.insert("pod/lone".to_string(), Some(judged("shop", "lone")));
+            pods.insert("pod/gone".to_string(), Some(judged("shop", "gone")));
+        }
+        let shop = ["shop".to_string()];
+        world(&index, Ok(&owners), Some(&shop[..]));
+        let mut held: Vec<String> = index.pods.lock().keys().cloned().collect();
+        held.sort();
+        assert_eq!(held, vec!["pod/etcd".to_string(), "pod/lone".to_string()]);
+        let page = world(&index, Ok(&owners), None);
+        assert_eq!(page.reading, 0, "the page reads its pods again");
         index.stop_for_test();
     }
 
