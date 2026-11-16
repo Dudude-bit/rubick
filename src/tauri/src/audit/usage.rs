@@ -65,6 +65,10 @@ pub enum UseVerdict {
     Within,
     /// The supplier holds no sample of its pods in the window.
     NoSamples,
+    /// Measured, but its youngest pod, started at `since` where that is
+    /// known, has not been seen to run the whole window: a peak of fewer
+    /// hours is not judged.
+    Young { since: Option<String> },
 }
 
 /// A request and the peak of what was used under it: millicores, or bytes.
@@ -158,6 +162,9 @@ pub fn judge(
                 }
                 Some(UseVerdict::Within) => return (None, None),
                 Some(UseVerdict::NoSamples) => Why::NoSamples,
+                Some(UseVerdict::Young { since }) => Why::Young {
+                    since: since.clone(),
+                },
                 None if !workload => return (None, None),
                 None => match unread.iter().find(|u| u.namespace == namespace) {
                     Some(gone) => Why::Failed {
@@ -246,6 +253,8 @@ mod tests {
                   "verdict": { "says": "over", "cpu": { "requested": 2000, "peak": 300 }, "memory": null } },
                 { "namespace": "shop", "kind": "Deployment", "name": "api", "verdict": { "says": "within" } },
                 { "namespace": "shop", "kind": "CronJob", "name": "nightly", "verdict": { "says": "noSamples" } },
+                { "namespace": "shop", "kind": "Deployment", "name": "fresh",
+                  "verdict": { "says": "young", "since": "2026-11-15T10:00:00Z" } },
             ],
             "unread": [{ "namespace": "bank", "message": "pods is forbidden" }],
             "folded": 0,
@@ -254,9 +263,9 @@ mod tests {
     }
 
     /// The verdict the webview sent is the finding; a workload measured and
-    /// within is nothing; one with no samples, one whose namespace's pods
-    /// went unread, and every workload while usage is unread, unsupplied or
-    /// failed is not checked, never passed. Would break if any state that
+    /// within is nothing; one with no samples, one too young for a day's
+    /// peak, one whose namespace's pods went unread, and every workload while
+    /// usage is unread, unsupplied or failed is not checked, never passed. Would break if any state that
     /// did not read usage read as "not over".
     #[test]
     fn a_workload_is_over_only_as_the_webview_judged_it_and_unread_is_never_a_pass() {
@@ -280,6 +289,13 @@ mod tests {
         let why = |s: &Subject, read: Option<&UsageRead>| judge(s, read).1.map(|u| u.why);
         let nightly = subject("CronJob", Some("shop"), "nightly");
         assert_eq!(why(&nightly, Some(&usage)), Some(Why::NoSamples));
+        let fresh = subject("Deployment", Some("shop"), "fresh");
+        assert_eq!(
+            why(&fresh, Some(&usage)),
+            Some(Why::Young {
+                since: Some("2026-11-15T10:00:00Z".into())
+            })
+        );
         let teller = subject("Deployment", Some("bank"), "teller");
         assert_eq!(
             why(&teller, Some(&usage)),

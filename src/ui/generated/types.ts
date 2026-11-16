@@ -2666,6 +2666,7 @@ export interface WorkloadFold {
   unplaced: Unplaced[];
   unread: UnreadSums[];
   unlabelled: number;
+  since: (string | null)[];
 }
 
 export interface UnreadSums {
@@ -3538,6 +3539,7 @@ export type Why =
   | { says: "notScraped" }
   | { says: "noUsage" }
   | { says: "noSamples" }
+  | { says: "young"; since: string | null }
   | { says: "folded" };
 
 export type RuleId =
@@ -3708,7 +3710,8 @@ export type UsageRead =
 export type UseVerdict =
   | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
   | { says: "within" }
-  | { says: "noSamples" };
+  | { says: "noSamples" }
+  | { says: "young"; since: string | null };
 
 export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 

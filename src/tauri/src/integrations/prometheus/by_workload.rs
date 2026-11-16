@@ -62,6 +62,10 @@ pub struct WorkloadFold {
     pub unread: Vec<UnreadSums>,
     /// Series naming no namespace or no pod, which say nothing about a workload.
     pub unlabelled: u32,
+    /// Positional like `values`: when the youngest of the workload's pods on
+    /// a node started (or, not started yet, was created). A window of use is
+    /// no longer than the pods it was read from have run.
+    pub since: Vec<Option<String>>,
 }
 
 #[tauri::command]
@@ -155,12 +159,34 @@ pub(crate) fn fold(
         .collect();
     let in_scope = |namespace: &str| scope.is_none_or(|names| names.iter().any(|n| n == namespace));
 
+    let mut youngest: Vec<Option<k8s_openapi::jiff::Timestamp>> = vec![None; keys.len()];
+    for pod in read.pods.iter().filter(|pod| on_a_node(pod)) {
+        let Some(&row) = index.get(&cost_key(pod, &read.cron_of)) else {
+            continue;
+        };
+        let started = pod
+            .status
+            .as_ref()
+            .and_then(|s| s.start_time.as_ref())
+            .or(pod.metadata.creation_timestamp.as_ref())
+            .map(|t| t.0);
+        if let Some(started) = started {
+            if youngest[row].is_none_or(|seen| started > seen) {
+                youngest[row] = Some(started);
+            }
+        }
+    }
+
     let mut fold = WorkloadFold {
         values: vec![vec![None; width]; keys.len()],
         rest: vec![None; width],
         unplaced: Vec::new(),
         unread: Vec::new(),
         unlabelled: 0,
+        since: youngest
+            .into_iter()
+            .map(|at| at.map(|at| at.to_string()))
+            .collect(),
     };
     let mut unplaced: BTreeMap<&str, (BTreeSet<&str>, Values)> = BTreeMap::new();
     let mut unread_sums: BTreeMap<&str, Values> = BTreeMap::new();
@@ -243,6 +269,7 @@ mod tests {
     use crate::commands::cost::tests::{pod, read_of, running, Spec};
     use crate::commands::helpers::UnreadNamespace;
     use crate::integrations::prometheus::PromPoint;
+    use std::sync::Arc;
 
     fn series(namespace: &str, pod: &str, v: f64) -> PromSeries {
         let mut labels = HashMap::new();
@@ -335,6 +362,40 @@ mod tests {
         let answers = vec![vec![series("shop", "kept-0", 1.0)], vec![]];
         let fold = fold(&answers, &read, &[key("kept")], None);
         assert_eq!(fold.values, vec![vec![Some(1.0), None]]);
+    }
+
+    /// A window of use is no longer than the pods it was read from: the
+    /// fold says when the youngest of a workload's pods on a node started,
+    /// or was created where the kubelet has not said. Fails if the oldest
+    /// pod stood for the workload, or a pod with no start went uncounted.
+    #[test]
+    fn the_fold_says_when_the_youngest_pod_of_each_workload_started() {
+        let at = |s: &str| k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(s.parse().unwrap());
+        let started = |name: &str, owner: (&str, &str), when: &str| {
+            let mut pod = (*pod(&running("shop", name, owner))).clone();
+            pod.status.get_or_insert_with(Default::default).start_time = Some(at(when));
+            Arc::new(pod)
+        };
+        let mut unstarted = (*pod(&running("shop", "fresh-0", ("StatefulSet", "fresh")))).clone();
+        unstarted.metadata.creation_timestamp = Some(at("2026-11-15T11:00:00Z"));
+        if let Some(status) = unstarted.status.as_mut() {
+            status.start_time = None;
+        }
+        let read = read_of(vec![
+            started("kept-0", ("StatefulSet", "kept"), "2026-11-14T00:00:00Z"),
+            started("kept-1", ("StatefulSet", "kept"), "2026-11-15T10:00:00Z"),
+            Arc::new(unstarted),
+        ]);
+        let fold = fold(
+            &[vec![]],
+            &read,
+            &[key("kept"), key("fresh"), key("none")],
+            None,
+        );
+        let day = |i: usize| fold.since[i].as_deref().map(|s| s[..19].to_string());
+        assert_eq!(day(0).as_deref(), Some("2026-11-15T10:00:00"));
+        assert_eq!(day(1).as_deref(), Some("2026-11-15T11:00:00"));
+        assert_eq!(fold.since[2], None);
     }
 
     /// A series without the labels the fold joins on says nothing about any

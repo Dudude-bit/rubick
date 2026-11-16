@@ -15,6 +15,7 @@ import { sameKey } from "@/lib/cost";
 
 /** The window usage is read over, worded on the column. */
 export const EFFICIENCY_WINDOW = "24h";
+const WINDOW_MS = 24 * 3_600_000;
 
 /** The order a supplier's usage queries answer in. */
 export const USAGE_QUERIES = [
@@ -39,8 +40,8 @@ export type Efficiency =
   /** The supplier answered and holds no sample of this workload's pods. */
   | { state: "noSamples" }
   /** Nothing was requested, so there is no ratio: not 0%, not 100%. */
-  | { state: "unrequested"; avg: number | null; peak: number | null }
-  | {
+  | ({ state: "unrequested"; avg: number | null; peak: number | null } & Span)
+  | ({
       state: "measured";
       requested: number;
       avg: number | null;
@@ -48,7 +49,18 @@ export type Efficiency =
       /** Average used ÷ requested; `null` where only the peak was read. */
       ratio: number | null;
       peakRatio: number | null;
-    };
+    } & Span);
+
+/**
+ * How much of the window the readings cover. Each pod is averaged over its
+ * own life, so a workload rolled out two hours ago reads two hours.
+ */
+interface Span {
+  /** When the youngest of its pods started; `null` where not known. */
+  since: string | null;
+  /** Its youngest pod has run the whole window. */
+  whole: boolean;
+}
 
 export interface WorkloadEfficiency {
   cpu: Efficiency;
@@ -59,10 +71,14 @@ export interface WorkloadEfficiency {
 export function efficiencyOf(
   requested: number,
   avg: number | null,
-  peak: number | null
+  peak: number | null,
+  since: string | null,
+  now: number = Date.now()
 ): Efficiency {
   if (avg === null && peak === null) return { state: "noSamples" };
-  if (requested <= 0) return { state: "unrequested", avg, peak };
+  const started = since === null ? NaN : Date.parse(since);
+  const span = { since, whole: now - started >= WINDOW_MS };
+  if (requested <= 0) return { state: "unrequested", avg, peak, ...span };
   return {
     state: "measured",
     requested,
@@ -70,6 +86,7 @@ export function efficiencyOf(
     peak,
     ratio: avg === null ? null : avg / requested,
     peakRatio: peak === null ? null : peak / requested,
+    ...span,
   };
 }
 
@@ -80,7 +97,8 @@ export function efficiencyOf(
 export function workloadEfficiency(
   reading: UsageReading,
   key: WorkloadKey,
-  requests: { cpu: number; memory: number }
+  requests: { cpu: number; memory: number },
+  now: number = Date.now()
 ): WorkloadEfficiency {
   if (reading.state !== "read") return { cpu: reading, memory: reading };
   const at = reading.keys.findIndex((candidate) => sameKey(candidate, key));
@@ -88,12 +106,21 @@ export function workloadEfficiency(
   if (!values)
     return { cpu: { state: "noSamples" }, memory: { state: "noSamples" } };
   const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = values;
+  const since = reading.fold.since[at] ?? null;
   return {
-    cpu: efficiencyOf(requests.cpu, cpuAvg ?? null, cpuPeak ?? null),
+    cpu: efficiencyOf(
+      requests.cpu,
+      cpuAvg ?? null,
+      cpuPeak ?? null,
+      since,
+      now
+    ),
     memory: efficiencyOf(
       requests.memory,
       memoryAvg ?? null,
-      memoryPeak ?? null
+      memoryPeak ?? null,
+      since,
+      now
     ),
   };
 }
@@ -103,12 +130,15 @@ export const OVER_REQUESTED_BELOW = 0.5;
 
 /**
  * Asked for far more than it ever used: its peak over the whole window
- * stayed under half the request. Only a measured peak can say so; a
- * workload nobody measured, or one that requests nothing, is never judged.
+ * stayed under half the request. Only a measured peak can say so, and only
+ * over a whole day of its pods: a peak from the hours since a rollout has
+ * not met the day's busiest hour. A workload nobody measured, or one that
+ * requests nothing, is never judged.
  */
 export function overRequested(efficiency: Efficiency): boolean {
   return (
     efficiency.state === "measured" &&
+    efficiency.whole &&
     efficiency.peakRatio !== null &&
     efficiency.peakRatio < OVER_REQUESTED_BELOW
   );

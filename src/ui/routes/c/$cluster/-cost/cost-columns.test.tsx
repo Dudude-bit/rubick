@@ -21,10 +21,21 @@ const row = (name: string) =>
     currency: "",
     share: null,
     efficiency: {
-      cpu: { state: "unrequested", avg: null, peak: 3 },
-      memory: { state: "unrequested", avg: null, peak: 3 },
+      cpu: {
+        state: "unrequested",
+        avg: null,
+        peak: 3,
+        since: null,
+        whole: true,
+      },
+      memory: {
+        state: "unrequested",
+        avg: null,
+        peak: 3,
+        since: null,
+        whole: true,
+      },
     },
-    used: { cpu: null, memory: null },
   }) as const;
 
 const floorOf = (id: string, rows: readonly unknown[]) => {

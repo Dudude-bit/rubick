@@ -48,7 +48,14 @@ const READING: CostReading = {
   nodes: [],
   allocatedByNode: null,
   namespaces: {},
-  workloads: { values: [], rest: [], unplaced: [], unread: [], unlabelled: 0 },
+  workloads: {
+    values: [],
+    rest: [],
+    unplaced: [],
+    unread: [],
+    unlabelled: 0,
+    since: [],
+  },
   storage: {
     total: null,
     unclaimed: null,

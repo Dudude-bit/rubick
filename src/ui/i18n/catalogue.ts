@@ -1942,6 +1942,10 @@ export const en = {
       "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
     whyNoSamples:
       "the connected Prometheus holds no sample of its pods in the last day",
+    whyYoung:
+      "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyYoungUndated:
+      "when its pods started is not known, and a peak is judged over a whole day",
     whyFolded:
       "it is not among the workloads that request most, whose usage is read one by one",
     pickNamespaces:
@@ -2520,8 +2524,14 @@ export const en = {
     memoryRequested: "Memory requested",
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
+    usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
+    effMeasuredFor: "{avg} average, {peak} peak, over {age}",
+    effYoung:
+      "Its youngest pod started {age} ago, so these figures cover only that. Whether it asks for too much is judged over a whole day.",
+    effUndated:
+      "When its pods started is not known, so these figures may not cover a whole day, and whether it asks for too much is not judged.",
     effNoSupplier: "not measured: needs Prometheus",
     effReading: "reading…",
     effFailed: "could not read use: {said}",

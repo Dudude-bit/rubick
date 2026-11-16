@@ -17,6 +17,8 @@ import {
 } from "@/lib/cost";
 import { EFFICIENCY_WINDOW, type Efficiency } from "@/lib/efficiency";
 import { formatBytes } from "@/lib/k8s-quantity";
+import { formatQuantity } from "@/lib/metric-format";
+import { formatAge } from "@/lib/utils";
 import type { SupplierTrouble } from "@/hooks/useCost";
 
 const names = (list: readonly string[]) => list.join(", ");
@@ -189,16 +191,39 @@ const EFFICIENCY_WORDS: Record<
   unrequested: (_, t) => t("cost", "effUnrequested"),
 };
 
+/** How long the readings cover where that is less than the window: its youngest pod's age. */
+export function youngFor(e: Efficiency, t: T): string | null {
+  if (e.state !== "measured" && e.state !== "unrequested") return null;
+  return e.whole || e.since === null ? null : formatAge(e.since, t);
+}
+
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
-  return t("cost", "effMeasured", {
+  const values = {
     avg: e.ratio === null ? t("cost", "notMeasured") : formatShare(e.ratio),
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
         : formatShare(e.peakRatio),
-  });
+  };
+  const age = youngFor(e, t);
+  return age === null
+    ? t("cost", "effMeasured", values)
+    : t("cost", "effMeasuredFor", { ...values, age });
+}
+
+/** What one resource used, in its own units, over the span the readings cover. */
+export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
+  if (e.state !== "measured" && e.state !== "unrequested")
+    return t("cost", "notMeasured");
+  const say = (v: number | null) =>
+    v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
+  const values = { avg: say(e.avg), peak: say(e.peak) };
+  const age = youngFor(e, t);
+  return age === null
+    ? t("cost", "usedAvgPeak", values)
+    : t("cost", "usedAvgPeakFor", { ...values, age });
 }
 
 /**

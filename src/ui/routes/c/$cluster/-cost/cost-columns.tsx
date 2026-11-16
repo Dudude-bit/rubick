@@ -12,7 +12,11 @@ import {
   type NodeCost,
   type WorkloadCost,
 } from "@/lib/cost";
-import { EFFICIENCY_WINDOW, type WorkloadEfficiency } from "@/lib/efficiency";
+import {
+  EFFICIENCY_WINDOW,
+  type Efficiency,
+  type WorkloadEfficiency,
+} from "@/lib/efficiency";
 import { drawnCrd } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
 import {
@@ -28,6 +32,7 @@ import {
   share,
   sortable,
   totalOf,
+  usedWords,
   type Said,
 } from "./cost-words";
 import { EfficiencyCell, Money } from "./cost-cells";
@@ -45,14 +50,8 @@ export type WorkloadRow = WorkloadCost &
     /** The CRD its group serves the kind as; none for a built-in's own group. */
     crd: string | null | undefined;
     efficiency: WorkloadEfficiency;
-    used: Used;
   };
 export type NodeRow = NodeCost & { currency: string };
-
-export interface Used {
-  cpu: { avg: number | null; peak: number | null } | null;
-  memory: { avg: number | null; peak: number | null } | null;
-}
 
 export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
   const moneyColumn = (
@@ -141,16 +140,8 @@ export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
   ];
 }
 
-function usedWords(
-  used: { avg: number | null; peak: number | null } | null,
-  kind: "cpu" | "memory",
-  t: T
-): string {
-  if (!used) return t("cost", "notMeasured");
-  const say = (v: number | null) =>
-    v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
-  return t("cost", "usedAvgPeak", { avg: say(used.avg), peak: say(used.peak) });
-}
+const avgOf = (e: Efficiency) =>
+  e.state === "measured" || e.state === "unrequested" ? (e.avg ?? -1) : -1;
 
 /** A column as wide as the widest of what it says, in the face it is drawn in. */
 const saying = <Row,>(
@@ -263,16 +254,17 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       id: "cpuUsed",
       size: 180,
       header: t("cost", "cpuUsed", { window: EFFICIENCY_WINDOW }),
-      accessorFn: (row) => row.used.cpu?.avg ?? -1,
+      accessorFn: (row) => avgOf(row.efficiency.cpu),
       cell: ({ row }) => (
         <span className="text-[11px]">
-          {usedWords(row.original.used.cpu, "cpu", t)}
+          {usedWords(row.original.efficiency.cpu, "cpu", t)}
         </span>
       ),
       meta: {
-        share: (row: WorkloadRow, tt: T) => usedWords(row.used.cpu, "cpu", tt),
+        share: (row: WorkloadRow, tt: T) =>
+          usedWords(row.efficiency.cpu, "cpu", tt),
         floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.used.cpu, "cpu", tt)
+          usedWords(row.efficiency.cpu, "cpu", tt)
         ),
         yields: 6,
       },
@@ -301,17 +293,17 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       id: "memoryUsed",
       size: 180,
       header: t("cost", "memoryUsed", { window: EFFICIENCY_WINDOW }),
-      accessorFn: (row) => row.used.memory?.avg ?? -1,
+      accessorFn: (row) => avgOf(row.efficiency.memory),
       cell: ({ row }) => (
         <span className="text-[11px]">
-          {usedWords(row.original.used.memory, "memory", t)}
+          {usedWords(row.original.efficiency.memory, "memory", t)}
         </span>
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
-          usedWords(row.used.memory, "memory", tt),
+          usedWords(row.efficiency.memory, "memory", tt),
         floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.used.memory, "memory", tt)
+          usedWords(row.efficiency.memory, "memory", tt)
         ),
         yields: 5,
       },

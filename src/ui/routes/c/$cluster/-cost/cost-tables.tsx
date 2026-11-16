@@ -21,24 +21,8 @@ import {
   workloadColumns,
   type NamespaceRow,
   type NodeRow,
-  type Used,
   type WorkloadRow,
 } from "./cost-columns";
-
-const usedOf = (
-  reading: UsageReading,
-  index: Map<string, number>,
-  id: string
-): Used => {
-  if (reading.state !== "read") return { cpu: null, memory: null };
-  const at = index.get(id);
-  const values = at === undefined ? undefined : reading.fold.values[at];
-  if (!values) return { cpu: null, memory: null };
-  return {
-    cpu: { avg: values[0] ?? null, peak: values[1] ?? null },
-    memory: { avg: values[2] ?? null, peak: values[3] ?? null },
-  };
-};
 
 const idOf = (key: WorkloadKey) =>
   `${key.namespace}/${key.group}/${key.kind}/${key.name}`;
@@ -59,9 +43,6 @@ export function CostTables({
     const whole = picture.total?.perHour ?? null;
     const shareOf = (perHour: number | null) =>
       perHour === null || whole === null || whole <= 0 ? null : perHour / whole;
-    const index = new Map(
-      usage.state === "read" ? usage.keys.map((key, i) => [idOf(key), i]) : []
-    );
     return {
       namespaces: picture.namespaces.map((row): NamespaceRow => ({
         ...row,
@@ -75,7 +56,6 @@ export function CostTables({
         currency,
         share: shareOf(row.perHour),
         efficiency: workloadEfficiency(usage, row.key, row.requests),
-        used: usedOf(usage, index, idOf(row.key)),
       })),
       nodes:
         picture.nodes &&

@@ -93,6 +93,7 @@ const fold = (
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  since: values.map(() => null),
 });
 
 function reading(extra: Partial<CostReading> = {}): CostReading {

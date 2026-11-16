@@ -473,7 +473,12 @@ export async function costHistory(input: {
   };
 }
 
-/** Per pod, in {@link USAGE_QUERIES} order, over the efficiency window. */
+/**
+ * Per pod, in {@link USAGE_QUERIES} order, over the efficiency window. The
+ * averages run over each pod's own samples, so a pod two hours old is not
+ * divided by a day; containers are summed at each step first, so a restart's
+ * new series is not added to the old one's average.
+ */
 export function usageQueries(namespaces: readonly string[] | null): string[] {
   const scope =
     namespaces === null ? "" : `,namespace=~${namesPattern(namespaces)}`;
@@ -481,9 +486,9 @@ export function usageQueries(namespaces: readonly string[] | null): string[] {
   const cpu = `container_cpu_usage_seconds_total{${containers}}`;
   const memory = `container_memory_working_set_bytes{${containers}}`;
   const queries: Record<(typeof USAGE_QUERIES)[number], string> = {
-    cpuAvg: `sum by (namespace, pod) (rate(${cpu}[24h])) * 1000`,
+    cpuAvg: `avg_over_time((sum by (namespace, pod) (rate(${cpu}[5m])))[24h:5m]) * 1000`,
     cpuPeak: `max_over_time((sum by (namespace, pod) (rate(${cpu}[5m])))[24h:5m]) * 1000`,
-    memoryAvg: `sum by (namespace, pod) (avg_over_time(${memory}[24h]))`,
+    memoryAvg: `avg_over_time((sum by (namespace, pod) (${memory}))[24h:5m])`,
     memoryPeak: `max_over_time((sum by (namespace, pod) (${memory}))[24h:5m])`,
   };
   return USAGE_QUERIES.map((name) => queries[name]);

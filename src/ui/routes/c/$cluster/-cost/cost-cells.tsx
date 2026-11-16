@@ -3,9 +3,13 @@
  * and a workload's two efficiencies on two lines.
  */
 import { useT } from "@/i18n/useT";
-import { overRequested, type WorkloadEfficiency } from "@/lib/efficiency";
+import {
+  overRequested,
+  type Efficiency,
+  type WorkloadEfficiency,
+} from "@/lib/efficiency";
 import { cn } from "@/lib/utils";
-import { efficiencyWords, money, type Said } from "./cost-words";
+import { efficiencyWords, money, youngFor, type Said } from "./cost-words";
 
 export function Money({
   value,
@@ -29,6 +33,14 @@ export function EfficiencyCell({
   efficiency: WorkloadEfficiency;
 }) {
   const t = useT();
+  const titleOf = (e: Efficiency) => {
+    if (overRequested(e)) return t("cost", "overRequested");
+    if (e.state !== "measured" || e.whole) return undefined;
+    const age = youngFor(e, t);
+    return age === null
+      ? t("cost", "effUndated")
+      : t("cost", "effYoung", { age });
+  };
   return (
     <span className="flex flex-col text-[11px] leading-tight">
       {(["cpu", "memory"] as const).map((resource) => {
@@ -40,7 +52,7 @@ export function EfficiencyCell({
               e.state === "measured" ? "font-mono tabular-nums" : "text-fg-fnt",
               overRequested(e) && "text-warn"
             )}
-            title={overRequested(e) ? t("cost", "overRequested") : undefined}
+            title={titleOf(e)}
           >
             {t("cost", resource === "cpu" ? "cpu" : "memory")}{" "}
             {efficiencyWords(e, t)}

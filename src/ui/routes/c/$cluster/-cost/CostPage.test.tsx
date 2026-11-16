@@ -101,6 +101,7 @@ const READING: CostReading = {
     unplaced: [],
     unread: [],
     unlabelled: 0,
+    since: [null],
   },
   storage: {
     total: null,
@@ -362,6 +363,42 @@ describe("the Cost page", () => {
       screen.getAllByText(/not measured: needs Prometheus/).length
     ).toBeGreaterThan(0);
     expect(screen.queryByText(/0%/)).toBeNull();
+  });
+
+  /**
+   * A workload rolled out two hours ago is read over those two hours, and
+   * says so; its low peak is not toned as asking for too much. Fails if the
+   * figures claimed the whole day, or a young peak was marked.
+   */
+  it("says a young workload's figures cover only its pods' hours, and does not mark it", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    const started = new Date(Date.now() - 121 * 60_000).toISOString();
+    usage.mockReturnValue({
+      state: "read",
+      keys: [BASIS.workloads[0]!.key],
+      fold: {
+        values: [[50, 100, 0.1 * GIB, 0.2 * GIB]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        since: [started],
+      },
+    });
+    await open();
+    const [cpu] = screen.getAllByText(/^CPU 10% average, 20% peak, over 2h$/);
+    expect(cpu).not.toHaveClass("text-warn");
+    expect(cpu).toHaveAttribute(
+      "title",
+      expect.stringContaining("started 2h ago")
+    );
+    expect(
+      screen.getAllByText(/^50m average · 100m peak, over 2h$/).length
+    ).toBeGreaterThan(0);
   });
 });
 
