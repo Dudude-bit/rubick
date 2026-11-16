@@ -1838,6 +1838,8 @@ export const en = {
   topology: {
     title: "Topology",
     canvasLabel: "The cluster map",
+    layoutFailed:
+      "The map could not be laid out, so what is drawn may be missing objects: {said}",
     expandGroup: "Expand {name}",
     collapseGroup: "Collapse {name}",
     nodeKeys: "Enter opens its page, Space its peek",

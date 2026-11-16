@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   LayoutAnswer,
@@ -203,99 +203,111 @@ const NONE: Omit<Placement, "settled"> = {
  * Where every group and node of a canvas sits, worked out in a worker. Only
  * a group whose structure changed is laid out again; the rest are packed by
  * the size they have, so a node that changed keeps its place.
+ *
+ * One request is in flight at a time and every answer is kept: what changed
+ * while it ran is asked once it is back. Dropping the answer in flight on
+ * each render asked for the same layout again behind it, so on a scope that
+ * takes longer to lay out than it takes to change, nothing was ever placed.
  */
 export function useLayout(
   groups: readonly GraphGroup[],
   nodes: readonly GraphNode[],
   edges: readonly GraphEdge[]
 ): Placement {
-  const [held] = useState(() => ({
-    cache: new Map<string, Laid>(),
-    packed: new Map<"last", string>(),
-  }));
-  const ask = useMemo(
-    () =>
-      askFor(groups, nodes, edges, held.cache, held.packed.get("last") ?? null),
-    [groups, nodes, edges, held]
-  );
   const [laid, setLaid] = useState<{
     placement: Omit<Placement, "settled">;
-    answers: Ask | null;
-  }>({ placement: NONE, answers: null });
+    /** Every group laid out so far, by the structure it was laid out for. */
+    cache: ReadonlyMap<string, Laid>;
+    /** How the last answer packed the groups. */
+    packed: string | null;
+    /** The request that failed, not asked again until the canvas changes. */
+    failedAsk: string | null;
+  }>({ placement: NONE, cache: new Map(), packed: null, failedAsk: null });
+  const ask = useMemo(() => {
+    const next = askFor(groups, nodes, edges, laid.cache, laid.packed);
+    return next && JSON.stringify(next.request.groups) === laid.failedAsk
+      ? null
+      : next;
+  }, [groups, nodes, edges, laid.cache, laid.packed, laid.failedAsk]);
+  const flying = useRef(false);
 
   useEffect(() => {
-    if (!ask) return;
-    let live = true;
+    if (!ask || flying.current) return;
+    flying.current = true;
     const started = performance.now();
-    void run(ask.request).then((answer) => {
-      if (!live) return;
-      if (answer.failed !== undefined) {
-        const failed = answer.failed;
-        setLaid((was) => ({
-          placement: { ...was.placement, failed },
-          answers: ask,
-        }));
-        return;
-      }
-      const boxes = new Map<string, Box>();
-      const at = new Map<string, Point>();
-      for (const group of answer.groups) {
-        boxes.set(group.id, group);
-        const signature = ask.signatures.get(group.id);
-        if (group.positions && signature !== undefined)
-          held.cache.set(group.id, {
-            signature,
-            width: group.width,
-            height: group.height,
-            positions: group.positions,
+    void run(ask.request)
+      .catch((error: unknown): LayoutAnswer => ({
+        id: ask.request.id,
+        groups: [],
+        ms: 0,
+        failed: error instanceof Error ? error.message : String(error),
+      }))
+      .then((answer) => {
+        flying.current = false;
+        if (answer.failed !== undefined) {
+          const failed = answer.failed;
+          setLaid((was) => ({
+            ...was,
+            placement: { ...was.placement, failed },
+            failedAsk: JSON.stringify(ask.request.groups),
+          }));
+          return;
+        }
+        setLaid((was) => {
+          const cache = new Map(was.cache);
+          const boxes = new Map<string, Box>();
+          const at = new Map<string, Point>();
+          for (const group of answer.groups) {
+            boxes.set(group.id, group);
+            const signature = ask.signatures.get(group.id);
+            if (group.positions && signature !== undefined)
+              cache.set(group.id, {
+                signature,
+                width: group.width,
+                height: group.height,
+                positions: group.positions,
+              });
+            const positions =
+              group.positions ?? cache.get(group.id)?.positions ?? {};
+            for (const [id, point] of Object.entries(positions))
+              at.set(id, point);
+          }
+          return {
+            placement: { groups: boxes, nodes: at, failed: null },
+            failedAsk: null,
+            cache,
+            packed: JSON.stringify(
+              ask.request.groups.map((group) => {
+                const box = boxes.get(group.id);
+                return [group.id, box?.width, box?.height];
+              })
+            ),
+          };
+        });
+        if (perf.recording) {
+          const end = performance.now();
+          perf.record({
+            kind: "ipc",
+            name: "topologyLayout (worker)",
+            ms: answer.ms,
+            at: end,
+            rows: ask.request.groups.reduce(
+              (sum, group) => sum + (group.nodes?.length ?? 0),
+              0
+            ),
           });
-        const positions =
-          group.positions ?? held.cache.get(group.id)?.positions ?? {};
-        for (const [id, point] of Object.entries(positions)) at.set(id, point);
-      }
-      held.packed.set(
-        "last",
-        JSON.stringify(
-          ask.request.groups.map((group) => {
-            const box = boxes.get(group.id);
-            return [group.id, box?.width, box?.height];
-          })
-        )
-      );
-      setLaid({
-        placement: { groups: boxes, nodes: at, failed: null },
-        answers: ask,
+          perf.record({
+            kind: "ipc",
+            name: "topologyLayout (round trip)",
+            ms: end - started,
+            at: end,
+          });
+        }
       });
-      if (perf.recording) {
-        const end = performance.now();
-        perf.record({
-          kind: "ipc",
-          name: "topologyLayout (worker)",
-          ms: answer.ms,
-          at: end,
-          rows: ask.request.groups.reduce(
-            (sum, group) => sum + (group.nodes?.length ?? 0),
-            0
-          ),
-        });
-        perf.record({
-          kind: "ipc",
-          name: "topologyLayout (round trip)",
-          ms: end - started,
-          at: end,
-        });
-      }
-    });
-    return () => {
-      live = false;
-    };
-  }, [ask, held]);
+  }, [ask]);
 
   return useMemo(
-    () => ({
-      ...laid.placement,
-      settled: ask === null || laid.answers === ask,
-    }),
-    [laid, ask]
+    () => ({ ...laid.placement, settled: ask === null }),
+    [laid.placement, ask]
   );
 }

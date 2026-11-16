@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 import { GraphCanvas } from "./GraphCanvas";
 import type { GraphGroup, GraphNode } from "./types";
@@ -14,6 +14,17 @@ const fits: number[] = [];
 const fitView = vi.fn(async () => {
   fits.push(placed);
   return true;
+});
+
+vi.mock("@/lib/map-layout", async (original) => {
+  const real = await original<typeof import("@/lib/map-layout")>();
+  return {
+    ...real,
+    layOut: (...args: Parameters<typeof real.layOut>) =>
+      args[1].groups.some((group) => group.id === "broken")
+        ? Promise.reject(new Error("elk gave up"))
+        : real.layOut(...args),
+  };
 });
 
 vi.mock("@xyflow/react", async (original) => ({
@@ -131,5 +142,14 @@ describe("the map's view", () => {
     expect(after.get("group:shop")).toBe(before.get("group:shop"));
     expect(after.get("db")).not.toBe(before.get("db"));
     expect(handed.edges[0]).toBe(edge);
+  });
+
+  /** A layout that failed left a blank canvas under a header counting objects. Fails if the canvas does not say so. */
+  it("says the layout failed rather than drawing nothing", async () => {
+    render(canvas(["broken"]));
+    expect(await screen.findByRole("alert", undefined, SLOW)).toHaveTextContent(
+      "The map could not be laid out"
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("elk gave up");
   });
 });

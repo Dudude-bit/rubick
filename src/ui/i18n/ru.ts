@@ -1883,6 +1883,8 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    layoutFailed:
+      "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",
     collapseGroup: "Свернуть {name}",
     nodeKeys:

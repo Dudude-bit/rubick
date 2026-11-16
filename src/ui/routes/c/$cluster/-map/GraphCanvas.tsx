@@ -390,7 +390,7 @@ function Canvas({
     <MapContext.Provider value={actions}>
       <LightContext.Provider value={light}>
         <div
-          className="map-canvas h-full w-full"
+          className="map-canvas relative h-full w-full"
           role="group"
           aria-label={ariaLabel}
           data-paused={visible ? undefined : ""}
@@ -424,6 +424,14 @@ function Canvas({
               color="hsl(var(--hair))"
             />
           </ReactFlow>
+          {placement.failed !== null && (
+            <p
+              role="alert"
+              className="absolute right-3 bottom-3 left-3 rounded-md bg-raise/90 px-2 py-1 text-[11.5px] text-err"
+            >
+              {t("topology", "layoutFailed", { said: placement.failed })}
+            </p>
+          )}
         </div>
       </LightContext.Provider>
     </MapContext.Provider>
