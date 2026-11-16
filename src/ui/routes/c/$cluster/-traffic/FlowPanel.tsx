@@ -18,6 +18,7 @@ import {
   endSub,
   policyWords,
   rate,
+  sideWords,
   sourceLines,
 } from "./traffic-words";
 
@@ -92,11 +93,13 @@ export function FlowPanel({
       )}
       {row.by.map((line) => {
         const lines = sourceLines(line, t);
+        const side = sideWords(line, t);
         return (
           <section key={line.source.id} className="flex flex-col gap-0.5">
             <p className="font-medium text-fg">
               {t("traffic", "panelCounted", { source: line.source.name })}
             </p>
+            {side && <p className="text-[11.5px] text-fg-mut">{side}</p>}
             {lines.length > 0 ? (
               lines.map((text) => (
                 <p key={text} className="font-mono text-[11.5px] text-fg-mut">

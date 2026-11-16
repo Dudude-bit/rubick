@@ -116,6 +116,7 @@ function read(
               from: 0,
               to: 1,
               protocols: ["http"],
+              sides: [],
               values: MEASURES.map((measure) => set[measure] ?? null),
               reasons: [],
             },

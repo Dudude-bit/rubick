@@ -62,6 +62,7 @@ function model(
         from,
         to,
         protocols: [],
+        sides: [],
         values: MEASURES.map((m) => (m === "requests" ? 1 : null)),
         reasons: [],
       })),

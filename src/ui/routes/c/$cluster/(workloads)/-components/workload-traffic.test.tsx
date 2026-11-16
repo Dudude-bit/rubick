@@ -71,6 +71,7 @@ function read(
         from: names.indexOf(from),
         to: names.indexOf(to),
         protocols: [],
+        sides: [],
         values: MEASURES.map((measure) => set[measure] ?? null),
         reasons: [],
       })),

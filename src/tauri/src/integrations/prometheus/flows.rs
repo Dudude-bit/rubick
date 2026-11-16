@@ -110,6 +110,8 @@ pub struct FlowQuery {
     pub to: EndLabels,
     pub protocol: Option<String>,
     pub reason: Option<String>,
+    /// The label naming which proxy of the pair reported a series.
+    pub side: Option<String>,
     /// A pair this source saw that this query, answering, has no series
     /// for is at zero: a count of a subset (errors, drops) where none fell.
     pub zero_when_absent: bool,
@@ -189,6 +191,9 @@ pub struct Flow {
     pub from: u32,
     pub to: u32,
     pub protocols: Vec<String>,
+    /// Which proxies of the pair the numbers came from, where the source has
+    /// two: `server`, `caller`.
+    pub sides: Vec<String>,
     /// Per second over the window, positionally by `Measure`; `None` where
     /// no series of the source had one for this pair.
     pub values: Vec<Option<f64>>,
@@ -543,6 +548,7 @@ fn namespace_of(end: &FlowEnd) -> Option<&str> {
 struct Joined {
     values: [Option<f64>; 8],
     protocols: BTreeSet<String>,
+    sides: BTreeSet<String>,
     reasons: BTreeMap<String, f64>,
 }
 
@@ -644,6 +650,9 @@ pub(crate) fn fold(
             if let Some(protocol) = value_of(one, query.protocol.as_ref()) {
                 pair.protocols.insert(protocol.to_string());
             }
+            if let Some(side) = value_of(one, query.side.as_ref()) {
+                pair.sides.insert(side.to_string());
+            }
             let slot = &mut pair.values[query.measure.at()];
             *slot = Some(match *slot {
                 None => value,
@@ -708,6 +717,7 @@ pub(crate) fn fold(
             from: intern(from),
             to: intern(to),
             protocols: pair.protocols.into_iter().collect(),
+            sides: pair.sides.into_iter().collect(),
             values: pair.values.iter().map(|v| v.map(rounded)).collect(),
             reasons: pair
                 .reasons
@@ -858,6 +868,7 @@ mod tests {
             to,
             protocol: None,
             reason: None,
+            side: None,
             zero_when_absent: matches!(measure, Measure::Errors | Measure::Drops),
         }
     }
@@ -1460,6 +1471,47 @@ mod tests {
         );
         let size = serde_json::to_vec(&answer).expect("serialises").len();
         assert!(size < 256 * 1024, "{size} bytes");
+    }
+
+    /// Both proxies of a pair report a call; the caller's alone holds one that
+    /// failed before reaching the server. The two sides' series of one pair
+    /// are one flow, its requests their sum, and it says which sides they were.
+    #[test]
+    fn a_pair_both_proxies_report_is_one_flow_that_names_its_sides() {
+        let read = read_of(vec![]);
+        let side = |side: &str, v: f64| {
+            series(
+                &[
+                    ("sns", "shop"),
+                    ("sw", "web"),
+                    ("dns", "shop"),
+                    ("dw", "api"),
+                    ("rubick_side", side),
+                ],
+                Some(v),
+            )
+        };
+        let requests = FlowQuery {
+            side: Some("rubick_side".into()),
+            ..by_name(0, Measure::Requests)
+        };
+        let answer = fold(
+            &[requests, by_name(0, Measure::Errors)],
+            vec![
+                Ok(vec![side("server", 10.0), side("caller", 20.0)]),
+                Ok(vec![pair("web", "api", 20.0)]),
+            ],
+            Some(&read),
+            None,
+            None,
+            None,
+            &[],
+        );
+        assert_eq!(answer.flows.len(), 1);
+        let flow = &answer.flows[0];
+        assert_eq!(flow.values[Measure::Requests.at()], Some(30.0));
+        assert_eq!(flow.values[Measure::Errors.at()], Some(20.0));
+        assert_eq!(flow.sides, vec!["caller".to_string(), "server".to_string()]);
     }
 
     /// Past the cap each family keeps its busiest in turn: a pair with only

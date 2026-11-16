@@ -197,6 +197,16 @@ export function sourceLines(line: SourceLine, t: T): string[] {
   return out;
 }
 
+/** Which proxy of the pair a source's numbers came from; nothing where it has one. */
+export function sideWords(line: SourceLine, t: T): string | null {
+  const server = line.sides.includes("server");
+  const caller = line.sides.includes("caller");
+  if (server && caller) return t("traffic", "panelSideBoth");
+  if (server) return t("traffic", "panelSideServer");
+  if (caller) return t("traffic", "panelSideCaller");
+  return null;
+}
+
 /** The edge's second line: the row's own numbers, and whose they are. */
 export function edgeSub(row: FlowRow, t: T): string {
   const parts: string[] = [];

@@ -87,6 +87,18 @@ k create namespace bookinfo --dry-run=client -o yaml | k apply -f -
 k label namespace bookinfo istio-injection=enabled --overwrite
 k -n bookinfo apply -f "$ISTIO_RAW/samples/bookinfo/platform/kube/bookinfo.yaml"
 k -n bookinfo apply -f "$ISTIO_RAW/samples/bookinfo/networking/bookinfo-gateway.yaml"
+# A third of the calls to ratings fail in the caller's proxy (response flag
+# FI) and never reach ratings: only reporter="source" holds them.
+k -n bookinfo apply -f - <<'YAML'
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: { name: ratings-fault }
+spec:
+  hosts: [ratings]
+  http:
+    - fault: { abort: { percentage: { value: 33 }, httpStatus: 503 } }
+      route: [{ destination: { host: ratings } }]
+YAML
 
 echo "== a load generator through the gateway, in the mesh"
 k create namespace loadgen --dry-run=client -o yaml | k apply -f -
@@ -145,4 +157,8 @@ Give it a minute for rate() to have two scrapes. Then:
   - Traffic: loadgen -> istio-ingressgateway -> productpage -> details, reviews; reviews -> ratings.
   - Deployment plain/outside: "Not observed by Istio".
   - 5xx: kubectl --kubeconfig "$RUBICK_KUBECONFIG" --context $CONTEXT -n bookinfo scale deploy ratings-v1 --replicas=0
+  - reviews -> ratings: about a third of the calls fail in reviews' proxy before reaching ratings. The 503s
+    are on that edge, red, the panel saying "From the server's proxy, and the calls only the caller's proxy
+    saw"; where Istio cannot name the workload of a call that never left, they are on reviews -> Service
+    ratings instead, panel "From the caller's proxy". Never 0% in green.
 EOF

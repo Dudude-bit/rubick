@@ -115,6 +115,8 @@ export interface SourceLine {
   values: readonly (number | null)[];
   reasons: readonly Reason[];
   protocols: readonly string[];
+  /** The proxies of the pair its numbers came from: `server`, `caller`. */
+  sides: readonly string[];
 }
 
 export interface FlowRow {
@@ -264,6 +266,7 @@ const signature = (flows: readonly Flow[]) =>
       flow.values,
       flow.reasons,
       flow.protocols,
+      flow.sides,
     ])
   );
 
@@ -329,6 +332,7 @@ export function pairRows(
                 values: flow.values,
                 reasons: flow.reasons,
                 protocols: flow.protocols,
+                sides: flow.sides,
               },
             ]
           : [];
@@ -555,7 +559,15 @@ export function liveRow(pair: LivePair): FlowRow {
     drops: measured(pair.dropped, name),
     reasons,
     seenBy: [name],
-    by: [{ source: LIVE_SOURCE, values, reasons, protocols: pair.protocols }],
+    by: [
+      {
+        source: LIVE_SOURCE,
+        values,
+        reasons,
+        protocols: pair.protocols,
+        sides: [],
+      },
+    ],
   };
 }
 

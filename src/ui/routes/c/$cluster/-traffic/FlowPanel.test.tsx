@@ -2,7 +2,13 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { FlowEnd } from "@/generated/types";
-import { liveRow } from "@/lib/traffic";
+import {
+  flowTone,
+  liveRow,
+  MEASURES,
+  pairRows,
+  type FlowSource,
+} from "@/lib/traffic";
 import { renderWithRouter } from "@/test/render";
 import { FlowPanel } from "./FlowPanel";
 
@@ -113,5 +119,73 @@ describe("a flow opened from its edge", () => {
       screen.getByText("HTTP requests an L7 rule denied: 2/s")
     ).toBeTruthy();
     expect(document.body.textContent).not.toContain("DROP_REASON_UNKNOWN");
+  });
+
+  /**
+   * Calls that failed before reaching the server are in the caller's proxy's
+   * report only: the row holds them and is not green, and the panel says
+   * which proxy each number came from, the server's alone where it alone spoke.
+   */
+  it("says which proxy the numbers came from, and keeps the caller's failures in the share", async () => {
+    const istio: FlowSource = {
+      id: "istio",
+      name: "Istio",
+      state: { says: "present" },
+      measures: ["requests", "errors"],
+      found: [],
+      need: "needIstio",
+      marks: true,
+      nodeAgent: false,
+      needsPods: true,
+      grpcErrors: true,
+    };
+    const row = (sides: string[], requests: number, errors: number) =>
+      pairRows({
+        sources: [istio],
+        window: "5m",
+        answer: {
+          ends: [end("web"), end("api")],
+          flows: [
+            {
+              source: 0,
+              from: 0,
+              to: 1,
+              protocols: ["http"],
+              sides,
+              values: MEASURES.map((m) =>
+                m === "requests" ? requests : m === "errors" ? errors : null
+              ),
+              reasons: [],
+            },
+          ],
+          reads: [],
+          observed: null,
+          coverage: [],
+          podsUnread: [],
+          podsFailed: null,
+          cut: 0,
+        },
+      }).rows[0];
+    const both = row(["caller", "server"], 30, 20);
+    expect(flowTone(both)).toBe("err");
+    const page = await renderWithRouter(
+      <FlowPanel row={both} window="last 5 minutes" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(
+      screen.getByText(
+        "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server."
+      )
+    ).toBeTruthy();
+    page.unmount();
+    await renderWithRouter(
+      <FlowPanel
+        row={row(["server"], 10, 0)}
+        window="last 5 minutes"
+        onClose={() => {}}
+      />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(screen.getByText("From the server's proxy.")).toBeTruthy();
   });
 });
