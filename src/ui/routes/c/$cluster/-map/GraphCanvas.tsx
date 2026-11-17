@@ -81,6 +81,13 @@ const EDGE_TYPES = { map: MapEdge };
 
 const FIT = { padding: 0.08 };
 
+/**
+ * Nothing on the map is selectable or draggable, and React Flow then writes
+ * `pointer-events: none` on every node's wrapper: no click, no double click,
+ * no hover, no fold. A node's own style is spread after it, so this wins.
+ */
+const TAKES_POINTER = { pointerEvents: "all" } as const;
+
 /** Past this many drawn nodes only those in view are mounted. */
 export const MOUNT_ALL_UP_TO = 600;
 
@@ -278,7 +285,7 @@ function Canvas({
         data: { group },
         width: box.width,
         height: box.height,
-        style: { width: box.width, height: box.height },
+        style: { ...TAKES_POINTER, width: box.width, height: box.height },
         draggable: false,
         selectable: false,
         focusable: false,
@@ -308,6 +315,7 @@ function Canvas({
         position,
         parentId: node.group === null ? undefined : cardId(node.group),
         data: was?.data ?? { node },
+        style: TAKES_POINTER,
         width: NODE_W,
         height: NODE_H,
         draggable: false,

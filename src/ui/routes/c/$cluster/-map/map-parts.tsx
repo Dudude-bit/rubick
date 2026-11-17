@@ -73,7 +73,7 @@ export const ObjectNode = memo(function ObjectNode({
       aria-label={[node.kind, node.label, node.sub].filter(Boolean).join(", ")}
       data-node={id}
       className={cn(
-        "flex h-full w-full cursor-pointer flex-col justify-center rounded-[5px] border bg-raise px-2 py-1 text-left transition-opacity duration-150",
+        "flex h-full w-full cursor-pointer flex-col justify-center rounded-[5px] border bg-raise px-2 py-1 text-left transition-opacity duration-150 select-none",
         "hover:bg-hover focus-visible:border-info focus-visible:outline-hidden",
         NODE_BORDER[node.tone],
         lit === false && "opacity-25"
@@ -168,7 +168,7 @@ export const GroupFrame = memo(function GroupFrame({
   const { group } = data;
   return (
     <div
-      className="h-full w-full rounded-lg border border-hair bg-canvas/40"
+      className="h-full w-full rounded-lg border border-hair bg-canvas/40 select-none"
       style={group.refused ? HATCH : undefined}
     >
       <div className="flex items-center gap-2 px-3 pt-2.5">
@@ -191,7 +191,7 @@ export const GroupCard = memo(function GroupCard({
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col gap-1 rounded-lg border bg-raise px-3 py-2.5",
+        "flex h-full w-full flex-col gap-1 rounded-lg border bg-raise px-3 py-2.5 select-none",
         NODE_BORDER[group.tone]
       )}
       style={group.refused ? HATCH : undefined}
