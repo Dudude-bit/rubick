@@ -42,4 +42,21 @@ describe("the width text is drawn at", () => {
     expect(textWidth("controlplane", "mono")).toBeNull();
     expect(widestText(["controlplane"], "mono", 7.2)).toBe(Math.ceil(12 * 7.2));
   });
+
+  /**
+   * Each text laid out on its own was a layout of the whole document per
+   * text: the new ones are measured together, and a mono face, whose glyphs
+   * are one width, is not laid out at all.
+   */
+  it("lays out the texts it does not know in one pass, and a mono face in none", () => {
+    layOut(8);
+    const append = vi.spyOn(document.body, "append");
+    const words = Array.from({ length: 20 }, (_, i) => `reason ${i}`);
+    expect(widestText(words, "sans", 7)).toBe("reason 10".length * 8);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(widestText(["4.74", "1,234 ms"], "mono", 7.2)).toBe(
+      Math.ceil(8 * 7.2)
+    );
+    expect(append).toHaveBeenCalledTimes(1);
+  });
 });

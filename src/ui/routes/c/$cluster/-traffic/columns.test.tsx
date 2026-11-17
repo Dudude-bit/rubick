@@ -1,12 +1,15 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { act, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { tableLayout, yieldedColumns } from "@/components/ui/column-shares";
+import { DataTable } from "@/components/ui/data-table";
 import type { AppColumnMeta } from "@/components/ui/table-features";
 import type { FlowEnd, Measure } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { MEASURES, pairRows, type FlowRow } from "@/lib/traffic";
+import { liveRow, MEASURES, pairRows, type FlowRow } from "@/lib/traffic";
+import { renderWithRouter } from "@/test/render";
 import { drawnColumns, flowColumns } from "./columns";
 import { End, Figure } from "./flow-cells";
 
@@ -229,4 +232,68 @@ describe("a share of errors in the flows table", () => {
       "text-ok"
     );
   });
+});
+
+describe("the flows table under a live stream", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document, "fonts");
+  });
+
+  /**
+   * Live hands the table new rows every second, names and figures that
+   * change in length. Each figure a floor laid out in the document was a
+   * layout of the whole page: a hundred a second, until the webview hung in
+   * layout. A batch lays out nothing it already knows, and a figure nothing.
+   */
+  it("lays out a bounded number of times however many batches arrive", async () => {
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { status: "loaded", ready: Promise.resolve() },
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return { width: (this.textContent ?? "").length * 7 } as DOMRect;
+      }
+    );
+    const append = vi.spyOn(document.body, "append");
+    const batch = (n: number): FlowRow[] =>
+      Array.from({ length: 12 + (n % 5) }, (_, i) =>
+        liveRow({
+          from: workload("shop", `caller-${"x".repeat((n + i) % 9)}-${i}`),
+          to: workload("shop", `web-${i}`),
+          forwarded: 1 + ((n * 7 + i) % 97) / 10,
+          dropped: (n % 3) * 0.25,
+          drops: [],
+          requests: 0.5 + ((n * 13 + i) % 211) / 7,
+          errors: (n % 4) / 10,
+          p50: (n * 3 + i) % 40,
+          p95: 10 + ((n * 11 + i) % 900),
+          p99: 20 + ((n * 17 + i) % 4000),
+          protocols: ["HTTP/1.1"],
+        })
+      );
+    let push: (rows: FlowRow[]) => void = () => {};
+    const columns = flowColumns(t);
+    function Live() {
+      const [rows, setRows] = useState(() => batch(0));
+      push = setRows;
+      return (
+        <DataTable
+          columns={columns}
+          data={rows}
+          fill
+          getRowId={(row) => row.id}
+        />
+      );
+    }
+    await renderWithRouter(<Live />, {
+      at: "/c/prod/traffic",
+      route: "/c/$cluster/traffic",
+    });
+    const first = append.mock.calls.length;
+    for (let n = 1; n <= 100; n++) act(() => push(batch(n)));
+    expect(append.mock.calls.length - first).toBeLessThanOrEqual(5);
+    // A hundred renders of a table take seconds on a loaded machine.
+  }, 60_000);
 });
