@@ -90,6 +90,7 @@ export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
         />
       ),
       meta: {
+        names: true,
         floor: (_t: T, rows: readonly NamespaceRow[]) =>
           refCellPx(rows, (row) => row.namespace, 31),
       },

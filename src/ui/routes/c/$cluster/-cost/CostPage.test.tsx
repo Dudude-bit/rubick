@@ -490,9 +490,8 @@ describe("a namespace no OpenCost series prices", () => {
     cost.mockReturnValue({ state: "picture", picture, trouble: null });
     useClusterStore.setState({ namespaceScope: ["ml"] });
     await open();
-    // The scope is `ml` alone, so the one namespace row is its own.
     const [, row] = screen.getAllByRole("row");
-    expect(row).toHaveTextContent(/^not priced/);
+    expect(row).toHaveTextContent(/^Namespace mlnot priced/);
     expect(
       screen.queryByText("Nothing in this scope runs on a node.")
     ).toBeNull();
@@ -504,6 +503,37 @@ describe("a namespace no OpenCost series prices", () => {
     expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
       "No OpenCost series priced its pods."
     );
+  });
+});
+
+describe("the window on one namespace", () => {
+  /**
+   * A namespace-bound reader with prices entered, the window on `shop`: the
+   * by-namespace table drew one row of amounts and nothing saying whose,
+   * because one namespace chosen hides every Namespace column. There it is
+   * the row's own name; the by-workload table, where it repeats beside
+   * each name, still drops it. Fails if either table changes sides.
+   */
+  it("names the namespace on its row, and drops it beside each workload", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        BASIS,
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "EUR" },
+        ["shop"]
+      ),
+      trouble: null,
+    });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    await open();
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(headers.filter((h) => h === "Namespace")).toHaveLength(1);
+    const [, row] = screen.getAllByRole("row");
+    expect(
+      within(row!).getByRole("link", { name: /shop/ })
+    ).toBeInTheDocument();
   });
 });
 
