@@ -281,6 +281,29 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * A series a catch-up moved to the top while an older page was read came
+   * back in that page in its old place. Fails if one series is drawn twice.
+   */
+  it("does not lay in a series an older page holds once more", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    answers = [page([row("a", 40, 31)], { newest: 31 })];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["a", "b"])
+    );
+    answers = [page([row("a", 10), row("x", 5)])];
+    act(() => result.current.loadOlder());
+    await waitFor(() => expect(result.current.rows).toHaveLength(3));
+    expect(result.current.rows.map((each) => each.id)).toEqual(["a", "b", "x"]);
+  });
+
+  /**
    * A DaemonSet's tab named no group, which the backend reads as any: a
    * custom DaemonSet of the same name filled the built-in's history. Fails
    * if a subject without a group is not asked for in its built-in group, or

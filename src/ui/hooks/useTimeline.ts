@@ -233,11 +233,14 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           void client.resetQueries({ queryKey: key, exact: true });
           return;
         }
-        client.setQueryData<TimelinePage>(key, (now) =>
-          now && now.rows.at(-1)?.seq === last.seq
-            ? { ...now, rows: [...now.rows, ...page.rows], more: page.more }
-            : now
-        );
+        client.setQueryData<TimelinePage>(key, (now) => {
+          if (!now || now.rows.at(-1)?.seq !== last.seq) return now;
+          // A series a catch-up moved up while this page was read is held
+          // already, in its later place.
+          const held = new Set(now.rows.map((row) => row.id));
+          const older = page.rows.filter((row) => !held.has(row.id));
+          return { ...now, rows: [...now.rows, ...older], more: page.more };
+        });
       })
       .catch(() => {});
   }, [client, key, question]);
