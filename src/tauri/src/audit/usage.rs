@@ -77,6 +77,8 @@ pub enum UseVerdict {
 pub struct OverBy {
     pub requested: u64,
     pub peak: u64,
+    /// The peak is each pod's own peak summed: the workload's was no higher.
+    pub at_most: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +154,7 @@ pub fn judge(
                                 resource: resource.to_string(),
                                 requested: by.requested,
                                 peak: by.peak,
+                                at_most: by.at_most,
                             })
                         })
                         .collect();
@@ -250,7 +253,7 @@ mod tests {
             "state": "read", "window": "24h",
             "workloads": [
                 { "namespace": "shop", "kind": "Deployment", "name": "web",
-                  "verdict": { "says": "over", "cpu": { "requested": 2000, "peak": 300 }, "memory": null } },
+                  "verdict": { "says": "over", "cpu": { "requested": 2000, "peak": 300, "atMost": true }, "memory": null } },
                 { "namespace": "shop", "kind": "Deployment", "name": "api", "verdict": { "says": "within" } },
                 { "namespace": "shop", "kind": "CronJob", "name": "nightly", "verdict": { "says": "noSamples" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "fresh",
@@ -279,7 +282,8 @@ mod tests {
             vec![What::OverRequested {
                 resource: "cpu".into(),
                 requested: 2000,
-                peak: 300
+                peak: 300,
+                at_most: true
             }]
         );
         assert_eq!(

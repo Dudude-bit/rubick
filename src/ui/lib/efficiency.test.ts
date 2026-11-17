@@ -139,6 +139,35 @@ describe("efficiency", () => {
     });
   });
 
+  /**
+   * A peak is read per pod, and several pods' peaks summed are no lower
+   * than the workload's: a bound. Fails if a sum over several pods reads
+   * as the peak, or one pod's as a bound.
+   */
+  it("marks a peak summed over several pods as a bound", () => {
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[100, 400, 10, 20]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 1, 1]],
+        since: [DAY_OLD],
+      },
+    };
+    const of = workloadEfficiency(
+      reading,
+      key,
+      { cpu: 1000, memory: 100 },
+      NOW
+    );
+    expect(of.cpu).toMatchObject({ state: "measured", peakAtMost: true });
+    expect(of.memory).toMatchObject({ state: "measured", peakAtMost: false });
+  });
+
   /** Where the reading itself is missing, both resources say why. */
   it("carries the reading's own state to both resources", () => {
     const failed: UsageReading = { state: "failed", said: "timed out" };

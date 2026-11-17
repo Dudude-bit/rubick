@@ -2116,6 +2116,8 @@ export const en = {
     wRequestedTodayNone: "no request in the last day",
     wOverRequested:
       "{resource} peaked at {peak} of the {requested} it requests, over the last day",
+    wOverRequestedAtMost:
+      "{resource} peaked at no more than {peak} of the {requested} it requests, over the last day",
     wCpu: "CPU",
     wMemory: "Memory",
     pssHostProcess: "Runs as a Windows HostProcess",
@@ -2584,6 +2586,7 @@ export const en = {
     unclaimed: "Volumes nobody claims",
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
+    atMost: "at most {value}",
     notKnown: "Not known",
     notPriced: "not priced",
     notMeasured: "not measured",

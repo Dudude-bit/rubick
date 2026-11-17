@@ -2200,6 +2200,8 @@ export const ru: Catalogue = {
     wRequestedTodayNone: "за последние сутки запросов не было",
     wOverRequested:
       "{resource}: пик {peak} при запросе {requested}, за последние сутки",
+    wOverRequestedAtMost:
+      "{resource}: пик не больше {peak} при запросе {requested}, за последние сутки",
     wCpu: "CPU",
     wMemory: "Память",
     pssHostProcess: "Запускается как HostProcess Windows",
@@ -2717,6 +2719,7 @@ export const ru: Catalogue = {
     unclaimed: "Тома, которые никто не занял",
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
+    atMost: "не больше {value}",
     notKnown: "Неизвестно",
     notPriced: "без цены",
     notMeasured: "не измерено",

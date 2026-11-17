@@ -4,7 +4,13 @@ import type { CostBasis } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { estimatePicture } from "@/lib/cost";
-import { costLineWords, pictureNotes } from "./cost-words";
+import { efficiencyOf } from "@/lib/efficiency";
+import {
+  costLineWords,
+  efficiencyWords,
+  pictureNotes,
+  usedLines,
+} from "./cost-words";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -147,5 +153,24 @@ describe("a CronJob while the Jobs could not be listed", () => {
     ).toBe(
       "Not known: the Jobs that run it could not be listed (jobs is forbidden)."
     );
+  });
+});
+
+describe("a peak summed over several pods", () => {
+  /** A bound is said as one, as a percentage and as a quantity. Fails if it reads as the peak. */
+  it("says at most beside it", () => {
+    const e = efficiencyOf(
+      1000,
+      200,
+      800,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      true
+    );
+    expect(efficiencyWords(e, t)).toBe("20% average, at most 80% peak");
+    expect(usedLines(e, "cpu", t)).toEqual([
+      "200m average",
+      "at most 800m peak",
+    ]);
   });
 });

@@ -86,6 +86,7 @@ describe("the Audit tab with requests weighed against use", () => {
               resource: "cpu",
               requested: 2000,
               peak: 300,
+              at_most: false,
             },
           ],
         },

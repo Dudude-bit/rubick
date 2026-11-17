@@ -245,6 +245,12 @@ export function youngFor(e: Efficiency, t: T): string | null {
   return e.whole || e.since === null ? null : formatAge(e.since, t);
 }
 
+/** A peak as it was read: summed over several pods it is a bound, and says so. */
+const peakSaid = (e: Efficiency, value: string, t: T) =>
+  e.state === "measured" && e.peakAtMost
+    ? t("cost", "atMost", { value })
+    : value;
+
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
@@ -253,7 +259,7 @@ export function efficiencyWords(e: Efficiency, t: T): string {
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
-        : formatShare(e.peakRatio),
+        : peakSaid(e, formatShare(e.peakRatio), t),
   };
   const age = youngFor(e, t);
   return age === null
@@ -269,7 +275,10 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
     return t("cost", "notMeasured");
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
-  const values = { avg: say(e.avg), peak: say(e.peak) };
+  const values = {
+    avg: say(e.avg),
+    peak: e.peak === null ? say(null) : peakSaid(e, say(e.peak), t),
+  };
   const age = youngFor(e, t);
   return age === null
     ? t("cost", "usedAvgPeak", values)
@@ -292,11 +301,12 @@ export function usedLines(
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
   const age = youngFor(e, t);
+  const peak = e.peak === null ? say(null) : peakSaid(e, say(e.peak), t);
   return [
     t("cost", "usedAvg", { avg: say(e.avg) }),
     age === null
-      ? t("cost", "usedPeak", { peak: say(e.peak) })
-      : t("cost", "usedPeakFor", { peak: say(e.peak), age }),
+      ? t("cost", "usedPeak", { peak })
+      : t("cost", "usedPeakFor", { peak, age }),
   ];
 }
 

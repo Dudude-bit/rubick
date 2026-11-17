@@ -2111,6 +2111,7 @@ export interface WorkloadUse {
 export interface OverBy {
   requested: number;
   peak: number;
+  atMost: boolean;
 }
 
 export interface UnreadPods {
@@ -4109,6 +4110,7 @@ export type What =
       resource: string;
       requested: number;
       peak: number;
+      at_most: boolean;
     };
 
 export type TrafficBy =
