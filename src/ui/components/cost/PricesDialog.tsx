@@ -2,7 +2,7 @@
  * What a cluster's resources cost, as the reader says: one dialog, opened
  * from the Cost page and from the cluster's row in Settings.
  */
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/i18n/useT";
+import { persistedByName } from "@/lib/kept-by-name";
 import { useCostPrices, useCostPricesStore } from "@/stores/costPricesStore";
 import {
   FIELDS,
@@ -72,6 +73,17 @@ function PricesForm({
   const setPrices = useCostPricesStore((s) => s.setPrices);
   const [draft, setDraft] = useState<Draft>(() => draftOf(saved));
   const [touched, setTouched] = useState(false);
+  // The name turned into another cluster while the form was open: what it
+  // holds are the old cluster's prices, and Save must not give them to it.
+  useEffect(
+    () =>
+      persistedByName((turned) => {
+        if (turned !== context) return;
+        setDraft(draftOf(null));
+        setTouched(false);
+      }),
+    [context]
+  );
 
   const answer = pricesFromDraft(draft);
   const save = () => {

@@ -405,7 +405,7 @@ const SAYS: {
     const cpu = w.resource === "cpu";
     const amount = (n: number) => (cpu ? formatCPU(n) : formatBytes(n));
     return {
-      key: "wOverRequested",
+      key: w.at_most ? "wOverRequestedAtMost" : "wOverRequested",
       values: {
         resource: t("audit", cpu ? "wCpu" : "wMemory"),
         peak: amount(w.peak),

@@ -209,11 +209,13 @@ pub enum What {
         requests: u64,
     },
     /// What a workload requests of `resource`, `cpu` in millicores or
-    /// `memory` in bytes, and the most it used in the usage window.
+    /// `memory` in bytes, and the most it used in the usage window; with
+    /// `at_most`, a bound: each pod's own peak, summed.
     OverRequested {
         resource: String,
         requested: u64,
         peak: u64,
+        at_most: bool,
     },
 }
 

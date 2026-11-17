@@ -648,29 +648,35 @@ export const queryKeys = {
   costReading: (
     namespaces: readonly string[] | null,
     nodes: boolean,
+    supplier: string,
     rows: string
   ): string[] => [
     "cost-reading",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
     nodes ? "nodes" : "no-nodes",
+    supplier,
     rows,
   ],
   costTrend: (
     namespaces: readonly string[] | null,
     range: string,
-    prices: string
+    prices: string,
+    supplier: string
   ): string[] => [
     "cost-trend",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
     range,
     prices,
+    supplier,
   ],
   workloadUsage: (
     namespaces: readonly string[] | null,
+    supplier: string,
     rows: string
   ): string[] => [
     "workload-usage",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+    supplier,
     rows,
   ],
   /** Which flow sources a supplier holds series for, asked once per address. */

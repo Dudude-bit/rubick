@@ -313,10 +313,15 @@ fn unreachable(reason: String) -> Error {
 }
 
 fn configured(state: &AppState) -> Result<PrometheusEntry> {
-    let context = context_of(state)?;
-    let entry = entry_for(&context)?
+    configured_in(state, &context_of(state)?)
+}
+
+/// The Prometheus of `context`: for a reader that also reads that cluster's
+/// pods, so both answers are of one cluster.
+pub(crate) fn configured_in(state: &AppState, context: &str) -> Result<PrometheusEntry> {
+    let entry = entry_for(context)?
         .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))?;
-    super::own_tunnel(state, &context, &entry.url).map_err(Error::Connection)?;
+    super::own_tunnel(state, context, &entry.url).map_err(Error::Connection)?;
     Ok(entry)
 }
 

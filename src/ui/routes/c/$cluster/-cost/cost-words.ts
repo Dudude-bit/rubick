@@ -80,6 +80,11 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
         endpoint: trouble.endpoint,
         said: trouble.said,
       });
+    case "lastFailed":
+      return t("cost", "lastFailed", {
+        endpoint: trouble.endpoint,
+        said: trouble.said,
+      });
   }
 }
 
@@ -120,7 +125,7 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
     );
   if (picture.nodesUnread)
     notes.push(
-      t("cost", opencost ? "nodesNotChecked" : "nodesUnread", {
+      t("cost", "nodesUnread", {
         said: picture.nodesUnread.message,
       })
     );
@@ -132,6 +137,8 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
         endpoint: picture.source.endpoint,
       })
     );
+  if (picture.jobsUnread)
+    notes.push(t("cost", "jobsUnread", { said: picture.jobsUnread.message }));
   // OpenCost says what each node holds itself; only an estimate counts it.
   if (picture.heldUnread && !opencost)
     notes.push(t("cost", "heldUnread", { said: picture.heldUnread.message }));
@@ -162,6 +169,22 @@ export function costLineWords(
   t: T
 ): string {
   const of = costOf(picture, target);
+  // Its namespace's pods could not be read: no row, or one with no price,
+  // is the refusal, not an absence.
+  const refused = picture.unread.some((u) => u.namespace === target.namespace);
+  if (refused && (!of || of.perHour === null)) return t("cost", "lineUnread");
+  // What each workload costs was not read: its row has no price for that
+  // reason, not for want of a price.
+  if ("kind" in target && picture.workloadsFailed && of?.perHour === null)
+    return t("cost", "lineFailed", { said: picture.workloadsFailed });
+  // A CronJob's runs went under each Job while the Jobs were refused.
+  if (
+    !of &&
+    "kind" in target &&
+    target.kind === "CronJob" &&
+    picture.jobsUnread
+  )
+    return t("cost", "lineJobsUnread", { said: picture.jobsUnread.message });
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)
@@ -222,6 +245,12 @@ export function youngFor(e: Efficiency, t: T): string | null {
   return e.whole || e.since === null ? null : formatAge(e.since, t);
 }
 
+/** A peak as it was read: summed over several pods it is a bound, and says so. */
+const peakSaid = (e: Efficiency, value: string, t: T) =>
+  e.state === "measured" && e.peakAtMost
+    ? t("cost", "atMost", { value })
+    : value;
+
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
@@ -230,7 +259,7 @@ export function efficiencyWords(e: Efficiency, t: T): string {
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
-        : formatShare(e.peakRatio),
+        : peakSaid(e, formatShare(e.peakRatio), t),
   };
   const age = youngFor(e, t);
   return age === null
@@ -246,7 +275,10 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
     return t("cost", "notMeasured");
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
-  const values = { avg: say(e.avg), peak: say(e.peak) };
+  const values = {
+    avg: say(e.avg),
+    peak: e.peak === null ? say(null) : peakSaid(e, say(e.peak), t),
+  };
   const age = youngFor(e, t);
   return age === null
     ? t("cost", "usedAvgPeak", values)
@@ -269,11 +301,12 @@ export function usedLines(
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
   const age = youngFor(e, t);
+  const peak = e.peak === null ? say(null) : peakSaid(e, say(e.peak), t);
   return [
     t("cost", "usedAvg", { avg: say(e.avg) }),
     age === null
-      ? t("cost", "usedPeak", { peak: say(e.peak) })
-      : t("cost", "usedPeakFor", { peak: say(e.peak), age }),
+      ? t("cost", "usedPeak", { peak })
+      : t("cost", "usedPeakFor", { peak, age }),
   ];
 }
 

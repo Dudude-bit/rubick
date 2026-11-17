@@ -60,15 +60,17 @@ function summarySection(
   }
   if (scoped && picture.cluster)
     add(t("cost", "theCluster"), amountWords(picture.cluster, currency, t));
+  // As the tiles say it: a namespace's summary carries the cluster's idle
+  // under the cluster's name, and none of the cluster's own charges.
   add(
-    t("cost", "idle"),
+    t("cost", scoped ? "idleCluster" : "idle"),
     picture.idle
       ? amountWords(picture.idle, currency, t)
       : t("cost", noNodePriced(picture) ? "idleUnpriced" : "notKnown")
   );
-  if (picture.unclaimed !== null)
+  if (!scoped && picture.unclaimed !== null)
     add(t("cost", "unclaimed"), formatMoney(picture.unclaimed, currency));
-  if (picture.fee !== null)
+  if (!scoped && picture.fee !== null)
     add(t("cost", "fee"), formatMoney(picture.fee, currency));
   return {
     id: "cost-summary",

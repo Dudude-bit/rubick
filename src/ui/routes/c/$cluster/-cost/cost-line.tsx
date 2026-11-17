@@ -82,13 +82,19 @@ function useLine(target: CostTarget) {
   const t = useT();
   const namespaces = useMemo(() => [target.namespace], [target.namespace]);
   const { cost } = useCost(namespaces, { detail: true });
-  if (cost.state === "picture")
+  if (cost.state === "picture") {
+    const words = costLineWords(cost.picture, target, t);
+    // The latest read failed: the figures are the one before, and say so.
+    const last = cost.trouble?.kind === "lastFailed" ? cost.trouble : null;
     return {
       cost,
-      words: costLineWords(cost.picture, target, t) as ReactNode,
-      tone: undefined,
+      words: (last
+        ? t("cost", "lineLastFailed", { line: words, said: last.said })
+        : words) as ReactNode,
+      tone: last ? ("warn" as const) : undefined,
       said: true,
     };
+  }
   const waiting = waitingWords(cost, t);
   return {
     cost,
