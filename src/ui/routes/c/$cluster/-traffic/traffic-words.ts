@@ -13,9 +13,10 @@ import type {
   FlowSourceState,
   FlowWindow,
   SourceLine,
+  TrafficReading,
   TrafficWord,
 } from "@/lib/traffic";
-import { MEASURES } from "@/lib/traffic";
+import { MEASURES, silenceOf } from "@/lib/traffic";
 import { formatRate } from "@/lib/utils";
 
 export const WINDOW_WORD = {
@@ -51,6 +52,7 @@ export function endLabel(end: FlowEnd): string {
     case "notListed":
     case "service":
     case "node":
+    case "remote":
       return end.name;
     case "address":
       return end.address;
@@ -80,6 +82,11 @@ export function endSub(end: FlowEnd, t: T): string {
       return t("traffic", "endAddress");
     case "unidentified":
       return t("traffic", "endUnidentified");
+    case "remote":
+      return t("traffic", "endRemote", {
+        namespace: end.namespace,
+        cluster: end.cluster,
+      });
   }
 }
 
@@ -94,6 +101,8 @@ export function endKind(end: FlowEnd): string {
       return "Service";
     case "node":
       return "Node";
+    case "remote":
+      return end.kind;
     case "ambiguous":
     case "address":
     case "unidentified":
@@ -117,7 +126,7 @@ export function cellText(cell: Cell, kind: CellKind, t: T): string {
     case "bytes":
       return bytesRate(cell.value);
     case "share":
-      return formatShare(cell.value);
+      return `${cell.floor ? "≥" : ""}${formatShare(cell.value)}`;
     case "ms":
       return ms(cell.value, t);
   }
@@ -133,6 +142,8 @@ const CELL_EMPTY: Record<CellState, (t: T) => string> = {
 export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
   switch (cell.state) {
     case "measured":
+      if (cell.floor)
+        return t("traffic", "cellFloor", { source: cell.source ?? "" });
       return cell.source
         ? t("traffic", "cellFrom", { source: cell.source })
         : "";
@@ -157,7 +168,11 @@ export function sourceLines(line: SourceLine, t: T): string[] {
     const errors = value("errors");
     if (errors !== null && requests > 0)
       out.push(
-        t("traffic", "panelErrors", { share: formatShare(errors / requests) })
+        t(
+          "traffic",
+          line.source.grpcErrors ? "panelErrors" : "panelErrorsHttp",
+          { share: formatShare(errors / requests) }
+        )
       );
   }
   const quantiles = (["p50", "p95", "p99"] as const)
@@ -182,6 +197,16 @@ export function sourceLines(line: SourceLine, t: T): string[] {
   return out;
 }
 
+/** Which proxy of the pair a source's numbers came from; nothing where it has one. */
+export function sideWords(line: SourceLine, t: T): string | null {
+  const server = line.sides.includes("server");
+  const caller = line.sides.includes("caller");
+  if (server && caller) return t("traffic", "panelSideBoth");
+  if (server) return t("traffic", "panelSideServer");
+  if (caller) return t("traffic", "panelSideCaller");
+  return null;
+}
+
 /** The edge's second line: the row's own numbers, and whose they are. */
 export function edgeSub(row: FlowRow, t: T): string {
   const parts: string[] = [];
@@ -192,7 +217,9 @@ export function edgeSub(row: FlowRow, t: T): string {
     parts.push(t("traffic", "subEvents", { v: rate(row.events.value) }));
   if (row.errorShare.value !== null)
     parts.push(
-      t("traffic", "subErrors", { share: formatShare(row.errorShare.value) })
+      t("traffic", "subErrors", {
+        share: cellText(row.errorShare, "share", t),
+      })
     );
   if (row.p95.value !== null) parts.push(`p95 ${ms(row.p95.value, t)}`);
   if ((row.drops.value ?? 0) > 0)
@@ -208,3 +235,48 @@ export const policyWords = (policies: readonly PolicyRef[]) =>
   policies
     .map((p) => `${p.kind} ${p.namespace ? `${p.namespace}/` : ""}${p.name}`)
     .join(", ");
+
+/** Each source's failed reads, whole or in part, as lines above the map. */
+export function unreadNotes(reading: TrafficReading, t: T): string[] {
+  return reading.sources.flatMap((source, index) => {
+    const silence = silenceOf(reading, index, null);
+    return silence.says === "notRead"
+      ? [
+          t("traffic", silence.all ? "sourceUnread" : "sourcePartly", {
+            source: source.name,
+            said: silence.said,
+          }),
+        ]
+      : [];
+  });
+}
+
+/** What a reading with no flow says: who saw none, and who could not be read. */
+export function nothingWords(
+  reading: TrafficReading,
+  scope: string,
+  window: string,
+  t: T
+): string {
+  const quiet: string[] = [];
+  const unread: string[] = [];
+  reading.sources.forEach((source, index) =>
+    (silenceOf(reading, index, null).says === "notRead" ? unread : quiet).push(
+      source.name
+    )
+  );
+  return [
+    quiet.length > 0
+      ? t("traffic", "nothingInWindow", {
+          sources: quiet.join(", "),
+          scope,
+          window,
+        })
+      : "",
+    unread.length > 0
+      ? t("traffic", "notReadInWindow", { sources: unread.join(", ") })
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

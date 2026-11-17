@@ -20,19 +20,24 @@ export function namesRebound(): void {
 }
 
 const persisted = new Set<(context: string) => void>();
+const turned = new Set<string>();
 
 /**
  * Names a holder of what is persisted under a context name: pins, things
  * being watched for, the namespaces last used. It outlives the window, so it
  * is not let go on a kubeconfig change, where most names still mean the
- * cluster they did. It is told the one name that turned out not to.
+ * cluster they did. It is told the one name that turned out not to, and,
+ * named after that, every name that turned this session: a store first
+ * loaded with a lazy screen still holds what it kept for the old cluster.
  */
 export function persistedByName(forget: (context: string) => void): () => void {
   persisted.add(forget);
+  for (const context of turned) forget(context);
   return () => void persisted.delete(forget);
 }
 
 /** `context` is another cluster than the one last seen under the name. */
 export function nameIsAnotherCluster(context: string): void {
+  turned.add(context);
   for (const forget of [...persisted]) forget(context);
 }

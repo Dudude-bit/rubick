@@ -223,6 +223,9 @@ fn land(state: &AppState, generation: u64, reached: Reached) -> Option<ClusterIn
     state
         .client_manager
         .set_credential_deadline(&info.context, deadline);
+    // Whatever was built between the connect's start and now, on a client
+    // taken before it, moves to this one.
+    state.client_replaced(&info.context);
     state.set_current_context(Some(info.context.clone()));
     state.create_session(&info);
     Some(info)
@@ -873,6 +876,27 @@ mod lifecycle_tests {
 
     fn current(state: &AppState) -> Option<String> {
         state.get_current_context()
+    }
+
+    /// A reader that subscribed with a client taken before a reconnect began
+    /// builds the context's feeds in the gap; the landed client takes them
+    /// over. Fails if those feeds keep the old client, or another cluster
+    /// put behind the name, for the whole connection.
+    #[tokio::test]
+    async fn feeds_built_while_a_connect_is_out_move_to_the_client_it_lands() {
+        let state = AppState::new().expect("state");
+        hold(&state, "prod").await;
+        let taken = (*state.client_of("prod").expect("client")).clone();
+        let generation = begin(&state, "prod");
+        let _late = state
+            .feeds
+            .joined("prod", taken, &crate::audit::feed_ask(None));
+        let before = state.feeds.context("prod").expect("feeds").newest().id();
+
+        assert!(land(&state, generation, reached("prod").await).is_some());
+
+        let after = state.feeds.context("prod").expect("feeds").newest().id();
+        assert!(after > before, "the feeds kept the client taken before");
     }
 
     /// The thesis on a switch: the previous cluster stays alive for the way

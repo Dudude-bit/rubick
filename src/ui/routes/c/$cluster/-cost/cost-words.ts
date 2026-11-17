@@ -5,6 +5,8 @@
 import type { T } from "@/i18n/useT";
 import {
   costOf,
+  type CostPart,
+  type Parts,
   currencyOf,
   formatMoney,
   formatShare,
@@ -15,6 +17,8 @@ import {
 } from "@/lib/cost";
 import { EFFICIENCY_WINDOW, type Efficiency } from "@/lib/efficiency";
 import { formatBytes } from "@/lib/k8s-quantity";
+import { formatQuantity } from "@/lib/metric-format";
+import { formatAge } from "@/lib/utils";
 import type { SupplierTrouble } from "@/hooks/useCost";
 
 const names = (list: readonly string[]) => list.join(", ");
@@ -60,6 +64,8 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
   switch (trouble.kind) {
     case "noSeries":
       return t("cost", "noSeries", { endpoint: trouble.endpoint });
+    case "noNodePrices":
+      return t("cost", "noNodePrices", { endpoint: trouble.endpoint });
     case "unreachable":
       return t("cost", "unreachable", {
         endpoint: trouble.endpoint,
@@ -114,6 +120,17 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
         said: picture.nodesUnread.message,
       })
     );
+  if (picture.foreignNodes.length > 0 && picture.source.kind === "opencost")
+    notes.push(
+      t("cost", "foreignNodes", {
+        n: picture.foreignNodes.length,
+        names: names(picture.foreignNodes),
+        endpoint: picture.source.endpoint,
+      })
+    );
+  // OpenCost says what each node holds itself; only an estimate counts it.
+  if (picture.heldUnread && !opencost)
+    notes.push(t("cost", "heldUnread", { said: picture.heldUnread.message }));
   if (picture.missingLabels.length > 0)
     notes.push(
       t("cost", "missingLabels", { labels: picture.missingLabels.join(", ") })
@@ -142,17 +159,21 @@ export function costLineWords(
 ): string {
   const of = costOf(picture, target);
   if (!of) {
-    if ("kind" in target && picture.rest)
+    if (!("kind" in target)) return t("cost", "lineNothingOnANode");
+    if (picture.rest)
       return t("cost", "lineCut", { kept: picture.workloads.length });
-    return t("cost", "lineNothingOnANode");
+    // The line is drawn beside running pods: a workload with no row was not
+    // in what the cost was read from, which says nothing about its pods.
+    return t("cost", "lineNotRead");
   }
   if (of.perHour === null) return t("cost", "lineNotPriced");
   const currency = currencyOf(picture);
+  // Some of what it holds carries no price: its own amount is a floor.
+  const amount = (perHour: number) =>
+    amountWords({ perHour, atLeast: of.partial }, currency, t);
   const parts = [
-    t("cost", "linePerHour", { amount: formatMoney(of.perHour, currency) }),
-    t("cost", "linePerMonth", {
-      amount: formatMoney(monthOf(of.perHour), currency),
-    }),
+    t("cost", "linePerHour", { amount: amount(of.perHour) }),
+    t("cost", "linePerMonth", { amount: amount(monthOf(of.perHour)) }),
   ];
   if (of.share !== null)
     parts.push(
@@ -181,14 +202,86 @@ const EFFICIENCY_WORDS: Record<
   unrequested: (_, t) => t("cost", "effUnrequested"),
 };
 
+/** How long the readings cover where that is less than the window: its youngest pod's age. */
+export function youngFor(e: Efficiency, t: T): string | null {
+  if (e.state !== "measured" && e.state !== "unrequested") return null;
+  return e.whole || e.since === null ? null : formatAge(e.since, t);
+}
+
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
-  return t("cost", "effMeasured", {
+  const values = {
     avg: e.ratio === null ? t("cost", "notMeasured") : formatShare(e.ratio),
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
         : formatShare(e.peakRatio),
-  });
+  };
+  const age = youngFor(e, t);
+  return age === null
+    ? t("cost", "effMeasured", values)
+    : t("cost", "effMeasuredFor", { ...values, age });
+}
+
+/** What one resource used, in its own units, over the span the readings cover. */
+export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
+  if (e.state !== "measured" && e.state !== "unrequested")
+    return t("cost", "notMeasured");
+  const say = (v: number | null) =>
+    v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
+  const values = { avg: say(e.avg), peak: say(e.peak) };
+  const age = youngFor(e, t);
+  return age === null
+    ? t("cost", "usedAvgPeak", values)
+    : t("cost", "usedAvgPeakFor", { ...values, age });
+}
+
+/**
+ * What a money cell says: an amount, an amount that is a floor, no price
+ * for what is there, or nothing there to price.
+ */
+export type Said = number | { atLeast: number } | "notPriced" | "none";
+
+export function money(
+  value: Said | null | undefined,
+  currency: string,
+  t: T
+): string {
+  if (value === null || value === undefined || value === "notPriced")
+    return t("cost", "notPriced");
+  if (value === "none") return t("empty", "noneLower");
+  if (typeof value === "number") return formatMoney(value, currency);
+  return t("cost", "atLeast", { amount: formatMoney(value.atLeast, currency) });
+}
+
+/** A row's total: a floor where some of what it holds carries no price. */
+export const totalOf = (
+  row: { perHour: number | null; atLeast: boolean },
+  scale = 1
+): Said =>
+  row.perHour === null
+    ? "notPriced"
+    : row.atLeast
+      ? { atLeast: row.perHour * scale }
+      : row.perHour * scale;
+
+/** One part: its price, no price for what is there, or nothing there. */
+export const partOf = (
+  row: { parts: Parts; unpriced: readonly CostPart[] },
+  part: CostPart
+): Said =>
+  row.parts[part] ?? (row.unpriced.includes(part) ? "notPriced" : "none");
+
+export const sortable = (said: Said): number =>
+  typeof said === "number"
+    ? said
+    : typeof said === "object"
+      ? said.atLeast
+      : said === "none"
+        ? 0
+        : -1;
+
+export function share(value: number | null, t: T): string {
+  return value === null ? t("cost", "notPriced") : formatShare(value);
 }

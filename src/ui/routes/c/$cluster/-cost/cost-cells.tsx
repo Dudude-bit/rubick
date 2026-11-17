@@ -1,0 +1,64 @@
+/**
+ * The cells the breakdowns draw: an amount in the words its column shares,
+ * and a workload's two efficiencies on two lines.
+ */
+import { useT } from "@/i18n/useT";
+import {
+  overRequested,
+  type Efficiency,
+  type WorkloadEfficiency,
+} from "@/lib/efficiency";
+import { cn } from "@/lib/utils";
+import { efficiencyWords, money, youngFor, type Said } from "./cost-words";
+
+export function Money({
+  value,
+  currency,
+}: {
+  value: Said | null | undefined;
+  currency: string;
+}) {
+  const t = useT();
+  const words = money(value, currency, t);
+  return typeof value === "number" || (value && typeof value === "object") ? (
+    <span className="font-mono tabular-nums">{words}</span>
+  ) : (
+    <span className="text-fg-fnt">{words}</span>
+  );
+}
+
+export function EfficiencyCell({
+  efficiency,
+}: {
+  efficiency: WorkloadEfficiency;
+}) {
+  const t = useT();
+  const titleOf = (e: Efficiency) => {
+    if (overRequested(e)) return t("cost", "overRequested");
+    if (e.state !== "measured" || e.whole) return undefined;
+    const age = youngFor(e, t);
+    return age === null
+      ? t("cost", "effUndated")
+      : t("cost", "effYoung", { age });
+  };
+  return (
+    <span className="flex flex-col text-[11px] leading-tight">
+      {(["cpu", "memory"] as const).map((resource) => {
+        const e = efficiency[resource];
+        return (
+          <span
+            key={resource}
+            className={cn(
+              e.state === "measured" ? "font-mono tabular-nums" : "text-fg-fnt",
+              overRequested(e) && "text-warn"
+            )}
+            title={titleOf(e)}
+          >
+            {t("cost", resource === "cpu" ? "cpu" : "memory")}{" "}
+            {efficiencyWords(e, t)}
+          </span>
+        );
+      })}
+    </span>
+  );
+}

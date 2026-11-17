@@ -141,6 +141,9 @@ pub struct CostBasis {
     /// list, or the pods held on them, could not be read.
     pub nodes: Option<Vec<NodeBasis>>,
     pub nodes_unread: Option<ReadFailure>,
+    /// Why what each listed node holds was not counted, where the pods on
+    /// them were asked for and the list was refused or failed.
+    pub held_unread: Option<ReadFailure>,
     /// Every namespace of the scope that was read; an explicit scope lists
     /// each one read, at zero where nothing runs.
     pub namespaces: Vec<NamespaceBasis>,
@@ -192,7 +195,7 @@ async fn basis(
     );
     let read = read?;
     let cluster = match &read.stored {
-        Some((nodes, pods)) => Ok((nodes.clone(), Some(pods.clone()))),
+        Some((nodes, pods)) => Ok((nodes.clone(), Ok(Some(pods.clone())))),
         None => cluster_read(&client, scope.as_deref(), &read, held_on_nodes).await,
     };
     Ok(assemble(&read, cluster, &volumes, scope.as_deref()))
@@ -213,8 +216,12 @@ pub(crate) struct ScopedPods {
 
 /// The overview's nodes and every pod it holds.
 type Stored = (Vec<Arc<Node>>, Vec<Arc<Pod>>);
-/// The cluster's nodes, and its pods where they were counted.
-type Cluster = (Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>);
+/// The cluster's nodes, and every pod on them: `Ok(None)` where nobody asked,
+/// `Err` where the list was asked for and did not come.
+type Cluster = (
+    Vec<Arc<Node>>,
+    std::result::Result<Option<Vec<Arc<Pod>>>, ReadFailure>,
+);
 
 fn in_scope<K>(
     items: &[Arc<K>],
@@ -326,18 +333,18 @@ async fn cluster_read(
     let params = ListParams::default();
     let nodes: Api<Node> = Api::all(client.clone());
     let nodes = nodes.list(&params).await?.items;
+    // A token that may list the nodes and not every pod still has the
+    // nodes: what they hold goes uncounted, the cluster's total does not.
     let pods = match scope {
-        None => Some(read.pods.clone()),
-        Some(_) if !held_on_nodes => None,
-        Some(_) => Some({
+        None => Ok(Some(read.pods.clone())),
+        Some(_) if !held_on_nodes => Ok(None),
+        Some(_) => {
             let all: Api<Pod> = Api::all(client.clone());
             all.list(&params)
-                .await?
-                .items
-                .into_iter()
-                .map(Arc::new)
-                .collect()
-        }),
+                .await
+                .map(|list| Some(list.items.into_iter().map(Arc::new).collect()))
+                .map_err(|error| ReadFailure::of(&Error::from(error)))
+        }
     };
     Ok((nodes.into_iter().map(Arc::new).collect(), pods))
 }
@@ -428,7 +435,7 @@ fn claims_of<'a>(pod: &'a Pod, kept: Option<&KeptClaims>) -> Vec<String> {
         });
     let stored = kept
         .zip(pod.metadata.uid.as_deref())
-        .and_then(|(kept, uid): (&KeptClaims, &'a str)| kept.get(uid).map(|names| names.to_vec()))
+        .and_then(|(kept, uid): (&KeptClaims, &'a str)| kept.get(uid).map(|names| names.0.to_vec()))
         .into_iter()
         .flatten();
     mounted.chain(stored).collect()
@@ -739,14 +746,16 @@ fn assemble(
         entry.gpus += row.gpus;
     }
 
-    let (nodes, nodes_unread) = match cluster {
-        Ok((nodes, pods)) => (Some(node_rows(&nodes, pods.as_deref())), None),
-        Err(error) => (None, Some(ReadFailure::of(&error))),
+    let (nodes, nodes_unread, held_unread) = match cluster {
+        Ok((nodes, Ok(pods))) => (Some(node_rows(&nodes, pods.as_deref())), None, None),
+        Ok((nodes, Err(failure))) => (Some(node_rows(&nodes, None)), None, Some(failure)),
+        Err(error) => (None, Some(ReadFailure::of(&error)), None),
     };
     let (workloads, rest) = keep(rows.into_values().collect(), MAX_COST_ROWS);
     CostBasis {
         nodes,
         nodes_unread,
+        held_unread,
         namespaces: namespaces.into_values().collect(),
         workloads,
         rest,
@@ -855,6 +864,27 @@ pub(crate) mod tests {
             .find(|r| r.key.kind == kind && r.key.name == name)
     }
 
+    /// A token that lists the nodes and not every pod keeps the nodes: the
+    /// cluster's total stands, and only what each node holds is unknown,
+    /// with the refusal said. Fails if the refused pod list took the nodes
+    /// with it, or what they hold read as nothing.
+    #[test]
+    fn a_refused_pod_list_keeps_the_nodes_and_leaves_what_they_hold_unknown() {
+        let read = read_of(vec![pod(&running("shop", "web-0", ("StatefulSet", "web")))]);
+        let refusal = ReadFailure::of(&refused());
+        let basis = assemble(
+            &read,
+            Ok((vec![node("node-a", "2", "4Gi")], Err(refusal.clone()))),
+            &Volumes::default(),
+            None,
+        );
+        let nodes = basis.nodes.expect("the nodes were listed");
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].cpu_requested, None);
+        assert_eq!(basis.nodes_unread, None);
+        assert_eq!(basis.held_unread, Some(refusal));
+    }
+
     /// A token refused the node list must not read as a cluster with no
     /// nodes: the page would price the cluster at zero and call it complete.
     #[test]
@@ -892,7 +922,12 @@ pub(crate) mod tests {
             pod(&waiting),
             pod(&done),
         ]);
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &Volumes::default(), None);
+        let basis = assemble(
+            &read,
+            Ok((vec![], Ok(Some(vec![])))),
+            &Volumes::default(),
+            None,
+        );
         let web = row(&basis, "StatefulSet", "web").expect("its running pod");
         assert_eq!(web.pods, 1);
         assert_eq!(web.cpu, 100.0);
@@ -917,7 +952,7 @@ pub(crate) mod tests {
         .unwrap();
         let basis = assemble(
             &read_of(vec![Arc::new(pod)]),
-            Ok((vec![], Some(vec![]))),
+            Ok((vec![], Ok(Some(vec![])))),
             &Volumes::default(),
             None,
         );
@@ -935,14 +970,19 @@ pub(crate) mod tests {
         ))]);
         read.cron_of
             .insert(("ops".into(), "backup-29".into()), "backup".into());
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &Volumes::default(), None);
+        let basis = assemble(
+            &read,
+            Ok((vec![], Ok(Some(vec![])))),
+            &Volumes::default(),
+            None,
+        );
         assert!(row(&basis, "CronJob", "backup").is_some());
         assert!(row(&basis, "Job", "backup-29").is_none());
 
         let alone = read_of(vec![pod(&running("ops", "once-x2k9z", ("Job", "once")))]);
         let basis = assemble(
             &alone,
-            Ok((vec![], Some(vec![]))),
+            Ok((vec![], Ok(Some(vec![])))),
             &Volumes::default(),
             None,
         );
@@ -1014,7 +1054,7 @@ pub(crate) mod tests {
         crate::overview::strip_pod(&mut stored);
         let mut read = read_of(vec![pod(&a), Arc::new(stored)]);
         read.kept = Some(Arc::new(kept));
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &volumes, None);
+        let basis = assemble(&read, Ok((vec![], Ok(Some(vec![])))), &volumes, None);
         assert_eq!(row(&basis, "StatefulSet", "a").unwrap().claim_bytes, 5.0);
         assert_eq!(row(&basis, "StatefulSet", "b").unwrap().claim_bytes, 5.0);
         assert_eq!(basis.namespaces[0].storage_bytes, Some(10.0));
@@ -1029,7 +1069,7 @@ pub(crate) mod tests {
             claims_known: false,
             ..Volumes::default()
         };
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &blind, None);
+        let basis = assemble(&read, Ok((vec![], Ok(Some(vec![])))), &blind, None);
         assert_eq!(basis.namespaces[0].storage_bytes, None);
 
         let mut one_refused = Volumes {
@@ -1039,7 +1079,7 @@ pub(crate) mod tests {
         one_refused
             .namespaces_unread
             .push(UnreadNamespace::of("shop".into(), &refused()));
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &one_refused, None);
+        let basis = assemble(&read, Ok((vec![], Ok(Some(vec![])))), &one_refused, None);
         assert_eq!(basis.namespaces[0].storage_bytes, None);
         assert_eq!(basis.claims_unread[0].namespace, "shop");
     }
@@ -1056,7 +1096,12 @@ pub(crate) mod tests {
             claims_known: true,
             ..Volumes::default()
         };
-        let basis = assemble(&read, Ok((vec![], Some(vec![]))), &volumes, Some(&scope));
+        let basis = assemble(
+            &read,
+            Ok((vec![], Ok(Some(vec![])))),
+            &volumes,
+            Some(&scope),
+        );
         let named: Vec<_> = basis
             .namespaces
             .iter()
@@ -1168,6 +1213,7 @@ pub(crate) mod tests {
         let basis = CostBasis {
             nodes: Some(nodes),
             nodes_unread: None,
+            held_unread: None,
             namespaces,
             workloads,
             rest: Some(RestBasis::default()),
@@ -1206,7 +1252,7 @@ pub(crate) mod tests {
         let started = std::time::Instant::now();
         let basis = assemble(
             &read_of(pods),
-            Ok((vec![], Some(vec![]))),
+            Ok((vec![], Ok(Some(vec![])))),
             &Volumes::default(),
             None,
         );
@@ -1238,7 +1284,7 @@ pub(crate) mod tests {
         let started = std::time::Instant::now();
         let basis = assemble(
             &read_of(pods),
-            Ok((vec![], Some(vec![]))),
+            Ok((vec![], Ok(Some(vec![])))),
             &Volumes::default(),
             None,
         );

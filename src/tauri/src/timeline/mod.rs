@@ -7,8 +7,8 @@
 //! said to have been let go: the stretch it leaves is never drawn quiet.
 //!
 //! Nothing a change row says can be a value the app does not show: an env
-//! literal and every `ConfigMap` or `Secret` value are compared by a digest
-//! that never leaves this process (`project`).
+//! literal, every `ConfigMap` or `Secret` value and every annotation that may
+//! copy them are compared by a digest that never leaves this process (`project`).
 
 mod disk;
 pub(crate) mod follow;
@@ -98,8 +98,9 @@ pub enum FieldMove {
         from: Option<String>,
         to: Option<String>,
     },
-    /// A value the timeline does not keep, an env literal or a `ConfigMap`
-    /// or `Secret` value: only whether it was there, and that it changed.
+    /// A value the timeline does not keep, an env literal, a `ConfigMap` or
+    /// `Secret` value, or an annotation that may copy one: only whether it
+    /// was there, and that it changed.
     NotKept { path: String, was: bool, is: bool },
 }
 
@@ -134,6 +135,20 @@ pub enum Keeping {
     Failed {
         message: String,
     },
+}
+
+/// Whether the rows kept from an earlier run are this cluster's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Identity {
+    /// Nothing was kept from an earlier run, or the cluster was checked to
+    /// be the one it was kept for.
+    Known,
+    /// Kept from an earlier run, and not checked yet.
+    NotChecked,
+    /// Kept from an earlier run, and `kube-system` could not be read: the
+    /// rows may be another cluster's that had this name.
+    Unknown { message: String },
 }
 
 /// The question a timeline surface asks.
@@ -175,6 +190,11 @@ pub struct TimelinePage {
     pub keeping: Keeping,
     /// Lines of the kept files that could not be read and were skipped.
     pub unreadable: usize,
+    /// Moves each time the rows start over, for another cluster under the
+    /// name or a clear: a reader holding another's rows reads the first page
+    /// again, since `newest` numbers from the start once more.
+    pub epoch: u64,
+    pub identity: Identity,
 }
 
 /// What is kept on this machine, for Settings.
@@ -200,8 +220,17 @@ struct Inner {
     unreadable: usize,
     /// The cluster this name was last seen to be, by its `kube-system` uid.
     identity: Option<String>,
+    /// Whether what was read back from disk is this cluster's.
+    checked: Identity,
+    epoch: u64,
     /// What the files' own bounds let go, kept apart from what memory did.
     disk_let_go: LetGoes,
+    /// When rows were last taken to be written.
+    flushed_at: i64,
+    /// The stretches whose rows were dropped unwritten, keeping being off or
+    /// the disk refusing: spans written later leave them out, or a restart
+    /// would draw them watched and quiet.
+    unkept: Vec<(i64, i64)>,
     /// Something to tell the window and to write since the last flush.
     told: Told,
 }
@@ -225,7 +254,9 @@ impl ClusterTimeline {
         inner.told.rows = true;
     }
 
-    /// One of the cluster's events: a repeat replaces its series' row.
+    /// One of the cluster's events: a repeat replaces its series' row, and
+    /// one handed over again as it is held, by a list or a renewal, is not
+    /// recorded again.
     pub fn event(&self, event: EventInfo, seen: i64) {
         let at = [event.last_timestamp, event.first_timestamp]
             .into_iter()
@@ -246,6 +277,9 @@ impl ClusterTimeline {
             },
             at_relist: false,
         };
+        if self.inner.lock().store.holds(&row) {
+            return;
+        }
         self.change(row);
     }
 
@@ -258,12 +292,8 @@ impl ClusterTimeline {
     }
 
     /// Told which cluster this name turned out to be. Another one drops what
-    /// was kept under the name, and says so; `None`, a reader who may not
-    /// read `kube-system`, drops nothing.
-    pub fn seen_cluster(&self, identity: Option<String>) -> bool {
-        let Some(identity) = identity else {
-            return false;
-        };
+    /// was kept under the name, and says so.
+    pub fn seen_cluster(&self, identity: String) -> bool {
         let mut inner = self.inner.lock();
         let another = inner
             .identity
@@ -277,12 +307,25 @@ impl ClusterTimeline {
                 wipe: true,
                 ..disk::Pending::default()
             };
+            inner.epoch += 1;
+            inner.told.rows = true;
         }
-        if inner.identity.as_deref() != Some(&identity) {
+        if inner.identity.as_deref() != Some(&identity) || inner.checked != Identity::Known {
             inner.identity = Some(identity);
+            inner.checked = Identity::Known;
             inner.told.spans = true;
         }
         another
+    }
+
+    /// Which cluster this name is could not be read: nothing is dropped, and
+    /// what was kept from an earlier run is said to be perhaps another's.
+    pub fn not_identified(&self, message: String) {
+        let mut inner = self.inner.lock();
+        if inner.checked != Identity::Known {
+            inner.checked = Identity::Unknown { message };
+            inner.told.spans = true;
+        }
     }
 
     /// One page of what was recorded.
@@ -298,6 +341,8 @@ impl ClusterTimeline {
             let_go: inner.store.let_go(),
             keeping: inner.keeping.clone(),
             unreadable: inner.unreadable,
+            epoch: inner.epoch,
+            identity: inner.checked.clone(),
         }
     }
 
@@ -306,6 +351,7 @@ impl ClusterTimeline {
     fn clear(&self) {
         let mut inner = self.inner.lock();
         inner.store.clear(Self::now());
+        inner.epoch += 1;
         inner.disk_let_go = LetGoes::default();
         inner.pending = disk::Pending {
             wipe: true,
@@ -345,14 +391,9 @@ impl Timelines {
 
     /// Records `context` from what `subscription` hands over, in place of
     /// whatever was recorded before.
-    pub(crate) fn follow(
-        &self,
-        context: String,
-        subscription: crate::feeds::Subscription,
-        scope: Option<Vec<String>>,
-    ) {
+    pub(crate) fn follow(&self, context: String, subscription: crate::feeds::Subscription) {
         let cluster = self.cluster(&context);
-        *self.following.lock() = Some(follow::spawn(context, cluster, subscription, scope));
+        *self.following.lock() = Some(follow::spawn(context, cluster, subscription));
     }
 
     /// Tells the follower of `context`, where it is the one recording.
@@ -399,6 +440,9 @@ impl Timelines {
             .as_deref()
             .map(|dir| disk::load(dir, now))
             .unwrap_or_default();
+        let kept = !loaded.rows.is_empty()
+            || !loaded.spans.followed.is_empty()
+            || !loaded.spans.meta.is_empty();
         let mut store = Store::default();
         store.restore(loaded.rows, loaded.let_go, now);
         let disk_let_go = loaded.let_go;
@@ -420,7 +464,15 @@ impl Timelines {
                 keeping,
                 unreadable: loaded.unreadable,
                 identity: loaded.identity,
+                checked: if kept {
+                    Identity::NotChecked
+                } else {
+                    Identity::Known
+                },
+                epoch: 0,
                 disk_let_go,
+                flushed_at: now,
+                unkept: Vec::new(),
                 told: Told::default(),
             }),
         });
@@ -461,25 +513,30 @@ impl Timelines {
         let clusters: Vec<Arc<ClusterTimeline>> =
             self.clusters.iter().map(|held| held.clone()).collect();
         for cluster in clusters {
-            let (pending, told, state) = {
+            let now = ClusterTimeline::now();
+            let (pending, told, state, since) = {
                 let mut inner = cluster.inner.lock();
                 let told = std::mem::take(&mut inner.told);
                 let pending = std::mem::take(&mut inner.pending);
+                let since = std::mem::replace(&mut inner.flushed_at, now);
+                if !keep && cluster.dir.is_some() && !pending.rows.is_empty() {
+                    inner.unkept.push((since, now));
+                }
+                inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
                 let state = disk::State {
                     context: cluster.context.clone(),
                     identity: inner.identity.clone(),
-                    spans: inner.spans.clone(),
+                    spans: inner.spans.without(&inner.unkept),
                     let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
                 };
-                (pending, told, state)
+                (pending, told, state, since)
             };
-            if let (Some(dir), true) = (&cluster.dir, keep || pending.wipe) {
-                let written = disk::write(
-                    dir,
-                    &pending,
-                    keep.then_some(&state),
-                    ClusterTimeline::now(),
-                );
+            // A cluster with nothing new since is not written again: an idle
+            // one was a full fsync a second, and a context merely read was a
+            // folder in Settings.
+            let changed = told.rows || told.spans;
+            if let (Some(dir), true) = (&cluster.dir, (keep && changed) || pending.wipe) {
+                let written = disk::write(dir, &pending, keep.then_some(&state), now);
                 let mut inner = cluster.inner.lock();
                 let next = match written {
                     Ok(let_go) => {
@@ -490,9 +547,15 @@ impl Timelines {
                             Keeping::Off
                         }
                     }
-                    Err(error) => Keeping::Failed {
-                        message: error.to_string(),
-                    },
+                    Err(error) => {
+                        if !pending.rows.is_empty() {
+                            inner.unkept.push((since, now));
+                            inner.told.spans = true;
+                        }
+                        Keeping::Failed {
+                            message: error.to_string(),
+                        }
+                    }
                 };
                 if inner.keeping != next {
                     inner.keeping = next;

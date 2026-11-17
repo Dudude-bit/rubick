@@ -132,6 +132,55 @@ describe("the Audit tab's heading", () => {
   });
 });
 
+describe("an object whose rules could not all answer", () => {
+  /**
+   * Nothing found where a rule could not look is not "Nothing found". Fails
+   * if the tab or the peek says it, if the peek drops the rules that did
+   * not answer, or if its heading counts zero.
+   */
+  it("says nothing was found in what was read, and what was not, in the tab and the peek", async () => {
+    const data = audit({ unchecked: [unchecked] });
+    const where = {
+      at: "/c/prod/deployments/shop/web",
+      route: "/c/$cluster/deployments/$namespace/$name",
+    };
+    const tab = await renderWithRouter(
+      <>{auditTab(query(data), t).content}</>,
+      where
+    );
+    expect(screen.queryByText("Nothing found")).toBeNull();
+    expect(
+      screen.getByText("Nothing found in what could be read.")
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-unchecked="no-disruption-budget"]')
+    ).not.toBeNull();
+    tab.unmount();
+
+    await renderWithRouter(<PeekAudit query={query(data)} />, where);
+    expect(screen.queryByText("Nothing found")).toBeNull();
+    expect(screen.queryByText("0")).toBeNull();
+    expect(screen.getByTestId("audit-unchecked-count")).toHaveTextContent(
+      "1 rule could not check here"
+    );
+  });
+
+  /** Fails if a peek with findings forgets the rules that did not answer. */
+  it("counts the unanswered rules under a peek's findings", async () => {
+    const data = audit({
+      findings: [{ rule: "no-liveness-probe", severity: "low", what: [] }],
+      unchecked: [unchecked, { ...unchecked, kind: "Pod" }],
+    });
+    await renderWithRouter(<PeekAudit query={query(data)} />, {
+      at: "/c/prod/deployments/shop/web",
+      route: "/c/$cluster/deployments/$namespace/$name",
+    });
+    expect(screen.getByTestId("audit-unchecked-count")).toHaveTextContent(
+      "1 rule could not check here"
+    );
+  });
+});
+
 describe("a pod judged as part of its workload", () => {
   /**
    * A pod a Deployment stamps out is judged once, on the Deployment. Fails

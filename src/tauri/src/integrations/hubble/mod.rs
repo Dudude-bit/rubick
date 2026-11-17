@@ -40,6 +40,7 @@ use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
 use proto::flow::{self, DropReason, L7FlowType, Verdict};
 use proto::observer::{get_flows_response::ResponseTypes, observer_client::ObserverClient};
+use proto::relay::{NodeState, NodeStatusEvent};
 
 /// How far back a pair's rates reach.
 pub const WINDOW_SECS: u64 = 60;
@@ -50,6 +51,9 @@ const BATCH_PAIRS: usize = 400;
 /// Latencies a pair keeps a second, for its percentiles.
 const KEPT_LATENCIES: usize = 64;
 const SEND_EVERY: Duration = Duration::from_secs(1);
+/// How often the connection asks the relay whether it is there, and how long
+/// it waits: a port-forward that died in a sleep sends nothing, ever.
+const KEEP_ALIVE: Duration = Duration::from_secs(15);
 const SELECTOR: &str = "k8s-app=hubble-relay";
 const CONFIG: &str = "hubble-relay-config";
 const SERVER_CERTS: &str = "hubble-relay-server-certs";
@@ -75,6 +79,8 @@ pub struct LiveDrop {
     pub reason: String,
     pub rate: f64,
     pub policies: Vec<PolicyRef>,
+    /// A request an L7 rule denied at the proxy, which Hubble gives no reason code.
+    pub l7: bool,
 }
 
 /// One pair over the last `WINDOW_SECS`, every rate per second.
@@ -100,6 +106,16 @@ pub struct LivePair {
 pub struct LiveKey {
     pub from: FlowEnd,
     pub to: FlowEnd,
+}
+
+/// A node Hubble Relay cannot read flows from: none of its flows arrive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreachedNode {
+    pub name: String,
+    /// relay.proto's own word: `NODE_UNAVAILABLE` or `NODE_ERROR`.
+    pub state: String,
+    pub message: String,
 }
 
 /// Where the stream reads from, said once it is connected.
@@ -391,11 +407,18 @@ async fn connect(
                 said: e.to_string(),
             })?,
     };
-    let channel = endpoint
+    let channel = kept_alive(endpoint, KEEP_ALIVE)
         .connect_with_connector(connector)
         .await
         .map_err(|e| ended_by(&e, &found.at.namespace))?;
     Ok(ObserverClient::new(channel))
+}
+
+fn kept_alive(endpoint: tonic::transport::Endpoint, every: Duration) -> tonic::transport::Endpoint {
+    endpoint
+        .http2_keep_alive_interval(every)
+        .keep_alive_timeout(every)
+        .keep_alive_while_idle(true)
 }
 
 /// How a failed connection or call ends the stream: a certificate the CA
@@ -497,6 +520,7 @@ async fn run(
             relay,
             lost: fold.lost,
             untracked: fold.untracked,
+            unreached: fold.unreached.values().cloned().collect(),
         });
     };
     send(Vec::new(), Vec::new(), Some(found.at), &fold);
@@ -507,19 +531,17 @@ async fn run(
             () = cancel.cancelled() => return LiveEnd::Closed,
             _ = tick.tick() => {
                 let (pairs, gone) = fold.tick(now_secs());
-                for (at, chunk) in pairs.chunks(BATCH_PAIRS).enumerate() {
-                    let gone = if at == 0 { gone.clone() } else { Vec::new() };
-                    send(chunk.to_vec(), gone, None, &fold);
-                }
-                if pairs.is_empty() && !gone.is_empty() {
-                    send(Vec::new(), gone, None, &fold);
+                let nodes = std::mem::take(&mut fold.nodes_changed);
+                for (pairs, gone) in batches(pairs, gone, nodes) {
+                    send(pairs, gone, None, &fold);
                 }
             }
             message = stream.message() => match message {
                 Ok(Some(answer)) => match answer.response_types {
                     Some(ResponseTypes::Flow(one)) => fold.add(now_secs(), &one),
                     Some(ResponseTypes::LostEvents(lost)) => fold.lost += lost.num_events_lost,
-                    _ => {}
+                    Some(ResponseTypes::NodeStatus(status)) => fold.node_status(&status),
+                    None => {}
                 },
                 Ok(None) => return LiveEnd::RelayEnded,
                 Err(status) => return LiveEnd::Failed { said: status.message().to_string() },
@@ -528,10 +550,53 @@ async fn run(
     }
 }
 
+/// A tick's changes as events of at most `BATCH_PAIRS` pairs, what went with
+/// the first; an empty one where only what went, or the nodes, changed.
+fn batches(
+    pairs: Vec<LivePair>,
+    gone: Vec<LiveKey>,
+    nodes: bool,
+) -> Vec<(Vec<LivePair>, Vec<LiveKey>)> {
+    if pairs.is_empty() {
+        return if gone.is_empty() && !nodes {
+            Vec::new()
+        } else {
+            vec![(Vec::new(), gone)]
+        };
+    }
+    let mut gone = Some(gone);
+    pairs
+        .chunks(BATCH_PAIRS)
+        .map(|chunk| (chunk.to_vec(), gone.take().unwrap_or_default()))
+        .collect()
+}
+
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+/// An end in another cluster of a Cluster Mesh, by the cluster its identity
+/// carries: a name there is not the object of the same name here.
+fn remote_of(endpoint: Option<&flow::Endpoint>, here: Option<&str>) -> Option<FlowEnd> {
+    let endpoint = endpoint?;
+    let cluster = endpoint.cluster_name.as_str();
+    if cluster.is_empty() || here.is_none_or(|here| here == cluster) {
+        return None;
+    }
+    let (kind, name) = endpoint
+        .workloads
+        .first()
+        .map_or(("Pod", endpoint.pod_name.as_str()), |w| {
+            (w.kind.as_str(), w.name.as_str())
+        });
+    (!name.is_empty()).then(|| FlowEnd::Remote {
+        cluster: cluster.to_string(),
+        namespace: endpoint.namespace.clone(),
+        kind: kind.to_string(),
+        name: name.to_string(),
+    })
 }
 
 /// An end of a flow by what Hubble says it is: a workload with its kind, a
@@ -586,14 +651,38 @@ fn end_of(endpoint: Option<&flow::Endpoint>, address: &str, names: &[String]) ->
     }
 }
 
-/// A drop's reason and the policies behind it.
-type DropCause = (String, Vec<PolicyRef>);
+/// A drop's reason, and whether an L7 rule denied it.
+type DropCause = (String, bool);
+
+/// Cilium's monitor message type of a policy verdict (`pkg/monitor/api`).
+const POLICY_VERDICT: i32 = 5;
+
+/// One cause's drops. The datapath reports a denied packet twice, as a drop
+/// and as a policy verdict, and only the verdict names the policy
+/// (`CorrelatePolicy`): the two are counted apart and the larger kept.
+#[derive(Default)]
+struct Tally {
+    drops: u32,
+    verdicts: u32,
+    policies: BTreeSet<PolicyRef>,
+}
+
+impl Tally {
+    fn add(&mut self, other: &Tally) {
+        self.drops += other.drops;
+        self.verdicts += other.verdicts;
+        self.policies.extend(other.policies.iter().cloned());
+    }
+
+    fn count(&self) -> u32 {
+        self.drops.max(self.verdicts)
+    }
+}
 
 #[derive(Default)]
 struct Second {
     forwarded: u32,
-    dropped: u32,
-    drops: BTreeMap<DropCause, u32>,
+    drops: BTreeMap<DropCause, Tally>,
     requests: u32,
     errors: u32,
     latencies: Vec<f64>,
@@ -609,6 +698,8 @@ struct Fold {
     touched: BTreeSet<Key>,
     lost: u64,
     untracked: u64,
+    unreached: BTreeMap<String, UnreachedNode>,
+    nodes_changed: bool,
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -640,6 +731,33 @@ impl Fold {
             touched: BTreeSet::new(),
             lost: 0,
             untracked: 0,
+            unreached: BTreeMap::new(),
+            nodes_changed: false,
+        }
+    }
+
+    /// Relay's word on its nodes: one it cannot reach sends no flows, so it
+    /// is held until it is connected again or gone from the cluster.
+    fn node_status(&mut self, status: &NodeStatusEvent) {
+        let state = NodeState::try_from(status.state_change).unwrap_or(NodeState::UnknownNodeState);
+        for name in &status.node_names {
+            match state {
+                NodeState::NodeUnavailable | NodeState::NodeError => {
+                    self.unreached.insert(
+                        name.clone(),
+                        UnreachedNode {
+                            name: name.clone(),
+                            state: state.as_str_name().to_string(),
+                            message: status.message.clone(),
+                        },
+                    );
+                }
+                NodeState::NodeConnected | NodeState::NodeGone => {
+                    self.unreached.remove(name);
+                }
+                NodeState::UnknownNodeState => continue,
+            }
+            self.nodes_changed = true;
         }
     }
 
@@ -653,8 +771,10 @@ impl Fold {
             .l7
             .as_ref()
             .filter(|l7| l7.r#type == L7FlowType::Response as i32);
+        // A request an L7 rule denied is logged DROPPED (seven parser's
+        // decodeVerdict), and is the only L7 request counted.
         let counted = match (Verdict::try_from(one.verdict), &one.l7) {
-            (_, Some(_)) => response.is_some(),
+            (verdict, Some(_)) => response.is_some() || verdict == Ok(Verdict::Dropped),
             (Ok(Verdict::Forwarded | Verdict::Dropped), None) => true,
             _ => false,
         };
@@ -662,17 +782,30 @@ impl Fold {
             return;
         }
         let ip = one.ip.as_ref();
-        let from = end_of(
-            one.source.as_ref(),
-            ip.map_or("", |i| i.source.as_str()),
-            &one.source_names,
-        );
-        let to = end_of(
-            one.destination.as_ref(),
-            ip.map_or("", |i| i.destination.as_str()),
-            &one.destination_names,
-        );
-        let key = (from, to);
+        // A flow's node is `<cluster>/<node>` (GetAbsoluteNodeName): the
+        // cluster whose relay is read.
+        let here = one.node_name.split_once('/').map(|(cluster, _)| cluster);
+        let from = remote_of(one.source.as_ref(), here).unwrap_or_else(|| {
+            end_of(
+                one.source.as_ref(),
+                ip.map_or("", |i| i.source.as_str()),
+                &one.source_names,
+            )
+        });
+        let to = remote_of(one.destination.as_ref(), here).unwrap_or_else(|| {
+            end_of(
+                one.destination.as_ref(),
+                ip.map_or("", |i| i.destination.as_str()),
+                &one.destination_names,
+            )
+        });
+        // Cilium logs an L7 response from the server to the client
+        // (pkg/envoy/accesslog_server.go swaps the addresses); the pair is the caller's.
+        let key = if response.is_some() {
+            (to, from)
+        } else {
+            (from, to)
+        };
         if !self.pairs.contains_key(&key) && self.pairs.len() >= MAX_LIVE_PAIRS {
             self.untracked += 1;
             return;
@@ -697,7 +830,6 @@ impl Fold {
                 }
             }
         } else if one.verdict == Verdict::Dropped as i32 {
-            second.dropped += 1;
             let reason = DropReason::try_from(one.drop_reason_desc).map_or_else(
                 |_| one.drop_reason_desc.to_string(),
                 |r| r.as_str_name().to_string(),
@@ -709,7 +841,17 @@ impl Fold {
                 ]
                 .concat(),
             );
-            *second.drops.entry((reason, denied)).or_default() += 1;
+            let tally = second.drops.entry((reason, one.l7.is_some())).or_default();
+            tally.policies.extend(denied);
+            if one
+                .event_type
+                .as_ref()
+                .is_some_and(|e| e.r#type == POLICY_VERDICT)
+            {
+                tally.verdicts += 1;
+            } else {
+                tally.drops += 1;
+            }
         } else {
             second.forwarded += 1;
         }
@@ -722,6 +864,11 @@ impl Fold {
         let oldest = now.saturating_sub(WINDOW_SECS - 1);
         let span = now.saturating_sub(self.started).clamp(1, WINDOW_SECS);
         let mut changed = std::mem::take(&mut self.touched);
+        // Until a whole window has passed every rate's divisor grows each
+        // second, so every pair is said again.
+        if now.saturating_sub(self.started) <= WINDOW_SECS {
+            changed.extend(self.pairs.keys().cloned());
+        }
         for (key, seconds) in &mut self.pairs {
             let before = seconds.len();
             while seconds.front().is_some_and(|(at, _)| *at < oldest) {
@@ -755,11 +902,10 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
     let mut sum = Second::default();
     for (_, second) in seconds {
         sum.forwarded += second.forwarded;
-        sum.dropped += second.dropped;
         sum.requests += second.requests;
         sum.errors += second.errors;
-        for (why, n) in &second.drops {
-            *sum.drops.entry(why.clone()).or_default() += n;
+        for (why, tally) in &second.drops {
+            sum.drops.entry(why.clone()).or_default().add(tally);
         }
         sum.latencies.extend_from_slice(&second.latencies);
         sum.protocols.extend(second.protocols.iter().cloned());
@@ -776,14 +922,15 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
         from: key.0.clone(),
         to: key.1.clone(),
         forwarded: per(sum.forwarded),
-        dropped: per(sum.dropped),
+        dropped: per(sum.drops.values().map(Tally::count).sum()),
         drops: sum
             .drops
             .into_iter()
-            .map(|((reason, policies), n)| LiveDrop {
+            .map(|((reason, l7), tally)| LiveDrop {
                 reason,
-                rate: per(n),
-                policies,
+                rate: per(tally.count()),
+                policies: tally.policies.into_iter().collect(),
+                l7,
             })
             .collect(),
         requests: answered.then(|| per(sum.requests)),
@@ -837,7 +984,9 @@ mod tests {
                     ..Default::default()
                 })),
             }),
-            ..event(Verdict::Forwarded, "web", "api")
+            is_reply: Some(true),
+            // As Cilium writes a response: from the server to the client.
+            ..event(Verdict::Forwarded, "api", "web")
         }
     }
 
@@ -889,6 +1038,70 @@ mod tests {
         );
     }
 
+    /// One denied packet is a drop notification and a policy verdict, both
+    /// DROPPED: counted once, with the policy only the verdict names; with
+    /// drop notifications off, the verdicts alone are the count.
+    #[test]
+    fn a_denied_packet_is_one_drop_named_by_its_policy_verdict() {
+        let denied = |kind: i32, by: &str| flow::Flow {
+            event_type: Some(flow::CiliumEventType {
+                r#type: kind,
+                sub_type: 0,
+            }),
+            drop_reason_desc: DropReason::PolicyDenied as i32,
+            ingress_denied_by: if by.is_empty() {
+                vec![]
+            } else {
+                vec![flow::Policy {
+                    name: by.into(),
+                    namespace: "shop".into(),
+                    kind: "NetworkPolicy".into(),
+                    ..Default::default()
+                }]
+            },
+            ..event(Verdict::Dropped, "intruder", "db")
+        };
+        let mut fold = Fold::new(100);
+        fold.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        fold.add(100, &denied(1, ""));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs[0].dropped, 1.0);
+        assert_eq!(pairs[0].drops.len(), 1);
+        assert_eq!(pairs[0].drops[0].rate, 1.0);
+        assert_eq!(pairs[0].drops[0].policies[0].name, "db-from-caller-only");
+
+        let mut verdicts_only = Fold::new(100);
+        verdicts_only.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        verdicts_only.add(100, &denied(POLICY_VERDICT, "db-from-caller-only"));
+        assert_eq!(verdicts_only.tick(101).0[0].dropped, 2.0);
+    }
+
+    /// A request an L7 rule denied is a drop the pair carries, marked as
+    /// such; a request the proxy let through is counted on its response only.
+    #[test]
+    fn a_request_an_l7_rule_denied_is_a_drop() {
+        let mut fold = Fold::new(100);
+        let request = |verdict| flow::Flow {
+            l7: Some(flow::Layer7 {
+                r#type: L7FlowType::Request as i32,
+                record: Some(flow::layer7::Record::Http(flow::Http {
+                    method: "PUT".into(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
+            ..event(verdict, "caller", "web")
+        };
+        fold.add(100, &request(Verdict::Dropped));
+        fold.add(100, &request(Verdict::Forwarded));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].dropped, 1.0);
+        assert_eq!(pairs[0].forwarded, 0.0);
+        assert!(pairs[0].drops[0].l7);
+        assert_eq!(pairs[0].drops[0].reason, "DROP_REASON_UNKNOWN");
+    }
+
     /// HTTP is counted on its responses, with 5xx as errors and latency as
     /// percentiles; a pair with no HTTP has no requests, not zero.
     #[test]
@@ -913,10 +1126,17 @@ mod tests {
         );
         fold.add(100, &event(Verdict::Forwarded, "web", "db"));
         let (pairs, _) = fold.tick(101);
-        let api = pairs
-            .iter()
-            .find(|p| p.requests.is_some())
-            .expect("an HTTP pair");
+        let named = |end: &FlowEnd| match end {
+            FlowEnd::Workload { key } => key.name.clone(),
+            _ => String::new(),
+        };
+        let http: Vec<_> = pairs.iter().filter(|p| p.requests.is_some()).collect();
+        assert_eq!(http.len(), 1, "one pair, the caller's");
+        let api = http[0];
+        assert_eq!(
+            (named(&api.from), named(&api.to)),
+            ("web".into(), "api".into())
+        );
         assert_eq!(api.requests, Some(4.0));
         assert_eq!(api.errors, Some(1.0));
         assert_eq!(api.p50, Some(30.0));
@@ -932,7 +1152,7 @@ mod tests {
     /// emptied: one busy pair is one row, not the whole table.
     #[test]
     fn a_tick_sends_only_what_changed_and_says_what_went() {
-        let mut fold = Fold::new(100);
+        let mut fold = Fold::new(0);
         fold.add(100, &event(Verdict::Forwarded, "web", "api"));
         fold.add(100, &event(Verdict::Forwarded, "web", "db"));
         assert_eq!(fold.tick(101).0.len(), 2);
@@ -945,6 +1165,24 @@ mod tests {
         assert!(matches!(&gone[0].to, FlowEnd::Workload { key } if key.name == "db"));
     }
 
+    /// In the first minute a pair's rate is over the seconds so far, which
+    /// grow each tick: a pair nothing touched again is still said again, or
+    /// it keeps the rate of the second it was seen.
+    #[test]
+    fn a_quiet_pair_is_said_again_while_the_first_window_fills() {
+        let mut fold = Fold::new(100);
+        fold.add(102, &event(Verdict::Forwarded, "web", "api"));
+        let first = fold.tick(103).0;
+        assert_eq!(first[0].forwarded, 1.0 / 3.0);
+        let later = fold.tick(150).0;
+        assert_eq!(later.len(), 1);
+        assert_eq!(later[0].forwarded, 1.0 / 50.0);
+        assert!(
+            fold.tick(161).0.is_empty(),
+            "a full window: only what changed"
+        );
+    }
+
     /// Past the cap a new pair is counted and not held.
     #[test]
     fn pairs_past_the_cap_are_counted_not_held() {
@@ -954,6 +1192,37 @@ mod tests {
         }
         assert_eq!(fold.pairs.len(), MAX_LIVE_PAIRS);
         assert_eq!(fold.untracked, 1);
+    }
+
+    /// A node relay cannot reach is held until it connects again, and a tick
+    /// that changed only that still sends it: with no flows anywhere, the
+    /// page would otherwise say none were seen.
+    #[test]
+    fn a_node_relay_cannot_reach_is_held_and_sent_until_it_connects() {
+        let mut fold = Fold::new(0);
+        fold.node_status(&NodeStatusEvent {
+            state_change: NodeState::NodeUnavailable as i32,
+            node_names: vec!["kind/worker".into(), "kind/worker2".into()],
+            message: "connection refused".into(),
+        });
+        fold.node_status(&NodeStatusEvent {
+            state_change: NodeState::NodeConnected as i32,
+            node_names: vec!["kind/worker2".into()],
+            message: String::new(),
+        });
+        assert_eq!(
+            fold.unreached.values().cloned().collect::<Vec<_>>(),
+            vec![UnreachedNode {
+                name: "kind/worker".into(),
+                state: "NODE_UNAVAILABLE".into(),
+                message: "connection refused".into(),
+            }]
+        );
+        let (pairs, gone) = fold.tick(100);
+        let nodes = std::mem::take(&mut fold.nodes_changed);
+        assert_eq!(batches(pairs, gone, nodes).len(), 1);
+        let (pairs, gone) = fold.tick(101);
+        assert!(batches(pairs, gone, fold.nodes_changed).is_empty());
     }
 
     /// Hubble's own words for an end: a workload with its kind, a pod
@@ -992,6 +1261,41 @@ mod tests {
                 word: "kube-apiserver".into()
             }
         );
+    }
+
+    /// In a Cluster Mesh a name in another cluster is not the workload of
+    /// the same name here: it is said with its cluster, and a local or
+    /// unlabelled end stays as Hubble names it.
+    #[test]
+    fn an_end_in_another_cluster_of_the_mesh_is_remote() {
+        let mut fold = Fold::new(0);
+        let at = |cluster: &str, name: &str| flow::Endpoint {
+            cluster_name: cluster.into(),
+            ..endpoint("shop", Some(("Deployment", name)), "")
+        };
+        fold.add(
+            100,
+            &flow::Flow {
+                verdict: Verdict::Forwarded as i32,
+                node_name: "east/kind-worker".into(),
+                source: Some(at("west", "web")),
+                destination: Some(at("east", "api")),
+                ..Default::default()
+            },
+        );
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(
+            pairs[0].from,
+            FlowEnd::Remote {
+                cluster: "west".into(),
+                namespace: "shop".into(),
+                kind: "Deployment".into(),
+                name: "web".into(),
+            }
+        );
+        assert!(matches!(&pairs[0].to, FlowEnd::Workload { key } if key.name == "api"));
+        assert_eq!(remote_of(Some(&at("", "web")), Some("east")), None);
+        assert_eq!(remote_of(Some(&at("west", "web")), None), None);
     }
 
     #[derive(Debug)]
@@ -1204,5 +1508,39 @@ mod tests {
             found(answer(false)).await,
             Err(LiveEnd::NoPod { .. })
         ));
+    }
+
+    /// A relay that stops answering without closing, as a port-forward does
+    /// when the laptop sleeps, ends the call instead of leaving it to wait
+    /// forever while the page empties into "saw no flows".
+    #[tokio::test]
+    async fn a_relay_gone_silent_ends_the_call_instead_of_hanging_it() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a port");
+        let at = listener.local_addr().expect("its address");
+        let held = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.expect("a connection");
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            drop(socket);
+        });
+        let connector = tower::service_fn(move |_: http::Uri| async move {
+            tokio::net::TcpStream::connect(at).await.map(TokioIo::new)
+        });
+        let channel = kept_alive(
+            tonic::transport::Endpoint::from_static("http://hubble-relay"),
+            Duration::from_millis(200),
+        )
+        .connect_with_connector(connector)
+        .await
+        .expect("connected");
+        let mut observer = ObserverClient::new(channel);
+        let call = observer.get_flows(proto::observer::GetFlowsRequest {
+            follow: true,
+            ..Default::default()
+        });
+        let answered = tokio::time::timeout(Duration::from_secs(10), call).await;
+        assert!(answered.is_ok_and(|call| call.is_err()), "the call hung");
+        held.abort();
     }
 }

@@ -41,6 +41,7 @@ describe("what a live stream holds", () => {
       },
       lost: 0,
       untracked: 0,
+      unreached: [],
     });
     store.apply({
       pairs: [pair("web", "api", 2)],
@@ -48,8 +49,12 @@ describe("what a live stream holds", () => {
       relay: null,
       lost: 5,
       untracked: 0,
+      unreached: [
+        { name: "kind/worker", state: "NODE_UNAVAILABLE", message: "" },
+      ],
     });
     const now = store.snapshot();
+    expect(now.unreached.map((node) => node.name)).toEqual(["kind/worker"]);
     expect(now.phase).toBe("live");
     expect(now.relay?.pod).toBe("r-1");
     expect(now.lost).toBe(5);
@@ -63,6 +68,7 @@ describe("what a live stream holds", () => {
       relay: null,
       lost: 5,
       untracked: 0,
+      unreached: [],
     });
     expect(store.snapshot().pairs.size).toBe(1);
   });
@@ -71,7 +77,14 @@ describe("what a live stream holds", () => {
   it("stays ended once the stream said how it ended", () => {
     const store = new LiveStore();
     store.ended({ says: "mutualTls", namespace: "kube-system" });
-    store.apply({ pairs: [], gone: [], relay: null, lost: 0, untracked: 0 });
+    store.apply({
+      pairs: [],
+      gone: [],
+      relay: null,
+      lost: 0,
+      untracked: 0,
+      unreached: [],
+    });
     expect(store.snapshot().phase).toBe("ended");
     expect(store.snapshot().end).toEqual({
       says: "mutualTls",

@@ -1940,6 +1940,8 @@ export const en = {
     whyRefused: "refused: {message}",
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
+    whyAdmitted:
+      "admitted through {webhooks}, which may add containers the template does not show",
     whyUnserved: "this cluster does not serve the kind",
     whyNoPrometheus:
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
@@ -1949,6 +1951,10 @@ export const en = {
       "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
     whyNoSamples:
       "the connected Prometheus holds no sample of its pods in the last day",
+    whyYoung:
+      "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyYoungUndated:
+      "when its pods started is not known, and a peak is judged over a whole day",
     whyFolded:
       "it is not among the workloads that request most, whose usage is read one by one",
     pickNamespaces:
@@ -2013,12 +2019,22 @@ export const en = {
     showMore: "Show more",
     tab: "Audit",
     tabNone: "Nothing found",
+    sharedOnly: "Only {filters}.",
+    rulesUnchecked: {
+      one: "{n} rule could not check every object",
+      other: "{n} rules could not check every object",
+    },
+    tabNonePartly: "Nothing found in what could be read.",
     judgedOn: "This {kind}'s template is judged as part of {object}.",
     notCheckedHere: "Not checked here",
     uncheckedLine: "{rule}: {kind} {where}, {why}",
     peekMore: {
       one: "and {n} more on the Audit tab",
       other: "and {n} more on the Audit tab",
+    },
+    peekUnchecked: {
+      one: "{n} rule could not check here; the Audit tab says why",
+      other: "{n} rules could not check here; the Audit tab says why",
     },
     couldNotRead: "Audit could not read this cluster: {error}",
     noneOpen: "Pick a row to see why it matters and how to fix it.",
@@ -2166,10 +2182,10 @@ export const en = {
       "On a writable root filesystem whoever gets into the container can change its binaries and leave tools behind. readOnlyRootFilesystem: true, with an emptyDir where it needs to write, prevents it.",
     clusterAdminBinding: "Binds cluster-admin",
     clusterAdminBindingWhy:
-      "cluster-admin may do anything to any object. A subject other than the system's own holding it is one stolen token away from the whole cluster.",
+      "cluster-admin may do anything to any object. Kubernetes binds it only to the system:masters group; any other subject holding it is one stolen token away from the whole cluster, and a group such as system:authenticated hands it to everyone.",
     wildcardRole: "Grants every verb on every resource",
     wildcardRoleWhy:
-      "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
+      "A role with * verbs on * resources grants whatever its groups hold now and whatever is installed in them later. Where the groups take in RBAC's own (* or rbac.authorization.k8s.io), that includes the power to grant more.",
     defaultServiceAccountToken: "Mounts the default ServiceAccount's token",
     defaultServiceAccountTokenWhy:
       "Pods under the default ServiceAccount share one identity, and a mounted token is a credential for the API server inside every one of them. A pod that does not call the API needs none.",
@@ -2237,7 +2253,7 @@ export const en = {
     explained:
       "One clock for what changed: the controller's revisions, the delivery owner's history, Helm's history, what this app recorded of the object while it was connected, and the cluster's events about it. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching: no change made then is known, and its only events are those the cluster still held when this app looked again.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -2317,7 +2333,7 @@ export const en = {
     notWatchingNow: "Not watching this cluster right now.",
     watchingNow: "Watching since {since}",
     earlierRows:
-      "Rows before {since} were recorded by this app while it watched from {from} to {to}",
+      "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
@@ -2359,6 +2375,8 @@ export const en = {
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnknown:
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {
@@ -2413,7 +2431,12 @@ export const en = {
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
+    liveUnreached:
+      "Hubble Relay cannot reach {nodes}: flows seen there do not arrive.",
+    nothingOnReached:
+      "{sources} saw no flows in {scope} on the nodes it reaches, in the {window}.",
     panelDenied: "denied by {policies}",
+    panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
     window1h: "last hour",
@@ -2435,12 +2458,15 @@ export const en = {
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
-    cut: "Showing the busiest {kept}; the quietest {cut} are left out.",
+    notReadInWindow:
+      "{sources}: flows could not be read, so whether there were any is not known.",
+    cut: "Showing {kept}: the busiest by requests, bytes, flow events and drops in turn; {cut} quieter are left out.",
     podsFailed:
       "Pods could not be read ({said}), so names the sources wrote are not matched to workloads.",
     podsLabel: "pods",
     sourceFailed: "{source} could not be looked for: {said}",
-    sourcePartly: "Some of {source}'s numbers could not be read.",
+    sourcePartly: "Some of {source}'s numbers could not be read: {said}",
+    sourceUnread: "{source}'s flows could not be read: {said}",
     groupNotOnMap: "Not on the map: only named by a flow",
     endAmbiguous: "a name shared by {kinds}",
     endNotListed: "named by a flow; not listed in {namespace}",
@@ -2450,12 +2476,15 @@ export const en = {
     endNode: "a node",
     endAddress: "an address no workload has",
     endUnidentified: "not identified by its source",
+    endRemote: "{namespace} in cluster {cluster} of the mesh",
     milliseconds: "{v} ms",
     cellNotRead: "not read",
     cellNone: "none",
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellFloor:
+      "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
     panelClose: "Close",
     panelSeenBy:
@@ -2464,11 +2493,18 @@ export const en = {
     panelNothing: "nothing in this window",
     panelRequests: "{v} requests/s",
     panelErrors: "{share} of them errors (5xx, or gRPC other than OK)",
+    panelErrorsHttp:
+      "{share} of them HTTP 5xx (a failed gRPC call is answered with a 200 and is not counted)",
     panelBytes: "{v}",
     panelEvents: "{v} flow events/s",
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelSideServer: "From the server's proxy.",
+    panelSideCaller:
+      "From the caller's proxy: the server's reported none of it.",
+    panelSideBoth:
+      "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
     subRequests: "{v} req/s",
     subEvents: "{v} flow events/s",
     subErrors: "{share} errors",
@@ -2488,6 +2524,12 @@ export const en = {
     quiet: "{source} saw no flows to or from it in the {window}.",
     quietNodeAgent:
       "{source} saw no flows to or from it in the {window}; it sees only the nodes its agent runs on.",
+    ofCronJob:
+      "Flows are counted for CronJob {name}, which made this Job: the sources file every run under it.",
+    quietNotRead:
+      "Whether {source} saw flows to or from it is not known: they could not be read ({said}).",
+    quietUnmatched:
+      "{source} names workloads through their pods, and the pods in {namespace} could not be read, so its flows to or from it could not be found.",
     shareWay: "Way",
     sharePeer: "Workload",
     shareNumbers: "Numbers",
@@ -2499,6 +2541,7 @@ export const en = {
     monthNote: "Projected: the hourly rate × 730 hours, not a bill.",
     idle: "Idle",
     idleCluster: "Idle in the cluster",
+    idleUnpriced: "Not known while no node carries a price.",
     idleNote: "Paid for and allocated to nobody.",
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
@@ -2534,8 +2577,14 @@ export const en = {
     memoryRequested: "Memory requested",
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
+    usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
+    effMeasuredFor: "{avg} average, {peak} peak, over {age}",
+    effYoung:
+      "Its youngest pod started {age} ago, so these figures cover only that. Whether it asks for too much is judged over a whole day.",
+    effUndated:
+      "When its pods started is not known, so these figures may not cover a whole day, and whether it asks for too much is not judged.",
     effNoSupplier: "not measured: needs Prometheus",
     effReading: "reading…",
     effFailed: "could not read use: {said}",
@@ -2577,6 +2626,12 @@ export const en = {
       "Or {prices}, and this page estimates from node capacity and what each workload requests.",
     noSeries:
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
+    noNodePrices:
+      "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    whyNoNodePrices:
+      "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
+    whySomeNodePrices:
+      "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
     estimateMeanwhile:
@@ -2591,6 +2646,13 @@ export const en = {
       one: "{n} node carries no price in OpenCost: {names}.",
       other: "{n} nodes carry no price in OpenCost: {names}.",
     },
+    foreignNodes: {
+      one: "Prometheus at {endpoint} also prices {n} node this cluster does not list: {names}. It is left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+      other:
+        "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+    },
+    heldUnread:
+      "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
     storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
     storageUnpricedOpenCost:
@@ -2650,6 +2712,8 @@ export const en = {
       "Nothing of it runs on a node, so nothing is billed to it now.",
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
+    lineBilledTo: "Billed to {kind} {name}: {line}",
+    lineNotRead: "Not in the cost read yet.",
     lineUnread: "Could not read what this costs.",
   },
   hints: {
@@ -2823,6 +2887,9 @@ export const en = {
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",
+    nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
+    nothingSeenSinceCleared:
+      "nothing seen since {at}, when the timeline was cleared",
     waitingOn: "Waiting on",
     notLookedAt: "Not looked at",
     pinsFull: {

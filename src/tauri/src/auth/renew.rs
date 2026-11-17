@@ -540,7 +540,7 @@ async fn replace(
     }
     // The holders in this process that cannot hear the event: Rust tasks
     // that took the old client when they started.
-    state.client_replaced(context);
+    state.client_renewed(context);
     // Only now: telling the holders of the old client any earlier would have
     // them rebuild onto it.
     state.emit(crate::state::AppEvent::CredentialsRenewed {

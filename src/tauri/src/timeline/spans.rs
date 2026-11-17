@@ -138,12 +138,19 @@ impl SpanSets {
         }
     }
 
-    /// The source stopped watching now.
+    /// The source stopped watching now. One whose heartbeat is this late
+    /// ends where it was last alive: whatever ended it first after a sleep,
+    /// a broken watch or a renewal, the hours asleep were not watched.
     pub fn end(&mut self, source: Source, now: i64) {
         for span in self.of(source).iter_mut() {
             if span.to.is_none() {
-                span.seen_at = now;
-                span.to = Some(now);
+                let at = if now - span.seen_at > HEARTBEAT_MISSED_MS {
+                    span.seen_at
+                } else {
+                    now
+                };
+                span.seen_at = at;
+                span.to = Some(at);
             }
         }
     }
@@ -165,6 +172,45 @@ impl SpanSets {
             if span.to.is_none() {
                 span.to = Some(span.seen_at);
             }
+        }
+    }
+
+    /// These spans with `holes` cut out, oldest hole first: what was recorded
+    /// in them was not kept, so read back they were not watched.
+    #[must_use]
+    pub fn without(&self, holes: &[(i64, i64)]) -> Self {
+        let cut = |spans: &[ObservedSpan]| {
+            let mut out = Vec::with_capacity(spans.len());
+            for span in spans {
+                let mut rest = Some(span.clone());
+                for &(from, to) in holes {
+                    let Some(mut piece) = rest.take() else {
+                        break;
+                    };
+                    let end = piece.to.unwrap_or(i64::MAX);
+                    if to <= piece.from || from >= end {
+                        rest = Some(piece);
+                        continue;
+                    }
+                    if from > piece.from {
+                        let mut before = piece.clone();
+                        before.seen_at = from;
+                        before.to = Some(from);
+                        out.push(before);
+                    }
+                    if to < end {
+                        piece.from = to;
+                        piece.seen_at = piece.seen_at.max(to);
+                        rest = Some(piece);
+                    }
+                }
+                out.extend(rest);
+            }
+            out
+        };
+        Self {
+            followed: cut(&self.followed),
+            meta: cut(&self.meta),
         }
     }
 

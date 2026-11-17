@@ -74,6 +74,8 @@ export interface WorkloadUsageProps {
   idle: string;
   connections?: ResourceConnections | null;
   noLimitNote?: EmptyKey;
+  /** The workload its pods' cost is billed to, where that is another. */
+  billedTo?: { group: string; kind: string; name: string } | null;
 }
 
 export function WorkloadUsage({
@@ -88,6 +90,7 @@ export function WorkloadUsage({
   idle,
   connections,
   noLimitNote,
+  billedTo = null,
 }: WorkloadUsageProps) {
   const t = useT();
   const unread = Boolean(podsError) && pods.length === 0;
@@ -192,6 +195,7 @@ export function WorkloadUsage({
           kind={kind}
           name={name}
           namespace={namespace}
+          billedTo={billedTo}
         />
       )}
     </UsageBlock>

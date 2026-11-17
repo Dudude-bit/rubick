@@ -34,6 +34,8 @@ function page(over: Partial<TimelinePage> = {}): TimelinePage {
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
     unreadable: 0,
+    epoch: 0,
+    identity: { says: "known" },
     ...over,
   };
 }
@@ -302,4 +304,22 @@ it("offers to roll back to the revision before a template change", async () => {
   expect(await screen.findAllByText("Roll back to before this")).toHaveLength(
     1
   );
+});
+
+/**
+ * A timeline that could not be read holds no spans, and the tab drew the
+ * whole week as "Not observed" beside the failure. Fails if a failed read
+ * claims anything about when this app was watching.
+ */
+it("draws no stretch as watched or unwatched from a timeline it could not read", async () => {
+  answering(page(), (command) =>
+    command === "timeline_read"
+      ? Promise.reject(new Error("disk refused"))
+      : undefined
+  );
+  await renderWithRouter(<ObjectChanges subject={LEDGER} />, { at: "/c/prod" });
+  expect(
+    await screen.findByText(/^The timeline could not be read: /)
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/^Not observed /)).toBeNull();
 });

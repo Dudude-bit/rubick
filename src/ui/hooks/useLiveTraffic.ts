@@ -4,7 +4,12 @@
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import type { LiveEnd, LivePair, RelayAt } from "@/generated/types";
+import type {
+  LiveEnd,
+  LivePair,
+  RelayAt,
+  UnreachedNode,
+} from "@/generated/types";
 import { useCapability } from "@/integrations";
 import { listenBridgeLag } from "@/lib/events";
 import { livePairId, type LiveBatch } from "@/lib/traffic";
@@ -17,6 +22,8 @@ export interface LiveSnapshot {
   relay: RelayAt | null;
   lost: number;
   untracked: number;
+  /** Nodes whose flows do not arrive: their silence is not quiet. */
+  unreached: readonly UnreachedNode[];
   end: LiveEnd | null;
   /** Why the stream could not be opened. */
   error: unknown;
@@ -28,6 +35,7 @@ const EMPTY: LiveSnapshot = {
   relay: null,
   lost: 0,
   untracked: 0,
+  unreached: [],
   end: null,
   error: null,
 };
@@ -59,6 +67,7 @@ export class LiveStore {
       relay: batch.relay ?? this.current.relay,
       lost: batch.lost,
       untracked: batch.untracked,
+      unreached: batch.unreached,
     });
   }
 

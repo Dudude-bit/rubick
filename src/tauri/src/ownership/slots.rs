@@ -493,7 +493,11 @@ impl ClusterIndex {
             if let Some(stop) = stops.remove(slot) {
                 stop.cancel();
             }
-            graph.drop_slot(slot);
+            let uids = graph.drop_slot(slot);
+            self.tell(News::Dropped {
+                slot: slot.clone(),
+                uids,
+            });
             false
         });
     }
@@ -537,7 +541,11 @@ impl ClusterIndex {
                 return;
             }
             self.stops.lock().remove(slot);
-            self.graph.write().drop_slot(slot);
+            let uids = self.graph.write().drop_slot(slot);
+            self.tell(News::Dropped {
+                slot: slot.clone(),
+                uids,
+            });
             self.tell(News::State {
                 slot: slot.clone(),
                 state: SlotState::Refused {
@@ -1140,6 +1148,7 @@ mod tests {
                     .collect::<Vec<_>>()
                     .join(" "),
                 News::Retired { .. } => "retired".to_string(),
+                News::Dropped { uids, .. } => format!("dropped {}", uids.join(",")),
             });
         }
         assert_eq!(

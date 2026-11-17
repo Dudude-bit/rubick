@@ -72,6 +72,7 @@ pub fn ask(scope: Option<Vec<String>>) -> Ask {
     Ask {
         kinds: Kind::ALL.iter().map(|kind| kind.key()).collect(),
         scope,
+        narrow: true,
         binding: Binding::Page,
     }
 }

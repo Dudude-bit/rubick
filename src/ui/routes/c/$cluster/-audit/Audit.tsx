@@ -30,7 +30,7 @@ import { useAppSearchValue, useSetSearch } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
-import { auditScreenSection } from "./audit-share";
+import { auditScreenSection, filterWords } from "./audit-share";
 import { AuditSummaryBlock } from "./AuditSummary";
 import {
   FindingList,
@@ -73,8 +73,16 @@ function ruleColumns(t: T): ColumnDef<RuleRow>[] {
       id: "severity",
       header: t("audit", "severity"),
       size: 90,
-      accessorFn: (row) => SEVERITIES.indexOf(row.worst),
-      cell: ({ row }) => <SeverityBadge severity={row.original.worst} />,
+      accessorFn: (row) => (row.worst ? SEVERITIES.indexOf(row.worst) : 3),
+      cell: ({ row }) =>
+        row.original.worst ? (
+          <SeverityBadge severity={row.original.worst} />
+        ) : (
+          <EyeOff
+            className="h-3 w-3 text-fg-fnt"
+            aria-label={t("audit", "notCheckedHere")}
+          />
+        ),
     },
     {
       id: "rule",
@@ -215,10 +223,26 @@ function Pager({
   );
 }
 
+/**
+ * A pager's offset, back at the first page whenever the question it pages
+ * changes: another cluster, namespaces, filter or rule. An offset carried
+ * over asks past the new answer's end, which reads as nothing found.
+ */
+function useOffsetFor(question: unknown): [number, (offset: number) => void] {
+  const at = JSON.stringify(question);
+  const [paged, setPaged] = useState({ at, offset: 0 });
+  return [
+    paged.at === at ? paged.offset : 0,
+    (offset) => setPaged({ at, offset }),
+  ];
+}
+
 /** One rule opened: why, how, and the objects it found, a page at a time. */
 function RulePanel({ rule, base }: { rule: RuleId; base: AuditQuery }) {
   const t = useT();
-  const [offset, setOffset] = useState(0);
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useNamespaceScope();
+  const [offset, setOffset] = useOffsetFor([context, scope, base, rule]);
   const query = useAuditPage({ ...base, rule, offset, limit: PAGE });
   const rows = query.data?.rows ?? [];
   const first = rows.find((row) => row.row === "found");
@@ -372,6 +396,7 @@ function useBroughtIntoView(opened: string | undefined) {
 export function Audit() {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
+  const context = useClusterStore((s) => s.currentContext);
   const scope = useNamespaceScope();
   const setSearch = useSetSearch();
   const view = useAppSearchValue("view") === "object" ? "object" : "rule";
@@ -383,7 +408,6 @@ export function Audit() {
   const severity = isSeverity(severityParam) ? severityParam : undefined;
   const category = isCategory(categoryParam) ? categoryParam : undefined;
   const rule = isRule(ruleParam) ? ruleParam : undefined;
-  const [offset, setOffset] = useState(0);
   const openedRule = useBroughtIntoView(view === "rule" ? rule : undefined);
   const openedObject = useBroughtIntoView(
     view === "object" && open ? subjectKey(open) : undefined
@@ -401,6 +425,7 @@ export function Audit() {
     }),
     [view, category, severity, rule, system]
   );
+  const [offset, setOffset] = useOffsetFor([context, scope, base]);
   const query = useAuditPage({ ...base, offset });
   const page = query.data;
 
@@ -419,18 +444,17 @@ export function Audit() {
     [page]
   );
 
+  const narrowed = filterWords(base, t);
   useShareSection("audit", () =>
-    page ? [auditScreenSection(page, view, t)] : []
+    page ? [auditScreenSection(page, view, t, narrowed)] : []
   );
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={t("nav", "audit")} />;
   }
 
-  const choose = (patch: Parameters<typeof setSearch>[0]) => {
-    setOffset(0);
+  const choose = (patch: Parameters<typeof setSearch>[0]) =>
     setSearch(patch, { replace: true });
-  };
   const empty =
     page &&
     page.total === 0 &&
@@ -575,7 +599,7 @@ export function Audit() {
                   widthsKey="audit-rules"
                   emptyMessage={empty}
                   pageKeys
-                  share={{ title: t("audit", "byRule") }}
+                  share={{ title: t("audit", "byRule"), narrowed }}
                 />
               ) : (
                 <DataTable
@@ -592,7 +616,7 @@ export function Audit() {
                   emptyMessage={empty}
                   more={page?.next !== null && page?.next !== undefined}
                   pageKeys
-                  share={{ title: t("audit", "byObject") }}
+                  share={{ title: t("audit", "byObject"), narrowed }}
                 />
               )}
               <Pager page={page} offset={offset} onOffset={setOffset} />

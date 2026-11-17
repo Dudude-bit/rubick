@@ -75,7 +75,7 @@ const TURN_PAUSE: Duration = Duration::from_millis(250);
 const RELIST_EVERY: Duration = Duration::from_secs(30);
 
 /// How old such a list may be and still be the kind as it is: three turns.
-const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
+pub(crate) const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
 
 /// How one kind is being read, across the cluster or in one namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -277,6 +277,12 @@ pub(crate) enum News {
     /// The cluster stopped serving the kind.
     Retired {
         kind: KindKey,
+    },
+    /// No longer read: the window's namespaces moved off it, or it was
+    /// refused or retired. What it held is neither gone nor seen.
+    Dropped {
+        slot: SlotKey,
+        uids: Vec<String>,
     },
 }
 
@@ -808,7 +814,11 @@ impl ClusterIndex {
                     if let Some(stop) = stops.remove(slot) {
                         stop.cancel();
                     }
-                    graph.drop_slot(slot);
+                    let uids = graph.drop_slot(slot);
+                    self.tell(News::Dropped {
+                        slot: slot.clone(),
+                        uids,
+                    });
                 }
                 kept
             });
@@ -1590,7 +1600,8 @@ mod tests {
     /// A developer refused pods across the cluster flicked through their
     /// namespaces, and every one they ever picked kept a watch per refused
     /// kind until the index idled: hundreds of connections, never fewer.
-    /// Fails if a namespace that left the scope is still read.
+    /// Fails if a namespace that left the scope is still read, or a listener
+    /// is not told what was let go there.
     #[tokio::test]
     async fn a_namespace_that_leaves_the_scope_is_no_longer_read() {
         use crate::client::served::test_server::{answering, failure};
@@ -1631,9 +1642,22 @@ mod tests {
         }
         assert_eq!(reading(), both);
 
+        let (tx, mut news) = tokio::sync::mpsc::unbounded_channel();
+        index.listen(tx);
         index.rescope(Some(vec!["shop".to_string()]));
         tokio::time::sleep(Duration::from_millis(200)).await;
         let asked = web();
+        let mut dropped = Vec::new();
+        while let Ok(told) = news.try_recv() {
+            if let News::Dropped { slot, uids } = told {
+                dropped.push((slot.namespace, uids));
+            }
+        }
+        assert_eq!(
+            dropped,
+            [(Some("web".to_string()), vec!["web-api".to_string()])],
+            "a listener is not told what the index stopped reading"
+        );
         tokio::time::sleep(Duration::from_millis(400)).await;
 
         assert_eq!(

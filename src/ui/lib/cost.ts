@@ -10,6 +10,7 @@
  */
 import type {
   CostBasis,
+  OwnerReference,
   ReadFailure,
   UnreadNamespace,
   WorkloadBasis,
@@ -91,26 +92,67 @@ export type CostSource =
   | { kind: "opencost"; vendor: string; endpoint: string }
   | { kind: "estimate"; prices: Prices };
 
+/**
+ * OpenCost answers and prices none of the nodes: on kind, or a provider it
+ * has no price list for, it logs "No pricing found" and writes no node
+ * prices while every other series is there.
+ */
+export const pricesNoNode = (reading: CostReading): boolean =>
+  reading.nodes.length === 0;
+
 /** A sum that knows whether it is the whole of what it adds up. */
 export interface Amount {
   perHour: number;
   atLeast: boolean;
 }
 
-export interface NamespaceCost {
-  namespace: string;
-  /** `null` where nothing of it could be priced. */
+/** A row's total, from the parts it has a price for. */
+export interface Priced {
+  /** `null` where none of what it holds carries a price. */
   perHour: number | null;
+  /** Some of what it holds carries no price: the total is a floor. */
+  atLeast: boolean;
   parts: Parts;
+  /** What it holds that carries no price, by part. */
+  unpriced: CostPart[];
 }
 
-export interface WorkloadCost {
+export interface NamespaceCost extends Priced {
+  namespace: string;
+}
+
+export interface WorkloadCost extends Priced {
   key: WorkloadKey;
   pods: number;
-  /** `null` where no series priced any of its pods. */
-  perHour: number | null;
-  parts: Parts;
   requests: { cpu: number; memory: number };
+}
+
+/** The parts a row holds something of, which a price must cover. */
+function heldParts(held: {
+  pods: number;
+  gpus: number;
+  storageBytes: number | null;
+}): CostPart[] {
+  return [
+    ...(held.pods > 0 ? (["cpu", "memory"] as const) : []),
+    ...(held.gpus > 0 ? (["gpu"] as const) : []),
+    ...((held.storageBytes ?? 0) > 0 ? (["storage"] as const) : []),
+  ];
+}
+
+/**
+ * A row out of what it holds and the parts priced: unpriced parts make it a
+ * floor, and a row priced in none of them has no total, never 0.
+ */
+function pricedRow(parts: Parts, held: readonly CostPart[]): Priced {
+  const unpriced = held.filter((part) => parts[part] === undefined);
+  const any = Object.keys(parts).length > 0;
+  return {
+    perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
+    atLeast: any && unpriced.length > 0,
+    parts,
+    unpriced,
+  };
 }
 
 export interface NodeCost {
@@ -141,8 +183,12 @@ export interface CostPicture {
   cluster: Amount | null;
   /** The scope: the cluster, or the namespaces in it. */
   total: Amount | null;
-  /** Paid for and allocated to nobody, the cluster's. */
-  idle: { perHour: number; reserved: number | null } | null;
+  /**
+   * Paid for and allocated to nobody, the cluster's. `null` where no node
+   * carries a price: the nodes' cost is what idle is taken from, and with
+   * none of it known there is no idle to state, not an idle of 0.
+   */
+  idle: { perHour: number; reserved: number | null; atLeast: boolean } | null;
   namespaces: NamespaceCost[];
   workloads: WorkloadCost[];
   /** Workloads past the cap, added up. */
@@ -156,15 +202,41 @@ export interface CostPicture {
   /** Whether every node could be checked for a price. */
   nodesChecked: boolean;
   nodesUnread: ReadFailure | null;
+  /** Why what each node holds was not counted, where the pods were refused. */
+  heldUnread: ReadFailure | null;
   /** Namespaces whose pods could not be read. */
   unread: UnreadNamespace[];
   /** Series for pods not on a node, per namespace. */
   unplaced: Array<{ namespace: string; pods: number; perHour: number }>;
   waiting: number;
   missingLabels: string[];
+  /**
+   * Nodes the supplier prices that the cluster's node list, read, does not
+   * hold: another cluster's in a shared Prometheus. Left out of the totals.
+   */
+  foreignNodes: string[];
 }
 
 export const monthOf = (perHour: number): number => perHour * HOURS_PER_MONTH;
+
+/**
+ * The CronJob a Job's cost is billed to: its controller, by the same rule
+ * `cost_basis` folds a Job's pods into the CronJob's row.
+ */
+export const cronJobOf = (
+  job: { ownerReferences: readonly OwnerReference[] } | null | undefined
+): { group: string; kind: string; name: string } | null => {
+  const owner = job?.ownerReferences.find(
+    (o) => o.controller === true && o.kind === "CronJob"
+  );
+  return owner ? { group: "batch", kind: "CronJob", name: owner.name } : null;
+};
+
+/** The nodes were read and none of them carries a price. */
+export const noNodePriced = (picture: CostPicture): boolean =>
+  picture.nodes !== null &&
+  picture.nodes.length > 0 &&
+  picture.nodes.every((node) => node.perHour === null);
 
 function sum(values: Iterable<number | null | undefined>): number {
   let total = 0;
@@ -203,10 +275,14 @@ const storagePerHour = (bytes: number, perGibMonth: number): number =>
 
 function unread(
   basis: CostBasis
-): Pick<CostPicture, "nodesChecked" | "nodesUnread" | "unread" | "waiting"> {
+): Pick<
+  CostPicture,
+  "nodesChecked" | "nodesUnread" | "heldUnread" | "unread" | "waiting"
+> {
   return {
     nodesChecked: basis.nodes !== null,
     nodesUnread: basis.nodesUnread,
+    heldUnread: basis.heldUnread,
     unread: basis.unread,
     waiting: basis.waiting,
   };
@@ -226,7 +302,7 @@ function scopeTotal(
     atLeast:
       partial ||
       basis.unread.length > 0 ||
-      namespaces.some((n) => n.perHour === null),
+      namespaces.some((n) => n.perHour === null || n.atLeast),
   };
 }
 
@@ -331,7 +407,7 @@ export function estimatePicture(
       });
       if (n.storageBytes !== null && prices.storage !== null)
         parts.storage = storagePerHour(n.storageBytes, prices.storage);
-      return { namespace: n.namespace, perHour: partsTotal(parts), parts };
+      return { namespace: n.namespace, ...pricedRow(parts, heldParts(n)) };
     });
 
   const workloads = basis.workloads.map((w): WorkloadCost =>
@@ -353,7 +429,9 @@ export function estimatePicture(
     total: scopeTotal(basis, scope, cluster, namespaces, partial),
     // Idle needs what every priced node holds: one uncounted is no total.
     idle:
-      nodes && nodes.every((n) => n.perHour === null || n.idle !== null)
+      nodes &&
+      nodes.some((n) => n.perHour !== null) &&
+      nodes.every((n) => n.perHour === null || n.idle !== null)
         ? {
             perHour: sum(nodes.map((n) => n.idle)),
             reserved: nodes.some(
@@ -361,6 +439,7 @@ export function estimatePicture(
             )
               ? null
               : sum(nodes.map((n) => n.reserved)),
+            atLeast: unpriced.nodes.length > 0,
           }
         : null,
     namespaces,
@@ -374,16 +453,18 @@ export function estimatePicture(
     ...unread(basis),
     unplaced: [],
     missingLabels: [],
+    foreignNodes: [],
   };
 }
 
 function estimateWorkload(w: WorkloadBasis, prices: Prices): WorkloadCost {
-  const parts = priceOf(prices, w);
   return {
     key: w.key,
     pods: w.pods,
-    perHour: partsTotal(parts),
-    parts,
+    ...pricedRow(
+      priceOf(prices, w),
+      heldParts({ ...w, storageBytes: w.claimBytes })
+    ),
     requests: { cpu: w.cpu, memory: w.memory },
   };
 }
@@ -399,7 +480,13 @@ export function readingPicture(
   source: Extract<CostSource, { kind: "opencost" }>,
   scope: readonly string[] | null
 ): CostPicture {
-  const priced = new Map(reading.nodes.map((n) => [n.name, n]));
+  // A shared Prometheus prices other clusters' nodes too; where this one's
+  // list was read, only its own count.
+  const listed = basis.nodes && new Set(basis.nodes.map((n) => n.name));
+  const ours = listed
+    ? reading.nodes.filter((n) => listed.has(n.name))
+    : reading.nodes;
+  const priced = new Map(ours.map((n) => [n.name, n]));
   const unpriced: Unpriced = {
     nodes: [],
     gpuNodes: [],
@@ -414,7 +501,7 @@ export function readingPicture(
     if (!priced.has(node.name)) unpriced.nodes.push(node.name);
 
   const names = new Set([
-    ...reading.nodes.map((n) => n.name),
+    ...ours.map((n) => n.name),
     ...(basis.nodes ?? []).map((n) => n.name),
   ]);
   const types = new Map(
@@ -439,7 +526,7 @@ export function readingPicture(
 
   const cluster: Amount = {
     perHour:
-      sum(reading.nodes.map((n) => n.perHour)) +
+      sum(ours.map((n) => n.perHour)) +
       (reading.storage.total ?? 0) +
       (reading.fee ?? 0) +
       (reading.loadBalancers ?? 0),
@@ -450,13 +537,20 @@ export function readingPicture(
       unpriced.storage !== null,
   };
 
-  const namespaces = Object.entries(reading.namespaces)
-    .filter(([namespace]) => inScope(scope, namespace))
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([namespace, parts]): NamespaceCost => ({
+  // Every namespace the cluster runs something in, priced or not: one
+  // nothing priced is a row that says so, not a row left out.
+  const held = new Map(basis.namespaces.map((n) => [n.namespace, n]));
+  const namespaces = [
+    ...new Set([...Object.keys(reading.namespaces), ...held.keys()]),
+  ]
+    .filter((namespace) => inScope(scope, namespace))
+    .sort((a, b) => a.localeCompare(b))
+    .map((namespace): NamespaceCost => ({
       namespace,
-      perHour: partsTotal(parts),
-      parts,
+      ...pricedRow(
+        reading.namespaces[namespace] ?? {},
+        heldParts(held.get(namespace) ?? { pods: 0, gpus: 0, storageBytes: 0 })
+      ),
     }));
 
   const fold = "failed" in reading.workloads ? null : reading.workloads;
@@ -470,8 +564,10 @@ export function readingPicture(
     return {
       key: w.key,
       pods: w.pods,
-      perHour: valuesTotal(values),
-      parts,
+      // A failed read priced nothing it could vouch for: no total at all.
+      ...(fold
+        ? pricedRow(parts, heldParts({ ...w, storageBytes: w.claimBytes }))
+        : { perHour: null, atLeast: false, parts, unpriced: [] }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });
@@ -485,9 +581,14 @@ export function readingPicture(
     source,
     cluster,
     total: scopeTotal(basis, scope, cluster, namespaces, cluster.atLeast),
-    idle: withNodes
-      ? { perHour: sum(nodes.map((n) => n.idle)), reserved: null }
-      : null,
+    idle:
+      withNodes && nodes.some((n) => n.perHour !== null)
+        ? {
+            perHour: sum(nodes.map((n) => n.idle)),
+            reserved: null,
+            atLeast: unpriced.nodes.length > 0,
+          }
+        : null,
     namespaces,
     workloads,
     rest,
@@ -504,6 +605,9 @@ export function readingPicture(
       perHour: sum(u.values),
     })),
     missingLabels: reading.missingLabels,
+    foreignNodes: listed
+      ? reading.nodes.filter((n) => !listed.has(n.name)).map((n) => n.name)
+      : [],
   };
 }
 
@@ -513,6 +617,8 @@ export type CostTarget =
 
 export interface CostOf {
   perHour: number | null;
+  /** Its own total is a floor: some of what it holds carries no price. */
+  partial: boolean;
   /** Of the whole cluster, where both are known. */
   share: number | null;
   atLeast: boolean;
@@ -544,6 +650,7 @@ export function costOf(
   const cluster = picture.cluster;
   return {
     perHour: row.perHour,
+    partial: row.atLeast,
     share:
       row.perHour === null || !cluster || cluster.perHour <= 0
         ? null

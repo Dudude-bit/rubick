@@ -698,7 +698,7 @@ impl WatchConfigs {
                     () = stop.cancelled() => break,
                     () = tokio::time::sleep(REAP_EVERY) => {}
                 }
-                prune_claims(&claims, &pods);
+                prune_claims(&claims, &pods, Instant::now());
             }
         });
     }
@@ -775,7 +775,13 @@ pub fn strip_pod(pod: &mut Pod) {
 /// The claims each stored pod mounts, by its uid: what the cost page bills
 /// to the pod's workload. Beside the store rather than on the pod, so no
 /// reader of a stored pod is shown something the cluster did not write.
-pub type KeptClaims = DashMap<String, Arc<[String]>>;
+/// Each with when it was last noted, so a pod listed while the store is
+/// still swapping in a list is not taken for one it let go.
+pub type KeptClaims = DashMap<String, (Arc<[String]>, Instant)>;
+
+/// How long a pod's claims outlive its absence from the store: longer than
+/// any list a watch waits out before the store holds what it listed.
+const CLAIMS_GRACE: Duration = Duration::from_secs(600);
 
 /// Notes `pod`'s claims before it is stripped of its volumes.
 pub fn keep_claims(kept: &KeptClaims, pod: &Pod) {
@@ -795,18 +801,23 @@ pub fn keep_claims(kept: &KeptClaims, pod: &Pod) {
     if claims.is_empty() {
         kept.remove(uid);
     } else {
-        kept.insert(uid.to_string(), claims.into());
+        kept.insert(uid.to_string(), (claims.into(), Instant::now()));
     }
 }
 
-/// Lets go of the claims of pods the store no longer holds.
-fn prune_claims(kept: &KeptClaims, pods: &Store<Pod>) {
+/// Lets go of the claims of pods the store no longer holds and has not been
+/// told of for [`CLAIMS_GRACE`]. A watch listing anew fills a buffer the
+/// store swaps in only when the list ends: until then the store is the old
+/// one, and the pods just listed are not in it.
+fn prune_claims(kept: &KeptClaims, pods: &Store<Pod>, now: Instant) {
     let live: std::collections::HashSet<String> = pods
         .state()
         .iter()
         .filter_map(|pod| pod.metadata.uid.clone())
         .collect();
-    kept.retain(|uid, _| live.contains(uid));
+    kept.retain(|uid, (_, noted)| {
+        live.contains(uid) || now.saturating_duration_since(*noted) < CLAIMS_GRACE
+    });
 }
 
 pub fn strip_node(node: &mut Node) {
@@ -888,17 +899,45 @@ mod tests {
             "nothing written onto the pod"
         );
         assert_eq!(
-            &*kept.get("u-db-0").unwrap().clone(),
+            &*kept.get("u-db-0").unwrap().0.clone(),
             ["data-db-0".to_string()]
         );
 
         let (store, mut writer) = reflector::store::<Pod>();
         writer.apply_watcher_event(&watcher::Event::InitDone);
-        prune_claims(&kept, &store);
+        prune_claims(&kept, &store, Instant::now() + CLAIMS_GRACE);
         assert!(
             kept.is_empty(),
             "a pod the store does not hold keeps no claims"
         );
+    }
+
+    /// A pod listed while the watch lists anew is noted before the store
+    /// holds it: the store swaps the list in only when it ends. The pruner
+    /// waking in between must not let its claims go, or its workload loses
+    /// its storage until the pod changes. Fails if a just-noted pod absent
+    /// from the old store were pruned at once.
+    #[test]
+    fn a_pod_noted_during_a_list_keeps_its_claims_until_the_store_holds_it() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "db-0", "namespace": "shop", "uid": "u-db-0"},
+            "spec": {"containers": [], "volumes": [
+                {"name": "data", "persistentVolumeClaim": {"claimName": "data-db-0"}},
+            ]},
+        }))
+        .unwrap();
+        let (store, mut writer) = reflector::store::<Pod>();
+        writer.apply_watcher_event(&watcher::Event::Init);
+        let kept = KeptClaims::default();
+        keep_claims(&kept, &pod);
+        writer.apply_watcher_event(&watcher::Event::InitApply(pod.clone()));
+
+        prune_claims(&kept, &store, Instant::now());
+        assert!(kept.contains_key("u-db-0"), "listing, not gone");
+
+        writer.apply_watcher_event(&watcher::Event::InitDone);
+        prune_claims(&kept, &store, Instant::now() + CLAIMS_GRACE * 2);
+        assert!(kept.contains_key("u-db-0"), "held by the store now");
     }
 
     fn in_namespace(namespace: Option<&str>) -> Pod {

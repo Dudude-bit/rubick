@@ -50,6 +50,7 @@ import { formatDate } from "@/lib/utils";
 import { jobEndRow, jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
+import { cronJobOf } from "@/lib/cost";
 import { useT } from "@/i18n/useT";
 import { auditTab } from "../../../-audit/audit-tab";
 import { useObjectAudit } from "../../../-audit/useAudit";
@@ -224,6 +225,7 @@ export function JobDetail() {
               usage={
                 <WorkloadUsage
                   kind={ResourceType.Job}
+                  billedTo={cronJobOf(job)}
                   uid={job?.uid}
                   name={job?.name || name}
                   namespace={job?.namespace || namespace}
@@ -245,6 +247,7 @@ export function JobDetail() {
                   kind={ResourceType.Job}
                   namespace={namespace}
                   name={name}
+                  owners={job?.ownerReferences}
                 />
               }
               declared={

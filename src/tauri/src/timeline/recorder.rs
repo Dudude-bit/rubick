@@ -4,7 +4,7 @@
 //! refused. A list after a break is compared with what was seen before it,
 //! and what differs is said to have been noticed then, not seen happening.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -58,6 +58,11 @@ fn key_of(object: &Value) -> Option<Key> {
     Some((namespace, name))
 }
 
+/// How long the creation time of a deleted object is held: longer than any
+/// hand-over between clients or list a watch makes again, after which no
+/// report of it is late but simply wrong.
+const GONE_FOR_MS: i64 = 10 * 60 * 1000;
+
 /// What one slot of a followed kind holds.
 #[derive(Default)]
 struct Objects {
@@ -65,6 +70,25 @@ struct Objects {
     /// The creation time of what was deleted under each key, so a late
     /// report of it does not bring it back.
     gone: HashMap<Key, Option<String>>,
+    /// When each went, oldest first, so `gone` lets go of them in turn and
+    /// does not grow with every object a busy cluster ever deleted.
+    went: VecDeque<(i64, Key, Option<String>)>,
+}
+
+impl Objects {
+    fn forget_gone(&mut self, now: i64) {
+        while self
+            .went
+            .front()
+            .is_some_and(|(at, ..)| now - at >= GONE_FOR_MS)
+        {
+            if let Some((_, key, born)) = self.went.pop_front() {
+                if self.gone.get(&key) == Some(&born) {
+                    self.gone.remove(&key);
+                }
+            }
+        }
+    }
 }
 
 /// One object of a kind read by name only.
@@ -85,9 +109,6 @@ pub struct Recorder {
     objects: HashMap<(&'static str, &'static str, Option<String>), Objects>,
     named: HashMap<String, Named>,
     slots: BTreeMap<(Source, Slot), SlotState>,
-    /// The window's namespaces, where a kind refused across the cluster is
-    /// read instead.
-    scope: Vec<String>,
 }
 
 fn now() -> i64 {
@@ -96,19 +117,13 @@ fn now() -> i64 {
 
 impl Recorder {
     #[must_use]
-    pub fn new(timeline: Arc<ClusterTimeline>, scope: Vec<String>) -> Self {
+    pub fn new(timeline: Arc<ClusterTimeline>) -> Self {
         Self {
             timeline,
             objects: HashMap::new(),
             named: HashMap::new(),
             slots: BTreeMap::new(),
-            scope,
         }
-    }
-
-    /// The window's namespaces changed.
-    pub fn rescope(&mut self, scope: Vec<String>) {
-        self.scope = scope;
     }
 
     fn row(followed: &Followed, key: &Key, what: RowSays) -> TimelineRow {
@@ -201,15 +216,37 @@ impl Recorder {
 
     /// One object of a followed kind deleted.
     pub fn deleted(&mut self, followed: &'static Followed, slot: Option<&str>, object: &Value) {
+        self.deleted_at(followed, slot, object, now());
+    }
+
+    pub(crate) fn deleted_at(
+        &mut self,
+        followed: &'static Followed,
+        slot: Option<&str>,
+        object: &Value,
+        at: i64,
+    ) {
         let Some(key) = key_of(object) else {
             return;
         };
         let objects = self.slot_objects(followed, slot);
+        objects.forget_gone(at);
         let Some(prev) = objects.seen.remove(&key) else {
             return;
         };
-        objects.gone.insert(key.clone(), prev.born);
+        objects.gone.insert(key.clone(), prev.born.clone());
+        objects.went.push_back((at, key.clone(), prev.born));
         self.record(Self::row(followed, &key, RowSays::Deleted), false);
+    }
+
+    /// How many deleted objects' creation times are held.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn gone_held(&self) -> usize {
+        self.objects
+            .values()
+            .map(|objects| objects.gone.len())
+            .sum()
     }
 
     /// One of the cluster's events, new or repeated.
@@ -323,7 +360,8 @@ impl Recorder {
                 .push((&slot.namespace, state));
         }
         let mut cover = Cover::default();
-        let mut narrowed = false;
+        // The namespaces every kind not read across the cluster is read in.
+        let mut narrowed: Option<BTreeSet<&str>> = None;
         let mut refused_in = BTreeSet::new();
         for (kind, slots) in by_kind {
             let live = slots.iter().any(|(_, state)| *state == SlotState::Live);
@@ -338,7 +376,17 @@ impl Recorder {
                         .filter_map(|(namespace, _)| namespace.as_ref())
                         .map(|namespace| format!("{kind}/{namespace}")),
                 );
-                narrowed |= !wide;
+                if !wide {
+                    let here: BTreeSet<&str> = slots
+                        .iter()
+                        .filter(|(_, state)| *state == SlotState::Live)
+                        .filter_map(|(namespace, _)| namespace.as_deref())
+                        .collect();
+                    narrowed = Some(match narrowed {
+                        None => here,
+                        Some(all) => all.intersection(&here).copied().collect(),
+                    });
+                }
             } else {
                 cover.unwatched.push(kind.to_string());
             }
@@ -349,10 +397,14 @@ impl Recorder {
             }
         }
         cover.unwatched_in = refused_in.into_iter().collect();
-        // A kind read only in the window's namespaces makes the whole span
-        // speak for those alone: saying less is the honest side.
-        if narrowed {
-            cover.scope.clone_from(&self.scope);
+        // A kind read only in some namespaces makes the whole span speak for
+        // those alone, as its watches report them: saying less is the honest
+        // side, and a span no namespace is whole in speaks for none.
+        if let Some(namespaces) = narrowed {
+            if namespaces.is_empty() {
+                return None;
+            }
+            cover.scope = namespaces.into_iter().map(str::to_string).collect();
         }
         Some(cover)
     }
@@ -360,6 +412,17 @@ impl Recorder {
     /// Still watching: the open spans are stamped alive.
     pub fn heartbeat(&self) {
         self.timeline.spans(super::spans::SpanSets::heartbeat);
+    }
+
+    /// A slot no longer read: it holds nothing shut, and what it held is a
+    /// first sight when it is read again, neither gone nor moved unseen.
+    pub fn dropped(&mut self, source: Source, slot: Slot, uids: &[String]) {
+        let was = self.cover(source);
+        self.slots.remove(&(source, slot));
+        for uid in uids {
+            self.named.remove(uid);
+        }
+        self.settle(source, was.as_ref(), None);
     }
 
     /// The name-only reading ended: its span ends now, and what it held is

@@ -143,6 +143,12 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
+export interface UnreachedNode {
+  name: string;
+  state: string;
+  message: string;
+}
+
 export interface RelayAt {
   namespace: string;
   service: string;
@@ -168,6 +174,7 @@ export interface LiveDrop {
   reason: string;
   rate: number;
   policies: PolicyRef[];
+  l7: boolean;
 }
 
 export interface PolicyRef {
@@ -1222,6 +1229,7 @@ export interface ResourceBudget {
 export interface CostBasis {
   nodes: NodeBasis[] | null;
   nodesUnread: ReadFailure | null;
+  heldUnread: ReadFailure | null;
   namespaces: NamespaceBasis[];
   workloads: WorkloadBasis[];
   rest: RestBasis | null;
@@ -1912,6 +1920,8 @@ export interface TimelinePage {
   letGo: LetGoes;
   keeping: Keeping;
   unreadable: number;
+  epoch: number;
+  identity: Identity;
 }
 
 export interface LetGoes {
@@ -2809,6 +2819,7 @@ export interface Flow {
   from: number;
   to: number;
   protocols: string[];
+  sides: string[];
   values: (number | null)[];
   reasons: DropRate[];
 }
@@ -2832,6 +2843,7 @@ export interface FlowQuery {
   to: EndLabels;
   protocol: string | null;
   reason: string | null;
+  side: string | null;
   zeroWhenAbsent: boolean;
 }
 
@@ -2859,6 +2871,7 @@ export interface WorkloadFold {
   unplaced: Unplaced[];
   unread: UnreadSums[];
   unlabelled: number;
+  since: (string | null)[];
 }
 
 export interface UnreadSums {
@@ -3230,6 +3243,7 @@ export type AppEvent =
       relay: RelayAt | null;
       lost: number;
       untracked: number;
+      unreached: UnreachedNode[];
     }
   | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd }
   | {
@@ -3265,7 +3279,14 @@ export type FlowEnd =
   | { is: "service"; namespace: string | null; name: string }
   | { is: "node"; name: string }
   | { is: "address"; address: string }
-  | { is: "unidentified"; namespace: string | null; word: string };
+  | { is: "unidentified"; namespace: string | null; word: string }
+  | {
+      is: "remote";
+      cluster: string;
+      namespace: string;
+      kind: string;
+      name: string;
+    };
 
 export type NotListedWhy = "noSuch" | "podsUnread";
 
@@ -3907,6 +3928,11 @@ export type TerminalState =
   | "disconnected"
   | "error";
 
+export type Identity =
+  | { says: "known" }
+  | { says: "notChecked" }
+  | { says: "unknown"; message: string };
+
 export type Keeping =
   | { says: "kept" }
   | { says: "off" }
@@ -3941,7 +3967,9 @@ export type Why =
   | { says: "notScraped" }
   | { says: "noUsage" }
   | { says: "noSamples" }
-  | { says: "folded" };
+  | { says: "young"; since: string | null }
+  | { says: "folded" }
+  | { says: "admitted"; webhooks: string[] };
 
 export type RuleId =
   | "pss-host-process"
@@ -4075,7 +4103,7 @@ export type AuditRow =
   | {
       row: "rule";
       rule: RuleId;
-      worst: AuditSeverity;
+      worst: AuditSeverity | null;
       objects: number;
       unchecked: number;
     }
@@ -4111,7 +4139,8 @@ export type UsageRead =
 export type UseVerdict =
   | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
   | { says: "within" }
-  | { says: "noSamples" };
+  | { says: "noSamples" }
+  | { says: "young"; since: string | null };
 
 export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 

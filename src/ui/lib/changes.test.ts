@@ -10,13 +10,16 @@ import { ru } from "@/i18n/ru";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import {
+  bothCovering,
   COMPARED_FIELDS,
+  coverageOf,
   diffRevisions,
   earlierRowsWords,
   gapsOf,
   gapWords,
   helmReleaseOf,
   quietSince,
+  changesKnownFrom,
   rowWords,
   spansFor,
   watchedStretches,
@@ -795,6 +798,60 @@ describe("gapsOf", () => {
   });
 });
 
+describe("what one object's timeline was watched by", () => {
+  const span = (
+    from: number,
+    to: number | null,
+    over: Partial<ObservedSpan> = {}
+  ) => ({
+    from,
+    seenAt: to ?? from,
+    to,
+    unwatched: [],
+    unwatchedIn: [],
+    scope: [],
+    kinds: ["Deployment"],
+    ...over,
+  });
+
+  /**
+   * A CronJob's own rows come from the name-only reading, its events from
+   * the followed watches. Fails if its warnings are drawn watched while the
+   * Event watch was refused, or its changes stop reading the name-only spans.
+   */
+  it("takes each kind's changes from its own source and events from the followed watches", () => {
+    const spans = {
+      followed: [
+        span(T0, T0 + HOUR, { unwatched: ["Event"] }),
+        span(T0 + HOUR, null),
+      ],
+      meta: [span(T0, null, { kinds: [] })],
+    };
+    const gaps = (show: "all" | "changes" | "warnings") =>
+      gapsOf(
+        coverageOf(spans, ["CronJob"], [], show).covering,
+        T0,
+        T0 + 2 * HOUR
+      );
+    expect(gaps("changes")).toEqual([]);
+    expect(gaps("warnings")).toEqual([{ from: T0, to: T0 + HOUR }]);
+    expect(gaps("all")).toEqual([{ from: T0, to: T0 + HOUR }]);
+  });
+
+  /** Two watches drawn as one: fails if a gap in either is drawn as watched. */
+  it("watches only where both sets of spans did", () => {
+    expect(
+      bothCovering(
+        [span(T0, T0 + 3 * HOUR), span(T0 + 4 * HOUR, null)],
+        [span(T0 + HOUR, T0 + 5 * HOUR)]
+      ).map(({ from, to }) => [from, to])
+    ).toEqual([
+      [T0 + HOUR, T0 + 3 * HOUR],
+      [T0 + 4 * HOUR, T0 + 5 * HOUR],
+    ]);
+  });
+});
+
 describe("timelineOf", () => {
   /** The gap sits on the clock among the entries, dated by its end, so a reader scrolling down meets it where it happened. */
   it("puts a gap between the entries on either side of it", () => {
@@ -1318,7 +1375,7 @@ describe("where the rows before the running watch came from", () => {
         clock
       )
     ).toBe(
-      "Rows before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59"
+      "Changes before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59; the events are the cluster's own record"
     );
   });
 });
@@ -1421,8 +1478,16 @@ describe("the cluster's events and the recorded changes on one clock", () => {
 
   /** A watch whose changes were let go recorded some. Fails if it says nothing changed since it began. */
   it("does not call a watch quiet when its changes were let go", () => {
-    expect(quietSince({ from: T0 }, [], T0 + HOUR)).toBeNull();
-    expect(quietSince({ from: T0 }, [])).toBe(T0);
+    expect(quietSince({ from: T0 }, [], T0 + HOUR, "all")).toBeNull();
+    expect(quietSince({ from: T0 }, [], -Infinity, "all")).toBe(T0);
+  });
+
+  /** Rows below the first page were not read. Fails if a watch older than them is called quiet. */
+  it("knows the change rows only from where they were read", () => {
+    const known = (readFrom: number | null) =>
+      changesKnownFrom({ letGo: undefined, readFrom });
+    expect(quietSince({ from: T0 }, [], known(T0 + HOUR), "all")).toBeNull();
+    expect(quietSince({ from: T0 }, [], known(null), "all")).toBe(T0);
   });
 
   /** Older rows not read yet sit below the end of what is drawn. Fails if a gap or a revision is drawn among rows that were never read. */

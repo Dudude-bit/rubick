@@ -50,6 +50,8 @@ function model(
         need: "needIstio",
         marks: true,
         nodeAgent: false,
+        needsPods: false,
+        grpcErrors: true,
       },
     ],
     window: "5m",
@@ -60,6 +62,7 @@ function model(
         from,
         to,
         protocols: [],
+        sides: [],
         values: MEASURES.map((m) => (m === "requests" ? 1 : null)),
         reasons: [],
       })),
@@ -129,6 +132,32 @@ describe("flows on the map", () => {
     expect(drawn.groups.map((group) => group.id)).toContain("bank");
   });
 
+  /**
+   * A stand-in workload is drawn by its own kind and group: a namesake of a
+   * built-in from another group is a kind of its own, the built-in itself
+   * keeps its glyph.
+   */
+  it("draws a stand-in namesake as a kind of its own and a built-in with its glyph", () => {
+    const namesake: FlowEnd = {
+      is: "workload",
+      key: {
+        namespace: "shop",
+        group: "custom.io",
+        kind: "Deployment",
+        name: "odd",
+      },
+    };
+    const drawn = model(
+      [workload("Deployment", "cart"), namesake],
+      [[0, 1]],
+      []
+    );
+    expect(drawn.nodes.find((node) => node.label === "odd")?.crd).toBeNull();
+    expect(
+      drawn.nodes.find((node) => node.label === "cart")?.crd
+    ).toBeUndefined();
+  });
+
   /** An address outside every namespace is drawn outside every card. */
   it("draws an address outside every card", () => {
     const drawn = model(
@@ -139,6 +168,30 @@ describe("flows on the map", () => {
     expect(
       drawn.nodes.find((node) => node.label === "10.0.3.4")?.group
     ).toBeNull();
+  });
+
+  /**
+   * A workload in another cluster of the mesh is not this cluster's
+   * namesake: its own node outside every card, saying its cluster.
+   */
+  it("draws an end in another cluster apart from its namesake here", () => {
+    const web = mapped("Deployment", "web", "apps");
+    const remote: FlowEnd = {
+      is: "remote",
+      cluster: "west",
+      namespace: "shop",
+      kind: "Deployment",
+      name: "web",
+    };
+    const drawn = model(
+      [remote, workload("Deployment", "web")],
+      [[0, 1]],
+      [web]
+    );
+    const there = drawn.nodes.find((node) => node.id !== web.id);
+    expect(there).toMatchObject({ group: null, kind: "Deployment" });
+    expect(there?.sub).toBe("shop in cluster west of the mesh");
+    expect(drawn.edges[0]).toMatchObject({ from: there?.id, to: web.id });
   });
 
   /** A workload calling itself is a row, and no line from a node to itself. */

@@ -10,7 +10,7 @@ import { useShareCaveat } from "@/components/share/screen-share";
 import { Unknown } from "@/components/ui/unknown";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import type { CostPicture } from "@/lib/cost";
+import { noNodePriced, type CostPicture } from "@/lib/cost";
 import { pageLink } from "@/lib/links";
 import type { SupplierTrouble } from "@/hooks/useCost";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
@@ -21,13 +21,24 @@ export function CostNotes({
   picture,
   trouble,
   onRetry,
+  onPrices,
 }: {
   picture: CostPicture;
   trouble: SupplierTrouble | null;
   onRetry?: () => void;
+  onPrices: () => void;
 }) {
   const t = useT();
   const notes = pictureNotes(picture, t);
+  // Why OpenCost priced no node, and the two ways out; entered prices take
+  // over only while it prices none.
+  const why =
+    picture.source.kind === "opencost" && picture.unpriced.nodes.length > 0
+      ? noNodePriced(picture)
+        ? "whyNoNodePrices"
+        : "whySomeNodePrices"
+      : null;
+  useShareCaveat(why && t("cost", why, { prices: t("cost", "enterPrices") }));
   const said = trouble
     ? `${troubleWords(trouble, t)} ${t("cost", "estimateMeanwhile")}`
     : null;
@@ -45,6 +56,13 @@ export function CostNotes({
           {note}
         </p>
       ))}
+      {why && (
+        <p className="text-xs text-fg-mut" data-testid="cost-why-unpriced">
+          {parts(t("cost", why), {
+            prices: <PricesLink onPrices={onPrices} />,
+          })}
+        </p>
+      )}
       <UnreadNamespaces
         unread={picture.unread}
         label={t("cost", "podsLabel")}
