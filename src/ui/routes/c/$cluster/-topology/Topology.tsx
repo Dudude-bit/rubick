@@ -16,6 +16,7 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { usePeek } from "@/hooks/usePeek";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
+import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
@@ -46,6 +47,9 @@ import {
 import { toneOf, type ToneInputs } from "./tone";
 import { topologySection } from "./topology-share";
 import { useVendorLayers } from "./vendor-layers";
+import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
+
+const EVERY_NAMESPACE: readonly string[] = [];
 
 /** Past this many nodes in a scope of several namespaces, every group starts collapsed. */
 export const COLLAPSE_ABOVE = 400;
@@ -117,9 +121,25 @@ function TopologyMap() {
       ),
     [map.kinds]
   );
+  // The Routes page's own board, read cluster-wide for its Gateways and
+  // classes: a route and a Gateway are drawn by its verdict, and a Gateway a
+  // route names from outside the scope is read from its list.
+  const routes = useRoutesBoard(scope.wire ?? EVERY_NAMESPACE);
+  const verdicts = useMemo(
+    () =>
+      mapVerdicts(routes.board, routes.gatewaysAll.data, routes.topologyKnown),
+    [routes.board, routes.gatewaysAll.data, routes.topologyKnown]
+  );
+  const [namedGateways] = useState(
+    () => new WeakMap<TopologyNode, { from: unknown; node: TopologyNode }>()
+  );
+  const nodes = useMemo(
+    () => withNamedGateways(map.nodes, verdicts, namedGateways),
+    [map.nodes, verdicts, namedGateways]
+  );
   const toneInputs = useMemo<ToneInputs>(
-    () => ({ t, ingress: (row) => ingressHealth(row), stale }),
-    [t, ingressHealth, stale]
+    () => ({ t, ingress: (row) => ingressHealth(row), stale, verdicts }),
+    [t, ingressHealth, stale, verdicts]
   );
 
   const several = scope.wire === null || scope.wire.length > 1;
@@ -135,16 +155,25 @@ function TopologyMap() {
   const model = useMemo(
     () =>
       modelOf(
-        map.nodes,
+        nodes,
         map.edges,
         map.reads,
-        { grouping, hidden, policies, toggled, collapsedAtFirst },
+        {
+          grouping,
+          hidden,
+          policies,
+          toggled,
+          collapsedAtFirst,
+          pageSays: (node) => verdictSay(verdicts, node),
+        },
         (node) => toneOf(node, toneInputs),
         t,
         memo
       ),
     [
       map,
+      nodes,
+      verdicts,
       grouping,
       hidden,
       policies,

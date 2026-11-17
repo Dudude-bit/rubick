@@ -267,6 +267,30 @@ describe("the cluster map's model", () => {
     ).not.toBe("unknown");
   });
 
+  /**
+   * A route red on the map said nothing of why, while the Routes page named
+   * the class nothing claims. Fails if what another page says of a node is
+   * not on the line under it, or stays there once the page says otherwise.
+   */
+  it("puts what the route's page says on the line under it, and follows it", () => {
+    const memo = newMemo();
+    const route = node("HTTPRoute", "web");
+    const draw = (says: string | null) =>
+      modelOf(
+        new Map([[route.id, route]]),
+        new Map(),
+        new Map([["shop", read("shop")]]),
+        settings({ pageSays: () => says }),
+        () => "err",
+        t,
+        memo
+      ).nodes[0].sub;
+    expect(draw("nothing claims class live-check")).toContain(
+      "nothing claims class live-check"
+    );
+    expect(draw(null) ?? "").not.toContain("live-check");
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

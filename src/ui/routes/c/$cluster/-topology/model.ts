@@ -84,6 +84,8 @@ export interface ModelSettings {
   toggled: ReadonlyMap<string, boolean>;
   /** Whether a group nobody toggled starts collapsed. */
   collapsedAtFirst: boolean;
+  /** What another page says of a node, added to the line under it. */
+  pageSays?: (node: TopologyNode) => string | null;
 }
 
 export interface Model {
@@ -252,7 +254,10 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
  * any of them changes.
  */
 export interface ModelMemo {
-  nodes: WeakMap<TopologyNode, { graph: GraphNode; optional: boolean }>;
+  nodes: WeakMap<
+    TopologyNode,
+    { graph: GraphNode; optional: boolean; says: string | null }
+  >;
   edges: WeakMap<TopologyEdge, { graph: GraphEdge; ends: string }>;
 }
 
@@ -294,14 +299,17 @@ export function modelOf(
     // Ingress's health, a stale kind) may change without throwing away every
     // node's drawing; a node whose tone did not change keeps its object.
     const tone = optional ? "warn" : toneOf(node);
+    const says = settings.pageSays?.(node) ?? null;
     const kept = memo.nodes.get(node);
     let graph = kept?.graph;
-    if (graph && kept?.optional === optional && graph.tone !== tone) {
+    const same = kept?.optional === optional && kept.says === says;
+    if (graph && same && graph.tone !== tone) {
       graph = { ...graph, tone };
-      memo.nodes.set(node, { graph, optional });
+      memo.nodes.set(node, { graph, optional, says });
     }
-    if (!graph || kept?.optional !== optional) {
-      const sub = subOf(node, t);
+    if (!graph || !same) {
+      const sub =
+        [subOf(node, t), says].filter(Boolean).join(" · ") || undefined;
       graph = {
         id: node.id,
         group: groupIdOf(node, settings.grouping),
@@ -318,7 +326,7 @@ export function modelOf(
         badge: settings.policies ? coverBadge(node, t) : undefined,
         rank: RANK[kind] ?? WORKLOAD_RANK,
       };
-      memo.nodes.set(node, { graph, optional });
+      memo.nodes.set(node, { graph, optional, says });
     }
     tones.set(node.id, graph.tone);
     groupOf.set(node.id, graph.group);
