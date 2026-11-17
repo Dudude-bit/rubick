@@ -187,6 +187,18 @@ describe("one surface reading the timeline", () => {
     await waitFor(() => expect(result.current.rows).toHaveLength(5));
     expect(asked[2].before).toEqual({ at: 10, seq: 10 });
   });
+  /**
+   * Two surfaces of one key, their catch-ups answered out of order: the
+   * older answer replaced the newer version of a series and lowered what was
+   * read up to. Fails if a late answer undoes a later one.
+   */
+  it("keeps the later version of a series over one that arrives after it", () => {
+    const held = [row("e", 40, 22), row("a", 10)];
+    expect(withNewer(held, [row("e", 30, 21)])).toEqual(held);
+    expect(withNewer(held, [row("e", 50, 23)]).map((each) => each.seq)).toEqual(
+      [23, 10]
+    );
+  });
 });
 
 describe("rows that started over", () => {

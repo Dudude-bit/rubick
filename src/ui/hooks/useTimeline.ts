@@ -79,8 +79,14 @@ export function withNewer(
   tail: Placed | null = null
 ): TimelineRow[] {
   if (arrived.length === 0) return [...held];
-  const ids = new Set(arrived.map((row) => row.id));
-  const fresh = arrived
+  // A series held in a later version than one arriving late keeps it: two
+  // readers of one key may have their answers laid in out of order.
+  const heldSeq = new Map<string, number>();
+  const wanted = new Set(arrived.map((row) => row.id));
+  for (const row of held) if (wanted.has(row.id)) heldSeq.set(row.id, row.seq);
+  const later = arrived.filter((row) => (heldSeq.get(row.id) ?? -1) < row.seq);
+  const ids = new Set(later.map((row) => row.id));
+  const fresh = later
     .filter((row) => tail === null || newer(row, tail) <= 0)
     .sort(newer);
   const out: TimelineRow[] = [];
@@ -180,6 +186,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
                   page.rows,
                   now.more ? (now.rows.at(-1) ?? null) : null
                 ),
+                newest: Math.max(now.newest, page.newest),
                 more: now.more,
               }
             : now
