@@ -2364,6 +2364,8 @@ export const en = {
     letGoNormal:
       "Older Normal events were let go to stay under the limit; kept from {at}",
     letGoCleared: "Rows before {at} were cleared in Settings",
+    keptNowhere:
+      "Kept for this session only: this machine has no data folder to keep it in.",
     keptSessionOnly:
       "Kept for this session only: keeping between restarts is off in Settings.",
     keptFailed:

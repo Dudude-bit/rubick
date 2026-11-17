@@ -831,6 +831,19 @@ fn an_unreadable_line_is_skipped_and_counted() {
     assert_eq!((page.rows.len(), page.unreadable), (1, 1));
 }
 
+/// A machine with no data folder keeps nothing between restarts. Fails if
+/// the timeline says it is kept while there is nowhere to keep it.
+#[test]
+fn with_no_data_folder_keeping_on_is_said_to_keep_nothing() {
+    let (timelines, _rx) = holder(None, true);
+    let cluster = timelines.cluster("kind");
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Nowhere);
+    timelines.set_keep(false);
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Off);
+    timelines.set_keep(true);
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Nowhere);
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {

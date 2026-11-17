@@ -131,10 +131,22 @@ pub enum Keeping {
     Kept,
     /// Turned off in Settings: what is here lasts until the app closes.
     Off,
+    /// On, and this machine has no data folder to keep it in: what is here
+    /// lasts until the app closes.
+    Nowhere,
     /// The disk refused: what is here lasts until the app closes.
     Failed {
         message: String,
     },
+}
+
+/// What keeping amounts to for a timeline kept in `dir`.
+fn keeping_of(keep: bool, dir: Option<&PathBuf>) -> Keeping {
+    match (keep, dir) {
+        (false, _) => Keeping::Off,
+        (true, None) => Keeping::Nowhere,
+        (true, Some(_)) => Keeping::Kept,
+    }
 }
 
 /// Whether the rows kept from an earlier run are this cluster's.
@@ -423,7 +435,7 @@ impl Timelines {
         self.keep.store(keep, Ordering::Relaxed);
         for cluster in &self.clusters {
             let mut inner = cluster.inner.lock();
-            inner.keeping = if keep { Keeping::Kept } else { Keeping::Off };
+            inner.keeping = keeping_of(keep, cluster.dir.as_ref());
             inner.told.spans = true;
         }
     }
@@ -449,11 +461,7 @@ impl Timelines {
         let mut spans = loaded.spans;
         spans.closed();
         spans.prune(now);
-        let keeping = if self.keeps() {
-            Keeping::Kept
-        } else {
-            Keeping::Off
-        };
+        let keeping = keeping_of(self.keeps(), dir.as_ref());
         let cluster = Arc::new(ClusterTimeline {
             context: context.to_string(),
             dir,
