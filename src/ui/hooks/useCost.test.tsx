@@ -24,7 +24,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { costBasis: () => costBasis() },
 }));
 
-const { useCost } = await import("./useCost");
+const { useCost, rowsKey } = await import("./useCost");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useCostPricesStore } = await import("@/stores/costPricesStore");
 
@@ -251,5 +251,21 @@ describe("which source a cost is read from", () => {
       expect(hook.result.current.cost.state).toBe("basisFailed")
     );
     await act(async () => {});
+  });
+});
+
+describe("the rows a reading is keyed on", () => {
+  /**
+   * Two custom kinds of one name in two API groups are two workloads: the
+   * key that says the rows changed told them apart only by namespace, kind
+   * and name, so the page kept the first one's cost for the second.
+   */
+  it("tells workloads apart by their API group", () => {
+    const of = (group: string) => [
+      { namespace: "prod", group, kind: "Worker", name: "api" },
+    ];
+    expect(rowsKey(of("first.example"))).not.toBe(
+      rowsKey(of("second.example"))
+    );
   });
 });

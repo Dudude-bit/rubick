@@ -56,7 +56,7 @@ export type CostState =
 export function rowsKey(keys: readonly WorkloadKey[]): string {
   let hash = 2166136261;
   for (const key of keys) {
-    const text = `${key.namespace}/${key.kind}/${key.name};`;
+    const text = `${key.namespace}/${key.group}/${key.kind}/${key.name};`;
     for (let i = 0; i < text.length; i++)
       hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
   }
