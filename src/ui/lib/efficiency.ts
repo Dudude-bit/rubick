@@ -36,8 +36,8 @@ export type Efficiency =
   | { state: "noSupplier" }
   | { state: "reading" }
   | { state: "failed"; said: string }
-  /** The supplier answered and holds no sample of this workload's pods. */
-  | { state: "noSamples" }
+  /** The supplier answered and holds no sample of this workload's pods: young ones may have none yet. */
+  | ({ state: "noSamples" } & Span)
   /** Nothing was requested, so there is no ratio: not 0%, not 100%. */
   | ({ state: "unrequested"; avg: number | null; peak: number | null } & Span)
   | ({
@@ -74,9 +74,9 @@ export function efficiencyOf(
   since: string | null,
   now: number = Date.now()
 ): Efficiency {
-  if (avg === null && peak === null) return { state: "noSamples" };
   const started = since === null ? NaN : Date.parse(since);
   const span = { since, whole: now - started >= WINDOW_MS };
+  if (avg === null && peak === null) return { state: "noSamples", ...span };
   if (requested <= 0) return { state: "unrequested", avg, peak, ...span };
   return {
     state: "measured",
@@ -118,8 +118,10 @@ export function workloadEfficiency(
   if (reading.state !== "read") return { cpu: reading, memory: reading };
   const at = positionOf(reading.keys, key);
   const values = at === -1 ? undefined : reading.fold.values[at];
-  if (!values)
-    return { cpu: { state: "noSamples" }, memory: { state: "noSamples" } };
+  if (!values) {
+    const none: Efficiency = { state: "noSamples", since: null, whole: false };
+    return { cpu: none, memory: none };
+  }
   const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = values;
   const since = reading.fold.since[at] ?? null;
   return {

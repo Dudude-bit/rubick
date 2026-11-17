@@ -2589,6 +2589,8 @@ export const en = {
     effReading: "reading…",
     effFailed: "could not read use: {said}",
     effNoSamples: "no samples in {window}",
+    effNoSamplesYet: "no samples yet, started {age} ago",
+    noSamplesYet: "no samples yet",
     effUnrequested: "nothing requested",
     overRequested:
       "Its peak over 24 hours stayed under half of what it requests.",

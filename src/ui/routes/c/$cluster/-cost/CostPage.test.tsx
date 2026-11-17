@@ -464,6 +464,41 @@ describe("the Cost page", () => {
   });
 });
 
+describe("a workload minutes old", () => {
+  /**
+   * Its youngest pod started three minutes ago and Prometheus holds no
+   * sample yet. The row read "not measured · CPU no samples in 24h", as of
+   * a workload a whole day went unsampled. Fails if a young workload's
+   * empty reading is worded as a day without samples.
+   */
+  it("says it has no samples yet and when it started", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    const started = new Date(Date.now() - 3 * 60_000 - 5_000).toISOString();
+    usage.mockReturnValue({
+      state: "read",
+      keys: [BASIS.workloads[0]!.key],
+      fold: {
+        values: [[null, null, null, null]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        since: [started],
+      },
+    });
+    await open();
+    expect(
+      screen.getAllByText(/^CPU no samples yet, started 3m ago$/).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^no samples yet$/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no samples in 24h/)).toBeNull();
+  });
+});
+
 describe("a namespace no OpenCost series prices", () => {
   /**
    * `ml` runs pods on a node OpenCost has no price for, so the join drops

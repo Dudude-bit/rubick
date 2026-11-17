@@ -162,6 +162,24 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * Three minutes into a rollout Prometheus holds no sample yet; Audit says
+   * the workload is young, as the Cost page does, not that its pods were
+   * never sampled. Fails if a young workload with no samples read as
+   * noSamples.
+   */
+  it("calls a workload with no samples yet young", () => {
+    const started = new Date(Date.now() - 3 * 60_000).toISOString();
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const empty = reading(one, [[null, null, null, null]], [started]);
+    const read = usageRead(one, null, empty);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "young",
+      since: started,
+    });
+  });
+
+  /**
    * No Prometheus, a supplier still being probed, a failed read and a
    * requests list that did not come are each their own state; none is a
    * read with nothing over. Fails if any of them reached the backend as

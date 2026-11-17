@@ -2709,6 +2709,8 @@ export const ru: Catalogue = {
     effReading: "читаю…",
     effFailed: "не удалось прочитать потребление: {said}",
     effNoSamples: "нет замеров за {window}",
+    effNoSamplesYet: "замеров ещё нет, под запущен {age} назад",
+    noSamplesYet: "замеров ещё нет",
     effUnrequested: "ничего не запрошено",
     overRequested: "За сутки пик не дошёл и до половины запроса.",
     instanceType: "Тип машины",

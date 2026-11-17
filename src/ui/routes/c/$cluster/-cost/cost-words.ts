@@ -198,13 +198,23 @@ const EFFICIENCY_WORDS: Record<
   reading: (_, t) => t("cost", "effReading"),
   failed: (e, t) =>
     t("cost", "effFailed", { said: e.state === "failed" ? e.said : "" }),
-  noSamples: (_, t) => t("cost", "effNoSamples", { window: EFFICIENCY_WINDOW }),
+  noSamples: (e, t) => {
+    const age = youngFor(e, t);
+    return age === null
+      ? t("cost", "effNoSamples", { window: EFFICIENCY_WINDOW })
+      : t("cost", "effNoSamplesYet", { age });
+  },
   unrequested: (_, t) => t("cost", "effUnrequested"),
 };
 
 /** How long the readings cover where that is less than the window: its youngest pod's age. */
 export function youngFor(e: Efficiency, t: T): string | null {
-  if (e.state !== "measured" && e.state !== "unrequested") return null;
+  if (
+    e.state !== "measured" &&
+    e.state !== "unrequested" &&
+    e.state !== "noSamples"
+  )
+    return null;
   return e.whole || e.since === null ? null : formatAge(e.since, t);
 }
 
@@ -226,6 +236,8 @@ export function efficiencyWords(e: Efficiency, t: T): string {
 
 /** What one resource used, in its own units, over the span the readings cover. */
 export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
+  if (e.state === "noSamples" && youngFor(e, t) !== null)
+    return t("cost", "noSamplesYet");
   if (e.state !== "measured" && e.state !== "unrequested")
     return t("cost", "notMeasured");
   const say = (v: number | null) =>
