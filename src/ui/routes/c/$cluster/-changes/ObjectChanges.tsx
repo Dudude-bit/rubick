@@ -364,7 +364,8 @@ function ChangesPanel({
             {line}
           </p>
         ))}
-        {Number.isFinite(sinceMs) ? (
+        {/* Nothing is known since a moment of a timeline that was not read. */}
+        {read.read && Number.isFinite(sinceMs) ? (
           <p className="px-1.5 pb-1 text-[11px] text-fg-fnt">
             {items.some((i) => i.at !== null && i.at >= sinceMs)
               ? t("changes", "sinceMarker")
