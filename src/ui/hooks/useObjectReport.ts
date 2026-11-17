@@ -161,6 +161,17 @@ export function useObjectReport(
     show: "changes",
     enabled: capturing && targets.length > 1,
   });
+  // What the timeline could not say of the object: a failed or unanswered
+  // read is not a history with no change, and rows not read are not quiet.
+  const readings =
+    targets.length > 1 ? [ownChanges, ownerChanges] : [ownChanges];
+  const changesFailed =
+    readings.find((reading) => reading.error && !reading.read)?.error ?? null;
+  const changesPending = readings.some((reading) => !reading.read);
+  const readFroms = readings.flatMap((reading) =>
+    reading.readFrom === null ? [] : [reading.readFrom]
+  );
+  const changesReadFrom = readFroms.length > 0 ? Math.max(...readFroms) : null;
   const silent = useSilentNodes(capturing);
 
   // The chain as the page draws it: a read its watches have outrun is still
@@ -246,6 +257,12 @@ export function useObjectReport(
         rows: withNewer(ownChanges.rows, ownerChanges.rows),
         spans: ownChanges.spans,
         letGo: ownChanges.letGo,
+        readFrom: changesReadFrom,
+        unread: changesFailed
+          ? t("changes", "readFailed", { reason: errorToShow(changesFailed) })
+          : changesPending
+            ? t("share", "stillReading")
+            : null,
       },
       targets,
       capturedAt,
@@ -344,6 +361,9 @@ export function useObjectReport(
     ownChanges.spans,
     ownChanges.letGo,
     ownerChanges.rows,
+    changesFailed,
+    changesPending,
+    changesReadFrom,
     silent,
     context,
     graphed,

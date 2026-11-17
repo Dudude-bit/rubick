@@ -606,6 +606,37 @@ describe("changesSection", () => {
     owned.owners
   );
 
+  /**
+   * The timeline was cleared and nothing watched the object since: the file
+   * said only that it was not watching, and lost that its history was let
+   * go. Fails if the let-go line is dropped where nothing was watched.
+   */
+  it("keeps the let-go line where nothing was watched", () => {
+    const before = Date.parse(AT) - 60 * 60_000;
+    const section = changesSection(
+      {
+        rows: [],
+        spans: { followed: [], meta: [] },
+        letGo: {
+          changes: { before, cleared: true },
+          warnings: null,
+          normal: null,
+        },
+      },
+      payments,
+      AT,
+      t
+    );
+    const texts =
+      section?.body.type === "changes"
+        ? section.body.changes.map((change) => change.parts[0].text)
+        : [];
+    expect(texts).toEqual([
+      expect.stringMatching(/^changes\.letGoCleared\(/),
+      "share.journalEmpty",
+    ]);
+  });
+
   /** Nothing recorded and no span over the object is not "nothing changed". */
   it("says it was not watching when nothing was recorded and nothing watched", () => {
     const section = changesSection(read([], []), payments, AT, t);

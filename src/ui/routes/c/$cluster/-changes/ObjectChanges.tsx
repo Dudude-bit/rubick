@@ -22,6 +22,7 @@ import {
   type Revision,
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
+import { isBuiltInGroup } from "@/lib/links";
 import { useDeliveries, useDeliveryIntercept } from "../-delivery/useDelivery";
 import { useRollback } from "../-object/useRollback";
 import { useHeldRead } from "@/hooks/useHeldRead";
@@ -63,7 +64,11 @@ const isRevised = (kind: string): kind is RevisedKind =>
  */
 export function ObjectChanges({ subject }: { subject: ObjectChangesSubject }) {
   const revised = subject.kind;
-  return isRevised(revised) ? (
+  // The controller's revisions are the built-in kind's: a custom kind named
+  // Deployment read the built-in namesake's ReplicaSets as its own.
+  const builtIn =
+    subject.group == null || isBuiltInGroup(revised, subject.group);
+  return isRevised(revised) && builtIn ? (
     <RevisedChanges subject={{ ...subject, kind: revised }} />
   ) : (
     <ChangesPanel subject={subject} />

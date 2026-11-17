@@ -562,6 +562,33 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * Every kept row failed to parse, and the card said "nothing seen while
+   * this app was watching". Fails if rows that could not be read leave the
+   * last change said to be none.
+   */
+  it("says kept rows could not be read rather than that nothing was seen", () => {
+    const latest = lastChangeOf({
+      read: true,
+      rows: [],
+      letGo: undefined,
+      unreadable: 3,
+    });
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 1, total: 1 },
+      { entries: [], known: true },
+      [],
+      latest,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(
+      rows.find((row) => row.label === "Last change")?.values[0].text
+    ).toBe("3 kept rows could not be read and were skipped.");
+  });
+
+  /**
    * After Settings › Clear, a Deployment edited three times this week read
    * "nothing seen while this app was watching". Fails if a card whose
    * changes were cleared or let go says none was seen, there or in Share.
@@ -595,7 +622,7 @@ describe("the last change a card names", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/while this app was watching/)).toBeNull();
-    const read = { read: true, rows: [] };
+    const read = { read: true, rows: [], unreadable: 0 };
     const words = (letGo: { before: number; cleared: boolean }) => {
       const section = pinShare(
         pin,

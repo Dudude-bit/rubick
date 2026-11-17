@@ -69,6 +69,53 @@ describe("what the app keeps on this machine", () => {
     );
   });
 
+  /**
+   * The switch that could not save sprang back with no word, and the
+   * rejection went unhandled. Fails if a failed switch does not say why.
+   */
+  it("says why the switch did not take", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "timeline_set_keep")
+        throw new Error("config is read-only");
+      return command === "timeline_kept" ? kept : undefined;
+    });
+    await renderWithRouter(<KeptPanel />);
+    await userEvent.click(
+      await screen.findByRole("switch", {
+        name: "Keep the timeline between restarts",
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("keep-failed")).toHaveTextContent(
+        /^Keeping was not changed: .*config is read-only/
+      )
+    );
+  });
+
+  /**
+   * Nothing was kept at the first read, and the read after a switch failed:
+   * the panel went on saying "Nothing kept yet." Fails if an earlier answer
+   * hides a read that failed after it.
+   */
+  it("says a read that failed after an earlier answer, not the earlier answer", async () => {
+    kept = { keep: true, bytes: 0, clusters: 0 };
+    await renderWithRouter(<KeptPanel />);
+    await waitFor(() =>
+      expect(screen.getByTestId("kept-size")).toHaveTextContent(
+        "Nothing kept yet."
+      )
+    );
+    kept = new Error("permission denied");
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Keep the timeline between restarts" })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("kept-size")).toHaveTextContent(
+        /Could not read what is kept/
+      )
+    );
+  });
+
   /** A size that could not be read is not "nothing kept". */
   it("says what is kept could not be read, rather than that nothing is", async () => {
     kept = new Error("permission denied");

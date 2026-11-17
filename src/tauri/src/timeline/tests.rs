@@ -831,6 +831,129 @@ fn an_unreadable_line_is_skipped_and_counted() {
     assert_eq!((page.rows.len(), page.unreadable), (1, 1));
 }
 
+/// A machine with no data folder keeps nothing between restarts. Fails if
+/// the timeline says it is kept while there is nowhere to keep it.
+#[test]
+fn with_no_data_folder_keeping_on_is_said_to_keep_nothing() {
+    let (timelines, _rx) = holder(None, true);
+    let cluster = timelines.cluster("kind");
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Nowhere);
+    timelines.set_keep(false);
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Off);
+    timelines.set_keep(true);
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Nowhere);
+}
+
+/// Two switches of keeping that meet: one saves on, the other saves off and
+/// applies it, then the first applies on. Fails if the file and the app end
+/// up disagreeing, which keeps writing a timeline the reader turned off.
+#[tokio::test]
+async fn two_keeping_switches_that_meet_end_as_the_file_says() {
+    let (timelines, _rx) = holder(None, false);
+    let saved = Arc::new(Mutex::new(None));
+    let slow = {
+        let saved = saved.clone();
+        async move {
+            *saved.lock() = Some(true);
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok::<(), ()>(())
+        }
+    };
+    let fast = {
+        let saved = saved.clone();
+        async move {
+            *saved.lock() = Some(false);
+            Ok::<(), ()>(())
+        }
+    };
+    let first = {
+        let timelines = timelines.clone();
+        tokio::spawn(async move { timelines.keep_saved(true, slow).await })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    timelines.keep_saved(false, fast).await.unwrap();
+    first.await.unwrap().unwrap();
+    assert_eq!(*saved.lock(), Some(timelines.keeps()));
+}
+
+/// Settings › Clear pressed while a flush had taken what to write: the
+/// write recreated the folder with the rows just cleared. Fails if what was
+/// taken before a clear reaches the disk after it.
+#[test]
+fn what_a_flush_took_before_a_clear_is_not_written_after_it() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.change(change(
+        "1",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    let taken = Timelines::take(&cluster, true);
+    timelines.clear().unwrap();
+    timelines.write(&cluster, true, taken);
+    let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
+    assert!(again
+        .cluster("kind")
+        .page(&query(Show::All))
+        .rows
+        .is_empty());
+}
+
+/// Another cluster under the name, and the folder of the one before would
+/// not go. Fails if the wipe is forgotten after the failure, so the next
+/// write puts the new cluster's name on the old cluster's rows.
+#[cfg(unix)]
+#[test]
+fn a_wipe_that_failed_is_done_on_the_next_write() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    cluster.change(change(
+        "old",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    timelines.flush();
+    let dir = disk::dir_of(root.path(), "kind");
+    let mode = |mode| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode));
+    assert!(cluster.seen_cluster("uid-b".into()));
+    mode(0o500).unwrap();
+    timelines.flush();
+    mode(0o700).unwrap();
+    assert!(matches!(
+        cluster.page(&query(Show::All)).keeping,
+        Keeping::Failed { .. }
+    ));
+    cluster.change(change(
+        "new",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    timelines.flush();
+    let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let ids: Vec<String> = again
+        .cluster("kind")
+        .page(&query(Show::All))
+        .rows
+        .iter()
+        .map(|row| row.id.clone())
+        .collect();
+    assert_eq!(
+        ids,
+        ["new"],
+        "the old cluster's row read back as this one's"
+    );
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {
@@ -1301,6 +1424,22 @@ mod recording {
         );
     }
 
+    /// A late report of a deleted object, then a list without it. Fails if
+    /// the late report held the object again, so the list said it was
+    /// deleted a second time.
+    #[test]
+    fn a_late_report_of_a_deleted_object_is_not_deleted_twice() {
+        let (_t, cluster, mut recorder) = recorder();
+        let kind = followed_kind("Deployment");
+        let old = deployment("nginx:1", 2, "v");
+        recorder.listed(kind, None, [&old], true);
+        recorder.deleted(kind, None, &old);
+        recorder.applied(kind, None, &old);
+        recorder.listed(kind, None, std::iter::empty(), false);
+        let found: Vec<&str> = rows(&cluster).iter().map(says).collect();
+        assert_eq!(found, ["deleted"]);
+    }
+
     /// An object deleted and then reported again late is not born again;
     /// one made anew under the name is. Fails if either is said wrong.
     #[test]
@@ -1662,14 +1801,19 @@ mod following {
             state("apps", "deployments", FeedState::Synced),
         );
         feed(&mut recorder, whole(Whole::Fresh, vec![api("nginx:1")]));
-        let blind = "2026-11-14T10:00:00Z";
+        // After the span began, whatever the date the test runs on: a fixed
+        // moment fell out of the week kept and was pruned.
+        let blind_at = ClusterTimeline::now();
+        let blind = chrono::DateTime::from_timestamp_millis(blind_at)
+            .unwrap()
+            .to_rfc3339();
         feed(
             &mut recorder,
             state(
                 "apps",
                 "deployments",
                 FeedState::Blind {
-                    since: blind.into(),
+                    since: blind.clone(),
                 },
             ),
         );
@@ -1681,14 +1825,7 @@ mod following {
         let page = cluster.page(&query(Show::All));
         let spans = page.spans.followed;
         assert_eq!(spans.len(), 2);
-        assert_eq!(
-            spans[0].to,
-            Some(
-                chrono::DateTime::parse_from_rfc3339(blind)
-                    .unwrap()
-                    .timestamp_millis()
-            )
-        );
+        assert_eq!(spans[0].to, Some(blind_at));
         assert_eq!(spans[1].to, None);
         assert_eq!(page.rows.len(), 1);
         assert!(page.rows[0].at_relist);
@@ -1809,6 +1946,40 @@ mod following {
             },
             sight,
         }
+    }
+
+    /// A kind read by its list alone whose next turn never came: the index
+    /// counted it stale after ninety seconds, while the timeline went on
+    /// calling the stretch watched. Fails if an overdue list does not end the
+    /// name-only span, or a fresh list does not open it again.
+    #[test]
+    fn a_list_whose_next_turn_is_overdue_ends_the_name_only_span() {
+        let (_t, cluster, mut recorder) = setup();
+        let listed = |at| News::State {
+            slot: SlotKey {
+                kind: kind("batch", "jobs"),
+                namespace: None,
+            },
+            state: crate::ownership::SlotState::Listed { at },
+        };
+        let open = |cluster: &ClusterTimeline| {
+            cluster
+                .page(&query(Show::All))
+                .spans
+                .meta
+                .iter()
+                .any(|span| span.to.is_none())
+        };
+        hear(
+            &mut recorder,
+            listed(chrono::Utc::now() - chrono::Duration::seconds(100)),
+        );
+        assert!(open(&cluster));
+        recorder.overdue(ClusterTimeline::now());
+        assert!(!open(&cluster), "an overdue list drawn as watched");
+        hear(&mut recorder, listed(chrono::Utc::now()));
+        recorder.overdue(ClusterTimeline::now());
+        assert!(open(&cluster));
     }
 
     /// The window moved from `shop` to `ops` and back: the index stopped

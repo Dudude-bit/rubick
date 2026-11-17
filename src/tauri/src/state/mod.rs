@@ -353,6 +353,17 @@ impl AppState {
             .ok_or_else(|| crate::error::Error::NotConnected(context.to_string()))
     }
 
+    /// Whether `client` is still the one held for `context`: a reconnect, a
+    /// renewal or another cluster put behind the name replaces it. What
+    /// learned something through an older client must not write it down as
+    /// the context's.
+    #[must_use]
+    pub fn still_holds(&self, context: &str, client: &Arc<kube::Client>) -> bool {
+        self.client_manager
+            .get_client(context)
+            .is_some_and(|held| Arc::ptr_eq(&held, client))
+    }
+
     /// Where `plural` in `group` is served on the current cluster; `None`
     /// where it is not installed.
     ///

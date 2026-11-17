@@ -2364,6 +2364,8 @@ export const en = {
     letGoNormal:
       "Older Normal events were let go to stay under the limit; kept from {at}",
     letGoCleared: "Rows before {at} were cleared in Settings",
+    keptNowhere:
+      "Kept for this session only: this machine has no data folder to keep it in.",
     keptSessionOnly:
       "Kept for this session only: keeping between restarts is off in Settings.",
     keptFailed:
@@ -2378,6 +2380,7 @@ export const en = {
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
+    olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
     identityUnknown:
       "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
@@ -5982,6 +5985,7 @@ export const en = {
     keptNothing: "Nothing kept yet.",
     keptOff:
       "Off: nothing more is written; what is kept stays until you clear it.",
+    keepNotChanged: "Keeping was not changed: {reason}",
     keptUnread: "Could not read what is kept: {reason}",
     clearTimeline: "Clear the timeline",
     clearTimelineConfirm:

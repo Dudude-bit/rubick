@@ -3978,6 +3978,7 @@ export type Identity =
 export type Keeping =
   | { says: "kept" }
   | { says: "off" }
+  | { says: "nowhere" }
   | { says: "failed"; message: string };
 
 export type RowSays =

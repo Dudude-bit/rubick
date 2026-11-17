@@ -148,7 +148,8 @@ impl SpanSets {
                     span.seen_at
                 } else {
                     now
-                };
+                }
+                .max(span.from);
                 span.seen_at = at;
                 span.to = Some(at);
             }
