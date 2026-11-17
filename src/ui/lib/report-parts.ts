@@ -472,15 +472,18 @@ export function changesSection(
         ]
       : []),
   ].sort((a, b) => b.ms - a.ms);
-  const changes: ReportChange[] = !watched
-    ? [
+  const said = rows.map(({ at, ref, parts }) => ({ at, ref, parts }));
+  // Not watched, the let-go line is still what is known of the history.
+  const changes: ReportChange[] = watched
+    ? said
+    : [
+        ...said,
         {
           at: null,
           ref: null,
           parts: [{ text: t("share", "journalEmpty"), quiet: true }],
         },
-      ]
-    : rows.map(({ at, ref, parts }) => ({ at, ref, parts }));
+      ];
   return {
     ...shell,
     // Changes, as the Changes tab counts them; a row holds every change of one moment.
