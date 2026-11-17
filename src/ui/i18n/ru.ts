@@ -6664,6 +6664,7 @@ export const ru: Catalogue = {
     keptNothing: "Пока ничего не сохранено.",
     keptOff:
       "Выключено: больше ничего не записывается; сохранённое остаётся, пока вы его не очистите.",
+    keepNotChanged: "Сохранение не переключилось: {reason}",
     keptUnread: "Не удалось прочитать, что сохранено: {reason}",
     clearTimeline: "Очистить историю изменений",
     clearTimelineConfirm:

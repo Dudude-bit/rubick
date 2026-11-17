@@ -5984,6 +5984,7 @@ export const en = {
     keptNothing: "Nothing kept yet.",
     keptOff:
       "Off: nothing more is written; what is kept stays until you clear it.",
+    keepNotChanged: "Keeping was not changed: {reason}",
     keptUnread: "Could not read what is kept: {reason}",
     clearTimeline: "Clear the timeline",
     clearTimelineConfirm:

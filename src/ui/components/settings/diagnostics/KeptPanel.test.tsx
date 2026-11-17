@@ -69,6 +69,29 @@ describe("what the app keeps on this machine", () => {
     );
   });
 
+  /**
+   * The switch that could not save sprang back with no word, and the
+   * rejection went unhandled. Fails if a failed switch does not say why.
+   */
+  it("says why the switch did not take", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "timeline_set_keep")
+        throw new Error("config is read-only");
+      return command === "timeline_kept" ? kept : undefined;
+    });
+    await renderWithRouter(<KeptPanel />);
+    await userEvent.click(
+      await screen.findByRole("switch", {
+        name: "Keep the timeline between restarts",
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("keep-failed")).toHaveTextContent(
+        /^Keeping was not changed: .*config is read-only/
+      )
+    );
+  });
+
   /** A size that could not be read is not "nothing kept". */
   it("says what is kept could not be read, rather than that nothing is", async () => {
     kept = new Error("permission denied");
