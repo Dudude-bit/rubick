@@ -153,7 +153,7 @@ pub struct CostBasis {
     pub waiting: u32,
     /// Namespaces whose pods could not be read.
     pub unread: Vec<UnreadNamespace>,
-    /// Why the Jobs could not be listed where the pods were: a CronJob's
+    /// Why the Jobs could not be listed where the pods were: a `CronJob`'s
     /// runs are then each under its Job, whose maker is not known.
     pub jobs_unread: Option<ReadFailure>,
     /// Every volume in the cluster, claimed or not; `None` where volumes
@@ -318,12 +318,15 @@ pub(crate) async fn scoped_pods_on(
     gathered(&reaches, lists, scope.is_none())
 }
 
+/// One reach's pods and Jobs, each as it answered.
+type Listed = (Result<Vec<Pod>>, Result<Vec<Job>>);
+
 /// Each reach's pods and Jobs, put together. A refused Job list is said,
-/// not dropped: without it a CronJob's runs fall under each Job, and the
+/// not dropped: without it a `CronJob`'s runs fall under each Job, and the
 /// answer could not tell that from a Job nothing made.
 fn gathered(
     reaches: &[Option<&str>],
-    lists: Vec<(Result<Vec<Pod>>, Result<Vec<Job>>)>,
+    lists: Vec<Listed>,
     whole_cluster: bool,
 ) -> Result<ScopedPods> {
     let mut pods = Vec::new();
@@ -1306,7 +1309,7 @@ pub(crate) mod tests {
     }
 
     /// A token that lists pods and not Jobs: the refusal was dropped, so a
-    /// CronJob's runs sat under each Job with nothing saying whose they
+    /// `CronJob`'s runs sat under each Job with nothing saying whose they
     /// are. The refusal travels with the answer. Fails if a refused Job
     /// list reads as one with no Jobs in it.
     #[test]
