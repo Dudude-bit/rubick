@@ -18,7 +18,7 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use super::{configured, get_json, parse_result, unreachable, PromSeries};
+use super::{configured_in, get_json, parse_result, unreachable, PromSeries};
 use crate::commands::cost::{
     cost_key, on_a_node, scoped_pods, ScopedPods, WorkloadKey, MAX_COST_ROWS,
 };
@@ -102,7 +102,8 @@ async fn by_workload(
         )));
     }
     let scope = scope_of(scope)?;
-    let entry = configured(state)?;
+    let here = state.here()?;
+    let entry = configured_in(state, &here.context)?;
     let asked = join_all(queries.into_iter().map(|query| {
         let entry = entry.clone();
         async move {
@@ -112,7 +113,7 @@ async fn by_workload(
             parse_result(&value)
         }
     }));
-    let (answers, read) = tokio::join!(asked, scoped_pods(state, scope.as_deref()));
+    let (answers, read) = tokio::join!(asked, scoped_pods(state, &here, scope.as_deref()));
     let answers = answers.into_iter().collect::<Result<Vec<_>>>()?;
     Ok(fold(&answers, &read?, &keys, scope.as_deref()))
 }

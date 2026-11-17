@@ -188,9 +188,11 @@ async fn basis(
     held_on_nodes: bool,
 ) -> Result<CostBasis> {
     let scope = scope_of(scope)?;
-    let client = (*state.here()?.client).clone();
+    // One read of which cluster this is: pods, nodes and volumes all of it.
+    let here = state.here()?;
+    let client = (*here.client).clone();
     let (read, volumes) = tokio::join!(
-        scoped_pods(state, scope.as_deref()),
+        scoped_pods(state, &here, scope.as_deref()),
         volumes_in(&client, scope.as_deref())
     );
     let read = read?;
@@ -255,9 +257,14 @@ fn cron_of(jobs: &[Arc<Job>]) -> HashMap<(String, String), String> {
 }
 
 /// From the overview's stores while they serve (holding them, never
-/// starting a second set), by listing each reach otherwise.
-pub(crate) async fn scoped_pods(state: &AppState, scope: Option<&[String]>) -> Result<ScopedPods> {
-    let here = state.here()?;
+/// starting a second set), by listing each reach otherwise. Of the cluster
+/// `here` names, read once by the caller with whatever else it reads of it:
+/// a second `state.here()` could land after a switch of cluster.
+pub(crate) async fn scoped_pods(
+    state: &AppState,
+    here: &crate::state::Here<'_>,
+    scope: Option<&[String]>,
+) -> Result<ScopedPods> {
     scoped_pods_on(
         &state.overview_cache,
         (*here.client).clone(),
