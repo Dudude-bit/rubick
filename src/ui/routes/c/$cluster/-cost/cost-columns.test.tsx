@@ -54,6 +54,26 @@ describe("the breakdown by workload", () => {
     expect(floorOf("workload", rows)).toBeGreaterThanOrEqual(31 * 7.2);
   });
 
+  /**
+   * A cell too narrow for "Kind/name" drops the kind, so a floor sized for
+   * names alone gave "Pod/lonely" beside a bare "two-replicas-no-budget".
+   * Every row of mixed kinds keeps its kind: the floor holds the widest
+   * kind and the longest name together. Fails if it measures names alone.
+   */
+  it("floors the workload at its kind and its name, so every row says both", () => {
+    const of = (kind: string, name: string) => ({
+      ...row(name),
+      key: { ...row(name).key, kind },
+    });
+    const rows = [
+      of("Deployment", "two-replicas-no-budget"),
+      of("Pod", "lonely"),
+      of("StatefulSet", "as-root"),
+    ];
+    const widest = "Deployment/two-replicas-no-budget".length;
+    expect(floorOf("workload", rows)).toBeGreaterThanOrEqual(widest * 7.2);
+  });
+
   /** "CPU nothing requestec": the efficiency cell's widest words must fit its floor. */
   it("floors efficiency at its widest words", () => {
     const words = `${t("cost", "memory")} ${t("cost", "effUnrequested")}`;

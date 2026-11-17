@@ -17,7 +17,7 @@ import {
   type Efficiency,
   type WorkloadEfficiency,
 } from "@/lib/efficiency";
-import { drawnCrd } from "@/lib/links";
+import { drawnCrd, kindWords } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
 import {
   NAMESPACE_CELL_PX,
@@ -173,8 +173,20 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       ),
       meta: {
         share: (row: WorkloadRow) => `${row.key.kind} ${row.key.name}`,
+        // Kinds mix here, so every row says its kind before its name, as
+        // Audit does; a cell too narrow for both drops the kind, and only
+        // the rows with longer names lost theirs.
         floor: (_t: T, rows: readonly WorkloadRow[]) =>
-          refCellPx(rows, (row) => row.key.name, 31),
+          refCellPx(rows, (row) => row.key.name, 31) +
+          Math.ceil(
+            Math.max(
+              0,
+              ...rows.map(
+                (row) =>
+                  kindWords({ kind: row.key.kind, crd: row.crd }).length + 1
+              )
+            ) * 7.2
+          ),
       },
     },
     {
