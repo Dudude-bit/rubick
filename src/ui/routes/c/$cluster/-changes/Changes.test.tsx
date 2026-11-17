@@ -1052,6 +1052,50 @@ describe("warnings only, where the Event watch was refused", () => {
   });
 });
 
+describe("warnings only, while the Event watch is refused", () => {
+  /**
+   * The running span was refused the Event watch, and under Warnings only
+   * the page said "Watching since" over a list of warnings nobody could
+   * read. Fails if the header or Share call that watching, or stop naming
+   * the refusal.
+   */
+  it("says it is not watching and names the refusal, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const refused = {
+      from: NOW - 30 * 60_000,
+      seenAt: NOW,
+      to: null,
+      unwatched: ["Event"],
+    };
+    recorded({ entries: [], spans: { prod: [refused] } });
+    const collect = await mount();
+    act(() => screen.getByRole("button", { name: /Warnings only/ }).click());
+    await waitFor(() =>
+      expect(
+        screen.getByText("Not watching this cluster right now.", {
+          exact: false,
+        })
+      ).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/^Watching since/)).toBeNull();
+    expect(
+      screen.getByText(
+        /Event not watched across the cluster: the cluster refused/
+      )
+    ).toBeInTheDocument();
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    const text = watched?.body.type === "text" ? watched.body.text : "";
+    expect(text).toContain("Not watching this cluster right now.");
+    expect(text).toContain("Event not watched across the cluster");
+  });
+});
+
 describe("the Changes window toggle", () => {
   /** Russian read "24ч" and "7д" here and "24 ч" on every age beside it. Fails if the toggle stops using the locale's own units. */
   it("names its windows the way every age in the reader's language is written", async () => {
