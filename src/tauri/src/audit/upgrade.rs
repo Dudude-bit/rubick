@@ -578,11 +578,15 @@ pub async fn read(
             read.not_checked.push(blind(Why::NotAudited));
             continue;
         }
-        let Some((resource, namespaced)) =
-            served_resource(served, context, client, kind, &pending).await
-        else {
-            continue;
-        };
+        let (resource, namespaced) =
+            match served_resource(served, context, client, kind, &pending).await {
+                Ok(Some(found)) => found,
+                Ok(None) => continue,
+                Err(why) => {
+                    read.not_checked.push(blind(why));
+                    continue;
+                }
+            };
         for reach in reaches(scope, namespaced) {
             let api: Api<DynamicObject> = match &reach {
                 Some(namespace) => Api::namespaced_with(client.clone(), namespace, &resource),
@@ -604,20 +608,34 @@ pub async fn read(
 /// Where `kind` is listed from, at the version kubectl would use, and
 /// whether it lives in a namespace; `None` for a kind that cannot be listed,
 /// such as a review nobody stores.
+///
+/// # Errors
+///
+/// Discovery of the kind's group was not read: its writers are not checked.
 async fn served_resource(
     served: &ServedIndex,
     context: &str,
     client: &Client,
     kind: &str,
     pending: &[(String, Removal)],
-) -> Option<(ApiResource, bool)> {
-    let group = group_of(&pending.first()?.0);
-    let found = served.recommended(context, client, group).await.ok()??;
-    let (resource, caps) = found
+) -> Result<Option<(ApiResource, bool)>, Why> {
+    let Some((api, _)) = pending.first() else {
+        return Ok(None);
+    };
+    let Some(found) = served
+        .recommended(context, client, group_of(api))
+        .await
+        .map_err(|error| super::why_of(&error))?
+    else {
+        return Ok(None);
+    };
+    Ok(found
         .into_iter()
-        .find(|(resource, _)| resource.kind == kind)?;
-    caps.supports_operation(kube::discovery::verbs::LIST)
-        .then_some((resource, caps.scope == kube::discovery::Scope::Namespaced))
+        .find(|(resource, _)| resource.kind == kind)
+        .and_then(|(resource, caps)| {
+            caps.supports_operation(kube::discovery::verbs::LIST)
+                .then_some((resource, caps.scope == kube::discovery::Scope::Namespaced))
+        }))
 }
 
 /// Whether a pass read for `held` answers for `scope`.
@@ -913,6 +931,25 @@ mod tests {
         );
         assert!(unknown.is_none());
         assert_eq!(blind[0].kind, "FlowSchema");
+    }
+
+    /// A writer kind whose group discovery would not read is not checked,
+    /// with the cluster's words. Would break if the failed read skipped the
+    /// kind as one nothing can list, leaving its writers unjudged unsaid.
+    #[tokio::test]
+    async fn a_writer_kind_whose_group_would_not_be_read_is_not_checked() {
+        let (client, _) = answering(|_, _| failure(403, "Forbidden")).await;
+        let api = "flowcontrol.apiserver.k8s.io/v1beta3";
+        let due = removal(api, "FlowSchema").expect("listed").clone();
+        let found = served_resource(
+            &ServedIndex::default(),
+            "fake",
+            &client,
+            "FlowSchema",
+            &[(api.to_string(), due)],
+        )
+        .await;
+        assert!(matches!(found, Err(Why::Refused { .. })), "{found:?}");
     }
 
     fn entry(manager: &str, api: &str) -> ManagedFieldsEntry {
