@@ -44,10 +44,27 @@ pub async fn timeline_follow(
     state: State<'_, AppState>,
 ) -> Result<Following> {
     let scope = crate::commands::helpers::scope_of(scope)?;
-    let here = state.here()?;
-    let context = here.context.clone();
     let timelines = state.timeline.clone();
     timelines.start_writer();
+    // Reconnected while kube-system was read, perhaps to another cluster under
+    // the name: what the old client read says nothing of the cluster held
+    // now, so it is read again through the new one. A client that keeps
+    // changing leaves the cluster unchecked rather than misnamed.
+    let mut tries = 0;
+    let (here, read) = loop {
+        let here = state.here()?;
+        let read = kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
+            .get("kube-system")
+            .await;
+        tries += 1;
+        if state.still_holds(&here.context, &here.client) {
+            break (here, Some(read));
+        }
+        if tries == 3 {
+            break (state.here()?, None);
+        }
+    };
+    let context = here.context.clone();
     let cluster = {
         let timelines = timelines.clone();
         let context = context.clone();
@@ -55,20 +72,17 @@ pub async fn timeline_follow(
     };
     // A reader who may not read kube-system cannot tell: nothing is dropped,
     // and the rows kept before are said to be perhaps another cluster's.
-    let another_cluster =
-        match kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
-            .get("kube-system")
-            .await
-        {
-            Ok(namespace) => namespace
-                .metadata
-                .uid
-                .is_some_and(|identity| cluster.seen_cluster(identity)),
-            Err(error) => {
-                cluster.not_identified(Error::from(error).said());
-                false
-            }
-        };
+    let another_cluster = match read {
+        Some(Ok(namespace)) => namespace
+            .metadata
+            .uid
+            .is_some_and(|identity| cluster.seen_cluster(identity)),
+        Some(Err(error)) => {
+            cluster.not_identified(Error::from(error).said());
+            false
+        }
+        None => false,
+    };
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }
