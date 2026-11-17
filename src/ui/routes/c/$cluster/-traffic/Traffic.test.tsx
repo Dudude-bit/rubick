@@ -276,7 +276,7 @@ describe("the Traffic page", () => {
       .map((header) => header.textContent);
     expect(headers.join(" ")).not.toContain("Bytes/s");
     expect(screen.getByTestId("columns-note").textContent).toBe(
-      "Not drawn, no source here measures them: Flows/s, Bytes/s, Drops/s"
+      "Not drawn, no source here measures them: Forwarded/s, Bytes/s, Drops/s"
     );
     page.unmount();
     const state = read({ requests: 12 });
@@ -408,7 +408,7 @@ describe("the Traffic page, live", () => {
     );
     await open();
     expect(screen.getByTestId("canvas").textContent).toContain(
-      "4 flow events/s · Hubble Relay"
+      "4 forwarded/s · Hubble Relay"
     );
     expect(
       screen.getByText(/Live from Hubble Relay kube-system\/hubble-relay/)

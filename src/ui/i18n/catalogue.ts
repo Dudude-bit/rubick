@@ -2436,6 +2436,27 @@ export const en = {
     nothingOnReached:
       "{sources} saw no flows in {scope} on the nodes it reaches, in the {window}.",
     panelDenied: "denied by {policies}",
+    readingByApp: "The app's reading of the NetworkPolicies, not Hubble's:",
+    readingNoIngress: {
+      one: "{held} is selected by {policies}; none of its rules admits {other}.",
+      other:
+        "{held} is selected by {policies}; none of their rules admits {other}.",
+    },
+    readingNoEgress: {
+      one: "{held}'s egress is held by {policies}; none of its rules admits {other}.",
+      other:
+        "{held}'s egress is held by {policies}; none of their rules admits {other}.",
+    },
+    readingUnsettled:
+      "{held} is selected by {policies}, and a rule there may admit {other}: a port or an address decides, which the app does not read here.",
+    readingNotSelected:
+      "No NetworkPolicy restricts {to}'s ingress or {from}'s egress; another engine's policy, or Hubble itself, dropped it.",
+    readingUnread: "The NetworkPolicies on this path could not be read: {why}",
+    readingUnreadBare: "The NetworkPolicies on this path could not be read.",
+    readingOthers:
+      "Policies of kind {kinds} also apply here, and the app does not read them.",
+    readingOthersUnread:
+      "Whether another engine's policies apply here could not be read: {why}",
     panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
@@ -2500,7 +2521,7 @@ export const en = {
     panelErrorsHttp:
       "{share} of them HTTP 5xx (a failed gRPC call is answered with a 200 and is not counted)",
     panelBytes: "{v}",
-    panelEvents: "{v} flow events/s",
+    panelEvents: "{v} forwarded flows/s",
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
@@ -2512,13 +2533,13 @@ export const en = {
     panelSideBoth:
       "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
     subRequests: "{v} req/s",
-    subEvents: "{v} flow events/s",
+    subEvents: "{v} forwarded/s",
     subErrors: "{share} errors",
     subDrops: "{v} drops/s",
     columnFrom: "From",
     columnTo: "To",
     columnRequests: "Requests/s",
-    columnEvents: "Flows/s",
+    columnEvents: "Forwarded/s",
     columnErrors: "Errors",
     columnBytes: "Bytes/s",
     columnDrops: "Drops/s",

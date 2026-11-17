@@ -283,8 +283,10 @@ monitoring/$PROM_SVC:9090, or forward it and give http://localhost:19090:
   kubectl --kubeconfig "$RUBICK_KUBECONFIG" --context $CONTEXT -n monitoring port-forward svc/$PROM_SVC 19090:9090
 Then, in shop:
   - caller -> web with requests/s, 404s (not errors) and p95 (L7 through the HTTP rule);
-  - caller -> db forwarded; intruder -> db dropped: POLICY_DENIED, denied by NetworkPolicy shop/db-from-caller-only,
-    one drop per packet (not two);
+  - caller -> db forwarded; intruder -> db dropped: POLICY_DENIED, one drop per packet (not two). Hubble names no
+    policy for it (the intruder falls to the default deny of a policy that admits only caller), so the panel
+    gives the app's own reading: "db is selected by NetworkPolicy shop/db-from-caller-only; none of its rules
+    admits intruder.";
   - Live, caller -> web: a warn edge, the panel saying "HTTP requests an L7 rule denied" (the PUT);
   - grpc-caller -> etcd: every call fails, yet answers HTTP/2 200: errors "≥0%", a grey edge, never
     green, and Hubble's panel line says a failed gRPC call is not counted.

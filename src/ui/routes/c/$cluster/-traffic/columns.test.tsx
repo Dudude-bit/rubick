@@ -178,7 +178,7 @@ describe("the flows table's columns", () => {
     const istio = drawnColumns(flowColumns(t), ISTIO);
     expect(istio.columns.map((column) => column.id)).not.toContain("bytes");
     expect(istio.columns.map((column) => column.id)).not.toContain("drops");
-    expect(istio.unfilled).toEqual(["Flows/s", "Bytes/s", "Drops/s"]);
+    expect(istio.unfilled).toEqual(["Forwarded/s", "Bytes/s", "Drops/s"]);
     expect(drawnColumns(flowColumns(t), null).unfilled).toEqual([]);
   });
 });
