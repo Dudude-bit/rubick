@@ -58,19 +58,32 @@ export interface SvgInput {
   nodes: { node: GraphNode; at: Point; width: number; height: number }[];
   edges: { edge: GraphEdge; from: Point; to: Point }[];
   colours: SvgColours;
+  /** What the page says above the map about what it could not read, one line each. */
+  notes?: readonly string[];
 }
 
 /** The map as it stands, drawn from what it holds rather than read off the screen. */
-export function mapSvg({ groups, nodes, edges, colours }: SvgInput): string {
+export function mapSvg({
+  groups,
+  nodes,
+  edges,
+  colours,
+  notes = [],
+}: SvgInput): string {
   const boxes = [
     ...groups.map(({ box }) => box),
     ...nodes.map(({ at, width, height }) => ({ ...at, width, height })),
   ];
   const right = Math.max(0, ...boxes.map((b) => b.x + b.width)) + 24;
   const bottom = Math.max(0, ...boxes.map((b) => b.y + b.height)) + 24;
+  const top = -24 - notes.length * 16;
   const parts: string[] = [
     `<defs><pattern id="refused" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(135)"><line x1="0" y1="0" x2="0" y2="9" stroke="${colours.hair}"/></pattern></defs>`,
-    `<rect x="-24" y="-24" width="${right + 24}" height="${bottom + 24}" fill="${colours.canvas}"/>`,
+    `<rect x="-24" y="${top}" width="${right + 24}" height="${bottom - top}" fill="${colours.canvas}"/>`,
+    ...notes.map(
+      (note, at) =>
+        `<text x="0" y="${top + 16 * (at + 1)}" font-size="11" fill="${colours.tones.warn}">${escape(note)}</text>`
+    ),
   ];
   for (const { group, box, summary } of groups) {
     // As on screen: a namespace nothing could be read in is hatched and
@@ -101,7 +114,7 @@ export function mapSvg({ groups, nodes, edges, colours }: SvgInput): string {
   }
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 ${right + 24} ${bottom + 24}" width="${right + 24}" height="${bottom + 24}" font-family="sans-serif">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 ${top} ${right + 24} ${bottom - top}" width="${right + 24}" height="${bottom - top}" font-family="sans-serif">`,
     ...parts,
     `</svg>`,
   ].join("\n");

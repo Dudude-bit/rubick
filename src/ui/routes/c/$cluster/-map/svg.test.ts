@@ -123,4 +123,23 @@ describe("the map as an image", () => {
     expect(svg).toContain("Refused: nothing in payments could be read");
     expect(shop.getAttribute("stroke-dasharray")).toBe("3 3");
   });
+
+  /** The page names what it could not read above the map; the image left it off and read as the whole cluster. Fails if a caveat is not drawn above it. */
+  it("writes what the page could not read above the map", () => {
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [],
+      edges: [],
+      notes: ["Refused: Ingress, EndpointSlice"],
+    });
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const note = [...doc.querySelectorAll("text")].find(
+      (text) => text.textContent === "Refused: Ingress, EndpointSlice"
+    );
+    expect(note).toBeDefined();
+    const [, top] = doc.documentElement.getAttribute("viewBox")!.split(" ");
+    expect(Number(note!.getAttribute("y"))).toBeGreaterThan(Number(top));
+    expect(Number(note!.getAttribute("y"))).toBeLessThan(0);
+  });
 });

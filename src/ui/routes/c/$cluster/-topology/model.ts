@@ -479,12 +479,14 @@ const softEdge = (edge: TopologyEdge): boolean =>
     (relation) => relation.verb === "uses" && onlyOptional(relation.usages)
   );
 
-/** How a kind was read, across the scope, for the rail. */
+/** How a kind was read, across the window's scope, for the rail. */
 export function readingOf(
   kind: string,
-  kinds: readonly MapKindState[]
+  kinds: readonly MapKindState[],
+  scope: readonly string[] | null
 ): MapKindState["reading"] | null {
-  return kinds.find((state) => state.kind === kind)?.reading ?? null;
+  const reading = kinds.find((state) => state.kind === kind)?.reading;
+  return reading ? readingIn(reading, scope) : null;
 }
 
 /** A kind's count across the scope: `null` where some namespace did not count it. */
@@ -557,21 +559,29 @@ const EDGE_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 export interface NotLooked {
-  kind: string;
-  /** The kind, how it was read, and the cluster's words. */
+  /** How these kinds were read, then the kinds: one line a state. */
   line: string;
-  /** Whether edges the map would draw from it are absent because of it. */
-  edges: boolean;
+  kinds: string[];
+  /** What the cluster said of them, each sentence once. */
+  said: string[];
+  /** The kinds among them whose absence takes edges with it. */
+  edges: string[];
 }
 
 /**
- * Every kind the map could not read whole, in the cluster's words. A kind
- * still listing is said apart, and a kind the cluster does not serve is not
- * a gap.
+ * Every kind the map could not read whole, one line a state ("refused: …"),
+ * the cluster's sentences each once. A kind read in every namespace the
+ * window is on was read for this window; a kind still listing is said
+ * apart; a kind the cluster does not serve is not a gap.
  */
-export function notLookedAt(kinds: readonly MapKindState[], t: T): NotLooked[] {
-  return kinds.flatMap((state) => {
-    const reading = state.reading;
+export function notLookedAt(
+  kinds: readonly MapKindState[],
+  t: T,
+  scope: readonly string[] | null
+): NotLooked[] {
+  const lines = new Map<string, NotLooked>();
+  for (const state of kinds) {
+    const reading = readingIn(state.reading, scope);
     const words = readingWords(reading, t);
     if (
       !words ||
@@ -580,16 +590,44 @@ export function notLookedAt(kinds: readonly MapKindState[], t: T): NotLooked[] {
       reading.says === "syncing" ||
       reading.says === "queued"
     )
-      return [];
-    const said = "said" in reading && reading.said ? `: ${reading.said}` : "";
-    return [
-      {
-        kind: state.kind,
-        line: `${state.kind} (${words})${said}`,
-        edges:
-          EDGE_KINDS.has(state.kind) &&
-          (reading.says === "refused" || reading.says === "failed"),
-      },
-    ];
-  });
+      continue;
+    const held = lines.get(words) ?? {
+      line: "",
+      kinds: [],
+      said: [],
+      edges: [],
+    };
+    held.kinds.push(state.kind);
+    const said = "said" in reading ? reading.said : "";
+    if (said && !held.said.includes(said)) held.said.push(said);
+    if (
+      EDGE_KINDS.has(state.kind) &&
+      (reading.says === "refused" || reading.says === "failed")
+    )
+      held.edges.push(state.kind);
+    lines.set(words, held);
+  }
+  return [...lines].map(([words, held]) => ({
+    ...held,
+    line: t("topology", "notLookedLine", {
+      state: words.charAt(0).toUpperCase() + words.slice(1),
+      kinds: held.kinds.join(", "),
+    }),
+  }));
+}
+
+/**
+ * A kind's reading as this window sees it: one read only in some namespaces
+ * is read whole for a window on none but those.
+ */
+export function readingIn(
+  reading: MapKindState["reading"],
+  scope: readonly string[] | null
+): MapKindState["reading"] {
+  return reading.says === "namespacesOnly" &&
+    scope !== null &&
+    scope.length > 0 &&
+    scope.every((namespace) => reading.namespaces.includes(namespace))
+    ? { says: "live" }
+    : reading;
 }

@@ -13,6 +13,7 @@ import {
   newMemo,
   notLookedAt,
   OWNERLESS,
+  readingOf,
   type ModelSettings,
 } from "./model";
 import { topologySection } from "./topology-share";
@@ -375,12 +376,55 @@ describe("the cluster map's model", () => {
       { kind: "Deployment", reading: { says: "live" } },
       { kind: "HTTPRoute", reading: { says: "notServed" } },
     ];
-    const lines = notLookedAt(kinds, t);
-    expect(lines.map((line) => [line.kind, line.edges])).toEqual([
-      ["Service", true],
-      ["Secret", false],
+    const lines = notLookedAt(kinds, t, null);
+    expect(lines.map((line) => [line.kinds, line.edges])).toEqual([
+      [["Service", "Secret"], ["Service"]],
     ]);
-    expect(lines[0].line).toContain("services is forbidden");
+    expect(lines[0].said).toEqual([
+      "services is forbidden",
+      "secrets is forbidden",
+    ]);
+  });
+
+  /**
+   * As a reader bound to audit-test, the strip was one paragraph of twenty
+   * kinds, each "read only in audit-test" with the API server's whole
+   * sentence, and the map was left 200 px high. Fails if a kind read in
+   * every namespace the window is on is listed, if the kinds are not one
+   * line a state, or if one sentence the cluster said is repeated.
+   */
+  it("lists what was not read one line a state, each sentence once, leaving out what the window's scope read", () => {
+    const forbidden = (plural: string) =>
+      `${plural} is forbidden: User "audit-reader" cannot list resource "${plural}" at the cluster scope`;
+    const kinds: MapKindState[] = [
+      {
+        kind: "Pod",
+        reading: {
+          says: "namespacesOnly",
+          namespaces: ["audit-test"],
+          said: forbidden("pods"),
+        },
+      },
+      {
+        kind: "Ingress",
+        reading: { says: "refused", said: forbidden("ingresses") },
+      },
+      {
+        kind: "EndpointSlice",
+        reading: { says: "refused", said: forbidden("ingresses") },
+      },
+      { kind: "Job", reading: { says: "failed", said: "the read timed out" } },
+    ];
+    const lines = notLookedAt(kinds, t, ["audit-test"]);
+    expect(lines.map((line) => line.line)).toEqual([
+      "Refused: Ingress, EndpointSlice",
+      "No answer: Job",
+    ]);
+    expect(lines[0].said).toEqual([forbidden("ingresses")]);
+    expect(readingOf("Pod", kinds, ["audit-test"])).toEqual({ says: "live" });
+    expect(
+      notLookedAt(kinds, t, ["audit-test", "billing"]).map((line) => line.kinds)
+    ).toContainEqual(["Pod"]);
   });
 
   /** Share carries a row a group and names what was not read above the rows, so the file never reads as a smaller cluster. */

@@ -107,6 +107,8 @@ export interface GraphCanvasProps {
   ariaLabel: string;
   /** Plain words for a collapsed card's summary, for the image. */
   summaryText?: (group: GraphGroup) => string;
+  /** What the page says above the map about what it could not read, for the image. */
+  caveats?: readonly string[];
 }
 
 export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
@@ -131,6 +133,7 @@ function Canvas({
   fitKey = "",
   ariaLabel,
   summaryText,
+  caveats,
   handle,
 }: GraphCanvasProps & { handle: React.ForwardedRef<GraphCanvasHandle> }) {
   const t = useT();
@@ -358,6 +361,7 @@ function Canvas({
       toSvg: () =>
         mapSvg({
           colours: themeColours(),
+          notes: caveats,
           groups: groups.flatMap((group) => {
             const box = placement.groups.get(group.id);
             return box
@@ -391,7 +395,7 @@ function Canvas({
           }),
         }),
     }),
-    [flow, centre, groups, placement, drawn, absolute, summaryText]
+    [flow, centre, groups, placement, drawn, absolute, summaryText, caveats]
   );
 
   return (
