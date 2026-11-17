@@ -998,7 +998,9 @@ impl Fold {
                 if !http.protocol.is_empty() {
                     second.protocols.insert(http.protocol.clone());
                 }
-                if second.latencies.len() < KEPT_LATENCIES {
+                // Cilium writes 0 where it could not pair the response with
+                // its request (seven/parser.go): no latency, not a zero one.
+                if l7.latency_ns > 0 && second.latencies.len() < KEPT_LATENCIES {
                     #[allow(clippy::cast_precision_loss)]
                     second.latencies.push(l7.latency_ns as f64 / 1e6);
                 }
@@ -1570,6 +1572,18 @@ mod tests {
         assert!(fold.counts_moved());
         let (pairs, gone) = fold.tick(100);
         assert_eq!(batches(pairs, gone, true).len(), 1);
+    }
+
+    /// Cilium writes a latency of 0 where it could not pair a response with
+    /// its request: the response counts, the latency is unknown, not 0 ms.
+    #[test]
+    fn a_response_with_no_latency_counts_and_leaves_the_percentiles_unknown() {
+        let mut fold = Fold::new(100);
+        fold.add(100, &response(200, 0));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs[0].requests, Some(1.0));
+        assert_eq!(pairs[0].p50, None);
+        assert_eq!(pairs[0].p99, None);
     }
 
     /// Past the cap a new pair is counted and not held.
