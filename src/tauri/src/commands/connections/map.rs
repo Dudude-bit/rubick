@@ -50,6 +50,8 @@ pub struct Held {
     pub gateways: Option<Vec<crate::resources::GatewayInfo>>,
     /// This namespace's own Gateways, drawn as its nodes.
     pub gateways_here: Option<Vec<crate::resources::GatewayInfo>>,
+    /// Every `ListenerSet`, or `None` where they were not read.
+    pub listener_sets: Option<Vec<crate::resources::ListenerSetInfo>>,
     /// The route kinds read here; any other was refused, failed, is still
     /// listing or is not served, and counts nothing.
     pub routes_read: Vec<&'static str>,
@@ -186,6 +188,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             &svc_ref,
             &snapshot.gateway_routes,
             snapshot.gateways.as_deref(),
+            snapshot.listener_sets.as_deref(),
             None,
             &mut out,
         );
@@ -259,6 +262,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             route,
             &route_ref,
             snapshot.gateways.as_deref(),
+            snapshot.listener_sets.as_deref(),
             None,
             &mut out,
         );
@@ -1143,6 +1147,7 @@ mod tests {
             gateway_routes: Vec::new(),
             gateways: None,
             gateways_here: None,
+            listener_sets: None,
             routes_read: Vec::new(),
             gateway_unread: Vec::new(),
             taken_at: chrono::Utc::now(),

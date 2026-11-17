@@ -33,6 +33,7 @@ import {
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { backingReadIn } from "@/integrations";
+import { parentAt } from "@/lib/parent-at";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 
 export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
@@ -214,13 +215,18 @@ function servesOf(
 function viaOf(
   parents: ParentRefInfo[],
   routeNamespace: string,
-  gateways: GatewayInfo[],
+  sources: TraceSources,
   t: T
 ): string {
   if (parents.length === 0) return t("empty", "noneLower");
   const first = parents[0];
-  const named =
-    gatewayOfParent(gateways, first, routeNamespace)?.name ?? first.name;
+  const at = parentAt(
+    first,
+    routeNamespace,
+    sources.gateways,
+    sources.listenerSets
+  );
+  const named = at.state === "found" ? at.gateway.name : at.name;
   const section = first.sectionName ? ` :${first.sectionName}` : "";
   const rest = parents.length > 1 ? ` +${parents.length - 1}` : "";
   return `${named}${section}${rest}`;
@@ -391,7 +397,12 @@ export function routesBoard(
   // through a ListenerSet; keying on the parentRef name filed them separately
   // and the contest went unseen.
   const roadOf = (parent: ParentRefInfo, route: RouteInfo): string => {
-    const via = gatewayOfParent(sources.gateways, parent, route.namespace);
+    const via = gatewayOfParent(
+      sources.gateways,
+      parent,
+      route.namespace,
+      sources.listenerSets
+    );
     return via
       ? `${via.namespace}/${via.name}`
       : `${parent.namespace ?? route.namespace}/${parent.name}`;
@@ -515,20 +526,30 @@ export function routesBoard(
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),
-      via: viaOf(gatewayParents, route.namespace, sources.gateways, t),
+      via: viaOf(gatewayParents, route.namespace, sources, t),
       ...(() => {
-        const first = gatewayParents[0];
-        const at = first.namespace ?? route.namespace;
         // The link goes to the Gateway, resolving a ListenerSet parent to the
-        // one that carries it — a link named after the set would point at a
-        // Gateway that does not exist and read as a ghost.
-        const found = gatewayOfParent(sources.gateways, first, route.namespace);
-        const ref = found
-          ? { kind: "Gateway", name: found.name, namespace: found.namespace }
-          : { kind: "Gateway", name: first.name, namespace: at };
+        // one that carries it; the ghost is whatever is not there, the set
+        // or the Gateway it names, and only where its list was read.
+        const at = parentAt(
+          gatewayParents[0],
+          route.namespace,
+          sources.gateways,
+          sources.listenerSets
+        );
         return {
-          viaRef: found ? ref : null,
-          viaGhost: sources.topologyKnown && !found ? ref : null,
+          viaRef:
+            at.state === "found"
+              ? {
+                  kind: "Gateway",
+                  name: at.gateway.name,
+                  namespace: at.gateway.namespace,
+                }
+              : null,
+          viaGhost:
+            sources.topologyKnown && at.state === "missing"
+              ? { kind: at.kind, name: at.name, namespace: at.namespace }
+              : null,
         };
       })(),
       contested: contestedBy(route),

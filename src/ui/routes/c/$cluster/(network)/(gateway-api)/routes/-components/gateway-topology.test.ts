@@ -195,6 +195,59 @@ describe("the gateway topology map", () => {
     expect(gateways[0].tag).toBeUndefined();
   });
 
+  /**
+   * A route through a ListenerSet whose Gateway was gone drew a Gateway node
+   * named after the set, tagged missing. Fails if the node is not the
+   * Gateway the set names, or a set nobody could read is drawn missing.
+   */
+  it("draws the Gateway a route's ListenerSet names as the missing thing", () => {
+    const viaSet = route("promo", {
+      parentRefs: [
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "ListenerSet",
+          name: "team",
+          namespace: null,
+          sectionName: null,
+          port: null,
+        },
+      ],
+    });
+    const team = {
+      name: "team",
+      namespace: "gwtest",
+      gatewayName: "gone",
+      gatewayNamespace: "infra",
+      listeners: [],
+      conditions: [],
+      createdAt: null,
+    };
+    const parentOf = (sets: (typeof team)[] | null) =>
+      gatewayTopology(
+        [gateway("edge")],
+        [viaSet],
+        undefined,
+        t,
+        undefined,
+        undefined,
+        sets
+      )
+        .columns.flatMap((column) => column.nodes)
+        .find(
+          (node) => /^(gw|set)\//.test(node.id) && node.id !== "gw/gwtest/edge"
+        )!;
+
+    expect(parentOf([team])).toMatchObject({
+      id: "gw/infra/gone",
+      label: "gone",
+      tone: "err",
+      tag: { text: "missing" },
+    });
+    const unread = parentOf(null);
+    expect(unread).toMatchObject({ id: "set/gwtest/team", tone: "mute" });
+    expect(unread.tag).toBeUndefined();
+  });
+
   it("marks the refused attachment on the edge, in addition to the route", () => {
     const data = gatewayTopology(
       [gateway("edge")],

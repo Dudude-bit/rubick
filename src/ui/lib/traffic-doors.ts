@@ -11,6 +11,7 @@
 
 import { pickListeners, type ListenerPick } from "@/lib/gateway-listeners";
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
+import { parentWords, stopParent } from "@/lib/parent-at";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
 import { doorDoubt, refusedStop, type DoorAsk } from "@/lib/policy-door";
@@ -102,7 +103,7 @@ function brokenWord(stop: ChainStop, t: T): string | null {
     case "routeRefsUnresolved":
       return t("empty", "gwBrokenRefs");
     case "gatewayMissing":
-      return t("empty", "gwGatewayMissingWord");
+      return parentWords(stopParent(stop), t).word;
     case "gatewayNotProgrammed":
       return t("empty", "gwNotProgrammedWord");
     case "gatewayClassMissing":

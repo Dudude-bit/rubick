@@ -595,6 +595,11 @@ export const queryKeys = {
   ],
   gatewayClasses: (): string[] =>
     queryKeys.resources(ResourceType.GatewayClass, null),
+  /** Every ListenerSet, under the Gateways' prefix so their mutations reach it. */
+  listenerSets: (): string[] => [
+    ...queryKeys.resources(ResourceType.Gateway, null),
+    "listener-sets",
+  ],
   /** RoleBindings across a scope of namespaces, `null` for the whole cluster. */
   roleBindings: (namespaces: readonly string[] | null): string[] => [
     "role-bindings",

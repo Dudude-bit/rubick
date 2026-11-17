@@ -433,6 +433,7 @@ mod refused_claim_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_unread: Vec::new(),
         };
@@ -494,6 +495,7 @@ mod refused_claim_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_unread: Vec::new(),
         };

@@ -358,6 +358,7 @@ describe("trafficDoors", () => {
             reason: "gatewayMissing",
             route: ref("HTTPRoute", "ghost-parent"),
             gateway: gatewayRef("ghost-gw", "envoy", "missing"),
+            listenerSet: null,
           },
         ],
       }),

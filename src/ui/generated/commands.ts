@@ -88,6 +88,7 @@ import type {
   Lineage,
   ListAccess,
   ListQuery,
+  ListenerSetInfo,
   LogLine,
   LokiConnection,
   LokiPage,
@@ -1192,6 +1193,10 @@ export async function getGatewayClass(name: string): Promise<GatewayClassInfo> {
 
 export async function deleteGatewayClass(name: string): Promise<void> {
   return invoke<void>("delete_gateway_class", { name });
+}
+
+export async function listListenerSets(): Promise<ListenerSetInfo[]> {
+  return invoke<ListenerSetInfo[]>("list_listener_sets");
 }
 
 export async function listGateways(

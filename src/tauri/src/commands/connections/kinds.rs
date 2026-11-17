@@ -478,6 +478,7 @@ pub(super) async fn service_connections(
         &subject,
         &snapshot.gateway_routes,
         snapshot.gateways.as_deref(),
+        snapshot.listener_sets.as_deref(),
         snapshot
             .gateway_classes
             .as_ref()

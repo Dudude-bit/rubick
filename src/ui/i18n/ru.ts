@@ -199,9 +199,6 @@ export const ru: Catalogue = {
     stopRefUnresolvedTitle: "Ссылка из этого маршрута не разрешилась",
     stopRefsUnresolvedNote:
       "Контроллер ответил ResolvedRefs: False{said}. Спецификация требует от реализации отказать затронутому трафику, а не пустить его в обход.",
-    stopGatewayMissingTitle: "Ссылается на Gateway, которого нет",
-    stopGatewayMissingNote:
-      "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер, поэтому об этом отказе кластер сам сказать не может.",
     stopGatewayNotProgrammedTitle: "{gateway} не запрограммирован",
     stopGatewayNotProgrammedNote:
       "Контроллер ответил {condition}: False{said}.",
@@ -8827,12 +8824,23 @@ export const ru: Catalogue = {
     gwSetsUnreadSay: "Не удалось понять, к какому Gateway относится {name}",
     gwSetsUnreadTitle: "Объекты ListenerSet прочитать не удалось",
     gwSetsUnreadBody:
-      "Этот маршрут привязан к ListenerSet, а к какому Gateway относится набор, записано на нём самом. Получить их список не вышло: отказ в правах либо вид не установлен. Значит, назвать Gateway отсюда нельзя, а это не то же самое, что его нет.",
+      "Этот маршрут привязан к ListenerSet, а к какому Gateway относится набор, записано на нём самом. Получить их список не вышло: отказ в правах либо ошибка. Значит, назвать Gateway отсюда нельзя, а это не то же самое, что его нет.",
+    gwClusterSaid: "Кластер ответил: {said}",
     gwGatewayMissingSay: "Gateway {name} не существует в {namespace}",
     gwGatewayMissingShort: "{name} не существует",
     gwGatewayMissingTitle: "parentRef называет Gateway, которого нет",
     gwGatewayMissingBody:
       "Принять этот маршрут некому. Обычно это опечатка в имени или пространстве имён, либо Gateway удалили после того, как маршрут был написан.",
+    gwSetMissingSay: "ListenerSet {name} не существует в {namespace}",
+    gwSetMissingWord: "ListenerSet нет",
+    gwSetMissingTitle: "parentRef называет ListenerSet, которого нет",
+    gwSetMissingBody:
+      "Принять этот маршрут некому. Обычно это опечатка в имени или пространстве имён, либо ListenerSet удалили после того, как маршрут был написан.",
+    gwSetGatewayMissingSay:
+      "ListenerSet {set} называет Gateway {name}, которого нет в {namespace}",
+    gwSetGatewayMissingTitle: "ListenerSet называет Gateway, которого нет",
+    gwSetGatewayMissingBody:
+      "Маршрут попадает в свой Gateway через этот ListenerSet, а parentRef самого набора называет Gateway, которого в кластере нет. Обычно это опечатка в parentRef набора, либо Gateway удалили после того, как набор был написан.",
     gwNotProgrammedSay: "Gateway {name} не запрограммирован",
     gwNotProgrammedShort: "{name} не запрограммирован",
     gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",

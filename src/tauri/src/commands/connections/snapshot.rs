@@ -60,6 +60,9 @@ pub(super) struct Snapshot {
     /// ordinarily attaches to a Gateway in another one, and a
     /// namespace-scoped list would call every such parent missing.
     pub(super) gateways: Option<Vec<crate::resources::GatewayInfo>>,
+    /// Every `ListenerSet`, read beside the Gateways: a route naming a set
+    /// resolves through the set's own parentRef. `None` where not read.
+    pub(super) listener_sets: Option<Vec<crate::resources::ListenerSetInfo>>,
     /// Every `GatewayClass`, read by the reader the Gateways pages use: `Err`
     /// with the cluster's words where the list was refused or failed, and
     /// `None` where this caller does not ask about classes at all.
@@ -425,7 +428,7 @@ impl Snapshot {
             Ok(_) => Err("the slices answered".to_string()),
             Err(_) => read_live(ctx.namespaced_api::<Endpoints>().list(&params).await)?,
         };
-        let (gateway_routes, gateways, gateway_classes, gateway_unread) =
+        let (gateway_routes, gateways, listener_sets, gateway_classes, gateway_unread) =
             gateway_lists(ctx, gateway).await?;
         Ok(Self {
             pods: read_live(pods)?,
@@ -445,6 +448,7 @@ impl Snapshot {
             taken_at,
             gateway_routes,
             gateways,
+            listener_sets,
             gateway_classes,
             gateway_unread,
         })
@@ -486,6 +490,7 @@ impl Snapshot {
                 taken_at: held.taken_at,
                 gateway_routes: held.gateway_routes,
                 gateways: held.gateways,
+                listener_sets: held.listener_sets,
                 gateway_classes: None,
                 gateway_unread: held.gateway_unread,
             },
@@ -615,13 +620,14 @@ pub(super) async fn gateway_lists(
 ) -> Result<(
     Vec<crate::resources::RouteInfo>,
     Option<Vec<crate::resources::GatewayInfo>>,
+    Option<Vec<crate::resources::ListenerSetInfo>>,
     Option<std::result::Result<Vec<crate::resources::GatewayClassInfo>, String>>,
     Vec<UnexploredKind>,
 )> {
     use crate::resources::{GatewayClassInfo, GatewayInfo, ListenerSetInfo, RouteInfo};
 
     let Some(detection) = gateway.filter(|d| d.installed) else {
-        return Ok((Vec::new(), None, None, Vec::new()));
+        return Ok((Vec::new(), None, None, None, Vec::new()));
     };
 
     let params = ListParams::default();
@@ -667,7 +673,12 @@ pub(super) async fn gateway_lists(
     // `None` until the kind answers: not having read the sets and having
     // found none are different facts, and the graph reports a route's
     // Gateway missing on the strength of the second.
-    let mut sets: Option<Vec<ListenerSetInfo>> = None;
+    // A cluster that serves no ListenerSet has none.
+    let mut sets: Option<Vec<ListenerSetInfo>> = (!detection
+        .kinds
+        .iter()
+        .any(|served| served.kind == "ListenerSet"))
+    .then(Vec::new);
     // As the Routes page reads them: a cluster that serves no GatewayClass
     // has none, and a list that was refused or failed is said so, never
     // taken for "every class is claimed".
@@ -737,7 +748,7 @@ pub(super) async fn gateway_lists(
             gateway.merge_listener_sets(sets.as_deref());
         }
     }
-    Ok((routes, gateways, Some(classes), unread))
+    Ok((routes, gateways, sets, Some(classes), unread))
 }
 
 #[cfg(test)]
@@ -895,6 +906,7 @@ mod refused_list_tests {
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_routes: Vec::new(),
             gateway_unread: Vec::new(),
@@ -1153,6 +1165,7 @@ mod refused_list_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_unread: Vec::new(),
         };
@@ -1185,6 +1198,7 @@ mod refused_list_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_unread: Vec::new(),
         };
