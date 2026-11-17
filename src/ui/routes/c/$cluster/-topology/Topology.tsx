@@ -19,7 +19,6 @@ import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
 import { pickSavePath } from "@/lib/host";
 import { crdInGroup, objectLink } from "@/lib/links";
@@ -31,7 +30,7 @@ import {
   type GraphCanvasHandle,
   type GraphNode,
 } from "../-map/GraphCanvas";
-import { useTopology } from "../-map/useTopology";
+import { mapStopped, useTopology } from "../-map/useTopology";
 import { KindRail, type RailRow } from "./KindRail";
 import {
   HIDDEN_AT_FIRST,
@@ -99,6 +98,7 @@ function TopologyMap() {
   const [focus, setFocus] = useState<{ id: string } | null>(null);
 
   const map = useTopology(scope.wire);
+  const stopped = mapStopped(map, t);
 
   const ingressRows = useMemo(
     () =>
@@ -381,8 +381,8 @@ function TopologyMap() {
       model,
       {
         unread:
-          map.error !== null
-            ? t("topology", "failed", { said: errorToShow(map.error) })
+          stopped !== null
+            ? stopped
             : map.phase === "opening"
               ? t("topology", "shareStillOpening")
               : null,
@@ -511,16 +511,12 @@ function TopologyMap() {
         others.length > 0 ||
         vendor.unread.length > 0 ||
         matches !== null ||
-        map.error !== null) && (
+        stopped !== null) && (
         <div
           className="flex max-h-[24vh] flex-none flex-col gap-0.5 overflow-y-auto scrollbar-lane px-1 text-[11.5px]"
           data-testid="topology-not-read"
         >
-          {map.error !== null && (
-            <p className="text-err">
-              {t("topology", "failed", { said: errorToShow(map.error) })}
-            </p>
-          )}
+          {stopped !== null && <p className="text-err">{stopped}</p>}
           {notLooked.map((entry) => (
             <div key={entry.line}>
               <p className="text-warn">{entry.line}</p>

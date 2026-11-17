@@ -8,7 +8,11 @@ import {
 } from "vite-plus/test";
 
 import type { TopologyNode } from "@/generated/types";
-import { TopologyStore } from "./useTopology";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { mapStopped, TopologyStore } from "./useTopology";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const node = (name: string, phase: string | null): TopologyNode => ({
   id: `/PersistentVolumeClaim/shop/${name}`,
@@ -65,6 +69,26 @@ describe("what a map stream has sent", () => {
       phase: "ended",
       end: { says: "replaced" },
     });
+  });
+
+  /**
+   * A stream that failed after drawing left the last map on screen with
+   * nothing to say it had stopped: the page read only a failure to open.
+   * Fails if a stream ended by a failure is not said, with the cluster's
+   * words, or one ended by the page's own leaving is.
+   */
+  it("says the map stopped when its stream ended in a failure", () => {
+    const store = new TopologyStore();
+    store.apply([{ is: "kinds", kinds: [] }]);
+    expect(mapStopped(store.snapshot(), t)).toBeNull();
+    store.ended({ says: "failed", said: "the watch was refused" });
+    expect(mapStopped(store.snapshot(), t)).toBe(
+      "The map stopped updating and shows what it last read: the watch was refused"
+    );
+    expect(mapStopped({ error: null, end: { says: "closed" } }, t)).toBeNull();
+    expect(
+      mapStopped({ error: new Error("no cluster"), end: null }, t)
+    ).toContain("The map could not be read");
   });
 
   /**

@@ -15,9 +15,26 @@ import {
   isCredentialsExpired,
 } from "@/lib/credentials";
 import { listenAll, listenBridgeLag, listenEvent } from "@/lib/events";
+import { errorToShow } from "@/lib/error-utils";
 import { currentConnection } from "@/lib/refusals";
+import type { T } from "@/i18n/useT";
 import { perf } from "@/lib/perf";
 import { useClusterStore } from "@/stores/clusterStore";
+
+/**
+ * What a page drawn from the map says when the map is not kept current: it
+ * could not be opened, or its stream stopped. `null` while it is.
+ */
+export function mapStopped(
+  map: Pick<TopologySnapshot, "error" | "end">,
+  t: T
+): string | null {
+  if (map.error !== null)
+    return t("topology", "failed", { said: errorToShow(map.error) });
+  if (map.end?.says === "failed")
+    return t("topology", "stopped", { said: errorToShow(map.end.said) });
+  return null;
+}
 
 export interface TopologySnapshot {
   /** `opening` until the first batch, `ready` once the scope was drawn whole. */
