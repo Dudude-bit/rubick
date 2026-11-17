@@ -96,7 +96,7 @@ function TopologyMap() {
     new Map()
   );
   const [query, setQuery] = useState(search.q ?? "");
-  const [focus, setFocus] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ id: string } | null>(null);
 
   const map = useTopology(scope.wire);
 
@@ -248,7 +248,7 @@ function TopologyMap() {
       const group = model.groupOf.get(id);
       if (group && model.groups.find((each) => each.id === group)?.collapsed)
         setToggled((was) => new Map(was).set(group, false));
-      setFocus(id);
+      setFocus({ id });
     },
     [model]
   );
