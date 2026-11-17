@@ -202,9 +202,13 @@ impl Recorder {
         };
         let next = snapshot(followed, object);
         let objects = self.slot_objects(followed, slot);
+        // A late report of what was deleted is not it back: held again, the
+        // next list without it said it was deleted a second time.
+        if !objects.seen.contains_key(&key) && objects.gone.get(&key) == Some(&next.born) {
+            return;
+        }
         let what = match objects.seen.get(&key) {
             Some(prev) if prev.born == next.born => changed(prev, &next),
-            None if objects.gone.get(&key) == Some(&next.born) => None,
             _ => Some(RowSays::Created),
         };
         objects.gone.remove(&key);

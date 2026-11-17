@@ -1301,6 +1301,22 @@ mod recording {
         );
     }
 
+    /// A late report of a deleted object, then a list without it. Fails if
+    /// the late report held the object again, so the list said it was
+    /// deleted a second time.
+    #[test]
+    fn a_late_report_of_a_deleted_object_is_not_deleted_twice() {
+        let (_t, cluster, mut recorder) = recorder();
+        let kind = followed_kind("Deployment");
+        let old = deployment("nginx:1", 2, "v");
+        recorder.listed(kind, None, [&old], true);
+        recorder.deleted(kind, None, &old);
+        recorder.applied(kind, None, &old);
+        recorder.listed(kind, None, std::iter::empty(), false);
+        let found: Vec<&str> = rows(&cluster).iter().map(says).collect();
+        assert_eq!(found, ["deleted"]);
+    }
+
     /// An object deleted and then reported again late is not born again;
     /// one made anew under the name is. Fails if either is said wrong.
     #[test]
