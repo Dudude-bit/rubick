@@ -232,6 +232,8 @@ export interface CostPicture {
   unpriced: Unpriced;
   /** Whether every node could be checked for a price. */
   nodesChecked: boolean;
+  /** How many of this cluster's own nodes carry a price, read or not by node. */
+  pricedNodes: number;
   nodesUnread: ReadFailure | null;
   /** Why what each node holds was not counted, where the pods were refused. */
   heldUnread: ReadFailure | null;
@@ -265,11 +267,14 @@ export const cronJobOf = (
   return owner ? { group: "batch", kind: "CronJob", name: owner.name } : null;
 };
 
-/** The nodes were read and none of them carries a price. */
+/**
+ * The nodes were read and none of them carries a price: counted apart from
+ * the by-node table, which is not there where allocation was not asked.
+ */
 export const noNodePriced = (picture: CostPicture): boolean =>
-  picture.nodes !== null &&
-  picture.nodes.length > 0 &&
-  picture.nodes.every((node) => node.perHour === null);
+  picture.nodesChecked &&
+  picture.unpriced.nodes.length > 0 &&
+  picture.pricedNodes === 0;
 
 function sum(values: Iterable<number | null | undefined>): number {
   let total = 0;
@@ -467,6 +472,7 @@ export function estimatePicture(
 
   return {
     source: { kind: "estimate", prices },
+    pricedNodes: (nodes ?? []).filter((n) => n.perHour !== null).length,
     cluster,
     total: scopeTotal(basis, scope, cluster, namespaces, partial),
     // Idle needs what every priced node holds: one uncounted is no total.
@@ -668,6 +674,7 @@ export function readingPicture(
 
   return {
     source,
+    pricedNodes: ours.length,
     cluster,
     total: scopeTotal(basis, scope, cluster, namespaces, atLeast),
     idle:

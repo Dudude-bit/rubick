@@ -16,6 +16,7 @@ import {
   cronJobOf,
   estimatePicture,
   monthOf,
+  noNodePriced,
   pricesNoNode,
   readingPicture,
   type CostReading,
@@ -535,6 +536,32 @@ describe("what the supplier's series cover", () => {
     );
     expect(all.workloads[0]!.atLeast).toBe(false);
     expect(all.namespaces[0]!.atLeast).toBe(false);
+  });
+});
+
+describe("whether no node carries a price", () => {
+  /**
+   * Where allocation by node was not asked the picture has no by-node
+   * table, and "no node priced" read that as "not known", so the page gave
+   * the reason for some nodes priced and offered no prices. It is counted
+   * from the nodes the cluster lists. Fails if it hangs on the table.
+   */
+  it("is told from the cluster's nodes, not from the by-node table", () => {
+    const none = readingPicture(
+      basis(),
+      reading({ nodes: [], allocatedByNode: null }),
+      opencost,
+      null
+    );
+    expect(none.nodes).toBeNull();
+    expect(noNodePriced(none)).toBe(true);
+    const some = readingPicture(
+      basis(),
+      reading({ allocatedByNode: null }),
+      opencost,
+      null
+    );
+    expect(noNodePriced(some)).toBe(false);
   });
 });
 
