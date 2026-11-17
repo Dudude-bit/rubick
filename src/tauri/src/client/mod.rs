@@ -23,6 +23,7 @@ pub mod open_files;
 pub mod proxy;
 mod send_again;
 pub mod served;
+pub mod watch;
 pub use context::{ContextAuth, ContextInfo};
 pub use proxy::{KubectlProxy, ProxyFailure};
 

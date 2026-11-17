@@ -3173,6 +3173,7 @@ export type AppEvent =
       why: AuthOutcome | null;
     }
   | { channel: "credentials-renewed"; context: string }
+  | { channel: "kubeconfig-changed"; changed: string[] }
   | {
       channel: "auth-terminal-session-created";
       auth_session_id: string;

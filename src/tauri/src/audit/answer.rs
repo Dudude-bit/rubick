@@ -1405,6 +1405,43 @@ mod tests {
         assert_eq!(blind.unchecked[0].kind, POD);
     }
 
+    /// kubeadm's own cluster-admin binding folds with the system's, its
+    /// finding kept; the same group bound by a binding someone made is a
+    /// finding in the scope's own part. Fails if every kubeadm cluster
+    /// shows its bootstrap as the reader's High finding.
+    #[tokio::test]
+    async fn kubeadms_own_binding_folds_with_the_systems_and_another_to_its_group_does_not() {
+        let index = crate::audit::index::AuditIndex::holding(client().await, None);
+        let bindings = ApiResource::erase::<k8s_openapi::api::rbac::v1::ClusterRoleBinding>(&());
+        let binding = |name: &str| {
+            json!({
+                "apiVersion": "rbac.authorization.k8s.io/v1", "kind": "ClusterRoleBinding",
+                "metadata": { "name": name, "uid": name, "resourceVersion": "1" },
+                "roleRef": { "apiGroup": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "cluster-admin" },
+                "subjects": [{ "kind": "Group", "name": "kubeadm:cluster-admins" }]
+            })
+        };
+        index.feed(&bindings, binding("kubeadm:cluster-admins"));
+        index.feed(&bindings, binding("open"));
+        let seen = world(&index, Err(&Why::Reading), None);
+        let of = |name: &str| {
+            seen.objects
+                .iter()
+                .find(|o| o.subject.name == name)
+                .cloned()
+                .unwrap()
+        };
+        let own = of("kubeadm:cluster-admins");
+        assert!(
+            own.system,
+            "kubeadm's own binding is not filed with the system's"
+        );
+        assert_eq!(own.findings.len(), 1);
+        let open = of("open");
+        assert!(!open.system);
+        assert_eq!(open.findings[0].rule, RuleId::ClusterAdminBinding);
+    }
+
     /// A world of two namespaces running pods and holding no `NetworkPolicy`,
     /// with `others` as the last read of other engines' policies said.
     async fn policed(others: (Option<Vec<String>>, OtherPolicies)) -> World {

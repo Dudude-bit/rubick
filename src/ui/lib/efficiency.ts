@@ -11,11 +11,32 @@
  * rule about requests far above use ({@link overRequested}).
  */
 import type { WorkloadFold, WorkloadKey } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 import { sameKey } from "@/lib/cost";
 
-/** The window usage is read over, worded on the column. */
+/** The window usage is read over, as PromQL writes it. */
 export const EFFICIENCY_WINDOW = "24h";
 const WINDOW_MS = 24 * 3_600_000;
+
+const UNIT_WORDS = {
+  m: "spanMinutesInSentence",
+  h: "spanHours",
+  d: "spanDays",
+} as const;
+
+/**
+ * A window such as `24h` in the reader's words, in its own unit: "24
+ * hours", «24 часа». A PromQL token is not a word of either language. One
+ * not of that shape is kept as written.
+ */
+export function windowWords(window: string, t: T): string {
+  const [, n, unit] = /^(\d+)([mhd])$/.exec(window) ?? [];
+  return n && unit
+    ? t("readings", UNIT_WORDS[unit as keyof typeof UNIT_WORDS], {
+        n: Number(n),
+      })
+    : window;
+}
 
 /** The order a supplier's usage queries answer in. */
 export const USAGE_QUERIES = [

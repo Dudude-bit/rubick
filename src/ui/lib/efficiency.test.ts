@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { WorkloadKey } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import {
+  EFFICIENCY_WINDOW,
   efficiencyOf,
   overRequested,
+  windowWords,
   workloadEfficiency,
   type UsageReading,
 } from "./efficiency";
@@ -129,5 +133,28 @@ describe("efficiency", () => {
       whole: false,
     });
     expect(of.memory).toEqual({ state: "noSamples" });
+  });
+});
+
+describe("the usage window in words", () => {
+  const tIn =
+    (locale: "en" | "ru"): T =>
+    (section, key, values) =>
+      translate(locale, section, key, values);
+
+  /**
+   * A PromQL token is not a word of either language. Fails if Audit's line
+   * or the Cost columns read "за последние 24h".
+   */
+  it("says the window in the reader's language", () => {
+    expect(windowWords(EFFICIENCY_WINDOW, tIn("en"))).toBe("24 hours");
+    expect(windowWords(EFFICIENCY_WINDOW, tIn("ru"))).toBe("24 часа");
+    expect(windowWords("7d", tIn("ru"))).toBe("7 дней");
+    expect(windowWords("whenever", tIn("en"))).toBe("whenever");
+    expect(
+      tIn("ru")("audit", "usageRead", {
+        window: windowWords(EFFICIENCY_WINDOW, tIn("ru")),
+      })
+    ).toContain("за последние 24 часа");
   });
 });

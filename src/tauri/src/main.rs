@@ -178,6 +178,11 @@ fn main() {
                 }
             });
 
+            tauri::async_runtime::spawn(k8s_gui_lib::client::watch::run(
+                state.client_manager.clone(),
+                state.event_tx.clone(),
+            ));
+
             let way_out = quit::WayOut::of(&state);
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

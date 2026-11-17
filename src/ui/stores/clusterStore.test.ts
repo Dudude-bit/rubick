@@ -257,6 +257,36 @@ describe("an expired session and the reconnect", () => {
   });
 });
 
+describe("a kubeconfig entry that changed on disk", () => {
+  /**
+   * `kind delete` and `kind create` rewrote the connected context's server,
+   * CA and certificate. Fails if the window goes on dialling the old address
+   * until a restart, keeps a held cluster built from the old entry, or
+   * connects again a cluster whose entry did not move.
+   */
+  it("connects the cluster on screen again and lets go of a held one", async () => {
+    const connect = vi.mocked(commands.connectCluster);
+    const disconnect = vi.mocked(commands.disconnectCluster);
+    vi.mocked(commands.releaseClusters).mockResolvedValue(["prod", "dev"]);
+    await state().connect("prod");
+    await vi.waitFor(() => expect(state().live).toEqual(["prod", "dev"]));
+    useClusterStore.setState({ wayBack: "dev" });
+    connect.mockClear();
+    disconnect.mockClear();
+
+    await state().entriesChanged(["dev"]);
+    expect(connect).not.toHaveBeenCalled();
+    expect(disconnect.mock.calls.map(([name]) => name)).toEqual(["dev"]);
+    expect(state().wayBack).toBeNull();
+    expect(state().live).toEqual(["prod"]);
+
+    await state().entriesChanged(["prod"]);
+    expect(connect.mock.calls.map(([name]) => name)).toEqual(["prod"]);
+    expect(state().isConnected).toBe(true);
+    vi.mocked(commands.releaseClusters).mockResolvedValue([]);
+  });
+});
+
 describe("a connect that failed", () => {
   /**
    * The field is read by the cluster door, its toast and the alert panel.

@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ErrorProvider } from "@/contexts/error-context";
 import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
 import { useWatchForRenewals } from "@/hooks/useCredentialRenewal";
+import { useWatchForKubeconfig } from "@/hooks/useWatchForKubeconfig";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
 import { useDrainEndings } from "@/hooks/useDrainEndings";
@@ -52,6 +53,7 @@ export default function App() {
   usePortForwardEvents();
   useDrainEndings();
   useWatchForRenewals();
+  useWatchForKubeconfig();
   useTellMeWhen();
   useEffect(forgetOldJournal, []);
   useTimelineFollow();

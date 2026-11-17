@@ -4,7 +4,7 @@
 use k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler;
 use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
-use k8s_openapi::api::rbac::v1::{PolicyRule, RoleRef, Subject as RbacSubject};
+use k8s_openapi::api::rbac::v1::{ClusterRoleBinding, PolicyRule, RoleRef, Subject as RbacSubject};
 
 use super::{AuditFinding, AuditSeverity, RuleId, What};
 use crate::resources::{shown_text, withhold_reason};
@@ -110,6 +110,25 @@ pub fn binding(
     finding_if(RuleId::ClusterAdminBinding, what)
 }
 
+/// A binding an installer makes on every cluster it sets up, as Kubernetes
+/// makes `cluster-admin` → `system:masters`: shown with the system's own,
+/// never hidden. kubeadm binds the group in its `admin.conf` certificate to
+/// `cluster-admin` since 1.29, the binding and the group both named
+/// `kubeadm:cluster-admins` (kubeadm's constants.go,
+/// `ClusterAdminsGroupAndClusterRoleBinding`;
+/// reference/setup-tools/kubeadm/implementation-details). Only that binding
+/// with that one subject: another subject added, or the group bound
+/// elsewhere, is someone's doing.
+#[must_use]
+pub fn an_installers_own(binding: &ClusterRoleBinding) -> bool {
+    const KUBEADM: &str = "kubeadm:cluster-admins";
+    let subjects = binding.subjects.as_deref().unwrap_or_default();
+    binding.metadata.name.as_deref() == Some(KUBEADM)
+        && binding.role_ref.kind == "ClusterRole"
+        && binding.role_ref.name == "cluster-admin"
+        && matches!(subjects, [only] if only.kind == "Group" && only.name == KUBEADM)
+}
+
 /// An autoscaler whose floor is its ceiling scales nothing.
 #[must_use]
 pub fn autoscaler(hpa: &HorizontalPodAutoscaler) -> Vec<AuditFinding> {
@@ -192,6 +211,40 @@ mod tests {
         assert_eq!(role(Some(&rules(&["*"], &["*"]))).len(), 1);
         assert!(role(Some(&rules(&["get", "list"], &["*"]))).is_empty());
         assert!(role(Some(&rules(&["*"], &["pods"]))).is_empty());
+    }
+
+    /// kubeadm's own binding is the installer's, by its name and its one
+    /// subject together. Fails if it is not, or if the group bound by any
+    /// other binding, or that binding with a subject added, is taken for it.
+    #[test]
+    fn only_kubeadms_own_binding_with_its_one_subject_is_the_installers() {
+        let binding = |name: &str, role: &str, subjects: serde_json::Value| -> ClusterRoleBinding {
+            serde_json::from_value(json!({
+                "metadata": { "name": name },
+                "roleRef": { "apiGroup": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": role },
+                "subjects": subjects
+            }))
+            .unwrap()
+        };
+        let group = json!({ "kind": "Group", "name": "kubeadm:cluster-admins" });
+        let own = binding("kubeadm:cluster-admins", "cluster-admin", json!([group]));
+        assert!(an_installers_own(&own));
+        let added = binding(
+            "kubeadm:cluster-admins",
+            "cluster-admin",
+            json!([group, { "kind": "User", "name": "alice" }]),
+        );
+        assert!(!an_installers_own(&added));
+        assert!(!an_installers_own(&binding(
+            "open",
+            "cluster-admin",
+            json!([group])
+        )));
+        assert!(!an_installers_own(&binding(
+            "kubeadm:cluster-admins",
+            "edit",
+            json!([group])
+        )));
     }
 
     /// A wildcard within one group cannot reach RBAC and grant more, so it
