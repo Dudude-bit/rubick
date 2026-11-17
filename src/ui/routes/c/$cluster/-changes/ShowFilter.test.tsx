@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { translate } from "@/i18n";
@@ -26,7 +26,7 @@ describe("a filter the cluster refused a kind of", () => {
     );
   });
 
-  /** Fails if the lock the filter carries is not there to be read. */
+  /** Fails if the lock the filter carries is not there to be read, as a title and as the lock itself. */
   it("draws the refusal on the button itself", () => {
     render(
       <ShowFilter
@@ -40,6 +40,11 @@ describe("a filter the cluster refused a kind of", () => {
       "title",
       "Event: refused by the cluster, not followed"
     );
+    expect(
+      within(warnings).getByLabelText(
+        "Event: refused by the cluster, not followed"
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Changes only/ })
     ).not.toHaveAttribute("title");
