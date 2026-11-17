@@ -132,7 +132,9 @@ export function useCost(
     enabled: ready !== null && basis.data !== undefined,
     refresh: "steady",
     retry: false,
-    placeholderData: keptWhere(readingKey, [3]),
+    // Within the same scope and the same supplier only: another scope's
+    // answer drew its workloads under this one's name until the read came.
+    placeholderData: keptWhere(readingKey, [1, 2, 3]),
   });
 
   const cost = useMemo((): CostState => {
@@ -247,7 +249,7 @@ export function useWorkloadUsage(
     refresh: "steady",
     staleTime: 5 * 60_000,
     retry: false,
-    placeholderData: keptWhere(usageKey, [2]),
+    placeholderData: keptWhere(usageKey, [1, 2]),
   });
   const since = usage.freshness.waitingSince;
   return useMemo(() => {

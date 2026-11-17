@@ -220,6 +220,38 @@ describe("which source a cost is read from", () => {
     await waitFor(() => expect(hook.result.current.cost.state).toBe("loading"));
   });
 
+  /**
+   * From namespace `a` to `b`: while `b`'s read was out the page kept `a`'s
+   * answer, and the table under `b` listed `a`'s workloads. An answer is
+   * kept only within its own scope. Fails if one scope's answer stands in
+   * for another's.
+   */
+  it("shows no scope's answer as another's while the other is read", async () => {
+    capability.mockReturnValue(
+      ready(async () => ({
+        ...READING,
+        nodes: [
+          { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+        ],
+      }))
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(
+      ({ scope }: { scope: string[] }) => useCost(scope),
+      { wrapper, initialProps: { scope: ["a"] } }
+    );
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    capability.mockReturnValue(ready(() => new Promise(() => {})));
+    hook.rerender({ scope: ["b"] });
+    await waitFor(() => expect(hook.result.current.basis).toBeDefined());
+    expect(hook.result.current.cost.state).toBe("loading");
+  });
+
   /** No series and no prices is its own sentence, not "nothing set up". */
   it("says the supplier holds no series where no prices are entered", async () => {
     capability.mockReturnValue(ready(async () => null));
