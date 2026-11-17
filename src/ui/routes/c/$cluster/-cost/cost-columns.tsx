@@ -328,19 +328,22 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
         // Two lines, each its resource's word and its own; the wider one.
         floor: (tt: T, rows: readonly WorkloadRow[]) =>
           Math.max(
-            saying(
-              (row: WorkloadRow, t2) =>
-                `${t2("cost", "cpu")} ${efficiencyWords(row.efficiency.cpu, t2)}`
-            )(tt, rows),
-            saying(
-              (row: WorkloadRow, t2) =>
-                `${t2("cost", "memory")} ${efficiencyWords(row.efficiency.memory, t2)}`
-            )(tt, rows)
+            cpuEfficiencyFloor(tt, rows),
+            memoryEfficiencyFloor(tt, rows)
           ),
       },
     },
   ];
 }
+
+const cpuEfficiencyFloor = saying(
+  (row: WorkloadRow, t: T) =>
+    `${t("cost", "cpu")} ${efficiencyWords(row.efficiency.cpu, t)}`
+);
+const memoryEfficiencyFloor = saying(
+  (row: WorkloadRow, t: T) =>
+    `${t("cost", "memory")} ${efficiencyWords(row.efficiency.memory, t)}`
+);
 
 export function nodeColumns(t: T, estimate: boolean): ColumnDef<NodeRow>[] {
   const moneyColumn = (

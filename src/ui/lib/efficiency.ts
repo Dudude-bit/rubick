@@ -11,7 +11,6 @@
  * rule about requests far above use ({@link overRequested}).
  */
 import type { WorkloadFold, WorkloadKey } from "@/generated/types";
-import { sameKey } from "@/lib/cost";
 
 /** The window usage is read over, worded on the column. */
 export const EFFICIENCY_WINDOW = "24h";
@@ -94,6 +93,22 @@ export function efficiencyOf(
  * A workload's efficiency, out of a reading of every workload's usage.
  * `requests` in millicores and bytes, as the cluster holds them now.
  */
+const positions = new WeakMap<readonly WorkloadKey[], Map<string, number>>();
+const idOf = (key: WorkloadKey) =>
+  `${key.namespace}\n${key.group}\n${key.kind}\n${key.name}`;
+
+/** Where `key` stands among `keys`, by an index built once per answer: 600 rows each searching 600 keys was 360 000 comparisons. */
+function positionOf(keys: readonly WorkloadKey[], key: WorkloadKey): number {
+  let index = positions.get(keys);
+  if (!index) {
+    index = new Map();
+    for (const [i, each] of keys.entries())
+      if (!index.has(idOf(each))) index.set(idOf(each), i);
+    positions.set(keys, index);
+  }
+  return index.get(idOf(key)) ?? -1;
+}
+
 export function workloadEfficiency(
   reading: UsageReading,
   key: WorkloadKey,
@@ -101,7 +116,7 @@ export function workloadEfficiency(
   now: number = Date.now()
 ): WorkloadEfficiency {
   if (reading.state !== "read") return { cpu: reading, memory: reading };
-  const at = reading.keys.findIndex((candidate) => sameKey(candidate, key));
+  const at = positionOf(reading.keys, key);
   const values = at === -1 ? undefined : reading.fold.values[at];
   if (!values)
     return { cpu: { state: "noSamples" }, memory: { state: "noSamples" } };

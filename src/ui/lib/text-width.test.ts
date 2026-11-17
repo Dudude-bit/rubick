@@ -5,7 +5,7 @@ import { translate } from "@/i18n";
 import { columnHeader } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
 import { headerFloor } from "./column-label";
-import { textWidth, widestText } from "./text-width";
+import { textWidth, textWidths, widestText } from "./text-width";
 
 const ru: T = (section, key, values) => translate("ru", section, key, values);
 
@@ -41,5 +41,25 @@ describe("the width text is drawn at", () => {
   it("falls back to a width a glyph where nothing lays text out", () => {
     expect(textWidth("controlplane", "mono")).toBeNull();
     expect(widestText(["controlplane"], "mono", 7.2)).toBe(Math.ceil(12 * 7.2));
+  });
+
+  /**
+   * Figures are tabular, so amounts that differ only in their digits are
+   * one width; what is unknown is laid out together. Fails if a digit, or
+   * a string, costs a probe of its own again.
+   */
+  it("lays out one probe per shape, all at once", () => {
+    layOut(7);
+    const append = vi.spyOn(Element.prototype, "append");
+    const widths = textWidths(
+      ["0.00167 EUR", "0.00523 EUR", "12%", "97%", "0.00167 EUR"],
+      "mono"
+    );
+    expect(widths).toEqual([77, 77, 21, 21, 77]);
+    const probes = append.mock.calls.filter(
+      ([first]) => first instanceof HTMLSpanElement
+    );
+    expect(probes).toHaveLength(1);
+    expect(probes[0]).toHaveLength(2);
   });
 });
