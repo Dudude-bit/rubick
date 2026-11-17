@@ -8,6 +8,8 @@ import { efficiencyOf } from "@/lib/efficiency";
 import {
   costLineWords,
   efficiencyWords,
+  money,
+  partOf,
   pictureNotes,
   usedLines,
 } from "./cost-words";
@@ -109,6 +111,7 @@ describe("the cost line of a workload whose cost read failed", () => {
           atLeast: false,
           parts: {},
           unpriced: [],
+          unknown: [],
           requests: { cpu: 100, memory: 1 },
         },
       ],
@@ -172,5 +175,20 @@ describe("a peak summed over several pods", () => {
       "200m average",
       "at most 800m peak",
     ]);
+  });
+});
+
+describe("a part nobody could read", () => {
+  /** Unread storage is "Not known", not "none" and not "not priced". Fails if its cell says either. */
+  it("says not known in its cell", () => {
+    const row = {
+      parts: { cpu: 0.01 },
+      unpriced: [],
+      unknown: ["storage" as const],
+    };
+    expect(money(partOf(row, "storage"), "", t)).toBe("Not known");
+    expect(money(partOf({ ...row, unknown: [] }, "storage"), "", t)).toBe(
+      "none"
+    );
   });
 });

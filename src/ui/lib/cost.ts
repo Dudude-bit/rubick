@@ -122,6 +122,8 @@ export interface Priced {
   parts: Parts;
   /** What it holds that carries no price, by part. */
   unpriced: CostPart[];
+  /** What nobody could read how much of it holds, by part: a floor too. */
+  unknown: CostPart[];
 }
 
 export interface NamespaceCost extends Priced {
@@ -151,7 +153,11 @@ function heldParts(held: {
  * A row out of what it holds and the parts priced: unpriced parts make it a
  * floor, and a row priced in none of them has no total, never 0.
  */
-function pricedRow(parts: Parts, held: readonly CostPart[]): Priced {
+function pricedRow(
+  parts: Parts,
+  held: readonly CostPart[],
+  unknown: readonly CostPart[] = []
+): Priced {
   const unpriced = held.filter((part) => parts[part] === undefined);
   // Priced where something it holds has a price: a part it holds none of,
   // storage at 0 say, prices nothing of it.
@@ -161,11 +167,24 @@ function pricedRow(parts: Parts, held: readonly CostPart[]): Priced {
       : held.some((part) => parts[part] !== undefined);
   return {
     perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
-    atLeast: any && unpriced.length > 0,
+    atLeast: any && (unpriced.length > 0 || unknown.length > 0),
     parts,
     unpriced,
+    unknown: [...unknown],
   };
 }
+
+/** Storage nobody could read: claims refused, or no volume read at all. */
+const storageUnread = (
+  basis: CostBasis
+): ((namespace: string) => CostPart[]) => {
+  const unread = new Set(
+    basis.namespaces
+      .filter((n) => n.storageBytes === null)
+      .map((n) => n.namespace)
+  );
+  return (namespace) => (unread.has(namespace) ? ["storage"] : []);
+};
 
 export interface NodeCost {
   name: string;
@@ -332,6 +351,7 @@ export function estimatePicture(
   prices: Prices,
   scope: readonly string[] | null
 ): CostPicture {
+  const unreadIn = storageUnread(basis);
   const unpriced: Unpriced = {
     nodes: [],
     gpuNodes: [],
@@ -426,11 +446,14 @@ export function estimatePicture(
       });
       if (n.storageBytes !== null && prices.storage !== null)
         parts.storage = storagePerHour(n.storageBytes, prices.storage);
-      return { namespace: n.namespace, ...pricedRow(parts, heldParts(n)) };
+      return {
+        namespace: n.namespace,
+        ...pricedRow(parts, heldParts(n), unreadIn(n.namespace)),
+      };
     });
 
   const workloads = basis.workloads.map((w): WorkloadCost =>
-    estimateWorkload(w, prices)
+    estimateWorkload(w, prices, unreadIn(w.key.namespace))
   );
   const rest = basis.rest && {
     workloads: basis.rest.workloads,
@@ -476,13 +499,18 @@ export function estimatePicture(
   };
 }
 
-function estimateWorkload(w: WorkloadBasis, prices: Prices): WorkloadCost {
+function estimateWorkload(
+  w: WorkloadBasis,
+  prices: Prices,
+  unknown: readonly CostPart[]
+): WorkloadCost {
   return {
     key: w.key,
     pods: w.pods,
     ...pricedRow(
       priceOf(prices, w),
-      heldParts({ ...w, storageBytes: w.claimBytes })
+      heldParts({ ...w, storageBytes: w.claimBytes }),
+      unknown
     ),
     requests: { cpu: w.cpu, memory: w.memory },
   };
@@ -505,6 +533,7 @@ export function readingPicture(
   source: Extract<CostSource, { kind: "opencost" }>,
   scope: readonly string[] | null
 ): CostPicture {
+  const unreadIn = storageUnread(basis);
   // A shared Prometheus prices other clusters' nodes too; where this one's
   // list was read, only its own count.
   const listed = basis.nodes && new Set(basis.nodes.map((n) => n.name));
@@ -592,9 +621,13 @@ export function readingPicture(
       ...(fold
         ? floorWhere(
             partly(i, w.pods),
-            pricedRow(parts, heldParts({ ...w, storageBytes: w.claimBytes }))
+            pricedRow(
+              parts,
+              heldParts({ ...w, storageBytes: w.claimBytes }),
+              unreadIn(w.key.namespace)
+            )
           )
-        : { perHour: null, atLeast: false, parts, unpriced: [] }),
+        : { perHour: null, atLeast: false, parts, unpriced: [], unknown: [] }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });
@@ -621,7 +654,8 @@ export function readingPicture(
           reading.namespaces[namespace] ?? {},
           heldParts(
             held.get(namespace) ?? { pods: 0, gpus: 0, storageBytes: 0 }
-          )
+          ),
+          unreadIn(namespace)
         )
       ),
     }));

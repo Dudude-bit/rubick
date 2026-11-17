@@ -538,6 +538,47 @@ describe("what the supplier's series cover", () => {
   });
 });
 
+describe("storage nobody could read", () => {
+  /**
+   * A namespace's claims were refused: its storage became 0 bytes, and the
+   * row, priced in CPU and memory, read as whole. It is a floor, its
+   * storage cell says it is not known, and so for its workloads; storage
+   * read as 0 stays whole. Fails if unread storage counts as none.
+   */
+  it("makes a row a floor where its storage could not be read, and only then", () => {
+    const shop = (storageBytes: number | null) =>
+      estimatePicture(
+        basis({
+          namespaces: [
+            {
+              namespace: "shop",
+              workloads: 1,
+              pods: 2,
+              cpu: 500,
+              memory: GIB,
+              gpus: 0,
+              storageBytes,
+            },
+          ],
+        }),
+        prices,
+        null
+      );
+    const unread = shop(null);
+    expect(unread.namespaces[0]).toMatchObject({
+      atLeast: true,
+      unknown: ["storage"],
+    });
+    expect(unread.workloads[0]).toMatchObject({
+      atLeast: true,
+      unknown: ["storage"],
+    });
+    const none = shop(0);
+    expect(none.namespaces[0]).toMatchObject({ atLeast: false, unknown: [] });
+    expect(none.workloads[0]!.atLeast).toBe(false);
+  });
+});
+
 describe("whether OpenCost prices this cluster's nodes", () => {
   /**
    * A shared Prometheus priced only staging's node: OpenCost "priced a
