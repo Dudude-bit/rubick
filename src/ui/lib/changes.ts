@@ -516,11 +516,20 @@ export function refusedWhere(span: SpanCover): Map<string, string[]> {
   return where;
 }
 
-/** The kinds a span was refused, each with where, in words, or `null` when it watched them all; `ended` for a span that is over. */
+/** How many kinds a screen names before it counts them instead. */
+export const NAMED_KINDS = 5;
+
+/**
+ * The kinds a span was refused, each with where, in words, or `null` when it
+ * watched them all; `ended` for a span that is over. Past `limit` kinds in
+ * one place they are counted, not named: a namespace-bound reader's footer
+ * was ninety names.
+ */
 export function unwatchedWords(
   span: SpanCover,
   t: T,
-  ended = false
+  ended = false,
+  limit = Number.POSITIVE_INFINITY
 ): string | null {
   const kindsAt = new Map<string, { kinds: string[]; where: string[] }>();
   for (const [kind, where] of refusedWhere(span)) {
@@ -531,7 +540,10 @@ export function unwatchedWords(
   }
   const said = [...kindsAt.values()].map(({ kinds, where }) =>
     t("changes", ended ? "unwatchedRefusedThen" : "unwatchedRefused", {
-      kinds: kinds.join(", "),
+      kinds:
+        kinds.length > limit
+          ? t("changes", "kindsCount", { n: kinds.length })
+          : kinds.join(", "),
       where: namespacesWhere(where, t),
     })
   );
@@ -1202,17 +1214,19 @@ export function refusedFor(
     : null;
 }
 
-/** What the index's name-only reading covered, said once under the page. */
+/** What the index's name-only reading covers, said once under the page, and the span whose refusals follow it. */
 export function metaWords(
   meta: readonly SpanLike[],
   t: T,
   clock: (ms: number) => string
-): string {
-  const open = meta.find((span) => span.to === null);
-  if (!open) return t("changes", "metaNotNow");
-  const since = t("changes", "metaSince", { since: clock(open.from) });
-  const unread = unwatchedWords(open, t);
-  return unread ? `${since} · ${unread}` : since;
+): { said: string; open: SpanLike | null } {
+  const open = meta.find((span) => span.to === null) ?? null;
+  return {
+    said: open
+      ? t("changes", "metaSince", { since: clock(open.from) })
+      : t("changes", "metaNotNow"),
+    open,
+  };
 }
 
 /** The revision a change row names as the one before it, where the object named one. */

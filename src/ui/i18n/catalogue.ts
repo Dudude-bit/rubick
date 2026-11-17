@@ -2334,6 +2334,7 @@ export const en = {
     watchingNow: "Watching since {since}",
     earlierRows:
       "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
+    kindsCount: { one: "{n} kind", other: "{n} kinds" },
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",

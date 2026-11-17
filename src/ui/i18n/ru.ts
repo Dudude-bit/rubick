@@ -2445,6 +2445,12 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     earlierRows:
       "Изменения до {since} приложение записало, когда наблюдало с {from} по {to}; события взяты из записей самого кластера",
+    kindsCount: {
+      one: "{n} вид",
+      few: "{n} вида",
+      many: "{n} видов",
+      other: "{n} вида",
+    },
     unwatchedRefused: "{kinds} не отслеживаются {where}: кластер отказал",
     unwatchedRefusedThen: "{kinds} не отслеживались {where}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
