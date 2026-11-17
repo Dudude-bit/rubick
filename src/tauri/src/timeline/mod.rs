@@ -247,6 +247,16 @@ struct Inner {
     told: Told,
 }
 
+/// What one flush took of a cluster to write.
+struct Taken {
+    pending: disk::Pending,
+    told: Told,
+    state: disk::State,
+    since: i64,
+    now: i64,
+    epoch: u64,
+}
+
 #[derive(Default)]
 struct Told {
     rows: bool,
@@ -387,6 +397,8 @@ pub struct Timelines {
     following: Mutex<Option<follow::Follower>>,
     /// One keeping switch at a time, saved and then applied.
     keeping_turn: tokio::sync::Mutex<()>,
+    /// One writer of the files at a time: a flush, or a clear.
+    io: Mutex<()>,
 }
 
 impl Timelines {
@@ -401,6 +413,7 @@ impl Timelines {
             writer: OnceLock::new(),
             following: Mutex::new(None),
             keeping_turn: tokio::sync::Mutex::new(()),
+            io: Mutex::new(()),
         }
     }
 
@@ -542,66 +555,89 @@ impl Timelines {
         let clusters: Vec<Arc<ClusterTimeline>> =
             self.clusters.iter().map(|held| held.clone()).collect();
         for cluster in clusters {
-            let now = ClusterTimeline::now();
-            let (pending, told, state, since) = {
-                let mut inner = cluster.inner.lock();
-                let told = std::mem::take(&mut inner.told);
-                let pending = std::mem::take(&mut inner.pending);
-                let since = std::mem::replace(&mut inner.flushed_at, now);
-                if !keep && cluster.dir.is_some() && !pending.rows.is_empty() {
-                    inner.unkept.push((since, now));
+            let _io = self.io.lock();
+            let taken = Self::take(&cluster, keep);
+            self.write(&cluster, keep, taken);
+        }
+    }
+
+    /// What a cluster recorded since the last flush, taken to be written.
+    fn take(cluster: &ClusterTimeline, keep: bool) -> Taken {
+        let now = ClusterTimeline::now();
+        let mut inner = cluster.inner.lock();
+        let told = std::mem::take(&mut inner.told);
+        let pending = std::mem::take(&mut inner.pending);
+        let since = std::mem::replace(&mut inner.flushed_at, now);
+        if !keep && cluster.dir.is_some() && !pending.rows.is_empty() {
+            inner.unkept.push((since, now));
+        }
+        inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
+        let state = disk::State {
+            context: cluster.context.clone(),
+            identity: inner.identity.clone(),
+            spans: inner.spans.without(&inner.unkept),
+            let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
+        };
+        Taken {
+            pending,
+            told,
+            state,
+            since,
+            now,
+            epoch: inner.epoch,
+        }
+    }
+
+    /// Writes what was taken, unless the rows started over since: a clear or
+    /// another cluster under the name between the two put back on disk what
+    /// was just let go of.
+    fn write(&self, cluster: &ClusterTimeline, keep: bool, taken: Taken) {
+        let Taken {
+            pending,
+            told,
+            state,
+            since,
+            now,
+            epoch,
+        } = taken;
+        // A cluster with nothing new since is not written again: an idle
+        // one was a full fsync a second, and a context merely read was a
+        // folder in Settings.
+        let changed = told.rows || told.spans;
+        let current = cluster.inner.lock().epoch == epoch;
+        if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || pending.wipe)) {
+            let written = disk::write(dir, &pending, keep.then_some(&state), now);
+            let mut inner = cluster.inner.lock();
+            let next = match written {
+                Ok(let_go) => {
+                    inner.disk_let_go = disk::merged(inner.disk_let_go, let_go);
+                    keeping_of(keep, Some(dir))
                 }
-                inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
-                let state = disk::State {
-                    context: cluster.context.clone(),
-                    identity: inner.identity.clone(),
-                    spans: inner.spans.without(&inner.unkept),
-                    let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
-                };
-                (pending, told, state, since)
+                Err(error) => {
+                    if !pending.rows.is_empty() {
+                        inner.unkept.push((since, now));
+                        inner.told.spans = true;
+                    }
+                    Keeping::Failed {
+                        message: error.to_string(),
+                    }
+                }
             };
-            // A cluster with nothing new since is not written again: an idle
-            // one was a full fsync a second, and a context merely read was a
-            // folder in Settings.
-            let changed = told.rows || told.spans;
-            if let (Some(dir), true) = (&cluster.dir, (keep && changed) || pending.wipe) {
-                let written = disk::write(dir, &pending, keep.then_some(&state), now);
-                let mut inner = cluster.inner.lock();
-                let next = match written {
-                    Ok(let_go) => {
-                        inner.disk_let_go = disk::merged(inner.disk_let_go, let_go);
-                        if keep {
-                            Keeping::Kept
-                        } else {
-                            Keeping::Off
-                        }
-                    }
-                    Err(error) => {
-                        if !pending.rows.is_empty() {
-                            inner.unkept.push((since, now));
-                            inner.told.spans = true;
-                        }
-                        Keeping::Failed {
-                            message: error.to_string(),
-                        }
-                    }
-                };
-                if inner.keeping != next {
-                    inner.keeping = next;
-                    let _ = self.events.send(AppEvent::TimelineChanged {
-                        context: cluster.context.clone(),
-                        rows: false,
-                        spans: true,
-                    });
-                }
-            }
-            if told.rows || told.spans {
+            if inner.keeping != next {
+                inner.keeping = next;
                 let _ = self.events.send(AppEvent::TimelineChanged {
                     context: cluster.context.clone(),
-                    rows: told.rows,
-                    spans: told.spans,
+                    rows: false,
+                    spans: true,
                 });
             }
+        }
+        if told.rows || told.spans {
+            let _ = self.events.send(AppEvent::TimelineChanged {
+                context: cluster.context.clone(),
+                rows: told.rows,
+                spans: told.spans,
+            });
         }
     }
 
@@ -623,6 +659,7 @@ impl Timelines {
     ///
     /// The kept files could not be removed.
     pub fn clear(&self) -> std::io::Result<()> {
+        let _io = self.io.lock();
         for cluster in &self.clusters {
             cluster.clear();
         }

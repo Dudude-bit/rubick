@@ -876,6 +876,32 @@ async fn two_keeping_switches_that_meet_end_as_the_file_says() {
     assert_eq!(*saved.lock(), Some(timelines.keeps()));
 }
 
+/// Settings › Clear pressed while a flush had taken what to write: the
+/// write recreated the folder with the rows just cleared. Fails if what was
+/// taken before a clear reaches the disk after it.
+#[test]
+fn what_a_flush_took_before_a_clear_is_not_written_after_it() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.change(change(
+        "1",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    let taken = Timelines::take(&cluster, true);
+    timelines.clear().unwrap();
+    timelines.write(&cluster, true, taken);
+    let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
+    assert!(again
+        .cluster("kind")
+        .page(&query(Show::All))
+        .rows
+        .is_empty());
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {
