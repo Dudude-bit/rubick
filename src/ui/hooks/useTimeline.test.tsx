@@ -261,6 +261,26 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * A page left open for days kept every row it was ever told of, long
+   * after they left its window. Fails if a catch-up keeps rows older than
+   * the window.
+   */
+  it("lets go of rows that left the window as it catches up", async () => {
+    const now = Date.now();
+    answers = [page([row("old", now - 70_000, 1)])];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: 60_000, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(asked.length).toBeGreaterThanOrEqual(1));
+    answers = [page([row("new", now, 2)], { newest: 2 })];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
+  });
+
+  /**
    * A DaemonSet's tab named no group, which the backend reads as any: a
    * custom DaemonSet of the same name filled the built-in's history. Fails
    * if a subject without a group is not asked for in its built-in group, or

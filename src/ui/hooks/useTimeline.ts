@@ -182,6 +182,9 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           await client.invalidateQueries({ queryKey: key, exact: true });
           return;
         }
+        // Rows that left the window go: kept, a page left open for days
+        // held every row it was ever told of.
+        const from = Date.now() - ask.windowMs;
         client.setQueryData<TimelinePage>(key, (now) =>
           now
             ? {
@@ -190,7 +193,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
                   now.rows,
                   page.rows,
                   now.more ? (now.rows.at(-1) ?? null) : null
-                ),
+                ).filter((row) => row.at >= from),
                 newest: Math.max(now.newest, page.newest),
                 more: now.more,
               }
@@ -216,7 +219,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
       if (hasData) void catchUp();
     });
     return () => void off.then((unlisten) => unlisten());
-  }, [enabled, client, key, question, context, hasData]);
+  }, [enabled, client, key, question, context, hasData, ask.windowMs]);
 
   const data = query.data;
   const loadOlder = useCallback(() => {
