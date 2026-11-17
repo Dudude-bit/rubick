@@ -15,6 +15,7 @@ import { parts } from "@/i18n/parts";
 import { crdInGroup, objectLink } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import { TONE_TEXT } from "../-map/tone-classes";
+import { PolicyReadingLine } from "./PolicyReadingLine";
 import {
   endLabel,
   endSub,
@@ -127,6 +128,11 @@ export function FlowPanel({
                     ? t("traffic", "panelL7Denied", { v: rate(reason.rate) })
                     : `${reason.reason}: ${rate(reason.rate)}/s`}
                 </span>
+                {reason.reason === "POLICY_DENIED" &&
+                  !reason.l7 &&
+                  (reason.policies ?? []).length === 0 && (
+                    <PolicyReadingLine from={row.from} to={row.to} />
+                  )}
                 {(reason.policies ?? []).length > 0 && (
                   <>
                     {" · "}

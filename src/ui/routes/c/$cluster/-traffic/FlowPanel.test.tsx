@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { FlowEnd } from "@/generated/types";
 import {
@@ -10,7 +10,14 @@ import {
   type FlowSource,
 } from "@/lib/traffic";
 import { renderWithRouter } from "@/test/render";
-import { FlowPanel } from "./FlowPanel";
+
+vi.mock("./PolicyReadingLine", () => ({
+  PolicyReadingLine: ({ from, to }: { from: FlowEnd; to: FlowEnd }) => (
+    <p data-testid="policy-reading">{`${from.is} → ${to.is}`}</p>
+  ),
+}));
+
+const { FlowPanel } = await import("./FlowPanel");
 
 const end = (name: string): FlowEnd => ({
   is: "workload",
@@ -217,6 +224,59 @@ describe("a flow opened from its edge", () => {
         "Seen only below HTTP: requests, errors and latency are not counted for this pair."
       )
     ).toBeTruthy();
-    expect(screen.getByText("2 flow events/s")).toBeTruthy();
+    expect(screen.getByText("2 forwarded flows/s")).toBeTruthy();
+  });
+
+  /**
+   * A default deny names no policy in Hubble's drop: the panel gives the
+   * app's reading of the policies there, where Hubble named one its name
+   * leads, and a zero of forwarded flows beside the drops is left out.
+   */
+  it("reads the policies itself where Hubble named none, and leaves out a zero of forwarded flows", async () => {
+    const dropped = (policies: { name: string }[]) =>
+      liveRow({
+        from: end("intruder"),
+        to: end("db"),
+        forwarded: 0,
+        dropped: 0.65,
+        drops: [
+          {
+            reason: "POLICY_DENIED",
+            rate: 0.65,
+            l7: false,
+            policies: policies.map(({ name }) => ({
+              group: "cilium.io",
+              kind: "CiliumNetworkPolicy",
+              namespace: "shop",
+              name,
+            })),
+          },
+        ],
+        requests: null,
+        errors: null,
+        p50: null,
+        p95: null,
+        p99: null,
+        protocols: [],
+      });
+    const page = await renderWithRouter(
+      <FlowPanel row={dropped([])} window="last minute" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(screen.getByTestId("policy-reading").textContent).toBe(
+      "workload → workload"
+    );
+    expect(document.body.textContent).not.toContain("forwarded flows/s");
+    page.unmount();
+    await renderWithRouter(
+      <FlowPanel
+        row={dropped([{ name: "deny-intruder" }])}
+        window="last minute"
+        onClose={() => {}}
+      />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(screen.queryByTestId("policy-reading")).toBeNull();
+    expect(document.body.textContent).toContain("deny-intruder");
   });
 });

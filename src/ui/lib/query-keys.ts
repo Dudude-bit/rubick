@@ -712,6 +712,11 @@ export const queryKeys = {
     controller: string,
     namespaces: readonly string[]
   ): string[] => ["ingress-client-policies", controller, namespaces.join(",")],
+  /** The other engines' policy kinds in force in each of `namespaces`. */
+  otherPolicyKinds: (namespaces: readonly string[]): string[] => [
+    "other-policy-kinds",
+    [...namespaces].sort().join(","),
+  ],
   /** Sorted and deduplicated here, so every reader asks the same question. */
   tlsCertificates: (
     namespace: string | undefined,

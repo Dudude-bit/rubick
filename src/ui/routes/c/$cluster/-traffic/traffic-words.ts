@@ -2,7 +2,13 @@
  * The words for flows: an end, a cell, a source's own line. Every map from
  * a state to words is a `Record` the compiler holds total.
  */
-import type { Coverage, FlowEnd, Measure, PolicyRef } from "@/generated/types";
+import type {
+  Coverage,
+  FlowEnd,
+  Measure,
+  PolicyRef,
+  WorkloadKey,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { formatShare } from "@/lib/cost";
 import { formatQuantity } from "@/lib/metric-format";
@@ -17,7 +23,9 @@ import type {
   TrafficWord,
 } from "@/lib/traffic";
 import type { MapTone } from "@/integrations";
+import type { Known } from "@/lib/known";
 import { lineShare, MEASURES, shareTone, silenceOf } from "@/lib/traffic";
+import type { PolicyReading } from "./policy-reading";
 import { formatRate } from "@/lib/utils";
 
 export const WINDOW_WORD = {
@@ -232,7 +240,9 @@ export function sourceLines(line: SourceLine, t: T): PanelLine[] {
   const bytes = value("bytes");
   if (bytes !== null) say(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
   const events = value("events");
-  if (events !== null) say(t("traffic", "panelEvents", { v: rate(events) }));
+  // "0 forwarded" beside the drops reads as a contradiction; the zero says nothing.
+  if (events !== null && events > 0)
+    say(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
   if (drops !== null) say(t("traffic", "panelDrops", { v: rate(drops) }));
   if (requests === null && line.source.measures.includes("requests"))
@@ -324,4 +334,60 @@ export function nothingWords(
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+const policyNames = (namespace: string, names: readonly string[]) =>
+  names.map((name) => `NetworkPolicy ${namespace}/${name}`).join(", ");
+
+/** The app's reading of the policies on a drop Hubble named none for, said as the app's. */
+export function readingWords(
+  reading: PolicyReading,
+  others: Known<string[]>,
+  from: WorkloadKey,
+  to: WorkloadKey,
+  t: T
+): string[] {
+  const out = [t("traffic", "readingByApp")];
+  switch (reading.says) {
+    case "noRuleAdmits": {
+      const ingress = reading.direction === "ingress";
+      const held = ingress ? to : from;
+      out.push(
+        t("traffic", ingress ? "readingNoIngress" : "readingNoEgress", {
+          n: reading.policies.length,
+          held: held.name,
+          other: (ingress ? from : to).name,
+          policies: policyNames(held.namespace, reading.policies),
+        })
+      );
+      break;
+    }
+    case "unsettled": {
+      const held = reading.direction === "ingress" ? to : from;
+      out.push(
+        t("traffic", "readingUnsettled", {
+          held: held.name,
+          other: (reading.direction === "ingress" ? from : to).name,
+          policies: policyNames(held.namespace, reading.policies),
+        })
+      );
+      break;
+    }
+    case "notSelected":
+      out.push(
+        t("traffic", "readingNotSelected", { to: to.name, from: from.name })
+      );
+      break;
+    case "unread":
+      out.push(
+        reading.why === null
+          ? t("traffic", "readingUnreadBare")
+          : t("traffic", "readingUnread", { why: reading.why })
+      );
+  }
+  if (!others.known)
+    out.push(t("traffic", "readingOthersUnread", { why: others.why ?? "" }));
+  else if (others.value.length > 0)
+    out.push(t("traffic", "readingOthers", { kinds: others.value.join(", ") }));
+  return out;
 }
