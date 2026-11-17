@@ -250,6 +250,30 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
 }
 
 /**
+ * The same, as the cell draws it: the average on one line and the peak on
+ * the next, so the column is as wide as the longer of the two.
+ */
+export function usedLines(
+  e: Efficiency,
+  kind: "cpu" | "memory",
+  t: T
+): [string] | [string, string] {
+  if (e.state === "noSamples" && youngFor(e, t) !== null)
+    return [t("cost", "noSamplesYet")];
+  if (e.state !== "measured" && e.state !== "unrequested")
+    return [t("cost", "notMeasured")];
+  const say = (v: number | null) =>
+    v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
+  const age = youngFor(e, t);
+  return [
+    t("cost", "usedAvg", { avg: say(e.avg) }),
+    age === null
+      ? t("cost", "usedPeak", { peak: say(e.peak) })
+      : t("cost", "usedPeakFor", { peak: say(e.peak), age }),
+  ];
+}
+
+/**
  * What a money cell says: an amount, an amount that is a floor, no price
  * for what is there, or nothing there to price.
  */

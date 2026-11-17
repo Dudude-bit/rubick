@@ -5,6 +5,7 @@ import type { T } from "@/i18n/useT";
 import type { AppColumnMeta } from "@/components/ui/table-features";
 import { yieldedColumns } from "@/components/ui/column-shares";
 import { columnFloor } from "@/lib/column-label";
+import { efficiencyOf } from "@/lib/efficiency";
 import { namespaceColumns, workloadColumns } from "./cost-columns";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -57,23 +58,50 @@ describe("the breakdown by workload", () => {
   });
 
   /**
-   * A cell too narrow for "Kind/name" drops the kind, so a floor sized for
-   * names alone gave "Pod/lonely" beside a bare "two-replicas-no-budget".
-   * Every row of mixed kinds keeps its kind: the floor holds the widest
-   * kind and the longest name together. Fails if it measures names alone.
+   * At a 1400 px window, about 1150 px of port, By workload hid five
+   * columns (Pods, Share, CPU and memory requested, memory used) while the
+   * name, the namespace and the cost stood in wide columns: the Used cells
+   * said average and peak on one line, and the name's floor held a kind
+   * prefix. Fails if the stand's rows lose more than the two least needed.
    */
-  it("floors the workload at its kind and its name, so every row says both", () => {
-    const of = (kind: string, name: string) => ({
-      ...row(name),
-      key: { ...row(name).key, kind },
-    });
-    const rows = [
-      of("Deployment", "two-replicas-no-budget"),
-      of("Pod", "lonely"),
-      of("StatefulSet", "as-root"),
-    ];
-    const widest = "Deployment/two-replicas-no-budget".length;
-    expect(floorOf("workload", rows)).toBeGreaterThanOrEqual(widest * 7.2);
+  it("keeps all but the two least needed columns at the stand's width", () => {
+    const now = Date.now();
+    const since = new Date(now - 4 * 60_000).toISOString();
+    const MI = 1024 * 1024;
+    const stand = [
+      ["Deployment", "everything-wrong"],
+      ["Deployment", "two-replicas-no-budget"],
+      ["Deployment", "three-replicas"],
+      ["StatefulSet", "as-root"],
+      ["Pod", "lonely"],
+    ].map(([kind, name], i) => ({
+      ...row(name!),
+      key: {
+        namespace: i % 2 ? "audit-test" : "live51",
+        group: "apps",
+        kind: kind!,
+        name: name!,
+      },
+      perHour: 0.00167 + i / 1000,
+      parts: { cpu: 0.001, memory: 0.0005 },
+      unpriced: [],
+      currency: "EUR",
+      share: 0.12,
+      requests: { cpu: 100, memory: 128 * MI },
+      efficiency: {
+        cpu: efficiencyOf(100, 3, 9, since, now),
+        memory: efficiencyOf(128 * MI, 64 * MI, 99 * MI, since, now),
+      },
+    }));
+    const specs = workloadColumns(t).map((c) => ({
+      id: c.id!,
+      floor: columnFloor(c, t, stand as never),
+      yields: (c.meta as AppColumnMeta).yields,
+    }));
+    const hidden = yieldedColumns(specs, 1150);
+    expect(hidden.length).toBeLessThanOrEqual(2);
+    for (const id of hidden)
+      expect(["memoryRequested", "cpuRequested"]).toContain(id);
   });
 
   /**

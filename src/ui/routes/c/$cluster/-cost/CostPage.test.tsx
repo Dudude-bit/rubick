@@ -458,9 +458,10 @@ describe("the Cost page", () => {
       "title",
       expect.stringContaining("started 2h ago")
     );
-    expect(
-      screen.getAllByText(/^50m average · 100m peak, over 2h$/).length
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^50m average$/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^100m peak, over 2h$/).length).toBeGreaterThan(
+      0
+    );
   });
 });
 
@@ -597,6 +598,45 @@ describe("a namespace no OpenCost series prices", () => {
     expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
       "No OpenCost series priced its pods."
     );
+  });
+});
+
+describe("the breakdown by workload's names", () => {
+  /**
+   * One table showed "Pod/lonely" beside a bare "two-replicas-no-budget":
+   * the cell drops its "Kind/" where a long name needs the room. Every row
+   * is drawn one way, the kind's icon and the name, the kind said to a
+   * screen reader. Fails if any row draws a kind label.
+   */
+  it("draws every workload as its kind's icon and its name", async () => {
+    const of = (kind: string, group: string, name: string) => ({
+      ...BASIS.workloads[0]!,
+      key: { namespace: "shop", group, kind, name },
+    });
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        {
+          ...BASIS,
+          workloads: [
+            of("Deployment", "apps", "two-replicas-no-budget"),
+            of("Pod", "", "lonely"),
+            of("StatefulSet", "apps", "as-root"),
+          ],
+        },
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "" },
+        null
+      ),
+      trouble: null,
+    });
+    await open();
+    for (const name of [
+      "Deployment two-replicas-no-budget",
+      "Pod lonely",
+      "StatefulSet as-root",
+    ])
+      expect(screen.getByRole("link", { name })).toBeInTheDocument();
+    expect(screen.queryAllByTestId("resource-ref-label")).toEqual([]);
   });
 });
 

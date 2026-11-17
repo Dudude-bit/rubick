@@ -9,7 +9,13 @@ import {
   type WorkloadEfficiency,
 } from "@/lib/efficiency";
 import { cn } from "@/lib/utils";
-import { efficiencyWords, money, youngFor, type Said } from "./cost-words";
+import {
+  efficiencyWords,
+  money,
+  usedLines,
+  youngFor,
+  type Said,
+} from "./cost-words";
 
 export function Money({
   value,
@@ -59,6 +65,24 @@ export function EfficiencyCell({
           </span>
         );
       })}
+    </span>
+  );
+}
+
+/** What one resource used: the average, and under it the peak. */
+export function UsedCell({
+  efficiency,
+  kind,
+}: {
+  efficiency: Efficiency;
+  kind: "cpu" | "memory";
+}) {
+  const t = useT();
+  return (
+    <span className="flex flex-col text-[11px] leading-tight">
+      {usedLines(efficiency, kind, t).map((line) => (
+        <span key={line}>{line}</span>
+      ))}
     </span>
   );
 }

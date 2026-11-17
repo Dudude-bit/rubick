@@ -17,7 +17,7 @@ import {
   type Efficiency,
   type WorkloadEfficiency,
 } from "@/lib/efficiency";
-import { drawnCrd, kindWords } from "@/lib/links";
+import { drawnCrd } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
 import {
   NAMESPACE_CELL_PX,
@@ -32,10 +32,11 @@ import {
   share,
   sortable,
   totalOf,
+  usedLines,
   usedWords,
   type Said,
 } from "./cost-words";
-import { EfficiencyCell, Money } from "./cost-cells";
+import { EfficiencyCell, Money, UsedCell } from "./cost-cells";
 
 interface Priced {
   perHour: number | null;
@@ -169,24 +170,15 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
           crd={row.original.crd}
           name={row.original.key.name}
           namespace={row.original.key.namespace}
+          showKind={false}
         />
       ),
       meta: {
         share: (row: WorkloadRow) => `${row.key.kind} ${row.key.name}`,
-        // Kinds mix here, so every row says its kind before its name, as
-        // Audit does; a cell too narrow for both drops the kind, and only
-        // the rows with longer names lost theirs.
+        // Every row the same way: the kind's icon and the name. A "Kind/"
+        // the cell drops where a long name needs the room read as two forms.
         floor: (_t: T, rows: readonly WorkloadRow[]) =>
-          refCellPx(rows, (row) => row.key.name, 31) +
-          Math.ceil(
-            Math.max(
-              0,
-              ...rows.map(
-                (row) =>
-                  kindWords({ kind: row.key.kind, crd: row.crd }).length + 1
-              )
-            ) * 7.2
-          ),
+          refCellPx(rows, (row) => row.key.name, 31),
       },
     },
     {
@@ -271,16 +263,13 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       header: t("cost", "cpuUsed", { window: EFFICIENCY_WINDOW }),
       accessorFn: (row) => avgOf(row.efficiency.cpu),
       cell: ({ row }) => (
-        <span className="text-[11px]">
-          {usedWords(row.original.efficiency.cpu, "cpu", t)}
-        </span>
+        <UsedCell efficiency={row.original.efficiency.cpu} kind="cpu" />
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
           usedWords(row.efficiency.cpu, "cpu", tt),
-        floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.efficiency.cpu, "cpu", tt)
-        ),
+        floor: (tt: T, rows: readonly WorkloadRow[]) =>
+          Math.max(cpuUsedFloors[0](tt, rows), cpuUsedFloors[1](tt, rows)),
         yields: 6,
       },
     },
@@ -310,16 +299,16 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       header: t("cost", "memoryUsed", { window: EFFICIENCY_WINDOW }),
       accessorFn: (row) => avgOf(row.efficiency.memory),
       cell: ({ row }) => (
-        <span className="text-[11px]">
-          {usedWords(row.original.efficiency.memory, "memory", t)}
-        </span>
+        <UsedCell efficiency={row.original.efficiency.memory} kind="memory" />
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
           usedWords(row.efficiency.memory, "memory", tt),
-        floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.efficiency.memory, "memory", tt)
-        ),
+        floor: (tt: T, rows: readonly WorkloadRow[]) =>
+          Math.max(
+            memoryUsedFloors[0](tt, rows),
+            memoryUsedFloors[1](tt, rows)
+          ),
         yields: 5,
       },
     },
@@ -350,6 +339,17 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
     },
   ];
 }
+
+/** A Used cell's two lines, each floored on its own, as the cell draws them. */
+const usedFloors = (kind: "cpu" | "memory") =>
+  [0, 1].map((line) =>
+    saying(
+      (row: WorkloadRow, t: T) =>
+        usedLines(row.efficiency[kind], kind, t)[line] ?? ""
+    )
+  );
+const cpuUsedFloors = usedFloors("cpu");
+const memoryUsedFloors = usedFloors("memory");
 
 const cpuEfficiencyFloor = saying(
   (row: WorkloadRow, t: T) =>
