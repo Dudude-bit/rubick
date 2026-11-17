@@ -258,13 +258,23 @@ fn cron_of(jobs: &[Arc<Job>]) -> HashMap<(String, String), String> {
 /// starting a second set), by listing each reach otherwise.
 pub(crate) async fn scoped_pods(state: &AppState, scope: Option<&[String]>) -> Result<ScopedPods> {
     let here = state.here()?;
-    let client = (*here.client).clone();
-    let context = here.context.clone();
-    if let Some(snapshot) = state
-        .overview_cache
-        .snapshot(&context, || client.clone())
-        .await
-    {
+    scoped_pods_on(
+        &state.overview_cache,
+        (*here.client).clone(),
+        &here.context,
+        scope,
+    )
+    .await
+}
+
+/// The same, for a task that holds the cache and a client and not the state.
+pub(crate) async fn scoped_pods_on(
+    cache: &crate::overview::OverviewCache,
+    client: Client,
+    context: &str,
+    scope: Option<&[String]>,
+) -> Result<ScopedPods> {
+    if let Some(snapshot) = cache.snapshot(context, || client.clone()).await {
         let pods = in_scope(&snapshot.pods, scope, |p| p.metadata.namespace.as_deref());
         let jobs = in_scope(&snapshot.jobs, scope, |j| j.metadata.namespace.as_deref());
         return Ok(ScopedPods {
