@@ -2334,6 +2334,7 @@ export const en = {
     watchingNow: "Watching since {since}",
     earlierRows:
       "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
+    kindsCount: { one: "{n} kind", other: "{n} kinds" },
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
@@ -2369,7 +2370,7 @@ export const en = {
       other: "{n} kept rows could not be read and were skipped.",
     },
     metaSince:
-      "Other kinds are seen by name only (created, deleted, generation), read since {since}",
+      "Other kinds are seen by name only, read since {since}: created, deleted or given a new generation, where no controller owns them",
     metaNotNow: "Other kinds are seen by name only, and are not being read now",
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",

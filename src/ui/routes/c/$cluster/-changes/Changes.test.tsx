@@ -51,7 +51,10 @@ interface Entry {
   to: string;
 }
 
-let held: { entries: Entry[]; spans: SpanLike[] } = { entries: [], spans: [] };
+let held: { entries: Entry[]; spans: SpanLike[]; meta?: SpanLike[] } = {
+  entries: [],
+  spans: [],
+};
 let announce: ((event: { payload: unknown }) => void) | null = null;
 
 function rowOf(entry: Entry, seq: number): TimelineRow {
@@ -85,11 +88,13 @@ function rowOf(entry: Entry, seq: number): TimelineRow {
 
 /** What the backend recorded, answered as `timeline_read` would and announced as it would be. */
 function recorded(next: {
+  meta?: SpanLike[];
   entries?: Entry[];
   spans?: Record<string, SpanLike[]>;
 }) {
   if (next.entries) held.entries = next.entries;
   if (next.spans) held.spans = next.spans.prod ?? [];
+  if (next.meta) held.meta = next.meta;
   act(() =>
     announce?.({
       payload: {
@@ -124,7 +129,13 @@ function answer(query: TimelineQuery): TimelinePage {
         kinds: JOURNAL_KINDS,
         ...span,
       })),
-      meta: [],
+      meta: (held.meta ?? []).map((span) => ({
+        unwatched: [],
+        unwatchedIn: [],
+        scope: [],
+        kinds: [],
+        ...span,
+      })),
     },
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
@@ -866,6 +877,56 @@ describe("a watch that has recorded nothing", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("changes-quiet")).toBeNull()
     );
+  });
+});
+
+describe("kinds a namespace-bound reader is refused", () => {
+  /**
+   * As audit-reader on audit-test the footer ended in ninety resource names,
+   * a third of the screen, and the header named sixteen kinds. Fails if past
+   * a handful they are named rather than counted, or the names cannot be
+   * reached, or Share loses them.
+   */
+  it("counts them on the page, names them on asking, and keeps every name in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["audit-test"],
+    });
+    const many = (n: number, kind: string) =>
+      Array.from({ length: n }, (_, i) => `${kind}${i}.demo.k8s-gui.io`);
+    const span = (unwatched: string[]) => ({
+      from: NOW - 60_000,
+      seenAt: NOW,
+      to: null,
+      scope: ["audit-test"],
+      unwatched,
+    });
+    recorded({
+      entries: [],
+      spans: { prod: [span(many(16, "Widget"))] },
+      meta: [span(many(90, "gadgets"))],
+    });
+    const collect = await mount();
+    expect(
+      screen.getByText(
+        "16 kinds not watched in audit-test: the cluster refused"
+      )
+    ).toBeInTheDocument();
+    const footer = screen.getByText(
+      /90 kinds not watched in audit-test: the cluster refused/
+    );
+    expect(footer.textContent).not.toContain("gadgets0.demo");
+    const [, shown] = screen.getAllByRole("button", { name: "Show" });
+    act(() => shown.click());
+    expect(
+      screen.getByText(/gadgets89\.demo\.k8s-gui\.io not watched in audit-test/)
+    ).toBeInTheDocument();
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    const text = watched?.body.type === "text" ? watched.body.text : "";
+    expect(text).toContain("Widget15.demo.k8s-gui.io");
   });
 });
 

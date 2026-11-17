@@ -28,6 +28,13 @@ use crate::resources::{annotations_of, shown_text};
 /// values included, and moves with every apply.
 pub const LAST_APPLIED: &str = "kubectl.kubernetes.io/last-applied-configuration";
 
+/// Never diffed: a leader-election record, rewritten with a new `renewTime`
+/// every few seconds by whoever holds the lock. A renewal is not a change of
+/// the object. client-go removed its `ConfigMap` and Endpoints locks, but
+/// Istio still elects through `ConfigMap`s (`istio-leader` and others):
+/// <https://github.com/istio/istio/blob/master/pilot/pkg/leaderelection/k8sleaderelection/k8sresourcelock/configmaplock.go>
+pub const LEADER: &str = "control-plane.alpha.kubernetes.io/leader";
+
 /// Whether an annotation's value is kept, or only its digest. kapp, Rancher
 /// and others keep a copy of the object in one under a name of their own,
 /// values and env literals with it, so this asks what it holds, not what it
@@ -347,7 +354,7 @@ pub fn snapshot(followed: &Followed, object: &Value) -> Snapshot {
         .any(|part| matches!(part, Part::Values(_)));
     let raw = read.as_ref().and_then(|meta| meta.annotations.as_ref());
     for (key, shown) in &annotations {
-        if key == LAST_APPLIED {
+        if key == LAST_APPLIED || key == LEADER {
             continue;
         }
         let value = raw.and_then(|raw| raw.get(key)).unwrap_or(shown);
