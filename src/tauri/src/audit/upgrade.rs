@@ -129,9 +129,10 @@ fn needs_group<'a>(api: &'a str, kind: &str, now: Option<u32>) -> Option<&'a str
     (!gone_by_version(api, kind, now)).then(|| group_of(api))
 }
 
-/// Whether this cluster serves `kind` at `api`: discovery's answer, or,
-/// where discovery failed, the guide's for a version it lists against the
-/// cluster's minor version. `Err` where neither can tell.
+/// Whether this cluster serves `kind` at `api`: discovery's answer, or the
+/// guide's where the cluster's version is past the version's removal. A
+/// version not yet removed may still be switched off with
+/// `--runtime-config`, so a failed discovery tells nothing of it: `Err`.
 ///
 /// # Errors
 ///
@@ -148,10 +149,7 @@ pub fn served(groups: &Groups, api: &str, kind: &str, now: Option<u32>) -> Resul
                 .any(|k| k.kind == kind && k.versions.iter().any(|v| v == version)))
         }
         Some(Group::Absent) => Ok(false),
-        Some(Group::Failed(why)) => match removal(api, kind) {
-            Some(_) if now.is_some() => Ok(true),
-            _ => Err(why.clone()),
-        },
+        Some(Group::Failed(why)) => Err(why.clone()),
         None => Err(Why::Reading),
     }
 }
@@ -900,16 +898,12 @@ mod tests {
             vec![
                 ("cert-manager.io/v1alpha2".to_string(), false, None),
                 ("gone.example.com/v1".to_string(), false, None),
-                (
-                    "flowcontrol.apiserver.k8s.io/v1beta3".to_string(),
-                    true,
-                    Some("1.32".to_string())
-                ),
             ]
         );
-        assert_eq!(blind.len(), 1);
-        assert_eq!(blind[0].kind, "Gadget");
-        assert_eq!(blind[0].why, refused);
+        // Not yet removed in 1.31, and perhaps switched off: unread, not served.
+        let kinds: Vec<&str> = blind.iter().map(|u| u.kind.as_str()).collect();
+        assert_eq!(kinds, vec!["Gadget", "FlowSchema"]);
+        assert!(blind.iter().all(|u| u.why == refused));
 
         let (unknown, blind) = judge_release(
             &web(),
