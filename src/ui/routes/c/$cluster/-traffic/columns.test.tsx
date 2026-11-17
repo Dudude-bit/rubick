@@ -251,12 +251,25 @@ describe("the flows table under a live stream", () => {
       configurable: true,
       value: { status: "loaded", ready: Promise.resolve() },
     });
+    // A probe put into the document and then read is one layout, however
+    // many probes the read takes in.
+    let dirty = false;
+    let layouts = 0;
+    const append = Element.prototype.append;
+    vi.spyOn(Element.prototype, "append").mockImplementation(function (
+      this: Element,
+      ...nodes: (Node | string)[]
+    ) {
+      dirty = true;
+      append.apply(this, nodes);
+    });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function (this: HTMLElement) {
+        if (dirty) layouts += 1;
+        dirty = false;
         return { width: (this.textContent ?? "").length * 7 } as DOMRect;
       }
     );
-    const append = vi.spyOn(document.body, "append");
     const batch = (n: number): FlowRow[] =>
       Array.from({ length: 12 + (n % 5) }, (_, i) =>
         liveRow({
@@ -291,9 +304,9 @@ describe("the flows table under a live stream", () => {
       at: "/c/prod/traffic",
       route: "/c/$cluster/traffic",
     });
-    const first = append.mock.calls.length;
+    const first = layouts;
     for (let n = 1; n <= 100; n++) act(() => push(batch(n)));
-    expect(append.mock.calls.length - first).toBeLessThanOrEqual(5);
+    expect(layouts - first).toBeLessThanOrEqual(5);
     // A hundred renders of a table take seconds on a loaded machine.
   }, 60_000);
 });

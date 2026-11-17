@@ -4,7 +4,8 @@
  * column renderers are built once and the file Share writes reads the
  * same words as the cells.
  */
-import { useMemo } from "react";
+import { replaceEqualDeep } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 import { DataTable } from "@/components/ui/data-table";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -24,6 +25,18 @@ import {
   type WorkloadRow,
 } from "./cost-columns";
 
+/**
+ * `next`, keeping every part of the last value that reads the same: an
+ * answer that moved nothing gives back what was there, and one that moved
+ * a row gives back every other row as it was.
+ */
+function useKept<T>(next: T): T {
+  const [kept, keep] = useState(next);
+  const shared = replaceEqualDeep(kept, next);
+  if (shared !== kept) keep(shared);
+  return shared;
+}
+
 const idOf = (key: WorkloadKey) =>
   `${key.namespace}/${key.group}/${key.kind}/${key.name}`;
 
@@ -39,7 +52,10 @@ export function CostTables({
   const estimate = picture.source.kind === "estimate";
   const { crdFor } = useCrdIndex();
 
-  const rows = useMemo(() => {
+  // Each answer rebuilds the rows; a row that reads the same keeps its
+  // object, so the tables redraw and re-measure only what moved, and an
+  // answer that moved nothing hands them the arrays they already hold.
+  const built = useMemo(() => {
     const whole = picture.total?.perHour ?? null;
     const shareOf = (perHour: number | null) =>
       perHour === null || whole === null || whole <= 0 ? null : perHour / whole;
@@ -62,6 +78,7 @@ export function CostTables({
         picture.nodes.map((row): NodeRow => ({ ...row, currency })),
     };
   }, [picture, usage, currency, crdFor]);
+  const rows = useKept(built);
 
   const byNamespace = useMemo(() => namespaceColumns(t), [t]);
   const byWorkload = useMemo(() => workloadColumns(t), [t]);

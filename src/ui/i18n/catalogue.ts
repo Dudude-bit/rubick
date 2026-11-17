@@ -2586,6 +2586,9 @@ export const en = {
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
     usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
+    usedAvg: "{avg} average",
+    usedPeak: "{peak} peak",
+    usedPeakFor: "{peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
     effMeasuredFor: "{avg} average, {peak} peak, over {age}",
@@ -2597,6 +2600,8 @@ export const en = {
     effReading: "reading…",
     effFailed: "could not read use: {said}",
     effNoSamples: "no samples in {window}",
+    effNoSamplesYet: "no samples yet, started {age} ago",
+    noSamplesYet: "no samples yet",
     effUnrequested: "nothing requested",
     overRequested:
       "Its peak over 24 hours stayed under half of what it requests.",
@@ -2722,6 +2727,8 @@ export const en = {
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
     lineNotRead: "Not in the cost read yet.",
+    lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
+    lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
   },
   hints: {

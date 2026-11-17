@@ -61,7 +61,10 @@ function overBy(e: Efficiency): OverBy | null {
   return { requested: Math.round(e.requested), peak: Math.round(e.peak) };
 }
 
-const young = (e: Efficiency) => e.state === "measured" && !e.whole;
+/** Not a whole day of its pods: measured over less, or none yet where when they started is known. */
+const young = (e: Efficiency) =>
+  (e.state === "measured" && !e.whole) ||
+  (e.state === "noSamples" && !e.whole && e.since !== null);
 
 /**
  * Over where either resource is; not known where either went unsampled, or
@@ -71,10 +74,11 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const cpu = overBy(e.cpu);
   const memory = overBy(e.memory);
   if (cpu || memory) return { says: "over", cpu, memory };
+  const fresh = [e.cpu, e.memory].find(young);
+  if (fresh?.state === "measured" || fresh?.state === "noSamples")
+    return { says: "young", since: fresh.since };
   if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
     return { says: "noSamples" };
-  const fresh = [e.cpu, e.memory].find(young);
-  if (fresh?.state === "measured") return { says: "young", since: fresh.since };
   return { says: "within" };
 }
 

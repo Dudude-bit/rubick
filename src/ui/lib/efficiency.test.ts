@@ -24,6 +24,21 @@ describe("efficiency", () => {
   it("is not measured where no sample came back", () => {
     expect(efficiencyOf(500, null, null, DAY_OLD, NOW)).toEqual({
       state: "noSamples",
+      since: DAY_OLD,
+      whole: true,
+    });
+  });
+
+  /**
+   * A workload three minutes old has no sample yet, which is not the same
+   * as a day without one: it says when its youngest pod started. Fails if
+   * a young workload's empty reading lost its start.
+   */
+  it("says when the youngest pod started where no sample came back yet", () => {
+    expect(efficiencyOf(500, null, null, TWO_HOURS_OLD, NOW)).toEqual({
+      state: "noSamples",
+      since: TWO_HOURS_OLD,
+      whole: false,
     });
   });
 
@@ -128,6 +143,10 @@ describe("efficiency", () => {
       since: TWO_HOURS_OLD,
       whole: false,
     });
-    expect(of.memory).toEqual({ state: "noSamples" });
+    expect(of.memory).toEqual({
+      state: "noSamples",
+      since: TWO_HOURS_OLD,
+      whole: false,
+    });
   });
 });
