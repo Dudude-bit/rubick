@@ -524,18 +524,24 @@ export function readingPicture(
     };
   });
 
-  const cluster: Amount = {
-    perHour:
-      sum(ours.map((n) => n.perHour)) +
-      (reading.storage.total ?? 0) +
-      (reading.fee ?? 0) +
-      (reading.loadBalancers ?? 0),
-    atLeast:
-      unpriced.nodes.length > 0 ||
-      unpriced.volumes.length > 0 ||
-      unpriced.unsized.length > 0 ||
-      unpriced.storage !== null,
-  };
+  const atLeast =
+    unpriced.nodes.length > 0 ||
+    unpriced.volumes.length > 0 ||
+    unpriced.unsized.length > 0 ||
+    unpriced.storage !== null;
+  // Without the cluster's own node list nothing says which priced nodes are
+  // this cluster's, or that none of its nodes went unpriced: no total.
+  const cluster: Amount | null =
+    basis.nodes === null
+      ? null
+      : {
+          perHour:
+            sum(ours.map((n) => n.perHour)) +
+            (reading.storage.total ?? 0) +
+            (reading.fee ?? 0) +
+            (reading.loadBalancers ?? 0),
+          atLeast,
+        };
 
   // Every namespace the cluster runs something in, priced or not: one
   // nothing priced is a row that says so, not a row left out.
@@ -580,9 +586,9 @@ export function readingPicture(
   return {
     source,
     cluster,
-    total: scopeTotal(basis, scope, cluster, namespaces, cluster.atLeast),
+    total: scopeTotal(basis, scope, cluster, namespaces, atLeast),
     idle:
-      withNodes && nodes.some((n) => n.perHour !== null)
+      cluster && withNodes && nodes.some((n) => n.perHour !== null)
         ? {
             perHour: sum(nodes.map((n) => n.idle)),
             reserved: null,

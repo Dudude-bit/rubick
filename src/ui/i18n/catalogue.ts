@@ -2704,8 +2704,6 @@ export const en = {
       one: "{n} volume has a price and no size: {names}.",
       other: "{n} volumes have a price and no size: {names}.",
     },
-    nodesNotChecked:
-      "Whether every node carries a price was not checked: the nodes could not be listed ({said}).",
     nodesUnread:
       "There is no cluster total: the nodes could not be listed ({said}).",
     missingLabels:

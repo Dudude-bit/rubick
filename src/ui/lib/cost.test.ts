@@ -291,16 +291,22 @@ describe("a picture from OpenCost's prices", () => {
     ).toBeNull();
   });
 
-  /** Coverage cannot be checked against nodes nobody could list. */
-  it("says the nodes were not checked when they could not be listed", () => {
-    const picture = readingPicture(
-      basis({ nodes: null }),
-      reading(),
-      opencost,
-      null
-    );
+  /**
+   * Without the cluster's node list nothing says which priced nodes are its
+   * own, or that none went unpriced: OpenCost's sum was shown as the
+   * cluster's total, exact. There is no total and no idle, as with entered
+   * prices; a scope's namespaces still add up. Fails if a total is made of
+   * nodes nobody could list.
+   */
+  it("has no cluster total or idle where the nodes could not be listed", () => {
+    const unlisted = basis({ nodes: null });
+    const picture = readingPicture(unlisted, reading(), opencost, null);
     expect(picture.nodesChecked).toBe(false);
-    expect(picture.unpriced.nodes).toEqual([]);
+    expect(picture.cluster).toBeNull();
+    expect(picture.total).toBeNull();
+    expect(picture.idle).toBeNull();
+    const shop = readingPicture(unlisted, reading(), opencost, ["shop"]);
+    expect(shop.total?.perHour).toBeCloseTo(0.05);
   });
 
   /**
@@ -469,10 +475,11 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
 
   /**
    * Without the node list there is nothing to tell another cluster's
-   * nodes by, so none is called foreign. Fails if a refused node list
-   * dropped every priced node from the total.
+   * nodes by: none is called foreign, each priced node keeps its row as
+   * OpenCost states it, and no total is made of them. Fails if a refused
+   * node list drops the priced nodes, or sums them as the cluster's.
    */
-  it("keeps every priced node where the cluster's node list was not read", () => {
+  it("keeps every priced node's row, and makes no total, where the cluster's node list was not read", () => {
     const shared = reading({
       nodes: [
         { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
@@ -485,7 +492,8 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
       opencost,
       null
     );
-    expect(picture.cluster?.perHour).toBeCloseTo(0.7);
+    expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a", "staging-1"]);
+    expect(picture.cluster).toBeNull();
     expect(picture.foreignNodes).toEqual([]);
   });
 });

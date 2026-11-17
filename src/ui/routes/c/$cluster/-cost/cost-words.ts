@@ -120,7 +120,7 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
     );
   if (picture.nodesUnread)
     notes.push(
-      t("cost", opencost ? "nodesNotChecked" : "nodesUnread", {
+      t("cost", "nodesUnread", {
         said: picture.nodesUnread.message,
       })
     );
