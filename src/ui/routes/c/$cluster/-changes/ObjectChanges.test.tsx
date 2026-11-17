@@ -323,3 +323,28 @@ it("draws no stretch as watched or unwatched from a timeline it could not read",
   ).toBeInTheDocument();
   expect(screen.queryByText(/^Not observed /)).toBeNull();
 });
+
+/**
+ * A custom resource of kind Deployment in another group opened its Changes
+ * tab, and the tab read the built-in Deployment of the same name: its
+ * ReplicaSets as this object's revisions, or a NotFound as its history.
+ * Fails if a namesake in another group reads the built-in kind's revisions.
+ */
+it("reads a controller's revisions only for the built-in kind of that name", async () => {
+  const asked: string[] = [];
+  answering(page(), (command) => {
+    asked.push(command);
+    return undefined;
+  });
+  await renderWithRouter(
+    <ObjectChanges
+      subject={{ ...LEDGER, group: "apps.example.io", kind: "Deployment" }}
+    />,
+    { at: "/c/prod" }
+  );
+  await waitFor(() => expect(asked).toContain("timeline_read"));
+  expect(asked).not.toContain("get_deployment_replicasets");
+  asked.length = 0;
+  await renderWithRouter(<ObjectChanges subject={LEDGER} />, { at: "/c/prod" });
+  await waitFor(() => expect(asked).toContain("get_deployment_replicasets"));
+});
