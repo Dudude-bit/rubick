@@ -258,6 +258,9 @@ fn main() {
             commands::pods::list_pod_rows,
             commands::pods::pod_rows_subscribed,
             commands::pods::stop_pod_rows,
+            commands::topology::open_topology,
+            commands::topology::topology_subscribed,
+            commands::topology::close_topology,
             commands::pods::get_pod,
             commands::pods::delete_pod,
             commands::pods::restart_pod,
@@ -1055,11 +1058,12 @@ mod tests {
     /// touch only memory, or if one of these names a way to the disk.
     #[test]
     fn a_command_on_the_window_thread_touches_only_memory() {
-        const ON_THE_WINDOW_THREAD: [&str; 26] = [
+        const ON_THE_WINDOW_THREAD: [&str; 28] = [
             "cancel_auth_session",
             "cancel_node_drain",
             "cancel_resource_search",
             "close_terminal",
+            "close_topology",
             "connection_attempt",
             "credential_renewal",
             "disconnect_cluster",
@@ -1081,6 +1085,7 @@ mod tests {
             "stop_pod_rows",
             "stop_port_forward",
             "terminal_subscribed",
+            "topology_subscribed",
             "unsubscribe_resource_watch",
         ];
         const WAYS_TO_THE_DISK: [&str; 12] = [

@@ -488,3 +488,26 @@
 .loading-fade.is-loading {
   opacity: 0.6;
 }
+
+/* A map edge carrying traffic: dashes moving from its source to its target,
+   held still under reduced motion and while the map is off screen. */
+@keyframes map-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.map-flow {
+  stroke-dasharray: 6 6;
+  animation: map-flow 0.8s linear infinite;
+}
+
+.map-canvas[data-paused] .map-flow {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-flow {
+    animation: none;
+  }
+}

@@ -965,6 +965,17 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
+export interface MapKindState {
+  kind: string;
+  reading: MapKindReading;
+}
+
+export interface NamespaceRead {
+  namespace: string;
+  counts: MapKindCount[];
+  notLookedAt: UnexploredKind[];
+}
+
 export interface MadePod {
   name: string;
   deleted: boolean;
@@ -1539,6 +1550,36 @@ export interface NearSelector {
 export interface UnexploredKind {
   kind: string;
   why: Unread;
+}
+
+export interface MapKindCount {
+  kind: string;
+  count: number | null;
+  used: number | null;
+}
+
+export interface TopologyEdge {
+  id: string;
+  from: string;
+  to: string;
+  relations: Relation[];
+}
+
+export interface TopologyNode {
+  id: string;
+  ref: ObjectRef;
+  home: string | null;
+  verdict: NodeVerdict;
+  app: string | null;
+  pods: PodTally | null;
+  cover: PolicyCover | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+export interface PodTally {
+  total: number;
+  ready: number;
 }
 
 export interface ConnectionEdge {
@@ -3142,6 +3183,32 @@ export type Usage =
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
 
+export type PolicyCover =
+  | { says: "covered"; policies: string[] }
+  | { says: "none" }
+  | { says: "unknown"; kinds: string[]; unreadable: string[] }
+  | { says: "unread"; said: string };
+
+export type NodeVerdict =
+  | { says: "rollout"; rollout: Rollout }
+  | { says: "job"; status: string }
+  | { says: "cronJob"; suspend: boolean }
+  | { says: "replicas"; ready: number; desired: number }
+  | {
+      says: "service";
+      published: ServicePublished | null;
+      unread: string | null;
+    }
+  | { says: "ingress"; row: IngressInfo }
+  | { says: "route"; stops: ChainStop[]; accepted: boolean | null }
+  | { says: "gateway"; row: GatewayInfo }
+  | { says: "claim"; phase: string | null }
+  | { says: "autoscaler" }
+  | { says: "budget" }
+  | { says: "policy"; selected: number | null }
+  | { says: "exists" }
+  | { says: "owner" };
+
 export type PodStart =
   | { state: "settled" }
   | { state: "up"; until: string }
@@ -3568,7 +3635,36 @@ export type AppEvent =
       namespaces: string[];
       cluster: boolean;
     }
-  | { channel: "audit-changed"; context: string; revision: number };
+  | { channel: "audit-changed"; context: string; revision: number }
+  | { channel: "topology-batch"; stream_id: string; pieces: TopologyPiece[] }
+  | { channel: "topology-ready"; stream_id: string }
+  | { channel: "topology-ended"; stream_id: string; end: TopologyEnd };
+
+export type TopologyEnd =
+  | { says: "closed" }
+  | { says: "unsubscribed" }
+  | { says: "replaced" }
+  | { says: "failed"; said: string };
+
+export type TopologyPiece =
+  | { is: "node"; node: TopologyNode }
+  | { is: "edge"; edge: TopologyEdge }
+  | { is: "nodeGone"; id: string }
+  | { is: "edgeGone"; id: string }
+  | { is: "namespace"; read: NamespaceRead }
+  | { is: "namespaceGone"; namespace: string }
+  | { is: "kinds"; kinds: MapKindState[] };
+
+export type MapKindReading =
+  | { says: "live" }
+  | { says: "syncing" }
+  | { says: "queued" }
+  | { says: "namespacesOnly"; namespaces: string[]; said: string }
+  | { says: "refused"; said: string }
+  | { says: "failed"; said: string }
+  | { says: "stale"; since: string }
+  | { says: "notServed" }
+  | { says: "unserved" };
 
 export type ListingFailure =
   | "noTools"

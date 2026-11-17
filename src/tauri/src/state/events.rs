@@ -480,6 +480,18 @@ pub enum AppEvent {
     /// Audit's watched kinds for `context` changed, and `revision` with them.
     /// At most one a second, so the page reads again no faster than that.
     AuditChanged { context: String, revision: u64 },
+    /// Changes to a cluster map, sized to the IPC target; never empty.
+    TopologyBatch {
+        stream_id: String,
+        pieces: Vec<crate::resources::topology::TopologyPiece>,
+    },
+    /// The scope has been drawn once whole; batches after it are changes.
+    TopologyReady { stream_id: String },
+    /// The stream ended; exactly one per stream, on every path.
+    TopologyEnded {
+        stream_id: String,
+        end: crate::resources::topology::TopologyEnd,
+    },
 }
 
 impl AppEvent {
@@ -514,6 +526,9 @@ impl AppEvent {
             AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
             AppEvent::OverviewChanged { .. } => "overview-changed",
             AppEvent::AuditChanged { .. } => "audit-changed",
+            AppEvent::TopologyBatch { .. } => "topology-batch",
+            AppEvent::TopologyReady { .. } => "topology-ready",
+            AppEvent::TopologyEnded { .. } => "topology-ended",
         }
     }
 
@@ -707,6 +722,17 @@ mod tests {
                 stream_id: "log-1".into(),
                 lines: 2,
             },
+            AppEvent::TopologyBatch {
+                stream_id: "map-1".into(),
+                pieces: vec![],
+            },
+            AppEvent::TopologyReady {
+                stream_id: "map-1".into(),
+            },
+            AppEvent::TopologyEnded {
+                stream_id: "map-1".into(),
+                end: crate::resources::topology::TopologyEnd::Closed,
+            },
         ]
     }
 
@@ -738,6 +764,9 @@ mod tests {
             AppEvent::OverviewChanged { .. } => 23,
             AppEvent::LogRead { .. } => 24,
             AppEvent::AuditChanged { .. } => 25,
+            AppEvent::TopologyBatch { .. } => 26,
+            AppEvent::TopologyReady { .. } => 27,
+            AppEvent::TopologyEnded { .. } => 28,
         }
     }
 
@@ -746,7 +775,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=25).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=28).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

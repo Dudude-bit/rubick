@@ -177,6 +177,8 @@ pub struct AppState {
     pub feeds: Arc<crate::feeds::Feeds>,
     /// Audit's watches, held while the Audit page is on screen.
     pub audit: Arc<crate::audit::AuditIndexes>,
+    /// Cluster maps being drawn.
+    pub topology_streams: streams::Streams,
 }
 
 impl AppState {
@@ -229,6 +231,7 @@ impl AppState {
             feeds: Arc::new(crate::feeds::Feeds::new(ownership.budget())),
             ownership,
             audit: Arc::new(crate::audit::AuditIndexes::new(event_tx_audit)),
+            topology_streams: streams::Streams::default(),
         })
     }
 

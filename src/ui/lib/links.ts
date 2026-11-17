@@ -312,6 +312,7 @@ export function pageLink(
   page:
     | "events"
     | "changes"
+    | "topology"
     | "audit"
     | "integrations"
     | "routes"

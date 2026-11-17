@@ -98,4 +98,5 @@ const SECTION_KEY = {
   table: "sectionTable",
   tree: "sectionTree",
   logs: "sectionLogs",
+  map: "sectionMap",
 } as const;

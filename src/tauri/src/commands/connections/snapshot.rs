@@ -443,6 +443,57 @@ impl Snapshot {
         })
     }
 
+    /// A namespace's lists as the cluster map holds them, and what the map
+    /// reads beside them. The `FailedCreate` refusals are the held Warnings
+    /// carrying that reason, the field selector [`Self::read`] asks for; the
+    /// legacy Endpoints are never held, so a refused slice list falls back to
+    /// the pods' readiness.
+    pub(super) fn from_stores(held: super::map::Held) -> (Self, super::map::Beside) {
+        let refusals = held.warnings.as_ref().map_err(Clone::clone).map(|events| {
+            events
+                .iter()
+                .filter(|event| event.reason.as_deref() == Some("FailedCreate"))
+                .cloned()
+                .collect()
+        });
+        let legacy = match &held.slices {
+            Ok(_) => Err("the slices answered".to_string()),
+            Err(said) => Err(said.clone()),
+        };
+        (
+            Self {
+                pods: held.pods,
+                services: held.services,
+                ingresses: held.ingresses,
+                claims: held.claims,
+                autoscalers: held.autoscalers,
+                budgets: held.budgets,
+                deployments: held.deployments,
+                stateful_sets: held.stateful_sets,
+                replica_sets: held.replica_sets,
+                refusals,
+                policies: held.policies,
+                others: held.others,
+                slices: held.slices,
+                legacy,
+                taken_at: held.taken_at,
+                gateway_routes: held.gateway_routes,
+                gateways: held.gateways,
+                gateway_unread: held.gateway_unread,
+            },
+            super::map::Beside {
+                namespace: held.namespace,
+                daemon_sets: held.daemon_sets,
+                jobs: held.jobs,
+                cron_jobs: held.cron_jobs,
+                warnings: held.warnings,
+                config_maps: held.config_maps,
+                secrets: held.secrets,
+                accounts: held.accounts,
+            },
+        )
+    }
+
     /// Whether any list failed, which makes the snapshot one caller's answer
     /// and not one to hand the next.
     pub(super) fn any_unread(&self) -> bool {

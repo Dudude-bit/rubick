@@ -367,6 +367,18 @@ export async function getDeploymentPods(
   return invoke<DeploymentPods>("get_deployment_pods", { name, namespace });
 }
 
+export async function openTopology(scope: string[] | null): Promise<string> {
+  return invoke<string>("open_topology", { scope });
+}
+
+export async function topologySubscribed(streamId: string): Promise<void> {
+  return invoke<void>("topology_subscribed", { streamId });
+}
+
+export async function closeTopology(streamId: string): Promise<void> {
+  return invoke<void>("close_topology", { streamId });
+}
+
 export async function appEventTypes(): Promise<AppEvent | null> {
   return invoke<AppEvent | null>("app_event_types");
 }
