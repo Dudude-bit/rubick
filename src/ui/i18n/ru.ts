@@ -1884,6 +1884,7 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    litEdges: "Связи {name}",
     layoutFailed:
       "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",

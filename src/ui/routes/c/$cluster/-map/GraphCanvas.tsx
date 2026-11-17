@@ -23,8 +23,9 @@
  *   backend's own spelling.
  * - `flow: "forward"` moves dashes along the edge; still under reduced
  *   motion and while the canvas is off screen.
- * - `onOpenEdge` makes every edge a button the keyboard reaches; without it
- *   an edge shows its `label` and `sub` while either end is singled out.
+ * - `onOpenEdge` makes every edge a button the keyboard reaches. The
+ *   `label` and `sub` of every edge from a node under the pointer are listed
+ *   beside that node, with a ground of their own, not drawn on the lines.
  * - Until the reader pans or zooms, the view stays fitted: to each layout
  *   laid out whole as nodes arrive, and as the canvas changes size. Once
  *   they have, their view is theirs: a resize keeps the node they last
@@ -499,6 +500,12 @@ function Canvas({
               color="hsl(var(--hair))"
             />
           </ReactFlow>
+          <LitWords
+            active={active}
+            nodes={drawn.nodes}
+            edges={drawn.edges}
+            absolute={absolute}
+          />
           {placement.failed !== null && (
             <p
               role="alert"
@@ -512,3 +519,57 @@ function Canvas({
     </MapContext.Provider>
   );
 }
+
+/**
+ * The words of every line from the node under the pointer, in one list with
+ * a ground of its own beside it. Drawn on their lines, each sat on whatever
+ * node the line passed and could not be read against it.
+ */
+function LitWords({
+  active,
+  nodes,
+  edges,
+  absolute,
+}: {
+  active: string | null;
+  nodes: readonly GraphNode[];
+  edges: readonly GraphEdge[];
+  absolute: (node: GraphNode) => { x: number; y: number } | null;
+}) {
+  const t = useT();
+  const [x, y, zoom] = useStore((state) => state.transform);
+  const width = useStore((state) => state.width);
+  const node =
+    active === null ? undefined : nodes.find((each) => each.id === active);
+  const at = node && absolute(node);
+  if (!node || !at) return null;
+  const lines = edges.flatMap((edge) => {
+    if (edge.from !== active && edge.to !== active) return [];
+    const words = [edge.label, edge.sub].filter(Boolean).join(" · ");
+    return words ? [{ id: edge.id, words }] : [];
+  });
+  if (lines.length === 0) return null;
+  const right = (at.x + NODE_W) * zoom + x + 8;
+  // Beside the node, on whichever side has room.
+  const left =
+    right + LIT_WIDTH <= width ? right : at.x * zoom + x - LIT_WIDTH - 8;
+  return (
+    <ul
+      aria-label={t("topology", "litEdges", { name: node.label })}
+      className="pointer-events-none absolute z-10 flex flex-col gap-0.5 rounded-md border border-hair bg-raise px-2 py-1 text-[10.5px] text-fg-mut shadow-sm"
+      style={{
+        left: Math.max(4, left),
+        top: Math.max(4, at.y * zoom + y),
+        width: LIT_WIDTH,
+      }}
+    >
+      {lines.map((line) => (
+        <li key={line.id} className="truncate" title={line.words}>
+          {line.words}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const LIT_WIDTH = 280;

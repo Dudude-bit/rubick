@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 
 import { GraphCanvas } from "./GraphCanvas";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
@@ -121,5 +121,11 @@ describe("the map under the mouse", () => {
       .querySelector(".react-flow__edge-path")
       ?.getAttribute("d");
     expect(path).toMatch(/^M [\d.-]+ [\d.-]+ L /);
+    // A hovered node's line words are listed beside it, never drawn over
+    // the neighbours on the line itself.
+    fireEvent.mouseEnter(document.querySelector('[data-node="web"]')!);
+    expect(label?.querySelector("span.whitespace-nowrap")).toHaveClass(
+      "hidden"
+    );
   });
 });

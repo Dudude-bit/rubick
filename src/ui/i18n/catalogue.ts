@@ -1839,6 +1839,7 @@ export const en = {
   topology: {
     title: "Topology",
     canvasLabel: "The cluster map",
+    litEdges: "The lines from {name}",
     layoutFailed:
       "The map could not be laid out, so what is drawn may be missing objects: {said}",
     expandGroup: "Expand {name}",

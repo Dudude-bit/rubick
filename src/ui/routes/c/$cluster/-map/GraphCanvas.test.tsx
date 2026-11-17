@@ -28,7 +28,11 @@ let handed: Handed = {
   onMoveStart: () => {},
 };
 /** The canvas's size as React Flow's store holds it. */
-const view = vi.hoisted(() => ({ width: 800, height: 600 }));
+const view = vi.hoisted(() => ({
+  width: 800,
+  height: 600,
+  transform: [0, 0, 1] as [number, number, number],
+}));
 const setViewport = vi.fn(async () => true);
 const setCenter = vi.fn(async () => true);
 /** How many nodes were placed each time the view was fitted. */
@@ -309,5 +313,44 @@ describe("the map's view", () => {
       ).find((each) => each.id === "lg>gw");
       expect(edge?.data?.route?.length).toBeGreaterThanOrEqual(2);
     }, SLOW);
+  });
+
+  /**
+   * The words of a hovered node's lines were drawn on the lines, over the
+   * neighbouring nodes, and could not be read. Fails if they are not listed
+   * in one place beside the hovered node, or stay once it is left.
+   */
+  it("lists the words of a hovered node's lines beside it", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    render(
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("productpage", "shop"), node("reviews", "shop")]}
+        edges={[
+          {
+            id: "pp>rev",
+            from: "productpage",
+            to: "reviews",
+            tone: "ok",
+            label: "productpage → reviews",
+            sub: "0.731 req/s · 0% errors",
+          },
+        ]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    const target = await screen.findByRole(
+      "button",
+      { name: /productpage/ },
+      SLOW
+    );
+    fireEvent.mouseEnter(target);
+    expect(
+      screen.getByRole("list", { name: "The lines from productpage" })
+    ).toHaveTextContent("productpage → reviews · 0.731 req/s · 0% errors");
+    fireEvent.mouseLeave(target);
+    expect(screen.queryByRole("list")).toBeNull();
   });
 });

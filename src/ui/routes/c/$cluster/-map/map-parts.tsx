@@ -287,7 +287,8 @@ export const MapEdge = memo(function MapEdge({
               : undefined,
         }}
       />
-      {(actions.openEdge || (touched && words.length > 0)) && (
+      {/* The words of a lit line are listed beside its node, not drawn on it. */}
+      {actions.openEdge && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto absolute"
@@ -295,41 +296,29 @@ export const MapEdge = memo(function MapEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             }}
           >
-            {actions.openEdge ? (
-              <button
-                type="button"
-                aria-label={words.join(", ") || edge.id}
-                className={cn(
-                  "group flex items-center gap-1 rounded-sm border border-hair bg-raise px-1 text-[10px] text-fg-mut",
-                  "focus-visible:border-info focus-visible:outline-hidden"
-                )}
-                onClick={() => actions.openEdge?.(edge)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    actions.openEdge?.(edge);
-                  }
-                }}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-fg-fnt"
-                  aria-hidden
-                />
-                <span
-                  className={cn(
-                    "whitespace-nowrap",
-                    !touched &&
-                      "hidden group-hover:inline group-focus-visible:inline"
-                  )}
-                >
-                  {words.join(" · ")}
-                </span>
-              </button>
-            ) : (
-              <span className="whitespace-nowrap rounded-sm bg-raise/90 px-1 text-[10px] text-fg-mut">
+            <button
+              type="button"
+              aria-label={words.join(", ") || edge.id}
+              className={cn(
+                "group flex items-center gap-1 rounded-sm border border-hair bg-raise px-1 text-[10px] text-fg-mut",
+                "focus-visible:border-info focus-visible:outline-hidden"
+              )}
+              onClick={() => actions.openEdge?.(edge)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  actions.openEdge?.(edge);
+                }
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-fg-fnt"
+                aria-hidden
+              />
+              <span className="hidden whitespace-nowrap group-hover:inline group-focus-visible:inline">
                 {words.join(" · ")}
               </span>
-            )}
+            </button>
           </div>
         </EdgeLabelRenderer>
       )}
