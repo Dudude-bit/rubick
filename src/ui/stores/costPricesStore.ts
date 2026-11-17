@@ -87,7 +87,8 @@ persistedByName((context) =>
 export function useCostPrices(
   context: string | null | undefined
 ): Prices | null {
+  // A context name is the reader's: `constructor` must not find a property.
   return useCostPricesStore((s) =>
-    context ? (s.prices[context] ?? null) : null
+    context && Object.hasOwn(s.prices, context) ? s.prices[context]! : null
   );
 }

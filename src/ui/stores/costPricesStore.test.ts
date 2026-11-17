@@ -2,7 +2,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
-import { pricesOf, useCostPricesStore } from "./costPricesStore";
+import { renderHook } from "@testing-library/react";
+
+import { pricesOf, useCostPrices, useCostPricesStore } from "./costPricesStore";
 
 const prices = {
   cpu: 0.04,
@@ -47,5 +49,15 @@ describe("entered prices", () => {
     );
     await useCostPricesStore.persist.rehydrate();
     expect(useCostPricesStore.getState().prices).toEqual({ dev: prices });
+  });
+
+  /**
+   * A context name is the reader's to choose, and `constructor` read an
+   * inherited function as its prices. Fails if a name finds a property.
+   */
+  it("has no prices for a context nobody priced, whatever its name", () => {
+    useCostPricesStore.setState({ prices: {} });
+    const { result } = renderHook(() => useCostPrices("constructor"));
+    expect(result.current).toBeNull();
   });
 });
