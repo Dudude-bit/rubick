@@ -1,5 +1,11 @@
+import { useState } from "react";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
+
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 
 import type {
   FlowEnd,
@@ -92,6 +98,27 @@ function read(
     rows: pairRows(reading).rows,
     lastFailed: null,
   };
+}
+
+/** The traffic section the page would share, read on a click. */
+function Collect() {
+  const collect = useScreenSections();
+  const [partial, setPartial] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        onClick={() =>
+          setPartial(
+            collect?.().find((section) => section.id === "traffic")?.partial ??
+              ""
+          )
+        }
+      >
+        collect
+      </button>
+      <p data-testid="partial">{partial}</p>
+    </>
+  );
 }
 
 const draw = (state: TrafficState) =>
@@ -289,6 +316,46 @@ describe("a workload's Traffic block", () => {
     expect(
       screen.getByText(/^Showing .*; 7 flows quieter are left out\.$/)
     ).toBeTruthy();
+  });
+
+  /**
+   * Rows kept from before a refresh that failed are old: the file shared
+   * from the page says so beside them, as the block does, and says nothing
+   * where the last refresh answered.
+   */
+  it("shares the failed refresh beside the rows it kept, and nothing where it answered", async () => {
+    const shared = async (lastFailed: string | null) => {
+      const page = await renderWithRouter(
+        <ScreenShareProvider>
+          <Block
+            state={
+              {
+                ...read(
+                  [ISTIO],
+                  [["web", "cart", { requests: 4 }]],
+                  [{ source: 0, pods: 1, marked: 1 }]
+                ),
+                lastFailed,
+              } as TrafficState
+            }
+            subject={CART}
+          />
+          <Collect />
+        </ScreenShareProvider>,
+        {
+          at: "/c/prod/deployments/shop/cart",
+          route: "/c/$cluster/deployments/$namespace/$name",
+        }
+      );
+      fireEvent.click(screen.getByText("collect"));
+      const partial = screen.getByTestId("partial").textContent;
+      page.unmount();
+      return partial;
+    };
+    expect(await shared("timed out after 20s")).toContain(
+      "timed out after 20s"
+    );
+    expect(await shared(null)).toBe("");
   });
 
   /**

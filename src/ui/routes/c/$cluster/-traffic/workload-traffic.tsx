@@ -178,7 +178,20 @@ export function Block({
       ]
     : [];
   useShareSection(read ? "traffic" : null, () =>
-    trafficSection(callers, callees, notes, t)
+    trafficSection(
+      callers,
+      callees,
+      read?.lastFailed
+        ? [
+            {
+              text: t("traffic", "lastFailed", { said: read.lastFailed }),
+              tone: "warn" as const,
+            },
+            ...notes,
+          ]
+        : notes,
+      t
+    )
   );
 
   switch (state.says) {
