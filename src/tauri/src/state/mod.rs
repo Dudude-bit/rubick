@@ -173,6 +173,8 @@ pub struct AppState {
     /// Which contexts' metrics API was not installed or refused, and when.
     pub metrics_unserved: crate::metrics::Unserved,
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
+    /// What this app saw happen on each cluster, and what it keeps of it.
+    pub timeline: Arc<crate::timeline::Timelines>,
     /// One watch per cluster and kind, for every backend reader that follows one.
     pub feeds: Arc<crate::feeds::Feeds>,
     /// Audit's watches, held while the Audit page is on screen.
@@ -190,6 +192,17 @@ impl AppState {
         // leave Tauri with no window. `load_or_recover` moves it aside instead.
         let config = AppConfig::load_or_recover();
         let (event_tx, _) = broadcast::channel(1000);
+        // A unit test's state keeps nothing in the reader's own folder.
+        let timeline_root = if cfg!(test) {
+            None
+        } else {
+            crate::timeline::Timelines::default_root()
+        };
+        let timeline = Arc::new(crate::timeline::Timelines::new(
+            timeline_root,
+            config.timeline.keep,
+            event_tx.clone(),
+        ));
 
         let client_manager = Arc::new(K8sClientManager::new());
 
@@ -235,6 +248,7 @@ impl AppState {
             audit: Arc::new(crate::audit::AuditIndexes::new(event_tx_audit)),
             topology_streams: streams::Streams::default(),
             hubble_streams: streams::Streams::default(),
+            timeline,
         })
     }
 

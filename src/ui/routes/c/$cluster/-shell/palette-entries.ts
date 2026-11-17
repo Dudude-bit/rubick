@@ -5,6 +5,7 @@ import {
   Box,
   Coins,
   FileText,
+  History,
   LayoutDashboard,
   Library,
   Network,
@@ -116,6 +117,12 @@ const quickActions: Array<{
     label: "goToEvents",
     words: "events",
     path: pageLink("events"),
+  },
+  {
+    icon: History,
+    label: "goToChanges",
+    words: "changes",
+    path: pageLink("changes"),
   },
   {
     icon: Waypoints,

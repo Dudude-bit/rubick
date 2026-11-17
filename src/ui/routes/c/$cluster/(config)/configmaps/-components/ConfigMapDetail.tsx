@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { guardedOf, noteDenied, useDenied } from "@/lib/access";
@@ -162,6 +163,17 @@ export function ConfigMapDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.ConfigMap, name: name ?? "" }),
+    changesTab(
+      configMap
+        ? {
+            kind: "ConfigMap",
+            name: configMap.name,
+            namespace: configMap.namespace,
+            createdAt: configMap.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "ConfigMap" }),
       yaml: configMapYaml,

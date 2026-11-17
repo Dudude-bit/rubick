@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import {
   useCallback,
   useEffect,
@@ -1253,6 +1254,17 @@ export function PodDetail() {
           },
           auditTab(audit, t),
           eventsTab(podEvents, t, { kind: ResourceType.Pod, name: name ?? "" }),
+          changesTab(
+            pod
+              ? {
+                  kind: "Pod",
+                  name: pod.name,
+                  namespace: pod.namespace,
+                  createdAt: pod.createdAt,
+                }
+              : null,
+            t
+          ),
           yamlTab({
             yaml,
             onCopy: copyYaml,

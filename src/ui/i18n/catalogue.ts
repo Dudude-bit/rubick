@@ -1272,6 +1272,7 @@ export const en = {
     goToConfigMaps: "Go to ConfigMaps",
     goToSecrets: "Go to Secrets",
     goToEvents: "Go to Events",
+    goToChanges: "Go to Changes",
     goToCost: "Go to Cost",
     goToHelm: "Go to Helm",
     goToTopology: "Go to Topology",
@@ -1592,6 +1593,7 @@ export const en = {
     remove: "Remove",
     rollBack: "Roll back",
     rollBackToThis: "Roll back to this revision",
+    rollBackBefore: "Roll back to before this",
     rollbackTitle: "Roll back {subject} to revision {n}?",
     rollbackBody:
       "Its pod template becomes the one revision {n} recorded, and the controller rolls that out like any other change.",
@@ -2198,9 +2200,9 @@ export const en = {
     title: "Changes",
     last24h: "Last 24 hours",
     explained:
-      "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
+      "One clock for what changed: the controller's revisions, the delivery owner's history, Helm's history, what this app recorded of the object while it was connected, and the cluster's events about it. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster's {kinds} while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching; nothing is known about it.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -2267,12 +2269,8 @@ export const en = {
     journalCreated: "{kind} appeared",
     objectCreated: "created; nothing before this belongs to it",
     journalDeleted: "{kind} gone",
-    journalGeneration: "spec generation {from} → {to}",
-    journalImage: "{container} image {from} → {to}",
-    journalReplicas: "replicas {from} → {to}",
-    journalAnnotation: "{key} {from} → {to}",
     journalSeenAtRelist:
-      "Seen at a relist after a break: it changed sometime in the gap before this.",
+      "Noticed when the list was read again: it changed some time before this moment, not at it.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:
@@ -2281,7 +2279,7 @@ export const en = {
     historyUnread: "{owner}'s history could not be read: {reason}",
     helmUnread: "Helm's history for {release} could not be read: {reason}",
     nothingInWindow: "Nothing on this clock in the window.",
-    notWatchingNow: "Not watching this cluster's workloads right now.",
+    notWatchingNow: "Not watching this cluster right now.",
     watchingNow: "Watching since {since}",
     earlierRows:
       "Rows before {since} were recorded by this app while it watched from {from} to {to}",
@@ -2294,6 +2292,39 @@ export const en = {
       one: "{n} more row not drawn",
       other: "{n} more rows not drawn",
     },
+    valueNotKeptChanged: "changed (values are not kept)",
+    valueNotKeptAdded: "added (values are not kept)",
+    valueNotKeptRemoved: "removed (values are not kept)",
+    nameOnlyGeneration:
+      "changed: generation {from} → {to}. Seen by name only; what changed was not seen.",
+    moreFields: { one: "and {n} more field", other: "and {n} more fields" },
+    showAll: "Everything",
+    showChanges: "Changes only",
+    showWarnings: "Warnings only",
+    showRefused: "{kinds}: refused by the cluster, not followed",
+    letGoChanges:
+      "Older changes were let go to stay under the limit; kept from {at}",
+    letGoWarnings:
+      "Older warnings were let go to stay under the limit; kept from {at}",
+    letGoNormal:
+      "Older Normal events were let go to stay under the limit; kept from {at}",
+    letGoCleared: "Rows before {at} were cleared in Settings",
+    keptSessionOnly:
+      "Kept for this session only: keeping between restarts is off in Settings.",
+    keptFailed:
+      "Could not keep the timeline on disk: {error}. This session’s is in memory.",
+    keptUnreadable: {
+      one: "{n} kept row could not be read and was skipped.",
+      other: "{n} kept rows could not be read and were skipped.",
+    },
+    metaSince:
+      "Other kinds are seen by name only (created, deleted, generation), read since {since}",
+    metaNotNow: "Other kinds are seen by name only, and are not being read now",
+    noWarningsInWindow: "No warning recorded in the window.",
+    openTimeline: "Its timeline from here",
+    readingKept: "Reading what was kept…",
+    readFailed: "The timeline could not be read: {reason}",
+    loadOlder: "Older rows",
   },
   traffic: {
     title: "Traffic",
@@ -5787,6 +5818,20 @@ export const en = {
     diagnosticsReadAt: "Read at {at}",
     diagnosticsReadAgainFailed:
       "Could not read again. This is the read from {at}.",
+    keptTitle: "Kept on this machine",
+    keepTimeline: "Keep the timeline between restarts",
+    keepTimelineHint:
+      "What the Changes page saw, per cluster, up to 7 days: the hours the app was closed stay a gap. A ConfigMap's or a Secret's values and an env literal are never kept.",
+    keptSize: "{size} for {clusters}",
+    keptNothing: "Nothing kept yet.",
+    keptOff:
+      "Off: nothing more is written; what is kept stays until you clear it.",
+    keptUnread: "Could not read what is kept: {reason}",
+    clearTimeline: "Clear the timeline",
+    clearTimelineConfirm:
+      "Forget everything the timeline kept for every cluster, on disk and in this session?",
+    timelineCleared: "Timeline cleared",
+    timelineNotCleared: "The timeline could not be cleared: {reason}",
     redactNamesAndPaths: "Redact names and paths",
     redactEverywhere:
       "Applies to every path from this computer the app shows, not only this report: your home folder reads ~ and your login name <user>.",
@@ -8632,6 +8677,7 @@ export const en = {
     settings: "preferences, options",
     ports: "port-forward, tunnel",
     terminals: "terminal, console",
+    changes: "timeline, history",
     topology: "map, graph, topology",
     traffic: "traffic, flows, requests, hubble, istio, beyla, caretta",
   },
@@ -8729,6 +8775,8 @@ export const en = {
     },
     eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
     eventObjects: { one: "{n} event", other: "{n} events" },
+    eventSeries: { one: "{n} event", other: "{n} events" },
+    keptClusters: { one: "{n} cluster", other: "{n} clusters" },
     eventObjectsLatest: {
       one: "the latest {n} event, more not read",
       other: "the latest {n} events, more not read",

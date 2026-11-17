@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -401,6 +402,17 @@ export function CrdDetail() {
       kind: ResourceType.CustomResourceDefinition,
       name: name ?? "",
     }),
+    changesTab(
+      crd
+        ? {
+            kind: "CustomResourceDefinition",
+            name: crd.name,
+            namespace: null,
+            createdAt: crd.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "CustomResourceDefinition" }),
       yaml,

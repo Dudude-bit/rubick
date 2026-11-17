@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -337,6 +338,17 @@ export function JobDetail() {
       },
       auditTab(audit, t),
       eventsTab(events, t, { kind: ResourceType.Job, name: name ?? "" }),
+      changesTab(
+        job
+          ? {
+              kind: "Job",
+              name: job.name,
+              namespace: job.namespace,
+              createdAt: job.createdAt,
+            }
+          : null,
+        t
+      ),
       yamlTab({
         yaml,
         onCopy: copyYaml,

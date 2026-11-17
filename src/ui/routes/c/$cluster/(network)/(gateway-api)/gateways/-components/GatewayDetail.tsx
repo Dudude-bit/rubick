@@ -9,6 +9,7 @@
  * answered for, which is not an error anywhere and serves no traffic.
  */
 
+import { changesTab } from "../../../../-changes/changes-tab";
 import { useMemo } from "react";
 import { DeleteAction } from "../../../../-object/DeleteAction";
 import { useQuery } from "@tanstack/react-query";
@@ -580,6 +581,18 @@ export function GatewayDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.Gateway, name: name ?? "" }),
+    changesTab(
+      gateway
+        ? {
+            kind: "Gateway",
+            group: "gateway.networking.k8s.io",
+            name: gateway.name,
+            namespace: gateway.namespace,
+            createdAt: gateway.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: "Gateway YAML",
       yaml,

@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { Info } from "lucide-react";
@@ -133,6 +134,17 @@ export function PersistentVolumeClaimDetail() {
         ? t("empty", "noEventsUnprovisioned")
         : t("empty", "noEventsForClaim"),
     }),
+    changesTab(
+      pvc
+        ? {
+            kind: "PersistentVolumeClaim",
+            name: pvc.name,
+            namespace: pvc.namespace,
+            createdAt: pvc.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "PersistentVolumeClaim" }),
       yaml: pvcYaml,

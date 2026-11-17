@@ -1,23 +1,27 @@
 /**
- * What changed on a workload, from four records that never agree on shape:
+ * What changed on an object, from five records that never agree on shape:
  * the controller's revisions, the delivery owner's history, plain Helm's
- * history, and this app's own journal of what it watched. Laid on one clock,
- * with the stretches it was not watching drawn as gaps rather than as calm.
+ * history, what this app recorded of the object, and the cluster's events
+ * about it. Laid on one clock, with the stretches it was not watching drawn
+ * as gaps rather than as calm.
  *
  * Nothing here says why. Two entries close in time are two entries close in
  * time, and the copy that draws them is held to that by a test.
  */
 
 import type {
-  ContainerImage,
   ControllerRevisionInfo,
-  DaemonSetInfo,
   DeploymentContainerInfo,
-  DeploymentInfo,
   EnvVarInfo,
+  EventInfo,
+  FieldMove,
   HelmRevision,
+  LetGo,
+  LetGoes,
+  ObservedSpan,
   ReplicaSetInfo,
-  StatefulSetInfo,
+  Show,
+  TimelineRow,
 } from "@/generated/types";
 import type { DeliveryRevision } from "@/integrations";
 import { probeFields } from "./probe-words";
@@ -26,23 +30,30 @@ import { namespacesWhere } from "./namespace-scope";
 import { listWords } from "@/i18n/say";
 
 /**
- * The kinds whose history the Changes tab can draw, as a value as well as a
- * type.
- *
- * A link may carry `?tab=changes&since=…`, and a tab id the page does not
- * have leaves the reader on a detail page with no panel open at all — so
- * whoever builds such a link asks here rather than keeping its own list of
- * three kinds.
+ * The kinds whose Changes tab reads the controller's own revisions beside
+ * what the timeline recorded, as a value as well as a type.
  */
-export const CHANGES_KINDS = [
+export const REVISED_KINDS = [
   "Deployment",
   "StatefulSet",
   "DaemonSet",
 ] as const;
 
-/** Whether `?tab=changes` means anything on this kind's page. */
+/** Whether a kind's Changes tab reads its controller's revisions: where an alert's moment is worth landing on. */
+export function isRevisedKind(kind: string): boolean {
+  return (REVISED_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * Whether `?tab=changes` means anything on this kind's page: every object
+ * page has the tab, and an Event is a row on it rather than a page with one.
+ *
+ * A link may carry `?tab=changes&since=…`, and a tab id the page does not
+ * have leaves the reader on a detail page with no panel open at all — so
+ * whoever builds such a link asks here.
+ */
 export function hasChangesTab(kind: string): boolean {
-  return (CHANGES_KINDS as readonly string[]).includes(kind);
+  return kind !== "Event";
 }
 
 export const HELM_RELEASE_NAME = "meta.helm.sh/release-name";
@@ -362,189 +373,109 @@ export function otherDifferences(
   return out;
 }
 
-export type JournalField =
-  | "created"
-  | "deleted"
-  | "generation"
-  | "image"
-  | "replicas"
-  | "annotation";
+/** One recorded row of the timeline: a change to an object or one series of the cluster's events. */
+export type { TimelineRow };
 
-export interface JournalEntry {
-  id: string;
-  context: string;
-  kind: string;
-  namespace: string;
-  name: string;
-  at: number;
-  field: JournalField;
-  /** The container name or annotation key the change is about. */
-  key: string | null;
-  from: string | null;
-  to: string | null;
-  /**
-   * Found by comparing against the baseline from before a break, not watched
-   * happening. `at` is when it was noticed; it changed somewhere in the gap
-   * before that.
-   */
-  atRelist?: boolean;
-}
+/** The rows of the timeline that are changes, and the events beside them. */
+export type ChangeRow = TimelineRow & {
+  what: Exclude<TimelineRow["what"], { says: "event" }>;
+};
 
-/**
- * One journal entry in words, for every surface that states it. `values`
- * lets a reader with less room shorten what `from` and `to` print.
- */
-export function journalWords(
-  item: JournalEntry,
+/** How a surface prints a value; `∅` for an absent one where it does not say. */
+export type ValueWords = (value: string | null, field: FieldMove) => string;
+
+const plainValue: ValueWords = (value) => value ?? "∅";
+
+/** A field of a change in words: its path and what moved, a value not kept said as not kept. */
+export function fieldWords(
+  field: FieldMove,
   t: T,
-  values: (value: string | null) => string = (value) => value ?? "∅"
+  values: ValueWords = plainValue
 ): string {
-  const from = values(item.from);
-  const to = values(item.to);
-  switch (item.field) {
-    case "created":
-      return t("changes", "journalCreated", { kind: item.kind });
-    case "deleted":
-      return t("changes", "journalDeleted", { kind: item.kind });
-    case "generation":
-      return t("changes", "journalGeneration", { from, to });
-    case "image":
-      return t("changes", "journalImage", {
-        container: item.key ?? "",
-        from,
-        to,
-      });
-    case "replicas":
-      return t("changes", "journalReplicas", { from, to });
-    case "annotation":
-      return t("changes", "journalAnnotation", {
-        key: item.key ?? "",
-        from,
-        to,
-      });
+  if (field.says === "notKept") {
+    const key = field.was
+      ? field.is
+        ? "valueNotKeptChanged"
+        : "valueNotKeptRemoved"
+      : "valueNotKeptAdded";
+    return `${field.path} ${t("changes", key)}`;
   }
-}
-
-/** The fields the journal watches, read off one list row. */
-export interface Snapshot {
-  /** The creation time, which tells a recreated object from the one it replaced. */
-  born: string | null;
-  generation: number | null;
-  /** Container name to image, so a removed container is not read as a
-   * changed image on every container after it. */
-  images: Map<string, string>;
-  replicas: number | null;
-  hashes: Map<string, string>;
-}
-
-type WatchedRow = DeploymentInfo | StatefulSetInfo | DaemonSetInfo;
-
-function namedImages(list: ContainerImage[]): Map<string, string> {
-  return new Map(
-    list.flatMap((c) => (c.image === null ? [] : [[c.name, c.image] as const]))
-  );
-}
-
-export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
-  if (kind === "Deployment") {
-    const d = row as DeploymentInfo;
-    return {
-      born: d.createdAt,
-      generation: d.generation,
-      images: new Map(
-        [...d.containers, ...d.initContainers].map((c) => [c.name, c.image])
-      ),
-      replicas: d.replicas.desired,
-      hashes: configHashes(d.templateAnnotations),
-    };
-  }
-  if (kind === "StatefulSet") {
-    const s = row as StatefulSetInfo;
-    return {
-      born: s.createdAt,
-      generation: s.generation,
-      images: namedImages(s.containerImages),
-      replicas: s.replicas.desired,
-      hashes: configHashes(s.templateAnnotations),
-    };
-  }
-  const ds = row as DaemonSetInfo;
-  return {
-    born: ds.createdAt,
-    generation: ds.generation,
-    images: namedImages(ds.containerImages),
-    replicas: null,
-    hashes: configHashes(ds.templateAnnotations),
-  };
+  return `${field.path} ${values(field.from, field)} → ${values(field.to, field)}`;
 }
 
 /**
- * Whether `next` is a state of the same object already past `prev`. Every
- * field a snapshot holds is spec, so generation orders them; two watches over
- * one namespace deliver each change twice, and one may lag the other.
+ * One change row in words, for every surface that states it in text: the
+ * fields it names, the ones past them counted.
  */
-export function alreadySeen(prev: Snapshot, next: Snapshot): boolean {
-  return (
-    prev.born === next.born &&
-    prev.generation !== null &&
-    next.generation !== null &&
-    next.generation <= prev.generation
-  );
+export function rowWords(
+  row: ChangeRow,
+  t: T,
+  values: ValueWords = plainValue
+): string {
+  const what = row.what;
+  switch (what.says) {
+    case "created":
+      return t("changes", "journalCreated", { kind: row.kind });
+    case "deleted":
+      return t("changes", "journalDeleted", { kind: row.kind });
+    case "generation":
+      return t("changes", "nameOnlyGeneration", {
+        from: what.from ?? "∅",
+        to: what.to ?? "∅",
+      });
+    case "changed": {
+      const fields = what.fields.map((field) => fieldWords(field, t, values));
+      if (what.more > 0)
+        fields.push(t("changes", "moreFields", { n: what.more }));
+      return fields.join("; ");
+    }
+  }
 }
 
-/** The entries one row's change writes; empty when the watched fields held still. */
-export function diffSnapshots(
-  prev: Omit<Snapshot, "born">,
-  next: Omit<Snapshot, "born">
-): Array<Pick<JournalEntry, "field" | "key" | "from" | "to">> {
-  const out: Array<Pick<JournalEntry, "field" | "key" | "from" | "to">> = [];
-  if (prev.generation !== next.generation) {
-    out.push({
-      field: "generation",
-      key: null,
-      from: prev.generation === null ? null : String(prev.generation),
-      to: next.generation === null ? null : String(next.generation),
-    });
-  }
-  for (const name of new Set([...prev.images.keys(), ...next.images.keys()])) {
-    const from = prev.images.get(name) ?? null;
-    const to = next.images.get(name) ?? null;
-    if (from !== to) out.push({ field: "image", key: name, from, to });
-  }
-  if (prev.replicas !== next.replicas) {
-    out.push({
-      field: "replicas",
-      key: null,
-      from: prev.replicas === null ? null : String(prev.replicas),
-      to: next.replicas === null ? null : String(next.replicas),
-    });
-  }
-  for (const key of new Set([...prev.hashes.keys(), ...next.hashes.keys()])) {
-    const from = prev.hashes.get(key) ?? null;
-    const to = next.hashes.get(key) ?? null;
-    if (from !== to) out.push({ field: "annotation", key, from, to });
-  }
-  return out;
+/** What one class of row let go, in the words that say why. */
+export function letGoWords(
+  item: { letGo: LetGo; of: keyof LetGoes },
+  t: T,
+  clock: (ms: number) => string
+): string {
+  const at = clock(item.letGo.before);
+  if (item.letGo.cleared) return t("changes", "letGoCleared", { at });
+  const key = {
+    changes: "letGoChanges",
+    warnings: "letGoWarnings",
+    normal: "letGoNormal",
+  } as const;
+  return t("changes", key[item.of], { at });
 }
 
-/** A stretch this app was watching a cluster's workloads. `to` is null while it still is. */
-export interface ObservedSpan {
-  from: number;
-  /** The last moment the watch was known alive; a crash leaves this as the end. */
-  seenAt: number;
-  to: number | null;
-  /** Kinds the cluster refused to let it watch anywhere, so this span says nothing about them. */
-  unwatched?: string[];
-  /** Kinds refused in some of its namespaces only, as `<kind>/<namespace>`. */
-  unwatchedIn?: string[];
-  /** The namespaces it watched; absent for all of them. */
-  scope?: string[];
+/**
+ * The spans that watched `kind`: the followed kinds' where a span names it,
+ * otherwise the ones that read every other kind by name.
+ */
+export function spansFor<S extends SpanLike & { kinds?: string[] }>(
+  spans: { followed: S[]; meta: S[] } | undefined,
+  kind: string
+): S[] {
+  if (!spans) return [];
+  return spans.followed.some((span) => span.kinds?.includes(kind))
+    ? spans.followed
+    : spans.meta;
 }
 
-export type SpanCover = Pick<
-  ObservedSpan,
-  "unwatched" | "unwatchedIn" | "scope"
+/** Whether a row is a change rather than one of the cluster's events. */
+export const isChange = (row: TimelineRow): row is ChangeRow =>
+  row.what.says !== "event";
+
+/** A stretch this app was watching a cluster. `to` is null while it still is. */
+export type { ObservedSpan };
+
+/** What a span watched and was not let see; every list absent or empty means none. */
+export type SpanCover = Partial<
+  Pick<ObservedSpan, "unwatched" | "unwatchedIn" | "scope" | "kinds">
 >;
+
+/** A span as the functions here read it: what it watched may be left out where it was none. */
+export type SpanLike = Pick<ObservedSpan, "from" | "seenAt" | "to"> & SpanCover;
 
 /** Whether the span was refused `kind` in `namespace`, `null` asking about every namespace it watched. */
 function refusedIn(
@@ -611,13 +542,13 @@ export function unwatchedWords(
  * The spans that watched every one of `kinds` in every one of `namespaces`,
  * `[]` meaning all of them. A span under kube-system watched nothing in shop.
  */
-export function spansCovering(
-  spans: readonly ObservedSpan[],
+export function spansCovering<S extends SpanLike>(
+  spans: readonly S[],
   {
     kinds,
     namespaces,
   }: { kinds: readonly string[]; namespaces: readonly string[] }
-): ObservedSpan[] {
+): S[] {
   return spans.filter(
     (span) =>
       !kinds.some((kind) =>
@@ -632,10 +563,10 @@ export function spansCovering(
 }
 
 /** The spans that watched every one of `kinds` somewhere, whatever namespaces they were on. */
-export function spansWatching(
-  spans: readonly ObservedSpan[],
+export function spansWatching<S extends SpanLike>(
+  spans: readonly S[],
   kinds: readonly string[]
-): ObservedSpan[] {
+): S[] {
   return spans.filter(
     (span) => !kinds.some((kind) => span.unwatched?.includes(kind))
   );
@@ -701,7 +632,7 @@ export function gapWords(
  * were. `null` when every row is the running watch's own.
  */
 export function earlierRowsWords(
-  spans: readonly ObservedSpan[],
+  spans: readonly SpanLike[],
   items: readonly ChangeItem[],
   since: number,
   t: T,
@@ -711,7 +642,7 @@ export function earlierRowsWords(
     item.kind === "journal" && item.at < since ? [item.at] : []
   );
   if (older.length === 0) return null;
-  const holds = (span: ObservedSpan, at: number) =>
+  const holds = (span: SpanLike, at: number) =>
     at >= span.from && at <= (span.to ?? span.seenAt);
   const held = spans
     .filter((span) => span.from < since && older.some((at) => holds(span, at)))
@@ -735,11 +666,13 @@ export function earlierRowsWords(
  * for it. The one still running has the header's own line.
  */
 export function watchedStretches(
-  spans: readonly ObservedSpan[],
+  spans: readonly SpanLike[],
   items: readonly ChangeItem[],
   from: number,
   to: number,
-  scope: readonly string[] = []
+  scope: readonly string[] = [],
+  /** Change rows before this were let go: a stretch reaching back past it is not known quiet. */
+  knownFrom = Number.NEGATIVE_INFINITY
 ): ChangeItem[] {
   const stretches: (Gap & { refused: SpanCover | null })[] = [];
   const clipped = spans
@@ -760,10 +693,12 @@ export function watchedStretches(
   return stretches
     .filter((stretch) => stretch.to < to)
     .flatMap(({ refused, ...gap }): ChangeItem[] => {
-      const quiet = !items.some(
-        (item) =>
-          item.kind === "journal" && item.at >= gap.from && item.at <= gap.to
-      );
+      const quiet =
+        gap.from >= knownFrom &&
+        !items.some(
+          (item) =>
+            item.kind === "journal" && item.at >= gap.from && item.at <= gap.to
+        );
       return quiet || refused
         ? [
             {
@@ -778,16 +713,19 @@ export function watchedStretches(
     });
 }
 
-/** When the running watch began, if it has recorded no row since; `null` otherwise. */
+/** When the running watch began, if it has recorded no change since; `null` otherwise, or where changes since were let go. */
 export function quietSince(
-  watching: ObservedSpan | undefined,
-  items: readonly ChangeItem[]
+  watching: Pick<ObservedSpan, "from"> | undefined,
+  items: readonly ChangeItem[],
+  knownFrom = Number.NEGATIVE_INFINITY
 ): number | null {
-  if (!watching) return null;
+  if (!watching || knownFrom > watching.from) return null;
   return items.some(
     (item) =>
       item.kind !== "gap" &&
       item.kind !== "watched" &&
+      item.kind !== "letGo" &&
+      item.kind !== "event" &&
       item.at !== null &&
       item.at >= watching.from
   )
@@ -796,7 +734,7 @@ export function quietSince(
 }
 
 /** The end of a window drawn at `now`, never before a moment the spans hold: a clock read to the half minute lags a span just ended. */
-export function windowEnd(spans: readonly ObservedSpan[], now: number): number {
+export function windowEnd(spans: readonly SpanLike[], now: number): number {
   let end = now;
   for (const span of spans)
     end = Math.max(end, span.from, span.seenAt, span.to ?? span.from);
@@ -805,7 +743,7 @@ export function windowEnd(spans: readonly ObservedSpan[], now: number): number {
 
 /** Where the watch running at `now` began to see these spans' scope without a break, by the rule `gapsOf` draws gaps with; `null` when nothing watches at `now`. */
 export function watchedSince(
-  spans: readonly ObservedSpan[],
+  spans: readonly SpanLike[],
   now: number
 ): number | null {
   let start: number | null = null;
@@ -843,10 +781,10 @@ export interface Gap {
  * nothing, part of the scope, or only namespaces outside it.
  */
 export function gapsOf(
-  spans: ObservedSpan[],
+  spans: readonly SpanLike[],
   from: number,
   to: number,
-  watching?: readonly ObservedSpan[],
+  watching?: readonly SpanLike[],
   /** The namespaces the page shows, `[]` for all: a gap where some were watched says which. */
   scope: readonly string[] = []
 ): Gap[] {
@@ -962,7 +900,12 @@ export type ChangeItem =
     }
   | { kind: "delivery"; at: number | null; revision: DeliveryRevision }
   | { kind: "helm"; at: number | null; revision: HelmRevision }
-  | { kind: "journal"; at: number; entry: JournalEntry }
+  /** A change this app recorded. */
+  | { kind: "journal"; at: number; row: ChangeRow }
+  /** A series of the cluster's events, at its last occurrence. */
+  | { kind: "event"; at: number; row: TimelineRow; event: EventInfo }
+  /** Rows of one class older than this were let go, to a bound or by the reader: what was there is not known. */
+  | { kind: "letGo"; at: number; letGo: LetGo; of: keyof LetGoes }
   | { kind: "gap"; at: number; gap: Gap }
   /** A stretch watched: `quiet` with nothing recorded, said so it is not read as unaccounted for; `refused` is what its watch was not let see. */
   | {
@@ -985,15 +928,53 @@ export interface TimelineInput {
   revisions: Revision[];
   deliveries: DeliveryRevision[];
   helm: HelmRevision[];
-  journal: JournalEntry[];
-  spans: ObservedSpan[];
+  /** What the timeline recorded, newest first, as it reads it. */
+  journal: readonly TimelineRow[];
+  spans: readonly SpanLike[];
   /** Every span that watched these kinds in any namespace; see {@link gapsOf}. */
-  watching?: ObservedSpan[];
+  watching?: readonly SpanLike[];
   /** The namespaces the timeline is about, `[]` or absent for all. */
   scope?: readonly string[];
   window: { from: number; to: number };
   /** The object's `creationTimestamp`, where the timeline is one object's. */
   createdAt?: string | null;
+  /** Which rows to draw; `all` where absent. */
+  show?: Show;
+  /** What each class of row let go; a stretch before it is not known. */
+  letGo?: LetGoes;
+  /** Older rows than this were not read yet: the timeline ends here until they are. */
+  readFrom?: number | null;
+}
+
+/** The classes of row each filter draws, so a let-go line is said only where its rows would be. */
+const CLASSES_SHOWN: Record<Show, readonly (keyof LetGoes)[]> = {
+  all: ["changes", "warnings", "normal"],
+  changes: ["changes"],
+  warnings: ["warnings"],
+};
+
+/** Since when the timeline's change rows are all there: past a let-go line some were not kept. */
+export function changesKnownFrom(letGo: LetGoes | undefined): number {
+  return letGo?.changes?.before ?? Number.NEGATIVE_INFINITY;
+}
+
+export const newestFirst = (a: ChangeItem, b: ChangeItem) =>
+  (b.at ?? -Infinity) - (a.at ?? -Infinity);
+
+/** Two lists already newest first, as one: the recorded rows are never sorted again. */
+export function merged(rows: ChangeItem[], rest: ChangeItem[]): ChangeItem[] {
+  const out: ChangeItem[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < rows.length || j < rest.length) {
+    if (
+      j === rest.length ||
+      (i < rows.length && newestFirst(rows[i], rest[j]) <= 0)
+    )
+      out.push(rows[i++]);
+    else out.push(rest[j++]);
+  }
+  return out;
 }
 
 export function comparisonOf(
@@ -1017,12 +998,16 @@ export function comparisonOf(
 
 /** Everything on one clock, newest first, with the unwatched stretches in it. */
 export function timelineOf(input: TimelineInput): ChangeItem[] {
-  const byNumber = [...input.revisions].sort(
-    (a, b) =>
-      (a.number ?? -Infinity) - (b.number ?? -Infinity) ||
-      (ms(a.at) ?? 0) - (ms(b.at) ?? 0)
-  );
-  const items: ChangeItem[] = byNumber.map((revision, index) => {
+  const show = input.show ?? "all";
+  const changes = show !== "warnings";
+  const byNumber = changes
+    ? [...input.revisions].sort(
+        (a, b) =>
+          (a.number ?? -Infinity) - (b.number ?? -Infinity) ||
+          (ms(a.at) ?? 0) - (ms(b.at) ?? 0)
+      )
+    : [];
+  const rest: ChangeItem[] = byNumber.map((revision, index) => {
     const older = index === 0 ? null : byNumber[index - 1];
     const at = ms(revision.at);
     const olderAt = older ? ms(older.at) : null;
@@ -1034,22 +1019,41 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
       readopted: at !== null && olderAt !== null && at < olderAt,
     };
   });
-  for (const revision of input.deliveries)
-    items.push({ kind: "delivery", at: ms(revision.at), revision });
-  for (const revision of input.helm)
-    items.push({ kind: "helm", at: ms(revision.updated), revision });
-  for (const entry of input.journal)
-    items.push({ kind: "journal", at: entry.at, entry });
+  if (changes) {
+    for (const revision of input.deliveries)
+      rest.push({ kind: "delivery", at: ms(revision.at), revision });
+    for (const revision of input.helm)
+      rest.push({ kind: "helm", at: ms(revision.updated), revision });
+  }
   // An object sixteen minutes old was not unobserved a week ago: it did not
-  // exist. Its timeline starts where it does.
+  // exist. Its timeline starts where it does. Rows not read yet are below the
+  // end of what is drawn, and so is everything else that old.
   const born = ms(input.createdAt ?? null);
-  const from =
-    born === null ? input.window.from : Math.max(input.window.from, born);
-  if (born !== null && born >= input.window.from) {
+  const from = Math.max(
+    input.window.from,
+    born ?? Number.NEGATIVE_INFINITY,
+    input.readFrom ?? Number.NEGATIVE_INFINITY
+  );
+  const rows: ChangeItem[] = [];
+  for (const row of input.journal) {
+    if (row.at < from) continue;
+    if (row.what.says === "event") {
+      if (show === "changes") continue;
+      if (show === "warnings" && row.what.event.type !== "Warning") continue;
+      rows.push({ kind: "event", at: row.at, row, event: row.what.event });
+    } else if (changes)
+      rows.push({ kind: "journal", at: row.at, row: row as ChangeRow });
+  }
+  if (born !== null && born >= from && changes) {
     const watchedBirth = input.journal.some(
-      (entry) => entry.field === "created" && entry.at >= born
+      (row) => row.what.says === "created" && row.at >= born
     );
-    if (!watchedBirth) items.push({ kind: "created", at: born });
+    if (!watchedBirth) rest.push({ kind: "created", at: born });
+  }
+  for (const of of CLASSES_SHOWN[show]) {
+    const letGo = input.letGo?.[of];
+    if (letGo && letGo.before >= from)
+      rest.push({ kind: "letGo", at: letGo.before, letGo, of });
   }
   for (const gap of gapsOf(
     input.spans,
@@ -1058,8 +1062,12 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
     input.watching,
     input.scope
   ))
-    items.push({ kind: "gap", at: gap.to, gap });
-  return items.sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
+    rest.push({ kind: "gap", at: gap.to, gap });
+  const drawn =
+    input.readFrom == null
+      ? rest
+      : rest.filter((item) => item.at === null || item.at >= from);
+  return merged(rows, drawn.sort(newestFirst));
 }
 
 /**
@@ -1071,6 +1079,7 @@ export function changesCount(items: readonly ChangeItem[], t: T): string {
     items.filter((item) => item.kind === kind).length;
   const parts = [
     [n("journal"), "changesSeen"],
+    [n("event"), "eventSeries"],
     [n("revision"), "revisionCount"],
     [n("delivery"), "deliveryCount"],
     [n("helm"), "releases"],
@@ -1089,4 +1098,51 @@ export function helmReleaseOf(
   const name = annotations[HELM_RELEASE_NAME];
   if (!name) return null;
   return { name, namespace: annotations[HELM_RELEASE_NAMESPACE] ?? namespace };
+}
+
+/**
+ * The kinds a filter cannot answer for in the running watch: Event for the
+ * warnings, every other refused kind for the changes. `null` where it can.
+ */
+export function refusedFor(
+  show: Show,
+  watching: SpanCover | undefined,
+  t: T
+): string | null {
+  if (!watching || show === "all") return null;
+  const kinds = [...refusedWhere(watching).keys()].filter((kind) =>
+    show === "warnings" ? kind === "Event" : kind !== "Event"
+  );
+  return kinds.length > 0
+    ? t("changes", "showRefused", { kinds: kinds.join(", ") })
+    : null;
+}
+
+/** What the index's name-only reading covered, said once under the page. */
+export function metaWords(
+  meta: readonly SpanLike[],
+  t: T,
+  clock: (ms: number) => string
+): string {
+  const open = meta.find((span) => span.to === null);
+  if (!open) return t("changes", "metaNotNow");
+  const since = t("changes", "metaSince", { since: clock(open.from) });
+  const unread = unwatchedWords(open, t);
+  return unread ? `${since} · ${unread}` : since;
+}
+
+/** The revision a change row names as the one before it, where the object named one. */
+export function revisionBefore(
+  row: ChangeRow,
+  revisions: readonly Revision[]
+): Revision | null {
+  if (row.what.says !== "changed" || row.what.before === null) return null;
+  const before = row.what.before;
+  return (
+    revisions.find((revision) =>
+      row.kind === "Deployment"
+        ? revision.number !== null && String(revision.number) === before
+        : revision.name === before
+    ) ?? null
+  );
 }

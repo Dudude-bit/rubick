@@ -508,6 +508,14 @@ pub enum AppEvent {
         stream_id: String,
         end: crate::integrations::hubble::LiveEnd,
     },
+    /// `context`'s timeline recorded new rows, or its spans or what it keeps
+    /// changed. At most one a second per cluster; the window reads again
+    /// from the newest row it holds.
+    TimelineChanged {
+        context: String,
+        rows: bool,
+        spans: bool,
+    },
 }
 
 impl AppEvent {
@@ -547,6 +555,7 @@ impl AppEvent {
             AppEvent::TopologyEnded { .. } => "topology-ended",
             AppEvent::HubbleFlows { .. } => "hubble-flows",
             AppEvent::HubbleFlowsEnded { .. } => "hubble-flows-ended",
+            AppEvent::TimelineChanged { .. } => "timeline-changed",
         }
     }
 
@@ -763,6 +772,11 @@ mod tests {
                 stream_id: "hubble-1".into(),
                 end: crate::integrations::hubble::LiveEnd::NotEnabled,
             },
+            AppEvent::TimelineChanged {
+                context: "kind-rubick".into(),
+                rows: true,
+                spans: false,
+            },
         ]
     }
 
@@ -799,6 +813,7 @@ mod tests {
             AppEvent::TopologyEnded { .. } => 28,
             AppEvent::HubbleFlows { .. } => 29,
             AppEvent::HubbleFlowsEnded { .. } => 30,
+            AppEvent::TimelineChanged { .. } => 31,
         }
     }
 
@@ -807,7 +822,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=30).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=31).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

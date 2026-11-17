@@ -24,7 +24,7 @@ use kube::discovery::ApiResource;
 use kube::Client;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Semaphore;
+use tokio::sync::{mpsc, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::client::served::Served;
@@ -33,7 +33,7 @@ use crate::error::Result;
 use crate::state::AppState;
 
 use graph::Graph;
-pub use graph::{Dependent, KindCount, KindKey, SlotKey, DEPENDENTS_PAGE};
+pub use graph::{Dependent, KindCount, KindKey, Node, SlotKey, DEPENDENTS_PAGE};
 
 /// Watches nobody has asked anything of for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
@@ -243,6 +243,41 @@ pub struct ClusterIndex {
     turns: Arc<Semaphore>,
     /// When the cluster's groups were last held against the ones read here.
     regrouped: Mutex<Instant>,
+    /// The one reader told of each object and state as the index sees it.
+    news: Mutex<Option<mpsc::UnboundedSender<News>>>,
+}
+
+/// How an object came to be seen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Sight {
+    /// In a slot's first list, or already held when the reader joined.
+    First,
+    /// In a list after a break, or a list turn: it may have changed unseen.
+    Relist,
+    Watched,
+}
+
+/// What the index saw, as its reader is told it.
+#[derive(Debug, Clone)]
+pub(crate) enum News {
+    Seen {
+        uid: String,
+        node: Node,
+        sight: Sight,
+    },
+    /// Deleted, or absent from a list after a break.
+    Gone {
+        uid: String,
+        relisted: bool,
+    },
+    State {
+        slot: SlotKey,
+        state: SlotState,
+    },
+    /// The cluster stopped serving the kind.
+    Retired {
+        kind: KindKey,
+    },
 }
 
 /// Slots the cluster refused on one connection, and its words for it.
@@ -332,6 +367,7 @@ impl OwnershipIndexes {
             watches: self.watches.clone(),
             turns: self.turns.clone(),
             regrouped: Mutex::new(Instant::now()),
+            news: Mutex::new(None),
         });
         let index = self
             .clusters
@@ -442,6 +478,41 @@ fn spawn_reaper(
             }
         }
     });
+}
+
+impl ClusterIndex {
+    /// Hands `tx` every slot's state and every object held, then each
+    /// change from now on, under the locks every change is made under.
+    pub(crate) fn listen(&self, tx: mpsc::UnboundedSender<News>) {
+        let slots = self.slots.lock();
+        let graph = self.graph.read();
+        for (slot, state) in slots.iter() {
+            let _ = tx.send(News::State {
+                slot: slot.clone(),
+                state: state.clone(),
+            });
+        }
+        for (uid, node) in graph.each() {
+            let _ = tx.send(News::Seen {
+                uid: uid.clone(),
+                node: node.clone(),
+                sight: Sight::First,
+            });
+        }
+        *self.news.lock() = Some(tx);
+    }
+
+    /// Whether a reader is still told what the index sees.
+    #[must_use]
+    pub fn listened(&self) -> bool {
+        self.news.lock().as_ref().is_some_and(|tx| !tx.is_closed())
+    }
+
+    fn tell(&self, news: News) {
+        if let Some(tx) = self.news.lock().as_ref() {
+            let _ = tx.send(news);
+        }
+    }
 }
 
 impl ClusterIndex {
@@ -852,6 +923,7 @@ impl ClusterIndex {
             watches: Arc::new(Semaphore::new(MAX_WATCHES)),
             turns: Arc::new(Semaphore::new(LISTS_AT_ONCE)),
             regrouped: Mutex::new(Instant::now()),
+            news: Mutex::new(None),
         };
         for (kind, key) in kinds {
             let resource = ApiResource {
@@ -913,6 +985,7 @@ impl ClusterIndex {
                     })
                     .into_iter()
                     .collect(),
+                generation: None,
             },
         );
         self.slots.lock().insert(slot, SlotState::Live);
@@ -935,6 +1008,7 @@ impl ClusterIndex {
                     name: (*name).to_string(),
                     namespace: namespace.map(str::to_string),
                     owners: Vec::new(),
+                    generation: None,
                 },
             );
         }
@@ -1291,6 +1365,7 @@ mod tests {
                 name: name.to_string(),
                 namespace: ns.map(str::to_string),
                 owners: Vec::new(),
+                generation: None,
             },
         );
     }

@@ -8,13 +8,15 @@ const SCOPED_PAGES = new Set([
   "topology",
   "traffic",
   "audit",
+  "cost",
   "helm",
 ]);
 
 /**
  * Whether the page at `pathname` draws what the window's namespaces hold: the
- * Overview, Events, Changes, Audit, Helm and every list of a namespaced kind. An
- * object's own page names its namespace in the address and reads that one.
+ * Overview, Events, Changes, Topology, Traffic, Audit, Cost, Helm and every
+ * list of a namespaced kind. An object's own page names its namespace in the
+ * address and reads that one.
  */
 export function readsScope(pathname: string): boolean {
   const [, , page = "", ...rest] = pathname.split("/").filter(Boolean);

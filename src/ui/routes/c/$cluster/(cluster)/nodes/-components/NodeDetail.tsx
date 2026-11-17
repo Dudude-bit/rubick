@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback, useMemo, useState } from "react";
 import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { nodeReadyWord, silentNodes } from "@/lib/node-reporting";
@@ -498,6 +499,17 @@ export function NodeDetail() {
     },
     connectionsTab(connections, t),
     eventsTab(events, t, { kind: ResourceType.Node, name: name ?? "" }),
+    changesTab(
+      node
+        ? {
+            kind: "Node",
+            name: node.name,
+            namespace: null,
+            createdAt: node.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Node" }),
       yaml: nodeYaml,

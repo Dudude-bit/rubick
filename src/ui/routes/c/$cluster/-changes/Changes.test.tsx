@@ -1,16 +1,31 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import { act, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import {
   ScreenShareProvider,
   useScreenSections,
 } from "@/components/share/screen-share";
-import { useChangeJournalStore } from "@/stores/changeJournalStore";
+import type {
+  TimelinePage,
+  TimelineQuery,
+  TimelineRow,
+} from "@/generated/types";
+import type { SpanLike } from "@/lib/changes";
+import { forgetChannels } from "@/lib/events";
+import { layOutVirtualLists } from "@/test/virtual-layout";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { formatWhen } from "@/lib/utils";
 import { renderWithRouter } from "@/test/render";
-import { JOURNAL_KINDS } from "@/hooks/useChangeJournal";
 vi.mock("@/components/share/ShareAction", async (original) =>
   (await import("@/test/shared-scope")).withSharedScope(original as never)
 );
@@ -18,6 +33,124 @@ vi.mock("@/components/share/ShareAction", async (original) =>
 import { Changes } from "./Changes";
 
 const NOW = Date.now();
+
+/** The kinds the backend's spans say they followed, as the recorder writes them. */
+const JOURNAL_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
+
+/** A change as these cases were written: one field of one workload. */
+interface Entry {
+  id: string;
+  context: string;
+  kind: string;
+  namespace: string;
+  name: string;
+  at: number;
+  field: "replicas" | "image";
+  key: string | null;
+  from: string;
+  to: string;
+}
+
+let held: { entries: Entry[]; spans: SpanLike[] } = { entries: [], spans: [] };
+let announce: ((event: { payload: unknown }) => void) | null = null;
+
+function rowOf(entry: Entry, seq: number): TimelineRow {
+  return {
+    id: entry.id,
+    seq,
+    at: entry.at,
+    kind: entry.kind,
+    group: "apps",
+    namespace: entry.namespace,
+    name: entry.name,
+    what: {
+      says: "changed",
+      fields: [
+        {
+          says: "moved",
+          path:
+            entry.field === "image"
+              ? `spec.template.spec.containers[${entry.key}].image`
+              : "spec.replicas",
+          from: entry.from,
+          to: entry.to,
+        },
+      ],
+      more: 0,
+      before: null,
+    },
+    atRelist: false,
+  };
+}
+
+/** What the backend recorded, answered as `timeline_read` would and announced as it would be. */
+function recorded(next: {
+  entries?: Entry[];
+  spans?: Record<string, SpanLike[]>;
+}) {
+  if (next.entries) held.entries = next.entries;
+  if (next.spans) held.spans = next.spans.prod ?? [];
+  act(() =>
+    announce?.({
+      payload: {
+        channel: "timeline-changed",
+        context: "prod",
+        rows: true,
+        spans: true,
+      },
+    })
+  );
+}
+
+function answer(query: TimelineQuery): TimelinePage {
+  const scope = query.scope ?? [];
+  const rows = held.entries
+    .map((entry, index) => rowOf(entry, index + 1))
+    .filter(
+      (row) =>
+        (scope.length === 0 || scope.includes(row.namespace ?? "")) &&
+        (query.after === null || row.seq > query.after)
+    )
+    .sort((a, b) => b.at - a.at);
+  return {
+    rows,
+    more: false,
+    newest: held.entries.length,
+    spans: {
+      followed: held.spans.map((span) => ({
+        unwatched: [],
+        unwatchedIn: [],
+        scope: [],
+        kinds: JOURNAL_KINDS,
+        ...span,
+      })),
+      meta: [],
+    },
+    letGo: { changes: null, warnings: null, normal: null },
+    keeping: { says: "kept" },
+    unreadable: 0,
+  };
+}
+
+let unlaid = () => {};
+beforeEach(() => {
+  held = { entries: [], spans: [] };
+  forgetChannels();
+  vi.mocked(listen).mockImplementation(async (event, handler) => {
+    if (event === "timeline-changed") announce = handler as typeof announce;
+    return () => {};
+  });
+  vi.mocked(invoke).mockImplementation(async (command, args) =>
+    command === "timeline_read"
+      ? answer((args as { query: TimelineQuery }).query)
+      : undefined
+  );
+  unlaid = layOutVirtualLists();
+});
+afterEach(() => {
+  announce = null;
+  unlaid();
+});
 
 async function mount() {
   let collect: ReturnType<typeof useScreenSections> = null;
@@ -31,6 +164,10 @@ async function mount() {
       <Probe />
     </ScreenShareProvider>,
     { at: "/c/prod/changes", route: "/c/$cluster/changes" }
+  );
+  // What was kept is read once the page is up.
+  await waitFor(() =>
+    expect(screen.queryByText("Reading what was kept…")).toBeNull()
   );
   return () => collect!();
 }
@@ -49,7 +186,7 @@ describe("the stretches this app watched", () => {
       namespaceScope: ["lena-sandbox"],
     });
     const scope = ["lena-sandbox"];
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -101,7 +238,7 @@ describe("the stretches this app watched", () => {
       scope: ["team-checkout", "team-blind"],
       unwatchedIn: [`DaemonSet/${refusedIn}`],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -160,7 +297,7 @@ describe("the stretches this app watched", () => {
       from: "2",
       to: "3",
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [scaled(44), scaled(24)],
       spans: {
         prod: [
@@ -209,7 +346,7 @@ describe("the stretches this app watched", () => {
         currentContext: "prod",
         namespaceScope: both,
       });
-      useChangeJournalStore.setState({
+      recorded({
         entries: [],
         spans: {
           prod: [
@@ -262,7 +399,7 @@ describe("a stretch that watched part of the scope", () => {
       to: to === null ? null : NOW - to * MIN,
       scope,
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -298,7 +435,7 @@ describe("what the Changes page offers Share", () => {
       currentContext: "prod",
       namespaceScope: [],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [
         {
           id: "1",
@@ -341,7 +478,7 @@ describe("what the Changes page offers Share", () => {
       currentContext: "prod",
       namespaceScope: [],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -373,7 +510,7 @@ describe("what the Changes page offers Share", () => {
       currentContext: "prod",
       namespaceScope: ["team-checkout"],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -442,7 +579,7 @@ describe("rows older than the running watch", () => {
       currentContext: "prod",
       namespaceScope: ["lena-sandbox"],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [lenaRow("a", 16), lenaRow("b", 6), lenaRow("c", 5)],
       spans: { prod: [allNamespaces, lenaSandbox] },
     });
@@ -471,7 +608,7 @@ describe("rows older than the running watch", () => {
       currentContext: "prod",
       namespaceScope: ["lena-sandbox"],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [lenaRow("a", 50), lenaRow("b", 5)],
       spans: {
         prod: [
@@ -505,7 +642,7 @@ describe("rows older than the running watch", () => {
       namespaceScope: [],
     });
     const shopRow = { ...lenaRow("shop", 11), namespace: "shop" };
-    useChangeJournalStore.setState({
+    recorded({
       entries: [lenaRow("a", 35.5), shopRow],
       spans: {
         prod: [
@@ -554,7 +691,7 @@ describe("rows older than the running watch", () => {
       currentContext: "prod",
       namespaceScope: ["lena-sandbox"],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [lenaRow("now", 0.5)],
       spans: { prod: [allNamespaces, lenaSandbox] },
     });
@@ -587,7 +724,7 @@ describe("a watch that has recorded nothing", () => {
       currentContext: "prod",
       namespaceScope: [],
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: { prod: [yesterday, running] },
     });
@@ -615,7 +752,7 @@ describe("a watch that has recorded nothing", () => {
       currentContext: "prod",
       namespaceScope: [],
     });
-    useChangeJournalStore.setState({ entries: [], spans: { prod: [running] } });
+    recorded({ entries: [], spans: { prod: [running] } });
 
     await mount();
     const said = screen.getByTestId("changes-quiet").textContent ?? "";
@@ -645,7 +782,7 @@ describe("a watch that has recorded nothing", () => {
       namespaceScope: ["shop", "ops"],
     });
     const scope = ["shop", "ops"];
-    useChangeJournalStore.setState({
+    recorded({
       entries: [],
       spans: {
         prod: [
@@ -693,14 +830,14 @@ describe("a watch that has recorded nothing", () => {
       from: "1",
       to: "0",
     });
-    useChangeJournalStore.setState({
+    recorded({
       entries: [row("before", NOW - 21 * 60 * MIN)],
       spans: { prod: [yesterday, running] },
     });
     await mount();
     expect(screen.getByTestId("changes-quiet").textContent).toBe(quiet);
 
-    useChangeJournalStore.setState({
+    recorded({
       entries: [row("before", NOW - 21 * 60 * MIN), row("now", NOW - MIN)],
     });
     await waitFor(() =>
@@ -713,7 +850,7 @@ describe("the Changes window toggle", () => {
   /** Russian read "24ч" and "7д" here and "24 ч" on every age beside it. Fails if the toggle stops using the locale's own units. */
   it("names its windows the way every age in the reader's language is written", async () => {
     useClusterStore.setState({ isConnected: true, currentContext: "prod" });
-    useChangeJournalStore.setState({ entries: [], spans: {} });
+    recorded({ entries: [], spans: {} });
     useLocaleStore.setState({ choice: "ru" });
     await mount();
     expect(screen.getByRole("button", { name: "24 ч" })).toBeInTheDocument();

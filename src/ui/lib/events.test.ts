@@ -64,7 +64,9 @@ describe("listening to the backend", () => {
     const deaf = taking
       .filter(([, source]) => !/\buseRenewals\(\)/.test(source))
       .map(([path]) => path);
-    expect(taking.length).toBeGreaterThanOrEqual(3);
+    // The change journal took watch events here until the timeline moved
+    // into the backend; what is left still proves the scan reads the tree.
+    expect(taking.length).toBeGreaterThanOrEqual(2);
     expect(deaf).toEqual([]);
   });
 

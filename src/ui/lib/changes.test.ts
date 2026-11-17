@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { DeploymentContainerInfo, ProbeInfo } from "@/generated/types";
+import type {
+  DeploymentContainerInfo,
+  ProbeInfo,
+  TimelineRow,
+} from "@/generated/types";
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
 import { translate } from "@/i18n";
@@ -8,24 +12,47 @@ import type { T } from "@/i18n/useT";
 import {
   COMPARED_FIELDS,
   diffRevisions,
-  diffSnapshots,
   earlierRowsWords,
   gapsOf,
   gapWords,
   helmReleaseOf,
+  quietSince,
+  rowWords,
+  spansFor,
   watchedStretches,
   spansCovering,
   unwatchedWords,
   otherDifferences,
   timelineOf,
   windowEnd,
-  type JournalEntry,
-  type ObservedSpan,
+  type ChangeRow,
   type Revision,
+  type SpanLike as ObservedSpan,
 } from "./changes";
 
 const T0 = Date.parse("2026-09-08T00:00:00Z");
 const HOUR = 60 * 60_000;
+
+/** A change row as the timeline records it. */
+function changeRow(at: number, over: Partial<ChangeRow> = {}): ChangeRow {
+  return {
+    id: String(at),
+    seq: at,
+    at,
+    kind: "Deployment",
+    group: "apps",
+    namespace: "shop",
+    name: "api",
+    what: {
+      says: "changed",
+      fields: [{ says: "moved", path: "spec.replicas", from: "2", to: "3" }],
+      more: 0,
+      before: null,
+    },
+    atRelist: false,
+    ...over,
+  };
+}
 
 function container(
   name: string,
@@ -428,7 +455,7 @@ describe("a timeline that starts where its object does", () => {
   const NOW = T0 + 7 * 24 * HOUR;
   const week = { from: NOW - 7 * 24 * HOUR, to: NOW };
   const born = new Date(NOW - 16 * 60_000).toISOString();
-  const timeline = (createdAt: string | null, journal: JournalEntry[] = []) =>
+  const timeline = (createdAt: string | null, journal: TimelineRow[] = []) =>
     timelineOf({
       revisions: [],
       deliveries: [],
@@ -469,18 +496,11 @@ describe("a timeline that starts where its object does", () => {
 
   /** A creation the journal watched happen is already on the timeline in its own words. */
   it("does not mark the creation twice when the journal saw it", () => {
-    const seen: JournalEntry = {
-      id: "c",
-      context: "dev",
+    const seen = changeRow(Date.parse(born) + 1000, {
       kind: "StatefulSet",
-      namespace: "shop",
       name: "orders-db",
-      at: Date.parse(born) + 1000,
-      field: "created",
-      key: null,
-      from: null,
-      to: null,
-    };
+      what: { says: "created" },
+    });
     expect(timeline(born, [seen]).some((item) => item.kind === "created")).toBe(
       false
     );
@@ -785,20 +805,7 @@ describe("timelineOf", () => {
       ],
       deliveries: [],
       helm: [],
-      journal: [
-        {
-          id: "j1",
-          context: "dev",
-          kind: "Deployment",
-          namespace: "shop",
-          name: "api",
-          at: T0 + 5 * HOUR,
-          field: "replicas",
-          key: null,
-          from: "2",
-          to: "3",
-        },
-      ],
+      journal: [changeRow(T0 + 5 * HOUR)],
       spans: [
         { from: T0, seenAt: T0 + 3 * HOUR, to: T0 + 3 * HOUR },
         { from: T0 + 4 * HOUR, seenAt: T0 + 6 * HOUR, to: null },
@@ -910,64 +917,6 @@ describe("timelineOf", () => {
     expect(newest?.kind === "revision" && newest.against).toEqual({
       state: "unread",
     });
-  });
-});
-
-describe("diffSnapshots", () => {
-  it("reports each watched field once, and nothing when they held still", () => {
-    const before = {
-      generation: 3,
-      images: new Map([
-        ["app", "app:1"],
-        ["proxy", "proxy:1"],
-      ]),
-      replicas: 2,
-      hashes: new Map([["checksum/config", "a"]]),
-    };
-    expect(diffSnapshots(before, before)).toEqual([]);
-    expect(
-      diffSnapshots(before, {
-        generation: 4,
-        images: new Map([
-          ["app", "app:2"],
-          ["proxy", "proxy:1"],
-        ]),
-        replicas: 3,
-        hashes: new Map([["checksum/config", "b"]]),
-      })
-    ).toEqual([
-      { field: "generation", key: null, from: "3", to: "4" },
-      { field: "image", key: "app", from: "app:1", to: "app:2" },
-      { field: "replicas", key: null, from: "2", to: "3" },
-      { field: "annotation", key: "checksum/config", from: "a", to: "b" },
-    ]);
-  });
-
-  /**
-   * Paired by position, removing the first container reported the second
-   * one's image as the first one's new image, and the second as gone — two
-   * changes, neither of which happened, for one that did.
-   */
-  it("pairs images by container name, so removing one is one change", () => {
-    expect(
-      diffSnapshots(
-        {
-          generation: 1,
-          images: new Map([
-            ["app", "app:1"],
-            ["sidecar", "sidecar:1"],
-          ]),
-          replicas: 1,
-          hashes: new Map(),
-        },
-        {
-          generation: 1,
-          images: new Map([["sidecar", "sidecar:1"]]),
-          replicas: 1,
-          hashes: new Map(),
-        }
-      )
-    ).toEqual([{ field: "image", key: "app", from: "app:1", to: null }]);
   });
 });
 
@@ -1114,18 +1063,7 @@ describe("a stretch watched with nothing recorded", () => {
   const recorded = (at: number) => ({
     kind: "journal" as const,
     at,
-    entry: {
-      id: "e",
-      context: "acme",
-      kind: "Deployment",
-      namespace: "lena-sandbox",
-      name: "hello-web",
-      at,
-      field: "image" as const,
-      key: "app",
-      from: "a",
-      to: "b",
-    },
+    row: changeRow(at, { namespace: "lena-sandbox", name: "hello-web" }),
   });
 
   /**
@@ -1358,18 +1296,7 @@ describe("where the rows before the running watch came from", () => {
   const row = (at: number) => ({
     kind: "journal" as const,
     at,
-    entry: {
-      id: String(at),
-      context: "acme",
-      kind: "Deployment",
-      namespace: "shop",
-      name: "web",
-      at,
-      field: "replicas" as const,
-      key: null,
-      from: "1",
-      to: "2",
-    },
+    row: changeRow(at, { name: "web" }),
   });
 
   /**
@@ -1393,5 +1320,164 @@ describe("where the rows before the running watch came from", () => {
     ).toBe(
       "Rows before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59"
     );
+  });
+});
+
+describe("the cluster's events and the recorded changes on one clock", () => {
+  const NOW = T0 + 6 * HOUR;
+  const window = { from: T0, to: NOW };
+  const event = (at: number, type: "Warning" | "Normal"): TimelineRow => ({
+    ...changeRow(at, { id: `e${at}`, kind: "Pod", group: "", name: "api-1" }),
+    what: {
+      says: "event",
+      event: {
+        name: `api-1.${at}`,
+        namespace: "shop",
+        uid: `e${at}`,
+        type,
+        reason: type === "Warning" ? "BackOff" : "Pulled",
+        message: "said by the kubelet",
+        source: "kubelet",
+        involvedObject: {
+          kind: "Pod",
+          name: "api-1",
+          namespace: "shop",
+          uid: "p1",
+        },
+        count: 3,
+        firstTimestamp: new Date(at - HOUR).toISOString(),
+        lastTimestamp: new Date(at).toISOString(),
+      },
+    },
+  });
+  const rows = [
+    changeRow(T0 + 5 * HOUR),
+    event(T0 + 4 * HOUR, "Warning"),
+    event(T0 + 3 * HOUR, "Normal"),
+    changeRow(T0 + 2 * HOUR),
+  ];
+  const span: ObservedSpan = { from: T0, seenAt: NOW, to: null };
+  const items = (over: Partial<Parameters<typeof timelineOf>[0]> = {}) =>
+    timelineOf({
+      revisions: [revision(1, [container("app", "app:1")])],
+      deliveries: [],
+      helm: [],
+      journal: rows,
+      spans: [span],
+      window,
+      ...over,
+    });
+
+  /** Fails if an event is not laid among the changes by its last time, or a filter keeps what it was asked to leave out. */
+  it("lays each event among the changes and draws what each filter asks for", () => {
+    expect(items().map((item) => item.kind)).toEqual([
+      "journal",
+      "event",
+      "event",
+      "journal",
+      "revision",
+    ]);
+    expect(items({ show: "changes" }).map((item) => item.kind)).toEqual([
+      "journal",
+      "journal",
+      "revision",
+    ]);
+    const warnings = items({ show: "warnings" });
+    expect(warnings.map((item) => item.kind)).toEqual(["event"]);
+    expect(warnings[0].kind === "event" && warnings[0].event.type).toBe(
+      "Warning"
+    );
+  });
+
+  /**
+   * Rows let go at a bound are not rows that never happened. Fails if the
+   * line is not drawn, drawn under a filter whose rows it is not about, or
+   * a stretch before it is still called quiet.
+   */
+  it("says where a class of rows was let go, and calls no stretch before it quiet", () => {
+    const letGo = {
+      changes: { before: T0 + HOUR, cleared: false },
+      warnings: null,
+      normal: { before: T0 + 2 * HOUR, cleared: false },
+    };
+    const lines = (show: "all" | "changes" | "warnings") =>
+      items({ letGo, show }).filter((item) => item.kind === "letGo");
+    expect(
+      lines("all").map((item) => item.kind === "letGo" && item.of)
+    ).toEqual(["normal", "changes"]);
+    expect(lines("warnings")).toEqual([]);
+    const closed: ObservedSpan = {
+      from: T0,
+      seenAt: T0 + 30 * 60_000,
+      to: T0 + 30 * 60_000,
+    };
+    const quiet = watchedStretches([closed], [], T0, NOW, [], T0 + HOUR);
+    expect(quiet).toEqual([]);
+    const known = watchedStretches([closed], [], T0, NOW);
+    expect(known.map((item) => item.kind === "watched" && item.quiet)).toEqual([
+      true,
+    ]);
+  });
+
+  /** A watch whose changes were let go recorded some. Fails if it says nothing changed since it began. */
+  it("does not call a watch quiet when its changes were let go", () => {
+    expect(quietSince({ from: T0 }, [], T0 + HOUR)).toBeNull();
+    expect(quietSince({ from: T0 }, [])).toBe(T0);
+  });
+
+  /** Older rows not read yet sit below the end of what is drawn. Fails if a gap or a revision is drawn among rows that were never read. */
+  it("ends where the rows read end, while older ones remain", () => {
+    const drawn = items({ readFrom: T0 + 3 * HOUR });
+    expect(
+      drawn.every((item) => item.at === null || item.at >= T0 + 3 * HOUR)
+    ).toBe(true);
+    expect(drawn.some((item) => item.kind === "revision")).toBe(false);
+  });
+});
+
+describe("a recorded change in words", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+
+  /** Fails if a value the timeline never kept reads as a value that never changed. */
+  it("names a field whose value is not kept, in both languages", () => {
+    const row = changeRow(T0, {
+      what: {
+        says: "changed",
+        fields: [
+          { says: "notKept", path: "data.password", was: true, is: true },
+          { says: "notKept", path: "data.token", was: false, is: true },
+        ],
+        more: 2,
+        before: null,
+      },
+    });
+    expect(rowWords(row, en)).toBe(
+      "data.password changed (values are not kept); data.token added (values are not kept); and 2 more fields"
+    );
+    expect(rowWords(row, ru)).toContain("значения не сохраняются");
+  });
+
+  /** A kind seen by name only is said to be: fails if a generation reads as the whole change. */
+  it("says a change seen by name only did not show what changed", () => {
+    const row = changeRow(T0, {
+      kind: "Job",
+      what: { says: "generation", from: 3, to: 4 },
+    });
+    expect(rowWords(row, en)).toBe(
+      "changed: generation 3 → 4. Seen by name only; what changed was not seen."
+    );
+  });
+});
+
+describe("which spans speak for a kind", () => {
+  const followed = [{ from: T0, seenAt: T0, to: null, kinds: ["Deployment"] }];
+  const meta = [{ from: T0 + HOUR, seenAt: T0 + HOUR, to: null }];
+
+  /** Fails if a kind read by name only is drawn against the followed kinds' watch, which never read it. */
+  it("gives a followed kind the followed spans and every other kind the name-only ones", () => {
+    expect(spansFor({ followed, meta }, "Deployment")).toBe(followed);
+    expect(spansFor({ followed, meta }, "Job")).toBe(meta);
+    expect(spansFor(undefined, "Job")).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { Info } from "lucide-react";
@@ -138,6 +139,17 @@ export function PersistentVolumeDetail() {
       kind: ResourceType.PersistentVolume,
       name: name ?? "",
     }),
+    changesTab(
+      pv
+        ? {
+            kind: "PersistentVolume",
+            name: pv.name,
+            namespace: null,
+            createdAt: pv.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "PersistentVolume" }),
       yaml: pvYaml,

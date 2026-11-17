@@ -1,3 +1,4 @@
+import { changesTab } from "../../-changes/changes-tab";
 import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -424,6 +425,18 @@ export function CustomResourceDetail({
       content: <RelatedPanel query={related} kind={crdInfo?.kind ?? "these"} />,
     },
     eventsTab(events, t, { kind: crdInfo?.kind ?? "", name }),
+    changesTab(
+      resource && crdInfo
+        ? {
+            kind: crdInfo.kind,
+            group: crdInfo.group,
+            name: name,
+            namespace: namespace || null,
+            createdAt: resource.createdAt ?? null,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: `${resource?.kind || "Resource"} YAML`,
       yaml,
