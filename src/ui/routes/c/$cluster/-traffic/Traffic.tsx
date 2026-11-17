@@ -335,13 +335,16 @@ function FlowsView({
 
   const openEnd = useCallback(
     (end: FlowEnd, how: "peek" | "page") => {
+      const crd = end.is === "workload" ? crdInGroup(end.key, crdFor) : null;
+      // A namesake of a built-in whose group no CRD here serves opens nothing.
+      if (end.is === "workload" && crd === null) return;
       const object =
         end.is === "workload"
           ? {
               kind: end.key.kind,
               name: end.key.name,
               namespace: end.key.namespace,
-              crd: crdInGroup(end.key, crdFor) ?? undefined,
+              crd: crd ?? undefined,
             }
           : end.is === "service" && end.namespace
             ? { kind: "Service", name: end.name, namespace: end.namespace }

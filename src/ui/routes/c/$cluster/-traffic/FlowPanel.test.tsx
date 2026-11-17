@@ -279,4 +279,43 @@ describe("a flow opened from its edge", () => {
     expect(screen.queryByTestId("policy-reading")).toBeNull();
     expect(document.body.textContent).toContain("deny-intruder");
   });
+
+  /** A policy kind of another API group no CRD here serves is named, not linked to the built-in kind of that name. */
+  it("does not link a denying policy of an unknown group to the built-in NetworkPolicy", async () => {
+    const row = liveRow({
+      from: end("web"),
+      to: end("db"),
+      forwarded: 0,
+      dropped: 1,
+      drops: [
+        {
+          reason: "POLICY_DENIED",
+          rate: 1,
+          l7: false,
+          policies: [
+            {
+              group: "example.com",
+              kind: "NetworkPolicy",
+              namespace: "shop",
+              name: "lookalike",
+            },
+          ],
+        },
+      ],
+      requests: null,
+      errors: null,
+      p50: null,
+      p95: null,
+      p99: null,
+      protocols: [],
+    });
+    await renderWithRouter(
+      <FlowPanel row={row} window="last minute" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(document.body.textContent).toContain("NetworkPolicy shop/lookalike");
+    expect(
+      screen.queryByRole("link", { name: "NetworkPolicy shop/lookalike" })
+    ).toBeNull();
+  });
 });

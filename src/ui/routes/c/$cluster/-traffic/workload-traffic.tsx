@@ -40,7 +40,7 @@ function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
           kind: end.key.kind,
           name: end.key.name,
           namespace: end.key.namespace,
-          crd: crdInGroup(end.key, crdFor) ?? undefined,
+          crd: crdInGroup(end.key, crdFor),
         })
       : null;
   const [name, ...rest] = rowWords(row, peer, t);

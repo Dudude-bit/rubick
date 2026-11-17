@@ -33,7 +33,7 @@ function Policies({ policies }: { policies: readonly PolicyRef[] }) {
       kind: policy.kind,
       name: policy.name,
       namespace: policy.namespace,
-      crd: crdInGroup(policy, crdFor) ?? undefined,
+      crd: crdInGroup(policy, crdFor),
     });
     const words = policyWords([policy]);
     return (

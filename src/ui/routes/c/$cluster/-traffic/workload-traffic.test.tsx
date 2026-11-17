@@ -300,4 +300,30 @@ describe("a workload's Traffic block", () => {
       )
     ).toBeTruthy();
   });
+
+  /**
+   * A Deployment of another API group is not the built-in Deployment: with
+   * no CRD here serving its group it is named, not linked to the built-in
+   * object of the same name.
+   */
+  it("does not link a namesake of a built-in kind to the built-in object", async () => {
+    const state = read([ISTIO], [["web", "cart", { requests: 1 }]], null);
+    if (state.says !== "read") throw new Error("a reading");
+    const namesake: FlowEnd = {
+      is: "workload",
+      key: {
+        namespace: "shop",
+        group: "example.com",
+        kind: "Deployment",
+        name: "web",
+      },
+    };
+    const reading = {
+      ...state.reading,
+      answer: { ...state.reading.answer, ends: [namesake, end("cart")] },
+    };
+    await draw({ ...state, reading, rows: pairRows(reading).rows });
+    expect(screen.getByText(/^web/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /^web/ })).toBeNull();
+  });
 });
