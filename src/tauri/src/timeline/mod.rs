@@ -350,6 +350,19 @@ impl ClusterTimeline {
         }
     }
 
+    /// The client behind the name was replaced, perhaps by another
+    /// cluster's: whether what is held is this cluster's is checked again.
+    /// Nothing is dropped; the next check decides.
+    fn unchecked(&self) {
+        let mut inner = self.inner.lock();
+        let held = inner.store.newest() > 0
+            || !inner.spans.followed.is_empty()
+            || !inner.spans.meta.is_empty();
+        if held && inner.checked == Identity::Known {
+            inner.checked = Identity::NotChecked;
+        }
+    }
+
     /// One page of what was recorded.
     #[must_use]
     pub fn page(&self, query: &TimelineQuery) -> TimelinePage {
@@ -453,6 +466,14 @@ impl Timelines {
             let mut inner = cluster.inner.lock();
             inner.keeping = keeping_of(keep, cluster.dir.as_ref());
             inner.told.spans = true;
+        }
+    }
+
+    /// A context's client was replaced by a connect or a disconnect, not a
+    /// renewal: the cluster behind the name may be another one now.
+    pub fn client_replaced(&self, context: &str) {
+        if let Some(cluster) = self.clusters.get(context) {
+            cluster.unchecked();
         }
     }
 

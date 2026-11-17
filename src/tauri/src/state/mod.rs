@@ -471,6 +471,7 @@ impl AppState {
     pub fn client_replaced(&self, context: &str) {
         self.let_go_of_client(context);
         self.audit.forget(context);
+        self.timeline.client_replaced(context);
     }
 
     /// A credential renewal: the same cluster under a new token. What was
@@ -521,6 +522,35 @@ impl Default for AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A reconnect put another cluster behind the name, which may not read
+    /// `kube-system`: the rows held went on reading as this cluster's, with
+    /// no word. Fails if a replaced client leaves them checked.
+    #[test]
+    fn a_replaced_client_leaves_what_the_timeline_holds_to_be_checked_again() {
+        use crate::timeline::{Cover, Identity, Show, Source, TimelineQuery};
+        let state = AppState::new().unwrap();
+        let context = "rubick-test-a-replaced-client";
+        let cluster = state.timeline.cluster(context);
+        cluster.seen_cluster("uid-a".into());
+        cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+        state.client_replaced(context);
+        cluster.not_identified("namespaces is forbidden".into());
+        let page = cluster.page(&TimelineQuery {
+            context: context.into(),
+            subject: None,
+            scope: None,
+            from: 0,
+            show: Show::All,
+            after: None,
+            before: None,
+        });
+        assert!(
+            matches!(page.identity, Identity::Unknown { .. }),
+            "{:?}",
+            page.identity
+        );
+    }
 
     #[test]
     fn test_session_management() {

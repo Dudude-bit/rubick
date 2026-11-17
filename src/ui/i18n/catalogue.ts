@@ -2383,7 +2383,7 @@ export const en = {
     olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
     identityUnknown:
-      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
+      "Rows kept under this name may be another cluster's that had it: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {
