@@ -109,6 +109,9 @@ pub struct Recorder {
     objects: HashMap<(&'static str, &'static str, Option<String>), Objects>,
     named: HashMap<String, Named>,
     slots: BTreeMap<(Source, Slot), SlotState>,
+    /// When each name-only slot read by its list alone was listed: live until
+    /// its next turn is overdue, as the index counts it.
+    listed: BTreeMap<Slot, i64>,
 }
 
 fn now() -> i64 {
@@ -123,6 +126,7 @@ impl Recorder {
             objects: HashMap::new(),
             named: HashMap::new(),
             slots: BTreeMap::new(),
+            listed: BTreeMap::new(),
         }
     }
 
@@ -445,6 +449,7 @@ impl Recorder {
     /// A slot no longer read: it holds nothing shut, and what it held is a
     /// first sight when it is read again, neither gone nor moved unseen.
     pub fn dropped(&mut self, source: Source, slot: Slot, uids: &[String]) {
+        self.listed.remove(&slot);
         let was = self.cover(source);
         self.slots.remove(&(source, slot));
         for uid in uids {
@@ -453,9 +458,35 @@ impl Recorder {
         self.settle(source, was.as_ref(), None);
     }
 
+    /// A name-only slot read by its list alone was listed at `at`; `None`
+    /// where it is read any other way now.
+    pub fn listed_at(&mut self, slot: Slot, at: Option<i64>) {
+        match at {
+            Some(at) => self.listed.insert(slot, at),
+            None => self.listed.remove(&slot),
+        };
+    }
+
+    /// A list whose next turn is overdue is no longer the kind as it is: the
+    /// index calls it stale from then, and the span ends where it was read.
+    pub fn overdue(&mut self, now: i64) {
+        let after = i64::try_from(crate::ownership::LISTED_FOR.as_millis()).unwrap_or(i64::MAX);
+        let late: Vec<(Slot, i64)> = self
+            .listed
+            .iter()
+            .filter(|(_, at)| now - **at > after)
+            .map(|(slot, at)| (slot.clone(), *at))
+            .collect();
+        for (slot, at) in late {
+            self.listed.remove(&slot);
+            self.state(Source::Meta, slot, SlotState::Blind, Some(at));
+        }
+    }
+
     /// The name-only reading ended: its span ends now, and what it held is
     /// a first sight when it is read again.
     pub fn meta_ended(&mut self) {
+        self.listed.clear();
         self.slots.retain(|(source, _), _| *source != Source::Meta);
         self.named.clear();
         self.timeline

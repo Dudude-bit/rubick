@@ -199,12 +199,17 @@ pub(crate) fn hear(recorder: &mut Recorder, news: News) {
                 return;
             }
             let SlotKey { kind, namespace } = slot;
+            let listed = match &state {
+                crate::ownership::SlotState::Listed { at } => Some(at.timestamp_millis()),
+                _ => None,
+            };
             let (state, since) = index_state(&state);
             let slot = Slot {
                 kind: named_label(&kind),
                 namespace,
             };
-            recorder.state(Source::Meta, slot, state, since);
+            recorder.state(Source::Meta, slot.clone(), state, since);
+            recorder.listed_at(slot, listed);
         }
         News::Seen { uid, node, sight } => {
             let item = Named {
@@ -297,7 +302,10 @@ pub(crate) fn spawn(
                         recorder.meta_ended();
                     }
                 }
-                _ = beat.tick() => recorder.heartbeat(),
+                _ = beat.tick() => {
+                    recorder.heartbeat();
+                    recorder.overdue(chrono::Utc::now().timestamp_millis());
+                }
             }
         }
         recorder.stop();

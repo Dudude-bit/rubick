@@ -1827,6 +1827,40 @@ mod following {
         }
     }
 
+    /// A kind read by its list alone whose next turn never came: the index
+    /// counted it stale after ninety seconds, while the timeline went on
+    /// calling the stretch watched. Fails if an overdue list does not end the
+    /// name-only span, or a fresh list does not open it again.
+    #[test]
+    fn a_list_whose_next_turn_is_overdue_ends_the_name_only_span() {
+        let (_t, cluster, mut recorder) = setup();
+        let listed = |at| News::State {
+            slot: SlotKey {
+                kind: kind("batch", "jobs"),
+                namespace: None,
+            },
+            state: crate::ownership::SlotState::Listed { at },
+        };
+        let open = |cluster: &ClusterTimeline| {
+            cluster
+                .page(&query(Show::All))
+                .spans
+                .meta
+                .iter()
+                .any(|span| span.to.is_none())
+        };
+        hear(
+            &mut recorder,
+            listed(chrono::Utc::now() - chrono::Duration::seconds(100)),
+        );
+        assert!(open(&cluster));
+        recorder.overdue(ClusterTimeline::now());
+        assert!(!open(&cluster), "an overdue list drawn as watched");
+        hear(&mut recorder, listed(chrono::Utc::now()));
+        recorder.overdue(ClusterTimeline::now());
+        assert!(open(&cluster));
+    }
+
     /// The window moved from `shop` to `ops` and back: the index stopped
     /// reading `shop`'s Jobs and read them again. Fails if a generation that
     /// moved while they were not read is said to have been seen moving, or
