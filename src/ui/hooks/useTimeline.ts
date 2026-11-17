@@ -16,6 +16,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { listenEvent } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
+import { builtInGroupOf } from "@/lib/links";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -119,7 +120,10 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
   const scope = ask.scope ?? NO_SCOPE;
   // By its fields: a page that builds the subject inline asks the same question.
   const kind = ask.subject?.kind;
-  const group = ask.subject?.group ?? null;
+  // A page that names no group is a built-in kind's: a namesake in another
+  // group is not this object, and its rows are not its history.
+  const group =
+    ask.subject?.group ?? (kind === undefined ? null : builtInGroupOf(kind));
   const namespace = ask.subject?.namespace ?? null;
   const name = ask.subject?.name ?? "";
   const subject = useMemo<TimelineSubject | null>(

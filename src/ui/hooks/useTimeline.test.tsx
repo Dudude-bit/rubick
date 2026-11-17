@@ -259,6 +259,50 @@ describe("one surface reading the timeline", () => {
       [23, 10]
     );
   });
+
+  /**
+   * A DaemonSet's tab named no group, which the backend reads as any: a
+   * custom DaemonSet of the same name filled the built-in's history. Fails
+   * if a subject without a group is not asked for in its built-in group, or
+   * a custom kind loses its own.
+   */
+  it("asks for a built-in kind in its own group where the page names none", async () => {
+    renderHook(
+      () =>
+        useTimeline({
+          subject: {
+            kind: "DaemonSet",
+            group: null,
+            namespace: "kube-system",
+            name: "agent",
+          },
+          windowMs: WIDE,
+          show: "all",
+        }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(asked.length).toBeGreaterThanOrEqual(1));
+    expect(asked[0].subject?.group).toBe("apps");
+    renderHook(
+      () =>
+        useTimeline({
+          subject: {
+            kind: "DaemonSet",
+            group: "apps.kruise.io",
+            namespace: "kube-system",
+            name: "agent",
+          },
+          windowMs: WIDE,
+          show: "all",
+        }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() =>
+      expect(
+        asked.some((each) => each.subject?.group === "apps.kruise.io")
+      ).toBe(true)
+    );
+  });
 });
 
 describe("rows that started over", () => {
