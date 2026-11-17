@@ -14,7 +14,7 @@ import {
   expiryReason,
   isCredentialsExpired,
 } from "@/lib/credentials";
-import { listenBridgeLag, listenEvent } from "@/lib/events";
+import { listenAll, listenBridgeLag, listenEvent } from "@/lib/events";
 import { currentConnection } from "@/lib/refusals";
 import { perf } from "@/lib/perf";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -204,7 +204,7 @@ export function useTopology(
       if (left || again) return;
       again = setTimeout(() => setAttempt((n) => n + 1), waitMs);
     };
-    const listening = Promise.all([
+    const listening = listenAll([
       listenEvent("topology-batch", ({ payload }) => {
         if (payload.stream_id === id) store.apply(payload.pieces);
       }),
@@ -243,7 +243,10 @@ export function useTopology(
     return () => {
       left = true;
       if (again) clearTimeout(again);
-      void listening.then((offs) => offs.forEach((off) => off()));
+      listening.then(
+        (off) => off(),
+        () => {}
+      );
       if (id) void commands.closeTopology(id).catch(() => {});
     };
   }, [store, enabled, context, scopeKey, attempt]);

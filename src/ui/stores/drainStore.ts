@@ -27,7 +27,7 @@ import type {
   DrainOutcome,
   DrainReport,
 } from "@/generated/types";
-import { listenEvent } from "@/lib/events";
+import { listenAll, listenEvent } from "@/lib/events";
 import { keptByName } from "@/lib/kept-by-name";
 
 export type {
@@ -130,7 +130,7 @@ let listening: Promise<unknown> | null = null;
 
 /** Up from the first drain on and never taken down: a drain outlives the page that started it. */
 function listen(): Promise<unknown> {
-  listening ??= Promise.all([
+  listening ??= listenAll([
     listenEvent("drain-progress", ({ payload }) => {
       const key = keyOf(payload.drain_id);
       if (key === undefined) return;

@@ -94,6 +94,27 @@ export function listenEvent<C extends EventChannel>(
 }
 
 /**
+ * Several listeners as one, held all or none. A `Promise.all` that lost one
+ * registration kept the handlers of the others, and left nothing to take
+ * them down with.
+ */
+export async function listenAll(
+  registering: Promise<Unlisten>[]
+): Promise<Unlisten> {
+  const settled = await Promise.allSettled(registering);
+  const offs = settled.flatMap((each) =>
+    each.status === "fulfilled" ? [each.value] : []
+  );
+  const off = () => offs.forEach((each) => each());
+  const failed = settled.find((each) => each.status === "rejected");
+  if (failed) {
+    off();
+    throw failed.reason;
+  }
+  return off;
+}
+
+/**
  * The bridge dropping events, for a holder of streams it subscribes again:
  * `handler` is told how many were dropped and how long to wait first. A
  * stream subscribed again lists its collection through the same bridge, so
