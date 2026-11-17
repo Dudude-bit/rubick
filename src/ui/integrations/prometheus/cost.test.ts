@@ -155,6 +155,25 @@ describe("what the cluster costs now", () => {
     ).rejects.toThrow("connection refused");
   });
 
+  /**
+   * `constructor` is a namespace a cluster can have, and a node name too.
+   * Kept in a plain object, its cost was written onto an inherited function
+   * and the namespace vanished; a node with no allocation read as one.
+   * Fails if a name the cluster chose can collide with a property.
+   */
+  it("keeps a namespace or a node called constructor as any other", async () => {
+    prometheusQuery.mockImplementation(async (query) => {
+      if (query === NODES_QUERY) return [one({ node: "node-a" }, 0.2)];
+      if (query.startsWith("sum by (namespace, part)"))
+        return [one({ namespace: "constructor", part: "cpu" }, 0.03)];
+      return [];
+    });
+    const answer = await costNow({ namespaces: null, keys: [], nodes: true });
+    expect(Object.keys(answer!.namespaces)).toEqual(["constructor"]);
+    expect(answer!.namespaces["constructor"]).toEqual({ cpu: 0.03 });
+    expect(answer!.allocatedByNode!["constructor"]).toBeUndefined();
+  });
+
   /** A price series with no node label prices nothing nameable, and the page says which label. */
   it("names the label the node prices are missing", async () => {
     prometheusQuery.mockImplementation(async (query) =>

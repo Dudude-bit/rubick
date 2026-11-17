@@ -291,7 +291,9 @@ export async function costNow(input: {
     });
   }
 
-  const perNamespace: Record<string, Parts> = {};
+  // Keyed by names the cluster chose: a namespace called `constructor` is
+  // one, and an inherited property must not stand in for its entry.
+  const perNamespace: Record<string, Parts> = Object.create(null);
   for (const series of namespaces) {
     const namespace = series.labels["namespace"] ?? "";
     const part = series.labels["part"] ?? "";
@@ -320,8 +322,11 @@ export async function costNow(input: {
   return {
     nodes: priced.sort((a, b) => a.name.localeCompare(b.name)),
     allocatedByNode: byNode
-      ? Object.fromEntries(
-          [...byLabel(byNode, "node")].filter(([name]) => name !== "")
+      ? Object.assign(
+          Object.create(null) as Record<string, number>,
+          Object.fromEntries(
+            [...byLabel(byNode, "node")].filter(([name]) => name !== "")
+          )
         )
       : null,
     namespaces: perNamespace,
