@@ -28,7 +28,7 @@ export function SourceRail({
   const t = useT();
   return (
     <aside
-      className="flex w-60 shrink-0 flex-col gap-3 overflow-y-auto scrollbar-lane rounded-lg border border-hair p-2 text-[12px]"
+      className="flex w-60 shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto scrollbar-lane rounded-lg border border-hair p-2 text-[12px]"
       aria-label={t("traffic", "sources")}
     >
       <p className="text-[11px] font-medium uppercase tracking-wide text-fg-fnt">
@@ -59,7 +59,7 @@ export function SourceRail({
               </span>
             </p>
             {source.state.says === "present" && (
-              <p className="break-all font-mono text-[11px] text-fg-mut">
+              <p className="select-text break-all font-mono text-[11px] text-fg-mut">
                 {source.found.join(", ")}
               </p>
             )}
@@ -82,7 +82,11 @@ export function SourceRail({
               </p>
             )}
             {source.state.says !== "present" && (
-              <p className="text-[11px] text-fg-fnt">
+              // A labelsContext list has no space to break at, and is copied whole.
+              <p
+                className="select-text wrap-anywhere text-[11px] text-fg-fnt"
+                data-testid="source-need"
+              >
                 {t("traffic", source.need)}
               </p>
             )}
