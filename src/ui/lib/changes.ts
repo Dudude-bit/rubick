@@ -449,17 +449,17 @@ export function letGoWords(
 }
 
 /**
- * The spans that watched `kind`: the followed kinds' where a span names it,
- * otherwise the ones that read every other kind by name.
+ * The spans that watched `kind`: each followed span that names it, where any
+ * does, otherwise the ones that read every other kind by name. A followed
+ * span from before the kind was served did not watch it, and spoke for it.
  */
 export function spansFor<S extends SpanLike & { kinds?: string[] }>(
   spans: { followed: S[]; meta: S[] } | undefined,
   kind: string
 ): S[] {
   if (!spans) return [];
-  return spans.followed.some((span) => span.kinds?.includes(kind))
-    ? spans.followed
-    : spans.meta;
+  const naming = spans.followed.filter((span) => span.kinds?.includes(kind));
+  return naming.length > 0 ? naming : spans.meta;
 }
 
 /** Whether a row is a change rather than one of the cluster's events. */
