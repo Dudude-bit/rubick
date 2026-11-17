@@ -4,7 +4,7 @@ import type { CostBasis } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { estimatePicture } from "@/lib/cost";
-import { costLineWords } from "./cost-words";
+import { costLineWords, pictureNotes } from "./cost-words";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -12,6 +12,7 @@ const refused: CostBasis = {
   nodes: [],
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [],
   workloads: [],
   rest: null,
@@ -114,5 +115,37 @@ describe("the cost line of a workload whose cost read failed", () => {
         t
       )
     ).toBe("Could not read what this costs: query timed out");
+  });
+});
+
+describe("a CronJob while the Jobs could not be listed", () => {
+  /**
+   * Pods could be read and Jobs not: each run is billed to its Job, and the
+   * CronJob's page said "Not in the cost read yet". The page and the line
+   * say the Jobs were refused. Fails if a refused Job list reads as nothing
+   * of the CronJob running.
+   */
+  it("says the Jobs could not be listed, on the page and on its line", () => {
+    const picture = estimatePicture(
+      {
+        ...refused,
+        unread: [],
+        jobsUnread: { code: "PERMISSION_DENIED", message: "jobs is forbidden" },
+      },
+      prices,
+      null
+    );
+    expect(pictureNotes(picture, t).join(" ")).toContain(
+      "The Jobs could not be listed (jobs is forbidden)"
+    );
+    expect(
+      costLineWords(
+        picture,
+        { namespace: "shop", group: "batch", kind: "CronJob", name: "nightly" },
+        t
+      )
+    ).toBe(
+      "Not known: the Jobs that run it could not be listed (jobs is forbidden)."
+    );
   });
 });

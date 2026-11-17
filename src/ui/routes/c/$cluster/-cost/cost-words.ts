@@ -137,6 +137,8 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
         endpoint: picture.source.endpoint,
       })
     );
+  if (picture.jobsUnread)
+    notes.push(t("cost", "jobsUnread", { said: picture.jobsUnread.message }));
   // OpenCost says what each node holds itself; only an estimate counts it.
   if (picture.heldUnread && !opencost)
     notes.push(t("cost", "heldUnread", { said: picture.heldUnread.message }));
@@ -175,6 +177,14 @@ export function costLineWords(
   // reason, not for want of a price.
   if ("kind" in target && picture.workloadsFailed && of?.perHour === null)
     return t("cost", "lineFailed", { said: picture.workloadsFailed });
+  // A CronJob's runs went under each Job while the Jobs were refused.
+  if (
+    !of &&
+    "kind" in target &&
+    target.kind === "CronJob" &&
+    picture.jobsUnread
+  )
+    return t("cost", "lineJobsUnread", { said: picture.jobsUnread.message });
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)

@@ -204,6 +204,8 @@ export interface CostPicture {
   nodesUnread: ReadFailure | null;
   /** Why what each node holds was not counted, where the pods were refused. */
   heldUnread: ReadFailure | null;
+  /** Why the Jobs could not be listed: whose runs some pods are is not known. */
+  jobsUnread: ReadFailure | null;
   /** Namespaces whose pods could not be read. */
   unread: UnreadNamespace[];
   /** Series for pods not on a node, per namespace. */
@@ -277,12 +279,18 @@ function unread(
   basis: CostBasis
 ): Pick<
   CostPicture,
-  "nodesChecked" | "nodesUnread" | "heldUnread" | "unread" | "waiting"
+  | "nodesChecked"
+  | "nodesUnread"
+  | "heldUnread"
+  | "jobsUnread"
+  | "unread"
+  | "waiting"
 > {
   return {
     nodesChecked: basis.nodes !== null,
     nodesUnread: basis.nodesUnread,
     heldUnread: basis.heldUnread,
+    jobsUnread: basis.jobsUnread,
     unread: basis.unread,
     waiting: basis.waiting,
   };

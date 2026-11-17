@@ -2694,6 +2694,8 @@ export const en = {
       other:
         "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
     },
+    jobsUnread:
+      "The Jobs could not be listed ({said}): a CronJob's runs are each shown as their Job, not under the CronJob.",
     heldUnread:
       "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
@@ -2759,6 +2761,8 @@ export const en = {
     lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
     lineFailed: "Could not read what this costs: {said}",
+    lineJobsUnread:
+      "Not known: the Jobs that run it could not be listed ({said}).",
   },
   hints: {
     mostLikely: "Most likely",

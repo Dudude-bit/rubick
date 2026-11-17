@@ -1235,6 +1235,7 @@ export interface CostBasis {
   rest: RestBasis | null;
   waiting: number;
   unread: UnreadNamespace[];
+  jobsUnread: ReadFailure | null;
   volumeBytes: number | null;
   volumeCount: number | null;
   unclaimed: UnclaimedVolume[] | null;

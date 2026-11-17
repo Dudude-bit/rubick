@@ -60,6 +60,7 @@ function basis(extra: Partial<CostBasis> = {}): CostBasis {
     nodes: [node("node-a")],
     nodesUnread: null,
     heldUnread: null,
+    jobsUnread: null,
     namespaces: [
       {
         namespace: "shop",

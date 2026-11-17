@@ -35,6 +35,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
     })),
     nodesUnread: null,
     heldUnread: null,
+    jobsUnread: null,
     namespaces: Array.from({ length: namespaces }, (_, i) => ({
       namespace: `ns-${i}`,
       workloads: Math.ceil(workloads / namespaces),

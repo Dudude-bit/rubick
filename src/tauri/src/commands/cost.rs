@@ -155,6 +155,9 @@ pub struct CostBasis {
     pub waiting: u32,
     /// Namespaces whose pods could not be read.
     pub unread: Vec<UnreadNamespace>,
+    /// Why the Jobs could not be listed where the pods were: a CronJob's
+    /// runs are then each under its Job, whose maker is not known.
+    pub jobs_unread: Option<ReadFailure>,
     /// Every volume in the cluster, claimed or not; `None` where volumes
     /// could not be listed.
     pub volume_bytes: Option<f64>,
@@ -209,6 +212,9 @@ pub(crate) struct ScopedPods {
     /// `(namespace, Job)` to the `CronJob` that made it.
     pub cron_of: HashMap<(String, String), String>,
     pub unread: Vec<UnreadNamespace>,
+    /// Why the Jobs could not be listed where the pods were: whose runs
+    /// those pods are is then not known.
+    pub jobs_unread: Option<ReadFailure>,
     pub served_from: OverviewSource,
     /// Nodes and every pod of the cluster, where the stores served.
     pub(crate) stored: Option<Stored>,
@@ -288,6 +294,7 @@ pub(crate) async fn scoped_pods_on(
             pods,
             cron_of: cron_of(&jobs),
             unread: Vec::new(),
+            jobs_unread: None,
             served_from: OverviewSource::Watch,
             stored: Some((snapshot.nodes, snapshot.pods)),
             kept: Some(snapshot.claims),
@@ -303,14 +310,26 @@ pub(crate) async fn scoped_pods_on(
             let (pods, jobs) = tokio::join!(pods.list(&params), jobs.list(&params));
             (
                 pods.map(|l| l.items).map_err(Error::from),
-                jobs.map(|l| l.items).ok(),
+                jobs.map(|l| l.items).map_err(Error::from),
             )
         }
     }))
     .await;
+    gathered(&reaches, lists, scope.is_none())
+}
+
+/// Each reach's pods and Jobs, put together. A refused Job list is said,
+/// not dropped: without it a CronJob's runs fall under each Job, and the
+/// answer could not tell that from a Job nothing made.
+fn gathered(
+    reaches: &[Option<&str>],
+    lists: Vec<(Result<Vec<Pod>>, Result<Vec<Job>>)>,
+    whole_cluster: bool,
+) -> Result<ScopedPods> {
     let mut pods = Vec::new();
     let mut jobs = Vec::new();
     let mut unread = Vec::new();
+    let mut jobs_unread = None;
     let mut first = None;
     for (reach, (listed, listed_jobs)) in reaches.iter().zip(lists) {
         match listed {
@@ -321,13 +340,18 @@ pub(crate) async fn scoped_pods_on(
                     unread.push(UnreadNamespace::of((*namespace).to_string(), &error));
                 }
                 first.get_or_insert(error);
+                continue;
             }
         }
-        // ponytail: a refused Job list leaves its CronJobs' pods under their Job.
-        jobs.extend(listed_jobs.into_iter().flatten().map(Arc::new));
+        match listed_jobs {
+            Ok(items) => jobs.extend(items.into_iter().map(Arc::new)),
+            Err(error) => {
+                jobs_unread.get_or_insert(ReadFailure::of(&error));
+            }
+        }
     }
     if let Some(error) = first {
-        if unread.len() == reaches.len() || scope.is_none() {
+        if unread.len() == reaches.len() || whole_cluster {
             return Err(error);
         }
     }
@@ -335,6 +359,7 @@ pub(crate) async fn scoped_pods_on(
         pods,
         cron_of: cron_of(&jobs),
         unread,
+        jobs_unread,
         served_from: OverviewSource::List,
         stored: None,
         kept: None,
@@ -778,6 +803,7 @@ fn assemble(
         rest,
         waiting,
         unread: read.unread.clone(),
+        jobs_unread: read.jobs_unread.clone(),
         volume_bytes: volumes.total,
         volume_count: volumes.count,
         unclaimed: volumes.unclaimed.clone(),
@@ -851,6 +877,7 @@ pub(crate) mod tests {
             pods,
             cron_of: HashMap::new(),
             unread: Vec::new(),
+            jobs_unread: None,
             served_from: OverviewSource::Watch,
             stored: None,
             kept: None,
@@ -1236,6 +1263,7 @@ pub(crate) mod tests {
             rest: Some(RestBasis::default()),
             waiting: 0,
             unread: Vec::new(),
+            jobs_unread: None,
             volume_bytes: Some(1.0),
             volume_count: Some(1),
             unclaimed: Some(Vec::new()),
@@ -1245,6 +1273,41 @@ pub(crate) mod tests {
         };
         let bytes = serde_json::to_vec(&basis).unwrap().len();
         assert!(bytes < 262_144, "a full answer is {bytes} bytes");
+    }
+
+    /// A token that lists pods and not Jobs: the refusal was dropped, so a
+    /// CronJob's runs sat under each Job with nothing saying whose they
+    /// are. The refusal travels with the answer. Fails if a refused Job
+    /// list reads as one with no Jobs in it.
+    #[test]
+    fn a_refused_job_list_is_said_and_not_read_as_no_jobs() {
+        let run = pod(&Spec {
+            owner: Some(("Job", "nightly-29112400")),
+            ..running(
+                "shop",
+                "nightly-29112400-abcde",
+                ("Job", "nightly-29112400"),
+            )
+        });
+        let refused = Err(refused());
+        let read = gathered(
+            &[Some("shop")],
+            vec![(Ok(vec![(*run).clone()]), refused)],
+            false,
+        )
+        .expect("the pods were read");
+        assert_eq!(
+            read.jobs_unread.as_ref().map(|f| f.code.as_str()),
+            Some("PERMISSION_DENIED")
+        );
+        let basis = assemble(
+            &read,
+            Ok((vec![], Ok(Some(vec![])))),
+            &Volumes::default(),
+            None,
+        );
+        assert!(basis.jobs_unread.is_some());
+        assert_eq!(basis.workloads[0].key.kind, "Job");
     }
 
     /// The perf rig is 10 000 pods Pending in ten namespaces on a node

@@ -28,6 +28,7 @@ const basis = (workloads: WorkloadBasis[]): CostBasis => ({
   nodes: null,
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [],
   workloads,
   rest: null,

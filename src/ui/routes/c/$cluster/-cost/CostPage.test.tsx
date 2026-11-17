@@ -57,6 +57,7 @@ const BASIS: CostBasis = {
   nodes: [node("node-a"), node("worker-7")],
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [
     {
       namespace: "shop",

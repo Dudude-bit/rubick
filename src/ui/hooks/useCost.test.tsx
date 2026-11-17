@@ -33,6 +33,7 @@ const BASIS: CostBasis = {
   nodes: [],
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [],
   workloads: [],
   rest: null,
