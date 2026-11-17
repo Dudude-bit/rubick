@@ -113,6 +113,8 @@ function stopSubject(stop: ChainStop) {
       return stop.route;
     case "gatewayMissing":
     case "gatewayNotProgrammed":
+    case "gatewayClassMissing":
+    case "gatewayClassUnclaimed":
       return stop.gateway;
     case "selectsNothing":
     case "scaledToZero":

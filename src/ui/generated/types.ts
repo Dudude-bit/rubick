@@ -3430,6 +3430,22 @@ export type ChainStop =
       message: string | null;
     }
   | {
+      reason: "gatewayClassMissing";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      class: string;
+    }
+  | {
+      reason: "gatewayClassUnclaimed";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      class: string;
+      controller: string;
+      refused: boolean;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
       reason: "selectsNothing";
       service: ObjectRef;
       selector: string;

@@ -478,6 +478,7 @@ pub(super) async fn service_connections(
         &subject,
         &snapshot.gateway_routes,
         snapshot.gateways.as_deref(),
+        snapshot.gateway_classes.as_deref(),
         out,
     );
     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;

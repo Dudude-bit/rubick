@@ -29,9 +29,11 @@ import {
   type RoutedIngress,
 } from "./connections";
 import type { DoorAsk, DoorRead } from "./policy-door";
+import { classStep } from "./route-trace";
 import type {
   ChainStop,
   ConditionInfo,
+  GatewayClassInfo,
   PolicyDoor,
   NotServing,
   PublishedEndpoint,
@@ -1800,6 +1802,80 @@ describe("the traffic chain", () => {
     expect(new Set(titles).size).toBe(3);
     expect(titles[0]).toContain("No Service named demo");
     expect(titles[1]).toBe("No pod carries app=tls-demo");
+  });
+
+  /**
+   * The Routes page said "nothing claims class live-check" of a route whose
+   * chain on the Connections tab showed no break. Fails if the tab's words
+   * for a missing, a silent or a refusing class are not the page's own.
+   */
+  it("says a Gateway's class stop in the Routes page's own words", () => {
+    const gateway = {
+      uid: "",
+      name: "public",
+      namespace: "infra",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      className: "live-check",
+      listenerSets: [],
+      listenerSetsKnown: true,
+      listeners: [],
+      addresses: [],
+      conditions: [],
+      generation: 1,
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    };
+    const page = (classes: GatewayClassInfo[]) =>
+      classStep(gateway, classes, true, t).detail!;
+    const ends = {
+      route: ref("HTTPRoute", "web"),
+      gateway: ref("Gateway", "public"),
+      class: "live-check",
+    };
+    const unclaimed = {
+      uid: "",
+      name: "live-check",
+      controllerName: "example.net/nobody",
+      description: null,
+      accepted: null,
+      conditions: [],
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    };
+    const refusal = {
+      type: "Accepted",
+      status: "False",
+      reason: "InvalidParameters",
+      message: "bad params",
+      lastTransitionTime: null,
+    };
+    const word = (stop: ChainStop) => {
+      const { title, note } = describeStop(stop, t);
+      return { title, body: note };
+    };
+    expect(word({ reason: "gatewayClassMissing", ...ends })).toEqual(page([]));
+    expect(
+      word({
+        reason: "gatewayClassUnclaimed",
+        ...ends,
+        controller: "example.net/nobody",
+        refused: false,
+        conditionReason: null,
+        message: null,
+      })
+    ).toEqual(page([unclaimed]));
+    expect(
+      word({
+        reason: "gatewayClassUnclaimed",
+        ...ends,
+        controller: "example.net/nobody",
+        refused: true,
+        conditionReason: "InvalidParameters",
+        message: "bad params",
+      })
+    ).toEqual(page([{ ...unclaimed, accepted: false, conditions: [refusal] }]));
   });
 
   /**

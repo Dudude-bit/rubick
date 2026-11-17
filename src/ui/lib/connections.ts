@@ -34,6 +34,7 @@ import {
 import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
+import { conditionSaid } from "./condition-health";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import {
   doorDoubt,
@@ -675,6 +676,27 @@ export function describeStop(
           gateway: stop.gateway.name,
         }),
         note: gatewayRefusalNote(stop, [], t),
+      };
+    // In the Routes page's own words, so the tab and the page say one thing.
+    case "gatewayClassMissing":
+      return {
+        title: t("empty", "gwClassMissingTitle", { name: stop.class }),
+        note: t("empty", "gwClassMissingBody"),
+      };
+    case "gatewayClassUnclaimed":
+      return {
+        title: t("empty", "gwClassUnclaimedTitle", { name: stop.class }),
+        note: stop.refused
+          ? t("empty", "gwClassRefusedBody", {
+              said: conditionSaid({
+                type: "Accepted",
+                status: "False",
+                reason: stop.conditionReason,
+                message: stop.message,
+                lastTransitionTime: null,
+              }),
+            })
+          : t("empty", "gwClassSilentBody", { controller: stop.controller }),
       };
   }
 }

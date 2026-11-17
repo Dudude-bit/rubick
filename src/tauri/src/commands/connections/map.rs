@@ -186,6 +186,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             &svc_ref,
             &snapshot.gateway_routes,
             snapshot.gateways.as_deref(),
+            None,
             &mut out,
         );
         let published = out
@@ -252,7 +253,15 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
             Existence::Present,
         )
         .with_group_of(&route.api_version);
-        route_parents(route, &route_ref, snapshot.gateways.as_deref(), &mut out);
+        // The map's route takes its verdict from the Routes page's board, class
+        // included; its backend reads no classes.
+        route_parents(
+            route,
+            &route_ref,
+            snapshot.gateways.as_deref(),
+            None,
+            &mut out,
+        );
         let id = node_id(&route_ref);
         nodes.insert(
             id.clone(),
