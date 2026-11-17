@@ -292,6 +292,40 @@ describe("the cluster map's model", () => {
     expect(draw(null) ?? "").not.toContain("live-check");
   });
 
+  /**
+   * The Gateway's card was packed after its route's whenever its namespace
+   * sorted later, and the line ran back across both. Fails if a group a
+   * route elsewhere attaches to is not packed first.
+   */
+  it("packs the group of a Gateway a route attaches to before the route's", () => {
+    const route = node("HTTPRoute", "web", "shop");
+    const gateway = node("Gateway", "public", "zones");
+    const model = of(
+      [route, gateway],
+      [read("shop"), read("zones"), read("billing")],
+      [
+        {
+          id: "attach",
+          from: route.id,
+          to: gateway.id,
+          relations: [
+            {
+              verb: "attachesTo",
+              sectionName: null,
+              port: null,
+              listenerSet: null,
+            },
+          ],
+        },
+      ]
+    );
+    expect(model.groups.map((group) => group.id)).toEqual([
+      "zones",
+      "billing",
+      "shop",
+    ]);
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

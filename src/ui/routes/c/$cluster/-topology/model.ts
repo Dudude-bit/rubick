@@ -358,79 +358,94 @@ export function modelOf(
       ? [...reads.keys(), ...members.keys()]
       : [...members.keys(), ...refusedIds]
   );
+  // A group a route elsewhere attaches to is packed before the rest, so a
+  // Gateway's card stands before (left of or above) its routes' cards.
+  const doors = new Set<string>();
+  for (const edge of edges.values()) {
+    if (edge.relations[0]?.verb !== "attachesTo") continue;
+    const into = groupOf.get(edge.to);
+    if (into && groupOf.get(edge.from) !== into) doors.add(into);
+  }
   const summaries = new Map<string, string>();
-  const groups: GraphGroup[] = [...ids].sort().map((id) => {
-    const held = members.get(id) ?? [];
-    // The namespaces a group was read from: its own, or every one its
-    // members came from. One not read at all is outside the scope.
-    const namespaces =
-      settings.grouping === "namespace"
-        ? [id]
-        : id.startsWith("ns:")
-          ? [id.slice(3)]
-          : [...new Set(held.flatMap((node) => node.home ?? []))];
-    const read = namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
-    // Before any namespace is read the whole map is opening, not outside.
-    const outside =
-      reads.size === 0
-        ? []
-        : namespaces.filter((namespace) => !reads.has(namespace));
-    const counts = new Map<string, number>();
-    for (const node of held)
-      counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
-    const failing = held.filter((node) => tones.get(node.id) === "err").length;
-    const warning = held.filter((node) => tones.get(node.id) === "warn").length;
-    const unread = [
-      ...new Set(
-        namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
-      ),
-    ];
-    const refused = refusedWhole(read);
-    const lines = refused
-      ? [
-          t("topology", "refusedWhole", {
-            namespace: namespaces[0],
-            said:
-              read?.notLookedAt[0]?.why.says === "unanswered"
-                ? read.notLookedAt[0].why.said
-                : "",
-          }),
-        ]
-      : [
-          MAP_KINDS.filter((kind) => counts.has(kind))
-            .map((kind) => `${kind} ${counts.get(kind)}`)
-            .join(" · ") || t("topology", "nothingDrawn"),
-          [
-            failing > 0 && t("count", "failingNodes", { n: failing }),
-            warning > 0 && t("count", "warningNodes", { n: warning }),
+  const groups: GraphGroup[] = [...ids]
+    .sort((a, b) => Number(doors.has(b)) - Number(doors.has(a)) || byName(a, b))
+    .map((id) => {
+      const held = members.get(id) ?? [];
+      // The namespaces a group was read from: its own, or every one its
+      // members came from. One not read at all is outside the scope.
+      const namespaces =
+        settings.grouping === "namespace"
+          ? [id]
+          : id.startsWith("ns:")
+            ? [id.slice(3)]
+            : [...new Set(held.flatMap((node) => node.home ?? []))];
+      const read =
+        namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
+      // Before any namespace is read the whole map is opening, not outside.
+      const outside =
+        reads.size === 0
+          ? []
+          : namespaces.filter((namespace) => !reads.has(namespace));
+      const counts = new Map<string, number>();
+      for (const node of held)
+        counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
+      const failing = held.filter(
+        (node) => tones.get(node.id) === "err"
+      ).length;
+      const warning = held.filter(
+        (node) => tones.get(node.id) === "warn"
+      ).length;
+      const unread = [
+        ...new Set(
+          namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
+        ),
+      ];
+      const refused = refusedWhole(read);
+      const lines = refused
+        ? [
+            t("topology", "refusedWhole", {
+              namespace: namespaces[0],
+              said:
+                read?.notLookedAt[0]?.why.says === "unanswered"
+                  ? read.notLookedAt[0].why.said
+                  : "",
+            }),
           ]
-            .filter(Boolean)
-            .join(" · "),
-          unread.length > 0 &&
-            t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
-          outside.length > 0 &&
-            t("topology", "outsideScope", { namespaces: outside.join(", ") }),
-        ].filter((line): line is string => Boolean(line));
-    summaries.set(id, lines.join(" · "));
-    return {
-      id,
-      label: groupLabel(id, t),
-      collapsed: settings.toggled.get(id) ?? settings.collapsedAtFirst,
-      tone: refused
-        ? "unknown"
-        : loudest(
+        : [
+            MAP_KINDS.filter((kind) => counts.has(kind))
+              .map((kind) => `${kind} ${counts.get(kind)}`)
+              .join(" · ") || t("topology", "nothingDrawn"),
             [
-              ...held.map((node) => tones.get(node.id) ?? "mute"),
-              ...(unread.length > 0 || outside.length > 0
-                ? ["unknown" as const]
-                : []),
-            ],
-            "mute"
-          ),
-      summary: lines.join("\n"),
-      refused,
-    };
-  });
+              failing > 0 && t("count", "failingNodes", { n: failing }),
+              warning > 0 && t("count", "warningNodes", { n: warning }),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            unread.length > 0 &&
+              t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
+            outside.length > 0 &&
+              t("topology", "outsideScope", { namespaces: outside.join(", ") }),
+          ].filter((line): line is string => Boolean(line));
+      summaries.set(id, lines.join(" · "));
+      return {
+        id,
+        label: groupLabel(id, t),
+        collapsed: settings.toggled.get(id) ?? settings.collapsedAtFirst,
+        tone: refused
+          ? "unknown"
+          : loudest(
+              [
+                ...held.map((node) => tones.get(node.id) ?? "mute"),
+                ...(unread.length > 0 || outside.length > 0
+                  ? ["unknown" as const]
+                  : []),
+              ],
+              "mute"
+            ),
+        summary: lines.join("\n"),
+        refused,
+      };
+    });
 
   const graphEdges: GraphEdge[] = [];
   for (const edge of edges.values()) {

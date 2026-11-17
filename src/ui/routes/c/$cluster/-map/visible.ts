@@ -1,5 +1,15 @@
 import type { GraphEdge, GraphGroup, GraphNode, MapTone } from "./types";
 
+/**
+ * The ends an edge is drawn between, left to right: a reversed one from its
+ * `to`, so a Gateway's line leaves its right side for its route's left, as
+ * the layout put them, instead of running back across both.
+ */
+export const drawnEnds = (edge: GraphEdge) =>
+  edge.reversed
+    ? { source: edge.to, target: edge.from }
+    : { source: edge.from, target: edge.to };
+
 /** The id a collapsed group's card is drawn under. */
 export const cardId = (group: string) => `group:${group}`;
 

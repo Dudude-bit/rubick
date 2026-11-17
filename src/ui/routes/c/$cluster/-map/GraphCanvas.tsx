@@ -72,7 +72,7 @@ import type {
   GraphNode,
 } from "./types";
 import { NODE_H, NODE_W, OUTSIDE, useLayout } from "./useLayout";
-import { cardId, visibleGraph } from "./visible";
+import { cardId, drawnEnds, visibleGraph } from "./visible";
 
 export type { GraphCanvasHandle, GraphEdge, GraphGroup, GraphNode };
 
@@ -339,8 +339,7 @@ function Canvas({
         if (was) return was;
         const flow: Edge = {
           id: edge.id,
-          source: edge.from,
-          target: edge.to,
+          ...drawnEnds(edge),
           type: "map",
           data: { edge },
           selectable: false,
@@ -389,8 +388,9 @@ function Canvas({
                   }
                 : null;
             };
-            const from = end(edge.from, "from");
-            const to = end(edge.to, "to");
+            const { source, target } = drawnEnds(edge);
+            const from = end(source, "from");
+            const to = end(target, "to");
             return from && to ? [{ edge, from, to }] : [];
           }),
         }),

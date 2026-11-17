@@ -152,4 +152,46 @@ describe("the map's view", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("elk gave up");
   });
+
+  /**
+   * A route's line to its Gateway left the route's right side, turned back
+   * and entered the Gateway from its left, across both cards. Fails if a
+   * reversed edge is handed to React Flow from its `from` rather than from
+   * its `to`, or an ordinary one is turned round.
+   */
+  it("draws a route's edge from its Gateway's side, and every other edge as handed", async () => {
+    const attaches = {
+      id: "web>attachesTo>public",
+      from: "web",
+      to: "public",
+      tone: "ok" as const,
+      reversed: true,
+    };
+    const selects = {
+      id: "svc>web",
+      from: "svc",
+      to: "web",
+      tone: "ok" as const,
+    };
+    render(
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={["web", "public", "svc"].map((id) => node(id, "shop"))}
+        edges={[attaches, selects]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    await waitFor(() => expect(placed).toBe(4), SLOW);
+    const ends = (id: string) =>
+      (handed.edges as { id: string; source: string; target: string }[]).find(
+        (each) => each.id === id
+      );
+    expect(ends(attaches.id)).toMatchObject({
+      source: "public",
+      target: "web",
+    });
+    expect(ends(selects.id)).toMatchObject({ source: "svc", target: "web" });
+  });
 });
