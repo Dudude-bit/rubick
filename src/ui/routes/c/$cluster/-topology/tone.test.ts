@@ -250,6 +250,33 @@ describe("a map node's colour", () => {
       ).toBe(ROLE_TONE[statusRole(phase)]);
   });
 
+  /**
+   * A budget whose controller has not written a status has no counts to
+   * judge. Fails if the map draws it as a quiet budget.
+   */
+  it("is unknown for a budget with no status yet, and quiet for one with room", () => {
+    const budget = (cannotAllow: boolean | null): TopologyNode =>
+      node(
+        {
+          ...ref("PodDisruptionBudget"),
+          facts: {
+            kind: "budget",
+            minAvailable: "1",
+            maxUnavailable: null,
+            disruptionsAllowed: cannotAllow === null ? 0 : 1,
+            currentHealthy: cannotAllow === null ? 0 : 2,
+            desiredHealthy: cannotAllow === null ? 0 : 1,
+            expectedPods: cannotAllow === null ? 0 : 2,
+            cannotAllow,
+            conditions: [],
+          },
+        },
+        { says: "budget" } as NodeVerdict
+      );
+    expect(toneOf(budget(null), inputs)).toBe("unknown");
+    expect(toneOf(budget(false), inputs)).toBe("ok");
+  });
+
   /** An Ingress is coloured by the Ingresses list's own hook; until it answers, nothing is claimed. */
   it("is an Ingress's verdict from the list's hook, and unknown until it has one", () => {
     const row = { name: "web", namespace: "shop" } as never;

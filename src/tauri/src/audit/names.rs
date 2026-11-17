@@ -111,12 +111,18 @@ pub fn floats(image: &str) -> bool {
 
 /// The sockets a container runtime listens on by default: containerd and
 /// CRI-O (setup/production-environment/container-runtimes), cri-dockerd
-/// (same page) and Docker Engine (moby docs/reference/dockerd.md).
+/// (same page) and Docker Engine (moby docs/reference/dockerd.md); k3s's
+/// containerd and cri-dockerd (k3s `pkg/agent/config/config_linux.go`) and
+/// `MicroK8s`'s (`--address ${SNAP_COMMON}/run/containerd.sock`,
+/// `microk8s-resources/default-args/containerd`).
 const SOCKETS: &[&str] = &[
     "/run/containerd/containerd.sock",
     "/var/run/crio/crio.sock",
     "/run/cri-dockerd.sock",
     "/var/run/docker.sock",
+    "/run/k3s/containerd/containerd.sock",
+    "/run/k3s/cri-dockerd/cri-dockerd.sock",
+    "/var/snap/microk8s/common/run/containerd.sock",
 ];
 
 /// The runtime socket a hostPath reaches, where it reaches one: the socket
@@ -276,6 +282,14 @@ mod tests {
         );
         assert!(reaches_socket("/var/run").is_some());
         assert!(reaches_socket("/").is_some());
+        assert_eq!(
+            reaches_socket("/run/k3s"),
+            Some("/run/k3s/containerd/containerd.sock")
+        );
+        assert_eq!(
+            reaches_socket("/var/snap/microk8s/common/run/containerd.sock"),
+            Some("/var/snap/microk8s/common/run/containerd.sock")
+        );
         assert_eq!(reaches_socket("/var/log"), None);
         assert_eq!(reaches_socket("/run/containerd-not"), None);
         assert_eq!(reaches_socket("/var/lib/kubelet"), None);

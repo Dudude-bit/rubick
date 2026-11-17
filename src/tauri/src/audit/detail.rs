@@ -6,7 +6,7 @@
 //! groups its deprecated versions were in.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler;
 use k8s_openapi::api::batch::v1::Job;
@@ -95,11 +95,9 @@ async fn beside_in(
             return kept.1.clone();
         }
     }
+    let era = state.audit.era(context);
     let read = Arc::new(read_beside(client, namespace).await);
-    state
-        .audit
-        .besides
-        .insert(key, (Instant::now(), read.clone()));
+    state.audit.keep_beside(era, key, read.clone());
     read
 }
 

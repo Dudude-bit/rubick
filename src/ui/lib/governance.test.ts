@@ -358,6 +358,22 @@ describe("the tone a disruption budget is allowed", () => {
   });
 
   /**
+   * Before its controller writes a status, a budget's counts are zeros
+   * nobody measured. Fails if they read as a budget exactly met.
+   */
+  it("says nothing of a budget whose status was never written", () => {
+    expect(
+      finding({
+        cannotAllow: null,
+        disruptionsAllowed: 0,
+        currentHealthy: 0,
+        desiredHealthy: 0,
+        expectedPods: 0,
+      })
+    ).toBeNull();
+  });
+
+  /**
    * The case `condition-health.ts` already calls advisory: one of three pods
    * restarting spends a budget of two, and the pod that comes back frees it.
    * Colouring it claims a fault the cluster never reported.

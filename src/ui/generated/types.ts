@@ -2048,6 +2048,7 @@ export interface AuditSummary {
   reading: number;
   unattributed: number;
   enforced: Enforced[];
+  enforcedUnread: Why | null;
   upgrade: UpgradeRead;
   usage: UsageState | null;
 }
@@ -3070,7 +3071,7 @@ export type ObjectFacts =
       currentHealthy: number;
       desiredHealthy: number;
       expectedPods: number;
-      cannotAllow: boolean;
+      cannotAllow: boolean | null;
       conditions: ConditionInfo[];
     };
 

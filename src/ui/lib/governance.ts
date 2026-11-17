@@ -388,6 +388,8 @@ export function budgetFinding(
   facts: BudgetCounts,
   t: T
 ): Finding | null {
+  // No status written yet: its counts are not counts, and nothing is said.
+  if (facts.cannotAllow === null) return null;
   if (facts.disruptionsAllowed > 0) return null;
 
   if (facts.cannotAllow) {

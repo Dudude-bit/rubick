@@ -222,9 +222,10 @@ pub enum ObjectFacts {
         desired_healthy: i32,
         #[serde(rename = "expectedPods")]
         expected_pods: i32,
-        /// See [`crate::resources::disruption::cannot_allow`].
+        /// See [`crate::resources::disruption::cannot_allow`]; `None` before
+        /// the budget's controller has written a status.
         #[serde(rename = "cannotAllow")]
-        cannot_allow: bool,
+        cannot_allow: Option<bool>,
         conditions: Vec<ConditionInfo>,
     },
 }

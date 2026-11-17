@@ -195,7 +195,7 @@ pub(super) fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
         current_healthy: status.map_or(0, |s| s.current_healthy),
         desired_healthy: status.map_or(0, |s| s.desired_healthy),
         expected_pods: status.map_or(0, |s| s.expected_pods),
-        cannot_allow: status.is_some_and(|s| {
+        cannot_allow: status.map(|s| {
             crate::resources::disruption::cannot_allow(s.desired_healthy, s.expected_pods)
         }),
         conditions: status
@@ -512,5 +512,37 @@ mod refused_claim_tests {
         assert_eq!(named.get("Service"), Some(&"v1"));
         assert_eq!(named.get("Ingress"), Some(&"networking.k8s.io/v1"));
         assert_eq!(named.get("PersistentVolumeClaim"), Some(&"v1"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// A budget whose controller has not written a status cannot say whether
+    /// it allows an eviction. Fails if it reads as one that does, which the
+    /// map drew as a quiet budget.
+    #[test]
+    fn a_budget_with_no_status_cannot_say_whether_it_allows_an_eviction() {
+        let pdb = |status: serde_json::Value| -> PodDisruptionBudget {
+            let mut value = json!({
+                "metadata": { "name": "web", "namespace": "shop" },
+                "spec": { "minAvailable": 1 }
+            });
+            if !status.is_null() {
+                value["status"] = status;
+            }
+            serde_json::from_value(value).expect("a budget")
+        };
+        let said = |pdb: &PodDisruptionBudget| match budget_ref(pdb, "shop").facts {
+            Some(ObjectFacts::Budget { cannot_allow, .. }) => cannot_allow,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(said(&pdb(serde_json::Value::Null)), None);
+        let written = json!({ "disruptionsAllowed": 0, "currentHealthy": 1,
+            "desiredHealthy": 1, "expectedPods": 1, "observedGeneration": 1 });
+        assert_eq!(said(&pdb(written)), Some(true));
     }
 }
