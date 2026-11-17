@@ -133,6 +133,21 @@ describe("the cluster map's model", () => {
   });
 
   /**
+   * A namespace that held only pods with no owner was summed up as "nothing
+   * drawn" beside the node, on the card and in the shared report. Fails if
+   * a kind the rail does not list is left out of its group's summary.
+   */
+  it("counts pods with no owner in their group's summary", () => {
+    const pods: TopologyNode = {
+      ...node("Pod", OWNERLESS),
+      verdict: { says: "ownerless", statuses: [] },
+      pods: { total: 2, ready: 2 },
+    };
+    const model = of([pods, node("Service", "web")], [read("shop")]);
+    expect(model.summaries.get("shop")).toBe("Service 1 · Pod 1");
+  });
+
+  /**
    * An edge to an object nobody could look at must not read like one to an
    * object that is there. Fails if an end not checked does not make its edge
    * unknown, or if two present ends or a missing one lose ok and err.
