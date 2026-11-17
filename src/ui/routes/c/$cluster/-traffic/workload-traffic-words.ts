@@ -58,6 +58,16 @@ export function cronJobOf(owners: readonly Owned[]): string | null {
   );
 }
 
+const RATES = ["requests", "bytes", "events"] as const;
+
+/** A row with no rate, where one of its rates could not be read: not "none". */
+export function rateUnread(row: FlowRow): boolean {
+  return (
+    RATES.every((family) => row[family].value === null) &&
+    RATES.some((family) => row[family].state === "notRead")
+  );
+}
+
 /** A row's own rate, by the first family it has. */
 function rateWords(row: FlowRow, t: T): string {
   if (row.requests.value !== null)
@@ -65,7 +75,7 @@ function rateWords(row: FlowRow, t: T): string {
   if (row.bytes.value !== null) return bytesRate(row.bytes.value);
   if (row.events.value !== null)
     return t("traffic", "subEvents", { v: rate(row.events.value) });
-  return t("traffic", "cellNone");
+  return t("traffic", rateUnread(row) ? "cellNotRead" : "cellNone");
 }
 
 export function rowWords(row: FlowRow, peer: "from" | "to", t: T): string[] {

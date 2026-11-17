@@ -21,13 +21,15 @@ import { TONE_TEXT } from "../-map/tone-classes";
 import {
   cronJobOf,
   type Owned,
+  rateUnread,
   rowWords,
   subjectNotes,
   subjectOf,
   trafficSection,
 } from "./workload-traffic-words";
 
-/** Where `rowWords` puts the share of errors, after the name. */
+/** Where `rowWords` puts the rate and the share of errors, after the name. */
+const RATE_PART = 0;
 const ERRORS_PART = 1;
 
 function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
@@ -67,6 +69,8 @@ function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
                 <span className={TONE_TEXT[shareTone(row.errorShare)]}>
                   {part}
                 </span>
+              ) : at === RATE_PART && rateUnread(row) ? (
+                <span className="text-warn">{part}</span>
               ) : (
                 part
               )}

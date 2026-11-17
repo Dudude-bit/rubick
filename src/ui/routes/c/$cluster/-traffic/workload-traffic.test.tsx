@@ -258,6 +258,27 @@ describe("a workload's Traffic block", () => {
   });
 
   /**
+   * A row with a latency and no rate, because the rate's query failed, is
+   * "not read" in warning, not "none": a failed read is not a quiet pair.
+   */
+  it("says a row's rate was not read where its query failed, never none", async () => {
+    await draw(
+      read([ISTIO], [["web", "cart", { p95: 0.012 }]], null, {
+        reads: [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "failed", code: "PROMETHEUS", message: "timed out" },
+          },
+        ],
+      })
+    );
+    const unread = screen.getByText("not read");
+    expect(unread.className).toContain("text-warn");
+    expect(screen.queryByText("none")).toBeNull();
+  });
+
+  /**
    * A CronJob's pods, and Hubble's names, file a run's flows under the
    * CronJob: a Job asked about as itself is never any flow's end.
    */
