@@ -3108,6 +3108,8 @@ export const ru: Catalogue = {
     noAddressPublished: "адрес не опубликован",
     moreWays: "ещё {n}",
     lastChange: "Последнее изменение",
+    lastChangeUnchecked:
+      "неизвестно: записи под этим именем могут быть от другого кластера ({reason})",
     nothingSeen: "приложение ничего не видело, пока смотрело",
     nothingSeenSinceLetGo:
       "приложение ничего не видело с {at}: более старые изменения удалены",

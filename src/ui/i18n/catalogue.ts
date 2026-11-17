@@ -2940,6 +2940,8 @@ export const en = {
     noAddressPublished: "no address published",
     moreWays: "{n} more",
     lastChange: "Last change",
+    lastChangeUnchecked:
+      "not known: the rows kept under this name may be another cluster's ({reason})",
     nothingSeen: "nothing seen while this app was watching",
     nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
     nothingSeenSinceCleared:
