@@ -51,7 +51,11 @@ export type FlowSourceState =
   | { says: "absent" }
   /** Its series are here and name no source or destination. */
   | { says: "unpaired" }
-  | { says: "failed"; said: string };
+  | { says: "failed"; said: string }
+  /** A live source still connecting, not enabled, or stopped: not found. */
+  | { says: "connecting" }
+  | { says: "off" }
+  | { says: "stopped" };
 
 /** A source of flows, as the supplier found it. */
 export interface FlowSource {

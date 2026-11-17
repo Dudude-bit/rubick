@@ -460,6 +460,34 @@ describe("the Traffic page, live", () => {
   });
 
   /**
+   * The rail beside a stopped stream named Hubble Relay "found", in green,
+   * over the sentence saying it was not enabled or had stopped.
+   */
+  it("draws Hubble Relay in the rail as not enabled, stopped or connecting, never found, where nothing is read", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    const rail = async (over: Partial<LiveSnapshot>) => {
+      live.mockReturnValue(snapshot({ relay: null, ...over }));
+      const page = await open();
+      const text =
+        screen.getByRole("complementary", { name: "Sources" }).textContent ??
+        "";
+      page.unmount();
+      return text;
+    };
+    const off = await rail({ phase: "ended", end: { says: "notEnabled" } });
+    const stopped = await rail({
+      phase: "ended",
+      end: { says: "notLooked", said: "services is forbidden" },
+    });
+    const connecting = await rail({ phase: "connecting" });
+    expect(off).toContain("not enabled");
+    expect(stopped).toContain("stopped");
+    expect(connecting).toContain("connecting");
+    for (const text of [off, stopped, connecting])
+      expect(text).not.toMatch(/found/);
+  });
+
+  /**
    * A node the relay cannot reach sends no flows: an empty map then is not
    * a quiet cluster, and the page names the nodes and why.
    */

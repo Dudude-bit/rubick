@@ -46,7 +46,7 @@ import { drawnColumns, flowColumns } from "./columns";
 import { FlowPanel } from "./FlowPanel";
 import { newFlowMemo, trafficModel } from "./model";
 import { SourceRail } from "./SourceRail";
-import { liveStopped } from "./live-words";
+import { liveSourceOf, liveStopped } from "./live-words";
 import { nothingWords, unreadNotes, WINDOW_WORD } from "./traffic-words";
 
 /** Who talks to whom, from the series a connected Prometheus holds. */
@@ -548,7 +548,7 @@ function LiveView({
   if (stopped !== null)
     return (
       <div className="flex min-h-0 flex-1 gap-2" data-testid="traffic-stopped">
-        <SourceRail sources={[LIVE_SOURCE]} reading={null} />
+        <SourceRail sources={[liveSourceOf(live)]} reading={null} />
         <p
           className={cn(
             "max-w-[72ch] px-1 py-4 text-xs",
@@ -600,7 +600,7 @@ function LiveView({
     <FlowsView
       rows={rows}
       scope={scope}
-      rail={<SourceRail sources={[LIVE_SOURCE]} reading={null} />}
+      rail={<SourceRail sources={[liveSourceOf(live)]} reading={null} />}
       notes={[
         ...(live.relay
           ? [

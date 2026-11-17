@@ -3,6 +3,8 @@ import type { LiveEnd } from "@/generated/types";
 import type { LiveSnapshot } from "@/hooks/useLiveTraffic";
 import type { T } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
+import { LIVE_SOURCE } from "@/lib/traffic";
+import type { FlowSource, FlowSourceState } from "@/lib/traffic";
 
 /** How a live stream ended, said; `closed` is the page leaving and says nothing. */
 const LIVE_END: Record<LiveEnd["says"], (end: LiveEnd, t: T) => string> = {
@@ -49,6 +51,22 @@ const LIVE_END: Record<LiveEnd["says"], (end: LiveEnd, t: T) => string> = {
 };
 
 /** The sentence a live stream stands at instead of flows, or `null` once it flows. */
+/** The live source as the rail draws it: found only once the stream is read. */
+export function liveSourceOf(live: LiveSnapshot): FlowSource {
+  const says: Exclude<
+    FlowSourceState["says"],
+    "absent" | "unpaired" | "failed"
+  > =
+    live.error || (live.phase === "ended" && live.end?.says !== "closed")
+      ? live.end?.says === "notEnabled"
+        ? "off"
+        : "stopped"
+      : live.phase === "connecting"
+        ? "connecting"
+        : "present";
+  return { ...LIVE_SOURCE, state: { says } };
+}
+
 export function liveStopped(live: LiveSnapshot, t: T): string | null {
   if (live.error)
     return t("traffic", "liveFailed", { said: errorToShow(live.error) });
