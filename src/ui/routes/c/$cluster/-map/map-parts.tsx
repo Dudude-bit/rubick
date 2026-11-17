@@ -15,8 +15,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import type { Point } from "@/lib/map-layout";
 import { useActions, useLight } from "./map-context";
 import { EDGE_TEXT, NODE_BORDER, TONE_TEXT } from "./tone-classes";
+import { routePath } from "./visible";
 import {
   subLine,
   type GraphEdge,
@@ -205,7 +207,10 @@ export const GroupCard = memo(function GroupCard({
   );
 });
 
-export type MapEdgeType = Edge<{ edge: GraphEdge }, "map">;
+export type MapEdgeType = Edge<
+  { edge: GraphEdge; route?: readonly Point[] },
+  "map"
+>;
 
 /** One line, its words beside it while either end is singled out. */
 export const MapEdge = memo(function MapEdge({
@@ -219,14 +224,20 @@ export const MapEdge = memo(function MapEdge({
 }: EdgeProps<MapEdgeType>) {
   const actions = useActions();
   const light = useLight();
-  const [path, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // Routed by the layout around the nodes where it was; a straight curve
+  // between the two ports only for an edge the layout did not lay out.
+  const routed =
+    data?.route && data.route.length >= 2 ? routePath(data.route) : null;
+  const [path, labelX, labelY] = routed
+    ? [routed.path, routed.middle.x, routed.middle.y]
+    : getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      });
   if (!data) return null;
   const { edge } = data;
   const touched = light.touched(edge);

@@ -335,13 +335,14 @@ function Canvas({
   const flowEdges = useMemo<Edge[]>(
     () =>
       drawn.edges.map((edge) => {
+        const route = placement.routes.get(edge.id);
         const was = held.edges.get(edge);
-        if (was) return was;
+        if (was && was.data?.route === route) return was;
         const flow: Edge = {
           id: edge.id,
           ...drawnEnds(edge),
           type: "map",
-          data: { edge },
+          data: { edge, route },
           selectable: false,
           focusable: false,
           zIndex: 2,
@@ -349,7 +350,7 @@ function Canvas({
         held.edges.set(edge, flow);
         return flow;
       }),
-    [drawn.edges, held]
+    [drawn.edges, held, placement.routes]
   );
 
   useImperativeHandle(
@@ -391,7 +392,9 @@ function Canvas({
             const { source, target } = drawnEnds(edge);
             const from = end(source, "from");
             const to = end(target, "to");
-            return from && to ? [{ edge, from, to }] : [];
+            return from && to
+              ? [{ edge, from, to, route: placement.routes.get(edge.id) }]
+              : [];
           }),
         }),
     }),

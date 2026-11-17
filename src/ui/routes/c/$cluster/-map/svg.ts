@@ -7,6 +7,7 @@ import {
   type MapTone,
 } from "./types";
 import type { Box } from "./useLayout";
+import { routePath } from "./visible";
 
 /** The theme's colours, as CSS colour strings. */
 export interface SvgColours {
@@ -70,7 +71,13 @@ export interface SvgInput {
   groups: { group: GraphGroup; box: Box; summary: string }[];
   /** Absolute positions. */
   nodes: { node: GraphNode; at: Point; width: number; height: number }[];
-  edges: { edge: GraphEdge; from: Point; to: Point }[];
+  /** With the layout's route where it laid the edge out. */
+  edges: {
+    edge: GraphEdge;
+    from: Point;
+    to: Point;
+    route?: readonly Point[];
+  }[];
   colours: SvgColours;
   /** What the page says above the map about what it could not read, one line each. */
   notes?: readonly string[];
@@ -113,10 +120,14 @@ export function mapSvg({
         `<text x="${box.x + 12}" y="${box.y + 44}" font-size="10.5" fill="${colours.faint}">${escape(summary)}</text>`
       );
   }
-  for (const { edge, from, to } of edges) {
+  for (const { edge, from, to, route } of edges) {
     const bend = (to.x - from.x) / 2;
+    const d =
+      route && route.length >= 2
+        ? routePath(route).path
+        : `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}`;
     parts.push(
-      `<path d="M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}" fill="none" stroke="${colours.tones[edge.tone]}" stroke-width="${1 + 3 * (edge.weight ?? 0)}"${edge.tone === "unknown" ? ' stroke-dasharray="3 3"' : ""}/>`
+      `<path d="${d}" fill="none" stroke="${colours.tones[edge.tone]}" stroke-width="${1 + 3 * (edge.weight ?? 0)}"${edge.tone === "unknown" ? ' stroke-dasharray="3 3"' : ""}/>`
     );
   }
   for (const { node, at, width, height } of nodes) {

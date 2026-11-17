@@ -198,4 +198,28 @@ describe("the map's view", () => {
     });
     expect(ends(selects.id)).toMatchObject({ source: "svc", target: "web" });
   });
+
+  /**
+   * An edge between two cards was a straight run from one port to the other
+   * wherever the cards stood, through whatever lay between. Fails if an
+   * edge the layout routed is not handed to React Flow with its route.
+   */
+  it("hands an edge between groups to React Flow along the layout's route", async () => {
+    render(
+      <GraphCanvas
+        groups={[group("loadgen"), group("istio")]}
+        nodes={[node("lg", "loadgen"), node("gw", "istio")]}
+        edges={[{ id: "lg>gw", from: "lg", to: "gw", tone: "ok" }]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    await waitFor(() => {
+      const edge = (
+        handed.edges as { id: string; data?: { route?: unknown[] } }[]
+      ).find((each) => each.id === "lg>gw");
+      expect(edge?.data?.route?.length).toBeGreaterThanOrEqual(2);
+    }, SLOW);
+  });
 });

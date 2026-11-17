@@ -115,5 +115,11 @@ describe("the map under the mouse", () => {
       return found;
     });
     expect(label).toHaveClass("pointer-events-auto");
+    // Drawn along the layout's route, straight runs between its bends,
+    // rather than a curve from port to port through what lies between.
+    const path = document
+      .querySelector(".react-flow__edge-path")
+      ?.getAttribute("d");
+    expect(path).toMatch(/^M [\d.-]+ [\d.-]+ L /);
   });
 });

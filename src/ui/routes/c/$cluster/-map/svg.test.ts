@@ -171,4 +171,27 @@ describe("the map as an image", () => {
     expect(names[1]).toBe("web");
     expect(doc.querySelector("g > title")?.textContent ?? "").toContain(long);
   });
+
+  /** The image drew every edge as a curve from port to port, through the nodes the canvas routes around. Fails if a routed edge is not drawn along its route. */
+  it("draws a routed edge along its route", () => {
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [],
+      edges: [
+        {
+          edge: { id: "lg>gw", from: "lg", to: "gw", tone: "ok" },
+          from: { x: 0, y: 0 },
+          to: { x: 40, y: 20 },
+          route: [
+            { x: 0, y: 0 },
+            { x: 20, y: 0 },
+            { x: 20, y: 20 },
+            { x: 40, y: 20 },
+          ],
+        },
+      ],
+    });
+    expect(svg).toContain('d="M 0 0 L 20 0 L 20 20 L 40 20"');
+  });
 });
