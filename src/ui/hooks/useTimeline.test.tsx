@@ -74,7 +74,9 @@ const WIDE = 1e15;
 describe("one surface reading the timeline", () => {
   let announce: ((event: { payload: unknown }) => void) | null = null;
   let asked: TimelineQuery[] = [];
-  let answers: (TimelinePage | Promise<TimelinePage>)[] = [];
+  let answers: (TimelinePage | Promise<TimelinePage> | Error)[] = [];
+  /** What the backend's rows are numbered under when nothing else is queued. */
+  let epochNow = 0;
   const fresh = () =>
     new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapperOf =
@@ -102,6 +104,7 @@ describe("one surface reading the timeline", () => {
     announce = null;
     asked = [];
     answers = [];
+    epochNow = 0;
     useClusterStore.setState({ currentContext: "prod", isConnected: true });
     vi.mocked(listen).mockImplementation(async (event, handler) => {
       if (event === "timeline-changed") announce = handler as typeof announce;
@@ -110,7 +113,9 @@ describe("one surface reading the timeline", () => {
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command !== "timeline_read") return undefined;
       asked.push((args as { query: TimelineQuery }).query);
-      return answers.shift() ?? page([]);
+      const next = answers.shift();
+      if (next instanceof Error) throw next;
+      return next ?? page([], { epoch: epochNow });
     });
   });
 
@@ -194,6 +199,31 @@ describe("one surface reading the timeline", () => {
     act(() => result.current.loadOlder());
     await waitFor(() => expect(result.current.rows).toHaveLength(5));
     expect(asked[3].before).toEqual({ at: 10, seq: 10 });
+  });
+
+  /**
+   * An older page answered after the backend started over, for another
+   * cluster under the name: laid in, the old cluster's rows sat below the
+   * new one's. Fails if that page is laid in rather than the timeline read
+   * again from the top.
+   */
+  it("reads the timeline again from the top when an older page comes from rows that started over", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    epochNow = 1;
+    answers = [
+      page([row("x", 5)], { epoch: 1 }),
+      page([row("new", 30, 3)], { epoch: 1 }),
+    ];
+    act(() => result.current.loadOlder());
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
   });
 
   /**
