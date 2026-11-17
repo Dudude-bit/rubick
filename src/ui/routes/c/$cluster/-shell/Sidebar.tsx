@@ -5,6 +5,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ChevronsDown,
   CircleOff,
+  ArrowRightLeft,
   Coins,
   FolderOpen,
   LayoutDashboard,
@@ -170,6 +171,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       resource(ResourceType.Event, "events"),
       { labelKey: "changes", path: pageLink("changes"), icon: History },
       { labelKey: "topology", path: pageLink("topology"), icon: Waypoints },
+      { labelKey: "traffic", path: pageLink("traffic"), icon: ArrowRightLeft },
       { labelKey: "audit", path: pageLink("audit"), icon: ShieldCheck },
       { labelKey: "cost", path: pageLink("cost"), icon: Coins },
     ],

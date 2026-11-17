@@ -492,6 +492,22 @@ pub enum AppEvent {
         stream_id: String,
         end: crate::resources::topology::TopologyEnd,
     },
+    /// Live flows whose last minute changed, and the pairs it emptied. The
+    /// first after connecting names the relay; `lost` and `untracked` are
+    /// running counts of events Hubble dropped and pairs past the cap.
+    HubbleFlows {
+        stream_id: String,
+        pairs: Vec<crate::integrations::hubble::LivePair>,
+        gone: Vec<crate::integrations::hubble::LiveKey>,
+        relay: Option<crate::integrations::hubble::RelayAt>,
+        lost: u64,
+        untracked: u64,
+    },
+    /// A live stream ended; exactly one per stream, on every path.
+    HubbleFlowsEnded {
+        stream_id: String,
+        end: crate::integrations::hubble::LiveEnd,
+    },
 }
 
 impl AppEvent {
@@ -529,6 +545,8 @@ impl AppEvent {
             AppEvent::TopologyBatch { .. } => "topology-batch",
             AppEvent::TopologyReady { .. } => "topology-ready",
             AppEvent::TopologyEnded { .. } => "topology-ended",
+            AppEvent::HubbleFlows { .. } => "hubble-flows",
+            AppEvent::HubbleFlowsEnded { .. } => "hubble-flows-ended",
         }
     }
 
@@ -733,6 +751,18 @@ mod tests {
                 stream_id: "map-1".into(),
                 end: crate::resources::topology::TopologyEnd::Closed,
             },
+            AppEvent::HubbleFlows {
+                stream_id: "hubble-1".into(),
+                pairs: vec![],
+                gone: vec![],
+                relay: None,
+                lost: 0,
+                untracked: 0,
+            },
+            AppEvent::HubbleFlowsEnded {
+                stream_id: "hubble-1".into(),
+                end: crate::integrations::hubble::LiveEnd::NotEnabled,
+            },
         ]
     }
 
@@ -767,6 +797,8 @@ mod tests {
             AppEvent::TopologyBatch { .. } => 26,
             AppEvent::TopologyReady { .. } => 27,
             AppEvent::TopologyEnded { .. } => 28,
+            AppEvent::HubbleFlows { .. } => 29,
+            AppEvent::HubbleFlowsEnded { .. } => 30,
         }
     }
 
@@ -775,7 +807,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=28).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=30).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

@@ -61,6 +61,7 @@ import type {
   EventFilters,
   EventInfo,
   FileRead,
+  FlowQuery,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -107,6 +108,7 @@ import type {
   PersistentVolumeInfo,
   PodFilters,
   PodInfo,
+  PodMarker,
   PodMetricsResponse,
   PortForwardConfigInfo,
   PortForwardConfigPayload,
@@ -148,6 +150,7 @@ import type {
   TerminalSessionInfo,
   ThemeConfig,
   TlsCertificate,
+  TrafficAnswer,
   UpdaterConfig,
   Via,
   WorkloadFold,
@@ -1912,6 +1915,18 @@ export async function getCertificateIssuance(
   });
 }
 
+export async function openHubbleFlows(scope: string[] | null): Promise<string> {
+  return invoke<string>("open_hubble_flows", { scope });
+}
+
+export async function hubbleFlowsSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("hubble_flows_subscribed", { streamId });
+}
+
+export async function closeHubbleFlows(streamId: string): Promise<void> {
+  return invoke<void>("close_hubble_flows", { streamId });
+}
+
 export async function detectInClusterExtensions(): Promise<
   DetectedExtension[]
 > {
@@ -1993,6 +2008,20 @@ export async function prometheusByWorkload(
     queries,
     scope,
     keys,
+  });
+}
+
+export async function prometheusFlows(
+  queries: FlowQuery[],
+  scope: string[] | null,
+  subject: WorkloadKey | null,
+  markers: PodMarker[]
+): Promise<TrafficAnswer> {
+  return invoke<TrafficAnswer>("prometheus_flows", {
+    queries,
+    scope,
+    subject,
+    markers,
   });
 }
 

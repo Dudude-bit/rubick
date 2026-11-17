@@ -179,6 +179,8 @@ pub struct AppState {
     pub audit: Arc<crate::audit::AuditIndexes>,
     /// Cluster maps being drawn.
     pub topology_streams: streams::Streams,
+    /// Live flows from Hubble Relay, one stream per Traffic page.
+    pub hubble_streams: streams::Streams,
 }
 
 impl AppState {
@@ -232,6 +234,7 @@ impl AppState {
             ownership,
             audit: Arc::new(crate::audit::AuditIndexes::new(event_tx_audit)),
             topology_streams: streams::Streams::default(),
+            hubble_streams: streams::Streams::default(),
         })
     }
 
