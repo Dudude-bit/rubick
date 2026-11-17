@@ -2369,7 +2369,7 @@ export const en = {
       other: "{n} kept rows could not be read and were skipped.",
     },
     metaSince:
-      "Other kinds are seen by name only (created, deleted, generation), read since {since}",
+      "Other kinds are seen by name only, read since {since}: created, deleted or given a new generation, where no controller owns them",
     metaNotNow: "Other kinds are seen by name only, and are not being read now",
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",

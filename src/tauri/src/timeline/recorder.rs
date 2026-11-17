@@ -270,14 +270,21 @@ impl Recorder {
 
     /// One object of a kind read by name only, as it is now: its generation
     /// moved, or it is new. A followed kind is said whole by its own watch,
-    /// and a controller's object's birth is its owner's story.
+    /// and what a controller made is its owner's story, birth and changes
+    /// alike: a rollout was a screen of generations of its `Pod`, both
+    /// `ReplicaSet`s and an `EndpointSlice`. An `EndpointSlice` moves on every
+    /// readiness flip of its Service's pods, owned or not.
     pub fn named_seen(&mut self, item: &Named, sight: Sight) {
         if item.kind == EVENT || followed(&item.kind, &item.group).is_some() {
             return;
         }
+        let owned =
+            item.controlled || (item.kind == "EndpointSlice" && item.group == "discovery.k8s.io");
         let before = self.named.insert(item.uid.clone(), item.clone());
         let what = match before {
-            Some(prev) if prev.generation != item.generation && item.generation.is_some() => {
+            Some(prev)
+                if !owned && prev.generation != item.generation && item.generation.is_some() =>
+            {
                 prev.generation.map(|from| RowSays::Generation {
                     from: Some(from),
                     to: item.generation,

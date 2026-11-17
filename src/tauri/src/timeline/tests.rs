@@ -1490,6 +1490,32 @@ mod recording {
         }
     }
 
+    /// One image set on a Deployment wrote nine by-name rows: the generation
+    /// of its `Pod`, both `ReplicaSet`s and an `EndpointSlice`, four times
+    /// over. Fails if what a controller made, or an `EndpointSlice`, has a
+    /// generation row of its own, or an object nobody owns stops having one.
+    #[test]
+    fn what_a_controller_made_and_an_endpoint_slice_leave_their_changes_to_their_owner() {
+        let (_t, cluster, mut recorder) = recorder();
+        let slice = |generation| Named {
+            kind: "EndpointSlice".into(),
+            group: "discovery.k8s.io".into(),
+            uid: "slice".into(),
+            name: "web-96nx5".into(),
+            namespace: Some("shop".into()),
+            generation: Some(generation),
+            controlled: false,
+        };
+        recorder.named_seen(&named("pod", Some(1), true), Sight::First);
+        recorder.named_seen(&slice(5), Sight::First);
+        recorder.named_seen(&named("lone", Some(1), false), Sight::First);
+        recorder.named_seen(&named("pod", Some(2), true), Sight::Watched);
+        recorder.named_seen(&slice(6), Sight::Watched);
+        recorder.named_seen(&named("lone", Some(2), false), Sight::Watched);
+        let found: Vec<String> = rows(&cluster).iter().map(|row| row.name.clone()).collect();
+        assert_eq!(found, ["job-lone"]);
+    }
+
     /// Seen by name only: a moved generation is a row that says so, a birth
     /// a controller made is its owner's, and a kind that keeps no generation
     /// says nothing of a change it cannot see. Fails if any of the three is
