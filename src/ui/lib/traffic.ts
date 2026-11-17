@@ -51,7 +51,11 @@ export type FlowSourceState =
   | { says: "absent" }
   /** Its series are here and name no source or destination. */
   | { says: "unpaired" }
-  | { says: "failed"; said: string };
+  | { says: "failed"; said: string }
+  /** A live source still connecting, not enabled, or stopped: not found. */
+  | { says: "connecting" }
+  | { says: "off" }
+  | { says: "stopped" };
 
 /** A source of flows, as the supplier found it. */
 export interface FlowSource {
@@ -61,7 +65,7 @@ export interface FlowSource {
   state: FlowSourceState;
   /** What it can measure: a column it leaves empty says so, never 0. */
   measures: readonly Measure[];
-  /** The metric names it found, for the rail. */
+  /** The metric names it found, for the rail, each with the end label it is read by (`{source_pod}`) where that differs by metric. */
   found: readonly string[];
   /** What it needs to have series here. */
   need: TrafficWord;
@@ -191,8 +195,9 @@ function readsOf(reading: TrafficReading) {
   return {
     failed: (source: number, measure: Measure) =>
       failed.has(`${source}:${measure}`),
-    // A cell can turn "not read" with its pair's flows unchanged.
-    key: JSON.stringify([reading.sources.map((s) => s.name), [...failed]]),
+    // A cell can turn "not read", or a source measure more, with its
+    // pair's flows unchanged: a row reads the sources whole.
+    key: JSON.stringify([reading.sources, [...failed]]),
   };
 }
 

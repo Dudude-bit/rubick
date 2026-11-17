@@ -50,6 +50,9 @@ export const SOURCE_STATE_WORD = {
   absent: "railAbsent",
   unpaired: "railUnpaired",
   failed: "railFailed",
+  connecting: "railConnecting",
+  off: "railOff",
+  stopped: "railStopped",
 } as const satisfies Record<FlowSourceState["says"], TrafficWord>;
 
 /** An end's name, as the source or the cluster wrote it. */

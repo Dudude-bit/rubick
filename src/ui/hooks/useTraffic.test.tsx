@@ -112,6 +112,23 @@ describe("reading traffic", () => {
     expect(result.current).toMatchObject({ said: "timed out after 20s" });
   });
 
+  /**
+   * Each supplier's flows are its own: a new address with the same sources
+   * reads again, and never shows the last address's rows under its name.
+   */
+  it("reads again for a new supplier address instead of showing the last one's flows", async () => {
+    capability.mockReturnValue(ready);
+    sources.mockResolvedValue([source("present")]);
+    read.mockResolvedValue(READING);
+    const { result, rerender } = run();
+    await waitFor(() => expect(result.current.says).toBe("read"));
+    read.mockReturnValue(new Promise(() => {}));
+    capability.mockReturnValue({ ...ready, endpoint: "prom-b.example.com" });
+    rerender();
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(result.current.says).toBe("reading");
+  });
+
   /** A present source is read, and its answer is the state. */
   it("reads a present source", async () => {
     capability.mockReturnValue(ready);

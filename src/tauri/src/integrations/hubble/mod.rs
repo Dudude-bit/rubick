@@ -597,8 +597,8 @@ async fn run(
                     asking = true;
                 }
                 let (pairs, gone) = fold.tick(now);
-                let nodes = std::mem::take(&mut fold.nodes_changed);
-                for (pairs, gone) in batches(pairs, gone, nodes) {
+                let news = fold.counts_moved() | std::mem::take(&mut fold.nodes_changed);
+                for (pairs, gone) in batches(pairs, gone, news) {
                     send(pairs, gone, None, &fold);
                 }
             }
@@ -832,6 +832,8 @@ struct Fold {
     /// Each pair as last sent, so a second that changes nothing a reader
     /// sees sends nothing.
     sent: HashMap<Key, LivePair>,
+    /// `lost` and `untracked` as last sent.
+    sent_counts: (u64, u64),
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -867,7 +869,17 @@ impl Fold {
             nodes_changed: false,
             owners: Owners::default(),
             sent: HashMap::new(),
+            sent_counts: (0, 0),
         }
+    }
+
+    /// Whether the events lost or not held moved since it was last asked:
+    /// a relay that reports only losses still has news to send.
+    fn counts_moved(&mut self) -> bool {
+        let now = (self.lost, self.untracked);
+        let moved = now != self.sent_counts;
+        self.sent_counts = now;
+        moved
     }
 
     /// A new read of the pods: pairs held under a pod it names are moved to
@@ -986,7 +998,9 @@ impl Fold {
                 if !http.protocol.is_empty() {
                     second.protocols.insert(http.protocol.clone());
                 }
-                if second.latencies.len() < KEPT_LATENCIES {
+                // Cilium writes 0 where it could not pair the response with
+                // its request (seven/parser.go): no latency, not a zero one.
+                if l7.latency_ns > 0 && second.latencies.len() < KEPT_LATENCIES {
                     #[allow(clippy::cast_precision_loss)]
                     second.latencies.push(l7.latency_ns as f64 / 1e6);
                 }
@@ -1543,6 +1557,33 @@ mod tests {
             &fold.tick(101).0[0].to,
             FlowEnd::Workload { key } if key.kind == "Deployment" && key.name == "coredns"
         ));
+    }
+
+    /// A relay that reports only losses, or a pair past the cap, still has
+    /// news: the count moves the page even with no pair to send.
+    #[test]
+    fn a_loss_alone_is_news_once() {
+        let mut fold = Fold::new(0);
+        assert!(!fold.counts_moved());
+        fold.lost += 4;
+        assert!(fold.counts_moved());
+        assert!(!fold.counts_moved());
+        fold.untracked += 1;
+        assert!(fold.counts_moved());
+        let (pairs, gone) = fold.tick(100);
+        assert_eq!(batches(pairs, gone, true).len(), 1);
+    }
+
+    /// Cilium writes a latency of 0 where it could not pair a response with
+    /// its request: the response counts, the latency is unknown, not 0 ms.
+    #[test]
+    fn a_response_with_no_latency_counts_and_leaves_the_percentiles_unknown() {
+        let mut fold = Fold::new(100);
+        fold.add(100, &response(200, 0));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs[0].requests, Some(1.0));
+        assert_eq!(pairs[0].p50, None);
+        assert_eq!(pairs[0].p99, None);
     }
 
     /// Past the cap a new pair is counted and not held.

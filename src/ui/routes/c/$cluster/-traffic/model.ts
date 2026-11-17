@@ -114,6 +114,9 @@ export function trafficModel(input: {
   const standIns = new Map<string, FlowEnd>();
   const idOf = new Map<string, string>();
   const endOf = new Map<string, FlowEnd>();
+  // A node several ends are drawn as (the namespace's pods nothing owns)
+  // stands for none of them: opening it must not pick one.
+  const shared = new Set<string>();
   for (const row of rows)
     for (const [end, key] of [
       [row.from, row.fromId],
@@ -126,8 +129,10 @@ export function trafficModel(input: {
       if (mapped && node) held.set(mapped, node);
       else standIns.set(id, end);
       idOf.set(key, id);
+      if (endOf.has(id)) shared.add(id);
       endOf.set(id, end);
     }
+  for (const id of shared) endOf.delete(id);
 
   const homes = new Set<string>();
   for (const node of held.values()) if (node.home) homes.add(node.home);

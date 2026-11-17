@@ -7,6 +7,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import {
   heard,
+  MAX_FLOW_ROWS,
   silenceOf,
   type FlowRow,
   type TrafficReading,
@@ -58,6 +59,16 @@ export function cronJobOf(owners: readonly Owned[]): string | null {
   );
 }
 
+const RATES = ["requests", "bytes", "events"] as const;
+
+/** A row with no rate, where one of its rates could not be read: not "none". */
+export function rateUnread(row: FlowRow): boolean {
+  return (
+    RATES.every((family) => row[family].value === null) &&
+    RATES.some((family) => row[family].state === "notRead")
+  );
+}
+
 /** A row's own rate, by the first family it has. */
 function rateWords(row: FlowRow, t: T): string {
   if (row.requests.value !== null)
@@ -65,7 +76,7 @@ function rateWords(row: FlowRow, t: T): string {
   if (row.bytes.value !== null) return bytesRate(row.bytes.value);
   if (row.events.value !== null)
     return t("traffic", "subEvents", { v: rate(row.events.value) });
-  return t("traffic", "cellNone");
+  return t("traffic", rateUnread(row) ? "cellNotRead" : "cellNone");
 }
 
 export function rowWords(row: FlowRow, peer: "from" | "to", t: T): string[] {
@@ -156,6 +167,13 @@ export function subjectNotes(
         );
     }
   });
+  if (reading.answer.cut > 0)
+    warn(
+      t("traffic", "cut", {
+        kept: t("count", "flows", { n: MAX_FLOW_ROWS }),
+        cut: t("count", "flows", { n: reading.answer.cut }),
+      })
+    );
   if (reading.answer.podsFailed)
     warn(
       t("traffic", "podsFailed", { said: reading.answer.podsFailed.message })

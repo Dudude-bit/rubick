@@ -1,5 +1,11 @@
+import { useState } from "react";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
+
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 
 import type {
   FlowEnd,
@@ -92,6 +98,27 @@ function read(
     rows: pairRows(reading).rows,
     lastFailed: null,
   };
+}
+
+/** The traffic section the page would share, read on a click. */
+function Collect() {
+  const collect = useScreenSections();
+  const [partial, setPartial] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        onClick={() =>
+          setPartial(
+            collect?.().find((section) => section.id === "traffic")?.partial ??
+              ""
+          )
+        }
+      >
+        collect
+      </button>
+      <p data-testid="partial">{partial}</p>
+    </>
+  );
 }
 
 const draw = (state: TrafficState) =>
@@ -258,6 +285,80 @@ describe("a workload's Traffic block", () => {
   });
 
   /**
+   * A row with a latency and no rate, because the rate's query failed, is
+   * "not read" in warning, not "none": a failed read is not a quiet pair.
+   */
+  it("says a row's rate was not read where its query failed, never none", async () => {
+    await draw(
+      read([ISTIO], [["web", "cart", { p95: 0.012 }]], null, {
+        reads: [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "failed", code: "PROMETHEUS", message: "timed out" },
+          },
+        ],
+      })
+    );
+    const unread = screen.getByText("not read");
+    expect(unread.className).toContain("text-warn");
+    expect(screen.queryByText("none")).toBeNull();
+  });
+
+  /**
+   * A workload with more pairs than a reading keeps is drawn with only the
+   * busiest: the block says how many it left out, as the page does.
+   */
+  it("says how many flows it left out where the reading was cut", async () => {
+    await draw(
+      read([ISTIO], [["web", "cart", { requests: 4 }]], null, { cut: 7 })
+    );
+    expect(
+      screen.getByText(/^Showing .*; 7 flows quieter are left out\.$/)
+    ).toBeTruthy();
+  });
+
+  /**
+   * Rows kept from before a refresh that failed are old: the file shared
+   * from the page says so beside them, as the block does, and says nothing
+   * where the last refresh answered.
+   */
+  it("shares the failed refresh beside the rows it kept, and nothing where it answered", async () => {
+    const shared = async (lastFailed: string | null) => {
+      const page = await renderWithRouter(
+        <ScreenShareProvider>
+          <Block
+            state={
+              {
+                ...read(
+                  [ISTIO],
+                  [["web", "cart", { requests: 4 }]],
+                  [{ source: 0, pods: 1, marked: 1 }]
+                ),
+                lastFailed,
+              } as TrafficState
+            }
+            subject={CART}
+          />
+          <Collect />
+        </ScreenShareProvider>,
+        {
+          at: "/c/prod/deployments/shop/cart",
+          route: "/c/$cluster/deployments/$namespace/$name",
+        }
+      );
+      fireEvent.click(screen.getByText("collect"));
+      const partial = screen.getByTestId("partial").textContent;
+      page.unmount();
+      return partial;
+    };
+    expect(await shared("timed out after 20s")).toContain(
+      "timed out after 20s"
+    );
+    expect(await shared(null)).toBe("");
+  });
+
+  /**
    * A CronJob's pods, and Hubble's names, file a run's flows under the
    * CronJob: a Job asked about as itself is never any flow's end.
    */
@@ -299,5 +400,31 @@ describe("a workload's Traffic block", () => {
         /Flows are counted for CronJob backup, which made this Job/
       )
     ).toBeTruthy();
+  });
+
+  /**
+   * A Deployment of another API group is not the built-in Deployment: with
+   * no CRD here serving its group it is named, not linked to the built-in
+   * object of the same name.
+   */
+  it("does not link a namesake of a built-in kind to the built-in object", async () => {
+    const state = read([ISTIO], [["web", "cart", { requests: 1 }]], null);
+    if (state.says !== "read") throw new Error("a reading");
+    const namesake: FlowEnd = {
+      is: "workload",
+      key: {
+        namespace: "shop",
+        group: "example.com",
+        kind: "Deployment",
+        name: "web",
+      },
+    };
+    const reading = {
+      ...state.reading,
+      answer: { ...state.reading.answer, ends: [namesake, end("cart")] },
+    };
+    await draw({ ...state, reading, rows: pairRows(reading).rows });
+    expect(screen.getByText(/^web/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /^web/ })).toBeNull();
   });
 });
