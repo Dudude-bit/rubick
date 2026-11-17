@@ -556,7 +556,13 @@ fn unserved_is_not_installed_for_gateway_kinds_and_unread_for_the_others() {
 async fn a_map_ends_when_the_layer_closes_its_channel() {
     let (tx, rx) = tokio::sync::mpsc::channel(8);
     let map = Arc::new(ClusterMap::default());
-    let pumping = tokio::spawn(pump(rx, map.clone(), std::collections::BTreeMap::new()));
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::new(),
+        None,
+    ));
     tx.send(crate::feeds::Update::State {
         slot: slot(Kind::Deployment, None),
         state: Reading::Synced,
@@ -693,4 +699,54 @@ async fn a_stream_that_lagged_sends_the_kinds_again() {
     assert!(seen.contains(&"kinds".to_string()), "{seen:?}");
     cancel.cancel();
     task.await.expect("ends");
+}
+
+/// Discovery failing for a Gateway API kind as the map opened kept its
+/// objects off the map for as long as it stayed open: each was parsed with
+/// no type and dropped. Fails if a kind discovery could not answer for is
+/// not asked about again when its objects arrive.
+#[tokio::test]
+async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let resolve: Resolve = Arc::new(|kind| {
+        Box::pin(async move {
+            (kind == Kind::Gateway).then(|| {
+                kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )
+            })
+        })
+    });
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Applied {
+        slot: slot(Kind::Gateway, None),
+        object: dynamic(json!({
+            "metadata": { "name": "edge", "namespace": "infra" },
+            "spec": { "gatewayClassName": "envoy", "listeners": [] },
+        })),
+    })
+    .await
+    .expect("sent");
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    let held = map.stores().held("infra", OtherPolicies::none(), now());
+    assert_eq!(held.gateways_here.map(|list| list.len()), Some(1));
 }
