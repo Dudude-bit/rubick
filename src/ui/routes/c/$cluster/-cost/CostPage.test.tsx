@@ -21,6 +21,10 @@ import type { UsageReading } from "@/lib/efficiency";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { vendorLink } from "@/lib/links";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import userEvent from "@testing-library/user-event";
 
 const cost = vi.fn<() => CostState>();
@@ -637,6 +641,50 @@ describe("the breakdown by workload's names", () => {
     ])
       expect(screen.getByRole("link", { name })).toBeInTheDocument();
     expect(screen.queryAllByTestId("resource-ref-label")).toEqual([]);
+  });
+});
+
+describe("the summary Share writes for one namespace", () => {
+  /**
+   * The tiles of a namespace's page leave out what only the cluster pays
+   * (volumes nobody claims, the management fee) and call idle the
+   * cluster's; the shared summary listed both as the namespace's and said
+   * "Idle". Fails if the file says what the page does not.
+   */
+  it("says what the tiles say, and none of the cluster's own charges", async () => {
+    const shop = readingPicture(
+      BASIS,
+      {
+        ...READING,
+        storage: { ...READING.storage, total: 0.5, unclaimed: 0.3 },
+        fee: 0.1,
+      },
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      ["shop"]
+    );
+    cost.mockReturnValue({ state: "picture", picture: shop, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <CostPage />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/cost", route: "/c/$cluster/cost" }
+    );
+    const summary = collect!().find((s) => s.id === "cost-summary")!;
+    const labels =
+      summary.body.type === "facts"
+        ? summary.body.rows.map((r) => r.label)
+        : [];
+    expect(labels).toContain("Idle in the cluster");
+    expect(labels).not.toContain("Idle");
+    expect(labels).not.toContain("Volumes nobody claims");
+    expect(labels).not.toContain("Cluster management fee");
   });
 });
 
