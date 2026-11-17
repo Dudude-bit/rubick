@@ -147,6 +147,13 @@ interface ClusterState {
    * be another cluster now, and what was kept under one is let go.
    */
   sessionsDropped: () => Promise<void>;
+  /**
+   * The kubeconfig changed on disk, and these contexts' entries with it: a
+   * server, a CA or credentials. A held one is let go, and the one on screen
+   * connected again from its new entry, or left where the file no longer
+   * names it. A name may be another cluster now.
+   */
+  entriesChanged: (changed: string[]) => Promise<void>;
 }
 
 export interface ConnectFailed {
@@ -562,6 +569,30 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     )
       return;
     set({ live });
+  },
+
+  entriesChanged: async (changed: string[]) => {
+    await get().loadContexts();
+    namesRebound();
+    const moved = new Set(changed);
+    const { currentContext, live, wayBack } = get();
+    const held = live.filter(
+      (name) => moved.has(name) && name !== currentContext
+    );
+    for (const name of held)
+      await commands.disconnectCluster(name).catch(() => null);
+    set({
+      live: get().live.filter((name) => !held.includes(name)),
+      wayBack: wayBack !== null && moved.has(wayBack) ? null : wayBack,
+    });
+    const { contexts, isConnected, isAuthenticating } = get();
+    if (!currentContext || !moved.has(currentContext)) return;
+    if (!isConnected && !isAuthenticating) return;
+    if (!contexts.some((c) => c.name === currentContext)) {
+      await get().disconnect();
+      return;
+    }
+    await get().connect(currentContext, { keepRoute: true });
   },
 
   sessionsDropped: async () => {
