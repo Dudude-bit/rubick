@@ -1029,9 +1029,11 @@ fn counts_of(
             .filter(|node| node.object.kind == kind && node.object.existence == Existence::Present)
             .count()
     };
+    // How many are used is known only where the list was read: a refused
+    // one leaves every named object unchecked, and none of them drawn.
     let count = |kind: &str, count: Option<usize>| MapKindCount {
         kind: kind.to_string(),
-        used: USED_ONLY.contains(&kind).then(|| drawn(kind)),
+        used: (USED_ONLY.contains(&kind) && count.is_some()).then(|| drawn(kind)),
         count,
     };
     let routes = |kind: &str| -> Option<usize> {
@@ -1605,6 +1607,31 @@ mod tests {
         };
         assert_eq!(count("ConfigMap"), Some((Some(2), Some(1))));
         assert_eq!(count("Secret"), Some((None, Some(1))));
+    }
+
+    /// A refused `ConfigMap` or `ServiceAccount` list left the objects a
+    /// workload names unchecked, so none was drawn, and the rail counted
+    /// "0 used". Fails if a kind whose list was not read counts any use.
+    #[test]
+    fn a_kind_whose_list_was_refused_counts_no_use() {
+        let slice = slice_of(
+            Held {
+                config_maps: Err("configmaps is forbidden".into()),
+                accounts: Err("serviceaccounts is forbidden".into()),
+                ..shop("")
+            },
+            chrono::Utc::now(),
+        );
+        let used = |kind: &str| {
+            slice
+                .read
+                .counts
+                .iter()
+                .find(|count| count.kind == kind)
+                .and_then(|count| count.used)
+        };
+        assert_eq!(used("ConfigMap"), None);
+        assert_eq!(used("ServiceAccount"), None);
     }
 
     /// An autoscaler names its target by group, kind and name: one naming a
