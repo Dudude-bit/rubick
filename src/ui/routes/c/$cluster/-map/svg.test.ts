@@ -142,4 +142,33 @@ describe("the map as an image", () => {
     expect(Number(note!.getAttribute("y"))).toBeGreaterThan(Number(top));
     expect(Number(note!.getAttribute("y"))).toBeLessThan(0);
   });
+
+  /**
+   * A long name ran over the next node and off the edge of the image, while
+   * the canvas cuts it with an ellipsis. Fails if a name wider than its box
+   * is drawn whole, a short one is cut, or the whole name is not kept in
+   * the node's title.
+   */
+  it("cuts a name to its box with an ellipsis and keeps it whole in a title", () => {
+    const long = "prometheus-kps-kube-prometheus-stack-prometheus-operator";
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [long, "web"].map((label, at) => ({
+        node: { id: label, group: null, kind: "Service", label, tone: "ok" },
+        at: { x: 0, y: at * 60 },
+        width: 208,
+        height: 46,
+      })),
+      edges: [],
+    });
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const names = [...doc.querySelectorAll("g > text:nth-of-type(1)")].map(
+      (text) => text.textContent ?? ""
+    );
+    expect(names[0].endsWith("…")).toBe(true);
+    expect(names[0].length).toBeLessThan(long.length);
+    expect(names[1]).toBe("web");
+    expect(doc.querySelector("g > title")?.textContent ?? "").toContain(long);
+  });
 });

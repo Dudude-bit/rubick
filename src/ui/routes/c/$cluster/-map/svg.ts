@@ -45,6 +45,20 @@ export function themeColours(
   };
 }
 
+/**
+ * Widths of one character, as a share of the font size, that a cut is
+ * judged by. ponytail: an average, not a measurement; an image that must
+ * fit a wide-lettered name exactly would measure with a canvas.
+ */
+const MONO_CHAR = 11.5 * 0.6;
+const SANS_CHAR = 10 * 0.56;
+
+/** `text` cut to `room` pixels, an ellipsis where it was. */
+function cut(text: string, room: number, char: number): string {
+  const fits = Math.floor(room / char);
+  return text.length <= fits ? text : `${text.slice(0, fits - 1)}…`;
+}
+
 const escape = (text: string) =>
   text
     .replace(/&/g, "&amp;")
@@ -106,10 +120,15 @@ export function mapSvg({
     );
   }
   for (const { node, at, width, height } of nodes) {
+    // Cut to the box as the canvas cuts with an ellipsis; the whole name
+    // stays in the node's title.
+    const room = width - 16;
     parts.push(
+      `<g><title>${escape([node.label, subLine(node)].filter(Boolean).join("\n"))}</title>`,
       `<rect x="${at.x}" y="${at.y}" width="${width}" height="${height}" rx="5" fill="${colours.raise}" stroke="${colours.tones[node.tone]}"${node.tone === "unknown" ? ' stroke-dasharray="3 3"' : ""}/>`,
-      `<text x="${at.x + 8}" y="${at.y + 19}" font-size="11.5" font-family="monospace" fill="${colours.fg}">${escape(node.label)}</text>`,
-      `<text x="${at.x + 8}" y="${at.y + 34}" font-size="10" fill="${colours.faint}">${escape(subLine(node))}</text>`
+      `<text x="${at.x + 8}" y="${at.y + 19}" font-size="11.5" font-family="monospace" fill="${colours.fg}">${escape(cut(node.label, room, MONO_CHAR))}</text>`,
+      `<text x="${at.x + 8}" y="${at.y + 34}" font-size="10" fill="${colours.faint}">${escape(cut(subLine(node), room, SANS_CHAR))}</text>`,
+      `</g>`
     );
   }
   return [
