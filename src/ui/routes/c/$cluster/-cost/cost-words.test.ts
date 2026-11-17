@@ -64,3 +64,55 @@ describe("the cost line of an object in a namespace that was refused", () => {
     ).toBe("Could not read what this costs.");
   });
 });
+
+describe("the cost line of a workload whose cost read failed", () => {
+  /**
+   * The per-workload read failed and the totals stood: each workload's line
+   * said "No OpenCost series priced its pods", sending the reader to the
+   * prices for what was a failed read. Fails if the failure is worded as a
+   * missing price.
+   */
+  it("says the read failed, with the reason", () => {
+    const one = {
+      ...refused,
+      unread: [],
+      workloads: [
+        {
+          key: {
+            namespace: "shop",
+            group: "apps",
+            kind: "Deployment",
+            name: "web",
+          },
+          pods: 1,
+          cpu: 100,
+          memory: 1,
+          gpus: 0,
+          claimBytes: 0,
+        },
+      ],
+    };
+    const picture = {
+      ...estimatePicture(one, prices, null),
+      workloads: [
+        {
+          key: one.workloads[0]!.key,
+          pods: 1,
+          perHour: null,
+          atLeast: false,
+          parts: {},
+          unpriced: [],
+          requests: { cpu: 100, memory: 1 },
+        },
+      ],
+      workloadsFailed: "query timed out",
+    };
+    expect(
+      costLineWords(
+        picture,
+        { namespace: "shop", group: "apps", kind: "Deployment", name: "web" },
+        t
+      )
+    ).toBe("Could not read what this costs: query timed out");
+  });
+});

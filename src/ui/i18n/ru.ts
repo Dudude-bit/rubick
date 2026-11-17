@@ -2904,6 +2904,7 @@ export const ru: Catalogue = {
     lineNoSeries: "В этом Prometheus нет рядов OpenCost; подробнее на {page}.",
     lineCostPage: "странице «Стоимость»",
     lineUnread: "Не удалось прочитать, сколько это стоит.",
+    lineFailed: "Не удалось прочитать, сколько это стоит: {said}",
   },
   hints: {
     mostLikely: "Скорее всего",

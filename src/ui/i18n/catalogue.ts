@@ -2754,6 +2754,7 @@ export const en = {
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
+    lineFailed: "Could not read what this costs: {said}",
   },
   hints: {
     mostLikely: "Most likely",

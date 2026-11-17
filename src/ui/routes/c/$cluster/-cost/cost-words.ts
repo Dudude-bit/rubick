@@ -166,6 +166,10 @@ export function costLineWords(
   // is the refusal, not an absence.
   const refused = picture.unread.some((u) => u.namespace === target.namespace);
   if (refused && (!of || of.perHour === null)) return t("cost", "lineUnread");
+  // What each workload costs was not read: its row has no price for that
+  // reason, not for want of a price.
+  if ("kind" in target && picture.workloadsFailed && of?.perHour === null)
+    return t("cost", "lineFailed", { said: picture.workloadsFailed });
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)
