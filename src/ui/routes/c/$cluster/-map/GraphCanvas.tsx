@@ -25,9 +25,12 @@
  *   motion and while the canvas is off screen.
  * - `onOpenEdge` makes every edge a button the keyboard reaches; without it
  *   an edge shows its `label` and `sub` while either end is singled out.
- * - The view is fitted once to the first layout laid out whole, and again
- *   to the first after `fitKey` changes; `null` holds the fit back. A later
- *   change moves nothing under the reader.
+ * - Until the reader pans or zooms, the view stays fitted: to each layout
+ *   laid out whole as nodes arrive, and as the canvas changes size. Once
+ *   they have, their view is theirs: a resize keeps the node they last
+ *   acted on in view, or else the middle of what they were looking at. A
+ *   new `fitKey` fits again and hands the view back to the map; `null`
+ *   holds every fit back.
  * - Places are worked out in a worker. Only a group whose nodes or shaping
  *   edges changed is laid out again, so a tone or a label never moves
  *   anything, and a node added keeps the others in their order.
@@ -50,6 +53,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   useStoreApi,
   type Edge,
   type Node,
@@ -205,13 +209,61 @@ function Canvas({
     centre(focus);
   }, [focus, placement, centre]);
 
-  const fitted = useRef<string | null>(null);
+  // Whether the reader moved the view themselves, and what they last opened.
+  const moved = useRef(false);
+  const acted = useRef<string | null>(null);
+  const fitted = useRef<{ key: string; groups: unknown } | null>(null);
   useEffect(() => {
-    if (fitKey === null || fitted.current === fitKey) return;
+    if (fitKey === null) return;
     if (!placement.settled || placement.groups.size === 0) return;
-    fitted.current = fitKey;
+    if (fitted.current?.key !== fitKey) moved.current = false;
+    else if (moved.current || fitted.current.groups === placement.groups)
+      return;
+    fitted.current = { key: fitKey, groups: placement.groups };
     void flow.fitView(FIT);
   }, [fitKey, placement, flow]);
+
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  const size = useRef<{ width: number; height: number } | null>(null);
+  // What the map holds, read by the resize below without the resize
+  // following it: only a change of size moves the view there.
+  const now = useRef({ placement, nodes: drawn.nodes, absolute, fitKey });
+  useEffect(() => {
+    now.current = { placement, nodes: drawn.nodes, absolute, fitKey };
+  });
+  useEffect(() => {
+    const was = size.current;
+    size.current = { width, height };
+    if (!was || width === 0 || height === 0) return;
+    if (was.width === width && was.height === height) return;
+    const { placement, nodes, absolute, fitKey } = now.current;
+    if (!moved.current) {
+      if (fitKey !== null && placement.settled && placement.groups.size > 0)
+        void flow.fitView(FIT);
+      return;
+    }
+    const { x, y, zoom } = flow.getViewport();
+    const node = nodes.find((each) => each.id === acted.current);
+    const at = node && absolute(node);
+    if (at) {
+      const left = at.x * zoom + x;
+      const top = at.y * zoom + y;
+      const inView =
+        left >= 0 &&
+        top >= 0 &&
+        left + NODE_W * zoom <= width &&
+        top + NODE_H * zoom <= height;
+      if (!inView)
+        void flow.setCenter(at.x + NODE_W / 2, at.y + NODE_H / 2, { zoom });
+      return;
+    }
+    void flow.setViewport({
+      x: x + (width - was.width) / 2,
+      y: y + (height - was.height) / 2,
+      zoom,
+    });
+  }, [width, height, flow]);
 
   const reveal = useCallback(
     (id: string) => {
@@ -242,7 +294,10 @@ function Canvas({
   const edgesOpen = onOpenEdge !== undefined;
   const actions = useMemo<MapActions>(
     () => ({
-      open: (node, how) => latest.current.onOpen(node, how),
+      open: (node, how) => {
+        acted.current = node.id;
+        latest.current.onOpen(node, how);
+      },
       openEdge: edgesOpen
         ? (edge) => latest.current.onOpenEdge?.(edge)
         : undefined,
@@ -424,6 +479,11 @@ function Canvas({
             onlyRenderVisibleElements={drawn.nodes.length > MOUNT_ALL_UP_TO}
             minZoom={0.05}
             maxZoom={2}
+            onMoveStart={(event) => {
+              // Only a reader's own pan or zoom carries an event; a fit or a
+              // centring of ours does not.
+              if (event) moved.current = true;
+            }}
             ariaLabelConfig={{
               "node.a11yDescription.default": t("topology", "nodeKeys"),
               "node.a11yDescription.keyboardDisabled": t(

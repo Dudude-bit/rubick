@@ -1,4 +1,4 @@
-import { memo, type KeyboardEvent } from "react";
+import { memo, useEffect, useRef, type KeyboardEvent } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -49,6 +49,13 @@ function Handles() {
 
 export type ObjectNodeType = Node<{ node: GraphNode }, "object">;
 
+/**
+ * How long a click waits for a second one before it opens the peek. The
+ * peek narrows the canvas and the map moves under the pointer, so a peek
+ * opened at once left a double click's second click on empty space.
+ */
+export const DOUBLE_CLICK_MS = 250;
+
 /** One object: click or Space for the peek, double-click or Enter for its page. */
 export const ObjectNode = memo(function ObjectNode({
   id,
@@ -58,6 +65,12 @@ export const ObjectNode = memo(function ObjectNode({
   const light = useLight();
   const { node } = data;
   const lit = light.lit(id);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settle = () => {
+    if (pending.current) clearTimeout(pending.current);
+    pending.current = null;
+  };
+  useEffect(() => settle, []);
   const onKey = (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -80,8 +93,19 @@ export const ObjectNode = memo(function ObjectNode({
         NODE_BORDER[node.tone],
         lit === false && "opacity-25"
       )}
-      onClick={() => actions.open(node, "peek")}
-      onDoubleClick={() => actions.open(node, "page")}
+      onClick={(event) => {
+        // The second click of a double click: the double click answers it.
+        if (event.detail > 1) return;
+        settle();
+        pending.current = setTimeout(() => {
+          pending.current = null;
+          actions.open(node, "peek");
+        }, DOUBLE_CLICK_MS);
+      }}
+      onDoubleClick={() => {
+        settle();
+        actions.open(node, "page");
+      }}
       onKeyDown={onKey}
       onMouseEnter={() => actions.setActive(id)}
       onMouseLeave={() => actions.setActive(null)}
