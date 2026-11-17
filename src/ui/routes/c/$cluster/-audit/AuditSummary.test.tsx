@@ -31,6 +31,7 @@ const summary = (over: Partial<AuditSummary> = {}): AuditSummary => ({
   reading: 0,
   unattributed: 0,
   enforced: [],
+  enforcedUnread: null,
   upgrade: { read: "2026-11-14T10:00:00Z", server: "v1.31.4" },
   usage: null,
   ...over,
@@ -77,6 +78,24 @@ describe("Audit's summary of a scope", () => {
   });
 
   /** Fails if pods still being read count as checked and found clean. */
+  it("says the namespaces' Pod Security labels were not read, with why", () => {
+    render(
+      <AuditSummaryBlock
+        page={page({
+          enforcedUnread: {
+            says: "refused",
+            message: "namespaces is forbidden",
+          },
+        })}
+        scope="shop"
+        system={false}
+      />
+    );
+    expect(screen.getByTestId("audit-enforced-unread")).toHaveTextContent(
+      "Which namespaces enforce Pod Security was not read: refused: namespaces is forbidden"
+    );
+  });
+
   it("does not call a scope clean while pods are still being read", () => {
     render(
       <AuditSummaryBlock

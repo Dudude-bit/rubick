@@ -356,14 +356,57 @@ pub fn minor_of(state: &AppState, context: &str) -> Option<u32> {
 const ENFORCED_FOR: Duration = Duration::from_mins(1);
 const ENFORCE_LABEL: &str = "pod-security.kubernetes.io/enforce";
 
+fn enforced_of(
+    meta: k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta,
+) -> Option<Enforced> {
+    let level = meta.labels?.remove(ENFORCE_LABEL)?;
+    Some(Enforced {
+        namespace: meta.name?,
+        level,
+    })
+}
+
+/// The scope's namespaces' Pod Security labels: every namespace listed, or,
+/// where the list is refused to a reader bound to namespaces, each one of
+/// the scope read on its own. `None` beside the list where it went whole.
+async fn read_enforced(
+    client: &kube::Client,
+    scope: Option<&[String]>,
+) -> std::result::Result<(Vec<Enforced>, bool), Why> {
+    let api: Api<Namespace> = Api::all(client.clone());
+    match api.list_metadata(&ListParams::default()).await {
+        Ok(list) => Ok((
+            list.items
+                .into_iter()
+                .filter_map(|ns| enforced_of(ns.metadata))
+                .collect(),
+            true,
+        )),
+        Err(error) => {
+            let Some(names) = scope else {
+                return Err(why_of(&error.into()));
+            };
+            let mut found = Vec::new();
+            for name in names {
+                let meta = api
+                    .get_metadata(name)
+                    .await
+                    .map_err(|error| why_of(&error.into()))?;
+                found.extend(enforced_of(meta.metadata));
+            }
+            Ok((found, false))
+        }
+    }
+}
+
 /// Which namespaces enforce a Pod Security level, from their labels
-/// (concepts/security/pod-security-admission). A caption only: a read that
-/// fails leaves it out and changes no verdict.
+/// (concepts/security/pod-security-admission). A caption only, changing no
+/// verdict; a read that fails says why rather than reading as none.
 async fn enforced(
     state: &AppState,
     here: &crate::state::Here<'_>,
     scope: Option<&[String]>,
-) -> Vec<Enforced> {
+) -> std::result::Result<Vec<Enforced>, Why> {
     let kept = state
         .audit
         .enforced
@@ -374,29 +417,16 @@ async fn enforced(
         all
     } else {
         let era = state.audit.era(&here.context);
-        let api: Api<Namespace> = Api::all((*here.client).clone());
-        let read: Vec<Enforced> = api
-            .list_metadata(&ListParams::default())
-            .await
-            .map(|list| {
-                list.items
-                    .into_iter()
-                    .filter_map(|ns| {
-                        let level = ns.metadata.labels?.remove(ENFORCE_LABEL)?;
-                        Some(Enforced {
-                            namespace: ns.metadata.name?,
-                            level,
-                        })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        state.audit.keep_enforced(era, &here.context, read.clone());
+        let (read, whole) = read_enforced(&here.client, scope).await?;
+        if whole {
+            state.audit.keep_enforced(era, &here.context, read.clone());
+        }
         read
     };
-    all.into_iter()
+    Ok(all
+        .into_iter()
         .filter(|each| scope.is_none_or(|names| names.contains(&each.namespace)))
-        .collect()
+        .collect())
 }
 
 /// One page of the Audit page's answer. The page being on screen is what
@@ -428,8 +458,9 @@ pub async fn audit_page(
         &seen,
         query,
         index.revision.load(std::sync::atomic::Ordering::Relaxed),
-        enforced,
+        enforced.clone().unwrap_or_default(),
     );
+    page.summary.enforced_unread = enforced.err();
     page.summary.upgrade.server = state
         .sessions
         .get(&here.context)
@@ -449,4 +480,44 @@ pub async fn object_audit_with(
     let mut audit = object_audit(state, kind, namespace, name).await?;
     usage::apply(&mut audit, usage);
     Ok(audit)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::client::served::test_server::{answering, failure};
+
+    /// A refused list of namespaces is not "none enforces": a reader bound
+    /// to namespaces has its own read one at a time, and with no scope to
+    /// read the refusal is said. Fails if a refusal reads as an empty list.
+    #[tokio::test]
+    async fn a_refused_namespace_list_is_read_per_namespace_or_said_unread() {
+        let (client, _) = answering(|path, _| match path {
+            "/api/v1/namespaces/shop" => (
+                200,
+                json!({ "apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadata",
+                    "metadata": { "name": "shop",
+                        "labels": { "pod-security.kubernetes.io/enforce": "baseline" } } })
+                .to_string(),
+            ),
+            _ => failure(403, "Forbidden"),
+        })
+        .await;
+        let shop = ["shop".to_string()];
+        let (found, whole) = read_enforced(&client, Some(&shop)).await.expect("read");
+        assert!(!whole);
+        assert_eq!(
+            found,
+            vec![Enforced {
+                namespace: "shop".to_string(),
+                level: "baseline".to_string(),
+            }]
+        );
+        assert!(matches!(
+            read_enforced(&client, None).await,
+            Err(Why::Refused { .. })
+        ));
+    }
 }

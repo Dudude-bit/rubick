@@ -1985,6 +1985,7 @@ export const en = {
     systemShown: "Showing the system's namespaces and roles",
     systemBack: "Back to the rest",
     enforced: "{namespace} enforces Pod Security {level}",
+    enforcedUnread: "Which namespaces enforce Pod Security was not read: {why}",
     upgradeReading:
       "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
     upgradeRead: "Upgrade: read at {time}, against Kubernetes {server}",

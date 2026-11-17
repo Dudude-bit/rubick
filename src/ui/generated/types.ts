@@ -2048,6 +2048,7 @@ export interface AuditSummary {
   reading: number;
   unattributed: number;
   enforced: Enforced[];
+  enforcedUnread: Why | null;
   upgrade: UpgradeRead;
   usage: UsageState | null;
 }

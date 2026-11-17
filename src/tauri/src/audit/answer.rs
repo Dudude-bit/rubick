@@ -157,6 +157,9 @@ pub struct AuditSummary {
     pub unattributed: u32,
     /// Namespaces that enforce a Pod Security level, where it was read.
     pub enforced: Vec<Enforced>,
+    /// Why the namespaces' Pod Security labels were not read: `enforced`
+    /// then says nothing of them.
+    pub enforced_unread: Option<Why>,
     pub upgrade: UpgradeRead,
     /// Where requests against use stand: `None` where nothing asked.
     pub usage: Option<super::UsageState>,

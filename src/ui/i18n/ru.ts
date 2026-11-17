@@ -2040,6 +2040,8 @@ export const ru: Catalogue = {
     systemShown: "Показаны системные пространства имён и роли",
     systemBack: "Вернуться к остальным",
     enforced: "{namespace} требует уровень Pod Security {level}",
+    enforcedUnread:
+      "Какие пространства имён требуют Pod Security, не прочитано: {why}",
     upgradeReading:
       "Обновление: ещё читаем Helm-релизы и тех, кто пишет через версии, которые удалит более новый Kubernetes",
     upgradeRead:
