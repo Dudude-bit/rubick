@@ -185,8 +185,10 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         // Rows that left the window go: kept, a page left open for days
         // held every row it was ever told of.
         const from = Date.now() - ask.windowMs;
+        // Checked against what is held now, not when it was asked: a reset
+        // meanwhile holds another cluster's rows, numbered from the start.
         client.setQueryData<TimelinePage>(key, (now) =>
-          now
+          now && now.epoch === page.epoch
             ? {
                 ...page,
                 rows: withNewer(
@@ -234,7 +236,12 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           return;
         }
         client.setQueryData<TimelinePage>(key, (now) => {
-          if (!now || now.rows.at(-1)?.seq !== last.seq) return now;
+          if (
+            !now ||
+            now.epoch !== page.epoch ||
+            now.rows.at(-1)?.seq !== last.seq
+          )
+            return now;
           // A series a catch-up moved up while this page was read is held
           // already, in its later place.
           const held = new Set(now.rows.map((row) => row.id));

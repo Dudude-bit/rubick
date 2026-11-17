@@ -227,6 +227,39 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * An older page asked before the backend started over came back after
+   * the window had read the new cluster's rows, numbered from the start so
+   * its last row matched. Fails if the old cluster's page is laid in below
+   * the new cluster's rows.
+   */
+  it("lays in no answer asked of rows that have since started over", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    let older: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (older = resolve))];
+    act(() => result.current.loadOlder());
+    epochNow = 1;
+    answers = [
+      page([], { epoch: 1, newest: 10 }),
+      page([row("new", 10, 10)], { epoch: 1, more: true }),
+    ];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
+    await act(async () => {
+      older(page([row("old", 5)]));
+      await new Promise((settle) => setTimeout(settle, 50));
+    });
+    expect(result.current.rows.map((each) => each.id)).toEqual(["new"]);
+  });
+
+  /**
    * A Changes tab closed and opened again within the cache's life: its rows
    * were held and never read again, so what was recorded while it was closed
    * stayed off screen until the next change. Fails if a surface opened on
