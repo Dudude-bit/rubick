@@ -2636,6 +2636,8 @@ export const ru: Catalogue = {
     columnBytes: "Байты/с",
     columnDrops: "Отброшено/с",
     columnSeenBy: "Видит",
+    columnsUnmeasured:
+      "Не показаны, их не измеряет ни один источник здесь: {columns}",
     callers: "Кто вызывает",
     callees: "Кого вызывает",
     blockCaption: "{sources} через {endpoint} · {window}",

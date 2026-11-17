@@ -154,6 +154,8 @@ interface DataTableProps<TData extends RowData> {
   onRowMenu?: (row: TData, at: { x: number; y: number }) => void;
   /** Drawn in place of the search box, for a page that narrows its rows before they reach the table. */
   toolbar?: React.ReactNode;
+  /** Said beside the columns hidden for width: columns the page itself does not draw, and why. */
+  columnsNote?: string;
 }
 
 /**
@@ -699,6 +701,7 @@ function DataTableInner<TData extends RowData>({
   pageKeys = false,
   onRowMenu,
   toolbar,
+  columnsNote,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -1912,6 +1915,16 @@ function DataTableInner<TData extends RowData>({
                           shown: formatCount(filteredRows),
                         })}
           </div>
+          {columnsNote && (
+            <span
+              className="flex min-w-0 max-w-full items-center gap-1"
+              title={columnsNote}
+              data-testid="columns-note"
+            >
+              <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+              <span className="truncate">{columnsNote}</span>
+            </span>
+          )}
           {yieldedNames && (
             <span
               className="flex min-w-0 max-w-full items-center gap-1"

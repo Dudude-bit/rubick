@@ -2516,6 +2516,7 @@ export const en = {
     columnBytes: "Bytes/s",
     columnDrops: "Drops/s",
     columnSeenBy: "Seen by",
+    columnsUnmeasured: "Not drawn, no source here measures them: {columns}",
     callers: "Calls it",
     callees: "It calls",
     blockCaption: "{sources} via {endpoint} · {window}",

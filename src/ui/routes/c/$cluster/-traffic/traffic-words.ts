@@ -90,6 +90,18 @@ export function endSub(end: FlowEnd, t: T): string {
   }
 }
 
+/** What an end's cell says on its one line, for the width it takes. */
+export function endText(end: FlowEnd, t: T): string {
+  switch (end.is) {
+    case "workload":
+      return `${end.key.namespace}/${end.key.name}`;
+    case "service":
+      return `${end.namespace ? `${end.namespace}/` : ""}${end.name} Service`;
+    default:
+      return `${endLabel(end)} ${endSub(end, t)}`;
+  }
+}
+
 /** The kind an end is drawn as. */
 export function endKind(end: FlowEnd): string {
   switch (end.is) {
