@@ -9,7 +9,8 @@
  *   server's proxy (ztunnel's inbound too) and `source` from the client's.
  * - Hubble (docs.cilium.io/en/stable/observability/metrics/):
  *   `hubble_flows_processed_total`, `hubble_drop_total{reason}`, httpV2's
- *   `hubble_http_requests_total{status,reporter}` and
+ *   `hubble_http_requests_total{status,reporter}` (HTTP v1 writes `status`
+ *   only on `hubble_http_responses_total`) and
  *   `hubble_http_request_duration_seconds`; ends only through `labelsContext`.
  * - Beyla (grafana/beyla `pkg/beyla/config_obi.go`): `beyla.network.flow.bytes`,
  *   a counter, `beyla_network_flow_bytes_total` in Prometheus (OBI alone
@@ -271,6 +272,7 @@ const HUBBLE_METRICS = [
   "hubble_flows_processed_total",
   "hubble_drop_total",
   "hubble_http_requests_total",
+  "hubble_http_responses_total",
 ];
 const HUBBLE_WORKLOAD = [
   "source_namespace",
@@ -360,14 +362,16 @@ export function hubbleQueries(
         reason: "reason",
       }
     );
-  const pairs = hubblePairs(found, "hubble_http_requests_total");
+  // HTTP v1 counts requests with no status and responses with one, so its
+  // calls and their 5xx are both read from the responses.
+  const answered = hubblePairs(found, "hubble_http_responses_total")
+    ? "hubble_http_responses_total"
+    : "hubble_http_requests_total";
+  const pairs = hubblePairs(found, answered);
   if (pairs) {
     const reporters = ['reporter!="client"', 'reporter="client"'];
     const requests = reporters.map((r) =>
-      sum(
-        [...pairs, "protocol"],
-        scoped("hubble_http_requests_total", [r], HUBBLE_SCOPE, ask)
-      )
+      sum([...pairs, "protocol"], scoped(answered, [r], HUBBLE_SCOPE, ask))
     );
     pair("requests", first(...requests), { protocol: "protocol" });
     pair(
@@ -376,15 +380,7 @@ export function hubbleQueries(
         pairs,
         requests,
         reporters.map((r) =>
-          sum(
-            pairs,
-            scoped(
-              "hubble_http_requests_total",
-              [r, 'status=~"5.."'],
-              HUBBLE_SCOPE,
-              ask
-            )
-          )
+          sum(pairs, scoped(answered, [r, 'status=~"5.."'], HUBBLE_SCOPE, ask))
         )
       )
     );
@@ -554,7 +550,9 @@ export const DEFINITIONS: readonly Definition[] = [
     judge: ([names, byWorkload, byPod]) => {
       const flows = names.includes("hubble_flows_processed_total");
       const drops = names.includes("hubble_drop_total");
-      const http = names.includes("hubble_http_requests_total");
+      const http =
+        names.includes("hubble_http_requests_total") ||
+        names.includes("hubble_http_responses_total");
       const paired = byWorkload.length > 0 || byPod.length > 0;
       const measures: Measure[] = [
         ...(flows ? (["events"] as const) : []),

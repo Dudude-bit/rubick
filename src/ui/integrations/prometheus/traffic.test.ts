@@ -222,6 +222,34 @@ describe("Hubble's ends, metric by metric", () => {
   });
 });
 
+describe("Hubble's HTTP metrics, v1 and v2", () => {
+  /**
+   * HTTP v1 writes `status` only on its responses: a 5xx share read from
+   * its requests finds none and reads 0% where half the calls failed.
+   */
+  it("reads HTTP v1's calls and 5xx from its responses and httpV2's from its requests", () => {
+    const v1 = hubbleQueries(
+      0,
+      [
+        "hubble_http_requests_total{source_workload}",
+        "hubble_http_responses_total{source_workload}",
+      ],
+      ALL
+    );
+    const v2 = hubbleQueries(
+      0,
+      ["hubble_http_requests_total{source_workload}"],
+      ALL
+    );
+    for (const measure of ["requests", "errors"]) {
+      expect(of(v1, measure)).toContain("hubble_http_responses_total{");
+      expect(of(v1, measure)).not.toContain("hubble_http_requests_total");
+      expect(of(v2, measure)).toContain("hubble_http_requests_total{");
+    }
+    expect(of(v1, "errors")).toContain('status=~"5.."');
+  });
+});
+
 describe("which sources a Prometheus holds", () => {
   beforeEach(() => {
     prometheusQuery.mockReset();
