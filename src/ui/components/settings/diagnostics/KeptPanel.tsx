@@ -66,15 +66,17 @@ export function KeptPanel() {
     }
   };
 
-  const size = kept.data
-    ? kept.data.bytes > 0
-      ? t("settings", "keptSize", {
-          size: formatBytes(kept.data.bytes),
-          clusters: t("count", "keptClusters", { n: kept.data.clusters }),
-        })
-      : t("settings", "keptNothing")
-    : kept.error
-      ? t("settings", "keptUnread", { reason: errorToShow(kept.error) })
+  // A read that failed is said even over an earlier answer, which is no
+  // longer what is kept.
+  const size = kept.error
+    ? t("settings", "keptUnread", { reason: errorToShow(kept.error) })
+    : kept.data
+      ? kept.data.bytes > 0
+        ? t("settings", "keptSize", {
+            size: formatBytes(kept.data.bytes),
+            clusters: t("count", "keptClusters", { n: kept.data.clusters }),
+          })
+        : t("settings", "keptNothing")
       : null;
 
   return (
