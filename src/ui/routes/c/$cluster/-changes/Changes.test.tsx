@@ -26,6 +26,10 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { formatWhen } from "@/lib/utils";
 import { renderWithRouter } from "@/test/render";
+vi.mock("@/lib/changes", async (original) => {
+  const real = await original<typeof import("@/lib/changes")>();
+  return { ...real, timelineOf: vi.fn(real.timelineOf) };
+});
 vi.mock("@/components/share/ShareAction", async (original) =>
   (await import("@/test/shared-scope")).withSharedScope(original as never)
 );
@@ -877,6 +881,28 @@ describe("a watch that has recorded nothing", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("changes-quiet")).toBeNull()
     );
+  });
+});
+
+describe("what the page computes on a render", () => {
+  /**
+   * Every render laid the week's rows out again: the read was a new object
+   * each time, so the memo over thousands of rows never held. Fails if a
+   * render that changes nothing the timeline reads lays it out again.
+   */
+  it("lays the rows out again only when what it reads changes", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    recorded({ entries: [], spans: { prod: [] } });
+    await mount();
+    const { timelineOf } = await import("@/lib/changes");
+    const before = vi.mocked(timelineOf).mock.calls.length;
+    act(() => useClusterStore.setState({ error: "unrelated" }));
+    act(() => useClusterStore.setState({ error: null }));
+    expect(vi.mocked(timelineOf).mock.calls.length).toBe(before);
   });
 });
 
