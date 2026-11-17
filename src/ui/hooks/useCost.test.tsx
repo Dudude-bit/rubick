@@ -195,6 +195,31 @@ describe("which source a cost is read from", () => {
     expect(hook.result.current.cost).toBe(first);
   });
 
+  /**
+   * The Prometheus behind a cluster changed: its answer sat under the old
+   * one's key, and the page showed the old supplier's cost as the new one's
+   * until the next read. Fails if one supplier's answer stands in for
+   * another's, even while the other is read.
+   */
+  it("shows no supplier's answer as another's while the other is read", async () => {
+    capability.mockReturnValue(
+      ready(async () => ({
+        ...READING,
+        nodes: [
+          { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+        ],
+      }))
+    );
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    capability.mockReturnValue({
+      ...ready(() => new Promise(() => {})),
+      endpoint: "other.example.com",
+    });
+    hook.rerender();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("loading"));
+  });
+
   /** No series and no prices is its own sentence, not "nothing set up". */
   it("says the supplier holds no series where no prices are entered", async () => {
     capability.mockReturnValue(ready(async () => null));

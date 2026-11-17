@@ -52,6 +52,23 @@ export type CostState =
       trouble: SupplierTrouble | null;
     };
 
+/** Which supplier answered: another Prometheus is another answer. */
+const supplierOf = (
+  power: CapabilityState<"cost.now" | "cost.history" | "usage.workloads">
+) => (power.state === "ready" ? `${power.vendor} ${power.endpoint}` : "");
+
+/**
+ * The answer on screen while the next is read, kept only where the next
+ * asks the same question of the same parts of the key: another supplier's
+ * answer is not this one's, even for a moment.
+ */
+const keptWhere =
+  (key: readonly unknown[], same: readonly number[]) =>
+  <T>(previous: T | undefined, query?: { queryKey: readonly unknown[] }) =>
+    query && same.every((at) => query.queryKey[at] === key[at])
+      ? previous
+      : undefined;
+
 /** A short stand-in for a set of rows, so a query re-reads when they change. */
 export function rowsKey(keys: readonly WorkloadKey[]): string {
   let hash = 2166136261;
@@ -100,8 +117,14 @@ export function useCost(
   // basis's rows, and a newer basis beside an older answer would put one
   // workload's cost on another's row.
   const asked = basis.data;
+  const readingKey = queryKeys.costReading(
+    namespaces,
+    !detail,
+    supplierOf(power),
+    rowsKey(keys)
+  );
   const reading = useLiveQuery({
-    queryKey: queryKeys.costReading(namespaces, !detail, rowsKey(keys)),
+    queryKey: readingKey,
     queryFn: async () => ({
       basis: asked!,
       reading: await ready!.use({ namespaces, keys, nodes: !detail }),
@@ -109,7 +132,7 @@ export function useCost(
     enabled: ready !== null && basis.data !== undefined,
     refresh: "steady",
     retry: false,
-    placeholderData: (previous) => previous,
+    placeholderData: keptWhere(readingKey, [3]),
   });
 
   const cost = useMemo((): CostState => {
@@ -209,8 +232,9 @@ export function useWorkloadUsage(
   const power = useCapabilityState("usage.workloads");
   const ready = power.state === "ready" ? power : null;
   const rows = keys ? rowsKey(keys) : "";
+  const usageKey = queryKeys.workloadUsage(namespaces, supplierOf(power), rows);
   const usage = useLiveQuery({
-    queryKey: queryKeys.workloadUsage(namespaces, rows),
+    queryKey: usageKey,
     queryFn: async () => {
       const asked = [...(keys ?? [])];
       return {
@@ -223,7 +247,7 @@ export function useWorkloadUsage(
     refresh: "steady",
     staleTime: 5 * 60_000,
     retry: false,
-    placeholderData: (previous) => previous,
+    placeholderData: keptWhere(usageKey, [2]),
   });
   const since = usage.freshness.waitingSince;
   return useMemo(() => {
@@ -257,7 +281,12 @@ export function useCostTrend(
   const power = useCapabilityState("cost.history");
   const ready = power.state === "ready" ? power : null;
   const trend = useLiveQuery({
-    queryKey: queryKeys.costTrend(namespaces, range, JSON.stringify(prices)),
+    queryKey: queryKeys.costTrend(
+      namespaces,
+      range,
+      JSON.stringify(prices),
+      supplierOf(power)
+    ),
     queryFn: () => ready!.use({ namespaces, range, prices }),
     enabled: ready !== null,
     refresh: "steady",
