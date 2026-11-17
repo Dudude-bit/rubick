@@ -2762,6 +2762,7 @@ export const en = {
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
+    effBilledTo: "Of {kind} {name}, every run: {line}",
     lineNotRead: "Not in the cost read yet.",
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",

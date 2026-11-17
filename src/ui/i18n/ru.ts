@@ -2912,6 +2912,7 @@ export const ru: Catalogue = {
     lineCut:
       "Не входит в {kept} нагрузок этого пространства имён, которые запрашивают больше всего; остальные страница «Стоимость» складывает.",
     lineBilledTo: "Оплачивается как {kind} {name}: {line}",
+    effBilledTo: "У {kind} {name}, по всем запускам: {line}",
     lineNotRead: "В прочитанной стоимости её пока нет.",
     lineNoSeries: "В этом Prometheus нет рядов OpenCost; подробнее на {page}.",
     lineCostPage: "странице «Стоимость»",
