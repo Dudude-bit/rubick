@@ -125,13 +125,11 @@ pub struct NodeBasis {
     pub gpus_requested: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UnclaimedVolume {
-    pub name: String,
+pub struct UnclaimedVolumes {
+    pub count: u32,
     pub bytes: f64,
-    /// `Available`, `Released` or `Failed`, as the cluster writes it.
-    pub phase: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,7 +160,9 @@ pub struct CostBasis {
     /// could not be listed.
     pub volume_bytes: Option<f64>,
     pub volume_count: Option<u32>,
-    pub unclaimed: Option<Vec<UnclaimedVolume>>,
+    /// Volumes bound to no claim, counted and summed: their names were
+    /// never shown, and twenty thousand of them were a megabyte of IPC.
+    pub unclaimed: Option<UnclaimedVolumes>,
     pub volumes_unread: Option<ReadFailure>,
     /// Namespaces whose claims could not be read, where volumes were not.
     pub claims_unread: Vec<UnreadNamespace>,
@@ -493,7 +493,7 @@ struct Volumes {
     claims_known: bool,
     total: Option<f64>,
     count: Option<u32>,
-    unclaimed: Option<Vec<UnclaimedVolume>>,
+    unclaimed: Option<UnclaimedVolumes>,
     unread: Option<ReadFailure>,
 }
 
@@ -517,7 +517,7 @@ fn volumes_from_pvs(pvs: &[PersistentVolume]) -> Volumes {
         claims_known: true,
         total: Some(0.0),
         count: Some(0),
-        unclaimed: Some(Vec::new()),
+        unclaimed: Some(UnclaimedVolumes::default()),
         ..Volumes::default()
     };
     for pv in pvs {
@@ -539,15 +539,11 @@ fn volumes_from_pvs(pvs: &[PersistentVolume]) -> Volumes {
                 *volumes.by_namespace.entry(namespace.clone()).or_default() += bytes;
                 volumes.claims.insert((namespace, name), bytes);
             }
-            _ => volumes
-                .unclaimed
-                .as_mut()
-                .expect("set above")
-                .push(UnclaimedVolume {
-                    name: pv.metadata.name.clone().unwrap_or_default(),
-                    bytes,
-                    phase,
-                }),
+            _ => {
+                let unclaimed = volumes.unclaimed.as_mut().expect("set above");
+                unclaimed.count += 1;
+                unclaimed.bytes += bytes;
+            }
         }
     }
     volumes
@@ -1266,13 +1262,47 @@ pub(crate) mod tests {
             jobs_unread: None,
             volume_bytes: Some(1.0),
             volume_count: Some(1),
-            unclaimed: Some(Vec::new()),
+            unclaimed: Some(UnclaimedVolumes::default()),
             volumes_unread: None,
             claims_unread: Vec::new(),
             served_from: OverviewSource::Watch,
         };
         let bytes = serde_json::to_vec(&basis).unwrap().len();
         assert!(bytes < 262_144, "a full answer is {bytes} bytes");
+    }
+
+    /// Twenty thousand Released volumes with 63-character names were a list
+    /// of over a megabyte in one answer, though only their sum was ever
+    /// shown. Counted and summed, the answer stays small and whole. Fails if
+    /// unclaimed volumes travel one by one again.
+    #[test]
+    fn twenty_thousand_unclaimed_volumes_are_counted_and_summed_not_listed() {
+        let pvs: Vec<PersistentVolume> = (0..20_000)
+            .map(|i| {
+                serde_json::from_value(json!({
+                    "metadata": {"name": format!("{:0>63}", i)},
+                    "spec": {"capacity": {"storage": "1Gi"}},
+                    "status": {"phase": "Released"},
+                }))
+                .expect("a volume")
+            })
+            .collect();
+        let volumes = volumes_from_pvs(&pvs);
+        let basis = assemble(
+            &read_of(vec![]),
+            Ok((vec![], Ok(Some(vec![])))),
+            &volumes,
+            None,
+        );
+        assert_eq!(
+            basis.unclaimed,
+            Some(UnclaimedVolumes {
+                count: 20_000,
+                bytes: 20_000.0 * 1024.0 * 1024.0 * 1024.0,
+            })
+        );
+        let bytes = serde_json::to_vec(&basis).unwrap().len();
+        assert!(bytes < 262_144, "the answer is {bytes} bytes");
     }
 
     /// A token that lists pods and not Jobs: the refusal was dropped, so a

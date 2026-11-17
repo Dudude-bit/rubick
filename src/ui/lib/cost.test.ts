@@ -10,6 +10,7 @@ import type {
 } from "@/generated/types";
 import {
   GIB,
+  HOURS_PER_MONTH,
   MAX_COST_ROWS,
   costOf,
   cronJobOf,
@@ -78,7 +79,7 @@ function basis(extra: Partial<CostBasis> = {}): CostBasis {
     unread: [],
     volumeBytes: 0,
     volumeCount: 0,
-    unclaimed: [],
+    unclaimed: { count: 0, bytes: 0 },
     volumesUnread: null,
     claimsUnread: [],
     servedFrom: "watch",
@@ -496,6 +497,18 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
     expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a", "staging-1"]);
     expect(picture.cluster).toBeNull();
     expect(picture.foreignNodes).toEqual([]);
+  });
+});
+
+describe("volumes nobody claims", () => {
+  /** Sent as a count and a sum, priced as one: fails if their cost is lost with the list. */
+  it("prices the sum of the volumes nobody claims", () => {
+    const picture = estimatePicture(
+      basis({ unclaimed: { count: 3, bytes: 30 * GIB } }),
+      prices,
+      null
+    );
+    expect(picture.unclaimed).toBeCloseTo((30 * 0.1) / HOURS_PER_MONTH, 6);
   });
 });
 

@@ -41,7 +41,7 @@ const BASIS: CostBasis = {
   unread: [],
   volumeBytes: 0,
   volumeCount: 0,
-  unclaimed: [],
+  unclaimed: { count: 0, bytes: 0 },
   volumesUnread: null,
   claimsUnread: [],
   servedFrom: "watch",

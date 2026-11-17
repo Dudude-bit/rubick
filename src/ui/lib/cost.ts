@@ -387,8 +387,7 @@ export function estimatePicture(
     prices.storage === null || volumeBytes === null
       ? null
       : storagePerHour(volumeBytes, prices.storage);
-  const unclaimedBytes =
-    basis.unclaimed === null ? null : sum(basis.unclaimed.map((v) => v.bytes));
+  const unclaimedBytes = basis.unclaimed?.bytes ?? null;
   const unclaimed =
     prices.storage === null || unclaimedBytes === null
       ? null

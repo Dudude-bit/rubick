@@ -1238,16 +1238,15 @@ export interface CostBasis {
   jobsUnread: ReadFailure | null;
   volumeBytes: number | null;
   volumeCount: number | null;
-  unclaimed: UnclaimedVolume[] | null;
+  unclaimed: UnclaimedVolumes | null;
   volumesUnread: ReadFailure | null;
   claimsUnread: UnreadNamespace[];
   servedFrom: OverviewSource;
 }
 
-export interface UnclaimedVolume {
-  name: string;
+export interface UnclaimedVolumes {
+  count: number;
   bytes: number;
-  phase: string | null;
 }
 
 export interface RestBasis {
