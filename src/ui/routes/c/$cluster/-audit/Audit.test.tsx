@@ -33,6 +33,27 @@ vi.mock("@/lib/commands", () => ({
       query: AuditQuery
     ): Promise<AuditPage> => {
       asked.push(query);
+      if (query.by === "object")
+        return Promise.resolve({
+          revision: 1,
+          summary,
+          rows: [
+            {
+              row: "object",
+              subject: {
+                kind: "Deployment",
+                namespace: "billing",
+                name: "api",
+              },
+              worst: null,
+              severities: { high: 0, medium: 0, low: 0 },
+              rules: [],
+              unchecked: 2,
+            },
+          ],
+          total: 1,
+          next: null,
+        });
       if (query.rule === "no-disruption-budget")
         return Promise.resolve({
           revision: 1,
@@ -198,6 +219,21 @@ describe("the Audit page", () => {
     await waitFor(() => expect(asked.at(-1)?.offset).toBe(100));
     act(() => useClusterStore.setState({ namespaceScope: ["shop"] }));
     await waitFor(() => expect(asked.at(-1)?.offset).toBe(0));
+  });
+
+  /**
+   * An object no rule could answer for wears an eye, not a badge. Fails if
+   * the eye says nothing to a screen reader, which hears an empty cell where
+   * a sighted reader sees "not checked".
+   */
+  it("names the not-checked mark of an object to a screen reader", async () => {
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit?view=object",
+      route: "/c/$cluster/audit",
+    });
+    const name = await screen.findByText("api");
+    const row = name.closest("tr") as HTMLElement;
+    expect(within(row).getByLabelText("Not checked here")).toBeInTheDocument();
   });
 
   it("counts the table's rows as rules", async () => {
