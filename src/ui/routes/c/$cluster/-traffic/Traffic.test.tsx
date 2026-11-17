@@ -9,6 +9,10 @@ import {
   vi,
 } from "vite-plus/test";
 
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import type { FlowEnd, Measure } from "@/generated/types";
 import type { LiveSnapshot } from "@/hooks/useLiveTraffic";
 import type { TrafficState } from "@/hooks/useTraffic";
@@ -18,6 +22,7 @@ import {
   type FlowSource,
   type TrafficReading,
 } from "@/lib/traffic";
+import type { PlacedSection } from "@/lib/report-parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { vendorLink } from "@/lib/links";
 import { useWindowActivity } from "@/lib/window-activity";
@@ -352,6 +357,48 @@ describe("the Traffic page", () => {
     expect(text).toContain(
       "Istio's flows could not be read: query processing would load too many samples into memory"
     );
+  });
+});
+
+describe("the Traffic page's Share", () => {
+  /**
+   * Rows kept from before a refresh that failed are old: the file says so
+   * beside them, as the page does, and says nothing where it answered.
+   */
+  it("says the failed refresh beside the rows it kept, and nothing where it answered", async () => {
+    let collect: (() => PlacedSection[]) | null = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const shared = async (lastFailed: string | null) => {
+      traffic.mockReturnValue({
+        ...read({ requests: 2 }, [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "read", series: 1 },
+          },
+        ]),
+        lastFailed,
+      } as TrafficState);
+      const page = await renderWithRouter(
+        <ScreenShareProvider>
+          <Traffic />
+          <Probe />
+        </ScreenShareProvider>,
+        { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+      );
+      const partial = collect!().find(
+        (section) => section.title === "Traffic"
+      )?.partial;
+      page.unmount();
+      return partial;
+    };
+    expect(await shared("timed out after 20s")).toContain(
+      "timed out after 20s"
+    );
+    expect(await shared(null)).toBeNull();
   });
 });
 

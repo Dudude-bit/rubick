@@ -521,7 +521,9 @@ function WindowView({
       quiet={nothingWords(reading, scopeWords, windowWords, t)}
       panelWindow={windowWords}
       cut={reading.answer.cut > 0}
-      sharePartial={partialOf(reading, sources, t)}
+      sharePartial={
+        notes.length > 0 ? notes.map((note) => note.text).join(" ") : null
+      }
       measured={measuredBy(sources)}
     />
   );
@@ -672,13 +674,4 @@ function notesOf(
       );
   out.push(...unreadNotes(reading, t));
   return out;
-}
-
-function partialOf(
-  reading: TrafficReading,
-  sources: readonly FlowSource[],
-  t: ReturnType<typeof useT>
-): string | null {
-  const words = notesOf(reading, sources, t);
-  return words.length > 0 ? words.join(" ") : null;
 }
