@@ -1678,14 +1678,19 @@ mod following {
             state("apps", "deployments", FeedState::Synced),
         );
         feed(&mut recorder, whole(Whole::Fresh, vec![api("nginx:1")]));
-        let blind = "2026-11-14T10:00:00Z";
+        // After the span began, whatever the date the test runs on: a fixed
+        // moment fell out of the week kept and was pruned.
+        let blind_at = ClusterTimeline::now();
+        let blind = chrono::DateTime::from_timestamp_millis(blind_at)
+            .unwrap()
+            .to_rfc3339();
         feed(
             &mut recorder,
             state(
                 "apps",
                 "deployments",
                 FeedState::Blind {
-                    since: blind.into(),
+                    since: blind.clone(),
                 },
             ),
         );
@@ -1697,14 +1702,7 @@ mod following {
         let page = cluster.page(&query(Show::All));
         let spans = page.spans.followed;
         assert_eq!(spans.len(), 2);
-        assert_eq!(
-            spans[0].to,
-            Some(
-                chrono::DateTime::parse_from_rfc3339(blind)
-                    .unwrap()
-                    .timestamp_millis()
-            )
-        );
+        assert_eq!(spans[0].to, Some(blind_at));
         assert_eq!(spans[1].to, None);
         assert_eq!(page.rows.len(), 1);
         assert!(page.rows[0].at_relist);
