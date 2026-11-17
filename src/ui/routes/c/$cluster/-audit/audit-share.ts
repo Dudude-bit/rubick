@@ -18,6 +18,7 @@ import {
   checkedWords,
   notCheckedWords,
   upgradeWords,
+  usageWords,
 } from "./summary-words";
 import { SEVERITY_WORDS, ruleTitle, uncheckedWords, whatWords } from "./rules";
 import { kindWords } from "./subjects";
@@ -88,6 +89,9 @@ export function auditScreenSection(
   const unread = [
     ...page.summary.notChecked.map((each) => notCheckedWords(each, t)),
     ...(page.summary.upgrade.read === null ? [upgradeWords(page, t)] : []),
+    ...(page.summary.usage !== null && page.summary.usage.says !== "read"
+      ? [usageWords(page, t) ?? ""]
+      : []),
   ];
   return {
     id: "audit",

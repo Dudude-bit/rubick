@@ -149,8 +149,12 @@ pub enum Binding {
 pub struct Ask {
     pub kinds: Vec<KindKey>,
     /// Where a kind refused across the cluster is read instead; `None` is
-    /// the whole cluster. Objects outside it are not handed over.
+    /// the whole cluster.
     pub scope: Option<Vec<String>>,
+    /// Objects outside `scope` are not handed over: a page drawing the
+    /// window's namespaces. A recorder of the whole cluster is handed
+    /// everything the layer reads, and `scope` only says where to fall back.
+    pub narrow: bool,
     pub binding: Binding,
 }
 
@@ -184,7 +188,8 @@ impl Lease {
                 let Some(sub) = inner.subscribers.get_mut(&self.id) else {
                     return;
                 };
-                sub.scope = scope;
+                sub.scope = scope.clone().filter(|_| sub.narrow);
+                sub.fallback = scope;
                 sub.kinds.clone()
             };
             for kind in kinds {
@@ -562,7 +567,11 @@ impl Feeds {
 
 struct Subscriber {
     kinds: BTreeSet<KindKey>,
+    /// What it is handed is held to these namespaces; `None` is everything.
     scope: Option<Vec<String>>,
+    /// Where it asks a kind refused across the cluster to be read.
+    fallback: Option<Vec<String>>,
+    narrow: bool,
     binding: Binding,
     touched: Instant,
     tx: mpsc::Sender<Update>,
@@ -1033,7 +1042,9 @@ impl ContextFeeds {
                 id,
                 Subscriber {
                     kinds: kinds.iter().map(|(kind, _)| kind.clone()).collect(),
-                    scope: ask.scope.clone(),
+                    scope: ask.scope.clone().filter(|_| ask.narrow),
+                    fallback: ask.scope.clone(),
+                    narrow: ask.narrow,
                     binding: ask.binding,
                     touched: Instant::now(),
                     tx,
@@ -1091,7 +1102,7 @@ impl ContextFeeds {
                     },
                 );
                 if let Some(objects) = objects {
-                    let scope = ask.scope.clone();
+                    let scope = ask.scope.clone().filter(|_| ask.narrow);
                     let objects = objects
                         .into_iter()
                         .filter(|o| in_scope(scope.as_deref(), o))
@@ -1202,7 +1213,7 @@ impl ContextFeeds {
                 .subscribers
                 .values()
                 .filter(|sub| sub.kinds.contains(kind))
-                .filter_map(|sub| sub.scope.clone())
+                .filter_map(|sub| sub.fallback.clone())
                 .flatten()
                 .collect();
             (
@@ -1757,6 +1768,7 @@ mod tests {
         Ask {
             kinds: vec![deployments().0],
             scope: scope.map(|names| names.into_iter().map(str::to_string).collect()),
+            narrow: true,
             binding,
         }
     }
@@ -1875,6 +1887,79 @@ mod tests {
             either.len(),
             "watches opened against kinds asked for"
         );
+        context.end();
+    }
+
+    /// The timeline follows for the whole session kinds that Audit and the
+    /// cluster map follow while on screen. With all three, each kind is one
+    /// watch; with the two pages closed, every kind the timeline asks for is
+    /// still watched and only the pages' own kinds stop. Would break if the
+    /// timeline spelled a kind its own way, or a page's leaving took a watch
+    /// a session subscriber still holds.
+    #[tokio::test]
+    async fn the_timeline_beside_audit_and_the_map_keeps_its_kinds_when_they_close() {
+        let feeds = feeds().lingering(Duration::ZERO, Duration::ZERO, QUEUE);
+        let context = feeds.context_for("prod", client().await);
+        let split = |ask: &Ask| {
+            let (known, unknown): (Vec<_>, Vec<_>) =
+                ask.kinds.iter().partition(|kind| built_in(kind).is_some());
+            let known: Vec<(KindKey, (ApiResource, bool))> = known
+                .into_iter()
+                .map(|kind| (kind.clone(), built_in(kind).expect("built in")))
+                .collect();
+            (known, unknown.into_iter().cloned().collect::<Vec<_>>())
+        };
+        let timeline = crate::timeline::follow::ask(None);
+        let audit = crate::audit::feed_ask(None);
+        let map = crate::topology::ask(None);
+        let (timeline_kinds, timeline_unserved) = split(&timeline);
+        let (audit_kinds, audit_unserved) = split(&audit);
+        let (map_kinds, map_unserved) = split(&map);
+        let _timeline = context.join(&timeline, &timeline_kinds, &timeline_unserved);
+        let audit_page = context.join(&audit, &audit_kinds, &audit_unserved);
+        let map_page = context.join(&map, &map_kinds, &map_unserved);
+
+        let ours: BTreeSet<&KindKey> = timeline_kinds.iter().map(|(kind, _)| kind).collect();
+        let either: BTreeSet<&KindKey> = timeline_kinds
+            .iter()
+            .chain(&audit_kinds)
+            .chain(&map_kinds)
+            .map(|(kind, _)| kind)
+            .collect();
+        let shared = audit_kinds
+            .iter()
+            .chain(&map_kinds)
+            .filter(|(kind, _)| ours.contains(kind))
+            .map(|(kind, _)| kind)
+            .collect::<BTreeSet<_>>()
+            .len();
+        assert!(
+            shared >= 8,
+            "the timeline shares {shared} kinds with the pages"
+        );
+        let mut spelled: BTreeMap<(&str, &str), BTreeSet<&KindKey>> = BTreeMap::new();
+        for kind in timeline.kinds.iter().chain(&audit.kinds).chain(&map.kinds) {
+            let stem = kind.plural.trim_end_matches('s');
+            spelled
+                .entry((kind.group.as_str(), stem))
+                .or_default()
+                .insert(kind);
+        }
+        let twice: Vec<_> = spelled.values().filter(|keys| keys.len() > 1).collect();
+        assert!(twice.is_empty(), "{twice:?}");
+        let generation = context.serving();
+        assert_eq!(generation.stops.lock().len(), either.len());
+
+        drop(audit_page);
+        drop(map_page);
+        context.reap(Instant::now());
+        for kind in &either {
+            assert_eq!(
+                generation.holds(&whole(kind)),
+                ours.contains(kind),
+                "{kind:?} after the pages closed"
+            );
+        }
         context.end();
     }
 
@@ -2016,6 +2101,72 @@ mod tests {
             namespace: Some("ops".to_string()),
         }));
         context.end();
+    }
+
+    /// With the window on `shop`, a page draws `shop` and the timeline records
+    /// the cluster, whose span says it watched the whole of it. Fails if the
+    /// timeline loses a rollout in `payments` the whole-cluster watch saw, a
+    /// page is handed it, or the timeline stops falling back to its window's
+    /// namespaces where the cluster refuses.
+    #[tokio::test]
+    async fn the_timeline_is_handed_the_whole_cluster_and_a_page_its_namespaces() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let window = Some(vec!["shop".to_string()]);
+        let mut page = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let mut timeline = context.join(
+            &crate::timeline::follow::ask(window.clone()),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("payments", "api", "1"),
+            ],
+        );
+        apply(&generation, &slot, deployment("payments", "api", "2"));
+        let named = |updates: Vec<Update>| -> Vec<String> {
+            updates
+                .iter()
+                .flat_map(|update| match update {
+                    Update::Whole { objects, .. } => names(objects),
+                    Update::Applied { object, .. } => {
+                        vec![object.metadata.name.clone().unwrap_or_default()]
+                    }
+                    _ => Vec::new(),
+                })
+                .collect()
+        };
+        assert_eq!(named(drain(&mut page)), ["web"]);
+        assert_eq!(named(drain(&mut timeline)), ["api", "web", "api"]);
+        timeline.lease.rescope(Some(vec!["ops".to_string()]));
+        apply(&generation, &slot, deployment("payments", "api", "3"));
+        assert_eq!(named(drain(&mut timeline)), ["api"]);
+
+        let refusing = feeds.context_for("staging", client().await);
+        let _timeline = refusing.join(&crate::timeline::follow::ask(window), &[deployments()], &[]);
+        let generation = refusing.serving();
+        SlotHost::refused(
+            &generation,
+            &whole(&deployments().0),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        assert!(generation.holds(&SlotKey {
+            kind: deployments().0,
+            namespace: Some("shop".to_string()),
+        }));
+        context.end();
+        refusing.end();
     }
 
     /// A renewed client reads every kind again; the old one serves until the
@@ -2347,6 +2498,7 @@ mod tests {
                     slot_of("", "secrets").kind,
                 ],
                 scope: None,
+                narrow: true,
                 binding: Binding::Session,
             },
             &[
@@ -2417,6 +2569,7 @@ mod tests {
             &Ask {
                 kinds: vec![pods.kind.clone()],
                 scope: None,
+                narrow: true,
                 binding: Binding::Session,
             },
             &[(pods.kind.clone(), (ApiResource::erase::<Pod>(&()), true))],
@@ -2531,6 +2684,7 @@ mod tests {
         Ask {
             kinds: vec![slot_of("", "configmaps").kind],
             scope: None,
+            narrow: true,
             binding: Binding::Session,
         }
     }

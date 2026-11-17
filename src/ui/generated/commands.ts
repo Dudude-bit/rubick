@@ -156,6 +156,7 @@ import type {
   TlsCertificate,
   TrafficAnswer,
   UpdaterConfig,
+  UsageRead,
   Via,
   WorkloadFold,
   WorkloadKey,
@@ -308,17 +309,19 @@ export async function runPodCheck(
 
 export async function getAudit(
   scope: string[] | null,
-  query: AuditQuery
+  query: AuditQuery,
+  usage: UsageRead | null
 ): Promise<AuditPage> {
-  return invoke<AuditPage>("get_audit", { scope, query });
+  return invoke<AuditPage>("get_audit", { scope, query, usage });
 }
 
 export async function getAuditOf(
   kind: string,
   namespace: string | null,
-  name: string
+  name: string,
+  usage: UsageRead | null
 ): Promise<ObjectAudit> {
-  return invoke<ObjectAudit>("get_audit_of", { kind, namespace, name });
+  return invoke<ObjectAudit>("get_audit_of", { kind, namespace, name, usage });
 }
 
 export async function listDeployments(

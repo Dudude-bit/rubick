@@ -1053,6 +1053,7 @@ export const en = {
     filterIdentitiesPlaceholder: "Filter by identity, client id or pod…",
     filterHostsPlaceholder: "Filter by host or Service…",
     askAgain: "Ask again",
+    supplierConnection: "{vendor} connection",
     readTheLast: "Read the last {range}",
     readWhatVendorKept: "Read what {vendor} kept",
     connectOne: "connect one",
@@ -1937,6 +1938,16 @@ export const en = {
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
     whyNotScraped:
       "the connected Prometheus holds none of the API server's metrics",
+    whyNoUsage:
+      "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
+    whyNoSamples:
+      "the connected Prometheus holds no sample of its pods in the last day",
+    whyYoung:
+      "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyYoungUndated:
+      "when its pods started is not known, and a peak is judged over a whole day",
+    whyFolded:
+      "it is not among the workloads that request most, whose usage is read one by one",
     pickNamespaces:
       "Pick the namespaces you can read in the namespace picker, and they are read one by one.",
     late: "{kind} {where} as read at {since}; the watch has failed since.",
@@ -1967,6 +1978,12 @@ export const en = {
       "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
     upgradeRead: "Upgrade: read at {time}, against Kubernetes {server}",
     upgradeReadUnversioned: "Upgrade: read at {time}",
+    usageNoSupplier:
+      "Requests against use: not weighed, since no Prometheus is connected to this cluster",
+    usageReading: "Requests against use: still reading the last day of usage",
+    usageFailed: "Requests against use: the usage could not be read: {said}",
+    usageRead:
+      "Requests against use: weighed over the last {window}, as the Cost page reads them",
     helmRelease: "Helm release",
     helmReleases: "Helm releases",
     deprecatedApi: "Deprecated API",
@@ -2066,6 +2083,10 @@ export const en = {
       other: "{n} requests in the last day",
     },
     wRequestedTodayNone: "no request in the last day",
+    wOverRequested:
+      "{resource} peaked at {peak} of the {requested} it requests, over the last day",
+    wCpu: "CPU",
+    wMemory: "Memory",
     pssHostProcess: "Runs as a Windows HostProcess",
     pssHostProcessWhy:
       "A HostProcess container runs with the Windows node's own privileges. The Baseline profile forbids it.",
@@ -2180,6 +2201,9 @@ export const en = {
     noMemoryRequest: "No memory request",
     noMemoryRequestWhy:
       "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
+    requestsAboveUsage: "Requests far above what it uses",
+    requestsAboveUsageWhy:
+      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler keeps the whole request free for it on a node, so the rest is paid for and used by nothing. Lower the request toward the peak, keeping room for the peaks the day did not see.",
     removedApiInHelmRelease:
       "Helm release stores an API version Kubernetes removes",
     removedApiInHelmReleaseWhy:
@@ -2202,7 +2226,7 @@ export const en = {
     explained:
       "One clock for what changed: the controller's revisions, the delivery owner's history, Helm's history, what this app recorded of the object while it was connected, and the cluster's events about it. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster while it was connected, and the cluster's events, in the order they happened. A gap is a stretch it was not watching: no change made then is known, and its only events are those the cluster still held when this app looked again.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -2282,7 +2306,7 @@ export const en = {
     notWatchingNow: "Not watching this cluster right now.",
     watchingNow: "Watching since {since}",
     earlierRows:
-      "Rows before {since} were recorded by this app while it watched from {from} to {to}",
+      "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
@@ -2324,6 +2348,8 @@ export const en = {
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnknown:
+      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {
@@ -2464,6 +2490,7 @@ export const en = {
     monthNote: "Projected: the hourly rate × 730 hours, not a bill.",
     idle: "Idle",
     idleCluster: "Idle in the cluster",
+    idleUnpriced: "Not known while no node carries a price.",
     idleNote: "Paid for and allocated to nobody.",
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
@@ -2499,8 +2526,14 @@ export const en = {
     memoryRequested: "Memory requested",
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
+    usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
+    effMeasuredFor: "{avg} average, {peak} peak, over {age}",
+    effYoung:
+      "Its youngest pod started {age} ago, so these figures cover only that. Whether it asks for too much is judged over a whole day.",
+    effUndated:
+      "When its pods started is not known, so these figures may not cover a whole day, and whether it asks for too much is not judged.",
     effNoSupplier: "not measured: needs Prometheus",
     effReading: "reading…",
     effFailed: "could not read use: {said}",
@@ -2542,6 +2575,12 @@ export const en = {
       "Or {prices}, and this page estimates from node capacity and what each workload requests.",
     noSeries:
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
+    noNodePrices:
+      "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    whyNoNodePrices:
+      "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
+    whySomeNodePrices:
+      "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
     estimateMeanwhile:
@@ -2556,6 +2595,13 @@ export const en = {
       one: "{n} node carries no price in OpenCost: {names}.",
       other: "{n} nodes carry no price in OpenCost: {names}.",
     },
+    foreignNodes: {
+      one: "Prometheus at {endpoint} also prices {n} node this cluster does not list: {names}. It is left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+      other:
+        "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
+    },
+    heldUnread:
+      "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
     storageUnpriced: "Storage has no price entered: {volumes}, {size}.",
     storageUnpricedOpenCost:
@@ -2615,6 +2661,8 @@ export const en = {
       "Nothing of it runs on a node, so nothing is billed to it now.",
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
+    lineBilledTo: "Billed to {kind} {name}: {line}",
+    lineNotRead: "Not in the cost read yet.",
     lineUnread: "Could not read what this costs.",
   },
   hints: {
@@ -2788,6 +2836,9 @@ export const en = {
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",
+    nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
+    nothingSeenSinceCleared:
+      "nothing seen since {at}, when the timeline was cleared",
     waitingOn: "Waiting on",
     notLookedAt: "Not looked at",
     pinsFull: {

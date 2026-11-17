@@ -12,6 +12,7 @@ import {
   GIB,
   MAX_COST_ROWS,
   costOf,
+  cronJobOf,
   estimatePicture,
   monthOf,
   readingPicture,
@@ -58,6 +59,7 @@ function basis(extra: Partial<CostBasis> = {}): CostBasis {
   return {
     nodes: [node("node-a")],
     nodesUnread: null,
+    heldUnread: null,
     namespaces: [
       {
         namespace: "shop",
@@ -92,6 +94,7 @@ const fold = (
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  since: values.map(() => null),
 });
 
 function reading(extra: Partial<CostReading> = {}): CostReading {
@@ -225,6 +228,36 @@ describe("an estimate from entered prices", () => {
     expect(picture.cluster!.perHour).toBeCloseTo(2 * 0.04 + 8 * 0.005);
   });
 
+  /**
+   * A row's total from parts some of which carry no price is a floor, and
+   * one with none priced has no total: the rows printed 0 while their parts
+   * read "not priced".
+   */
+  it("makes a row a floor where a part it holds has no price", () => {
+    const picture = estimatePicture(
+      basis({
+        namespaces: [
+          {
+            namespace: "shop",
+            workloads: 1,
+            pods: 2,
+            cpu: 500,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 10 * GIB,
+          },
+        ],
+      }),
+      { ...prices, storage: null },
+      ["shop"]
+    );
+    expect(picture.namespaces[0]).toMatchObject({
+      atLeast: true,
+      unpriced: ["storage"],
+    });
+    expect(picture.total!.atLeast).toBe(true);
+  });
+
   /** Some namespaces of the scope unread: what was read is a floor. */
   it("calls a scope's total at least when some of its namespaces could not be read", () => {
     const picture = estimatePicture(
@@ -293,6 +326,45 @@ describe("a picture from OpenCost's prices", () => {
     expect(picture.cluster!.atLeast).toBe(true);
   });
 
+  /**
+   * OpenCost with no node prices prices no CPU or memory: a namespace that
+   * runs pods has no total, and one OpenCost never named is still a row.
+   */
+  it("has no total for a namespace whose CPU and memory carry no price", () => {
+    const picture = readingPicture(
+      basis({
+        namespaces: [
+          {
+            namespace: "shop",
+            workloads: 1,
+            pods: 2,
+            cpu: 500,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 0,
+          },
+          {
+            namespace: "bank",
+            workloads: 1,
+            pods: 1,
+            cpu: 100,
+            memory: GIB,
+            gpus: 0,
+            storageBytes: 0,
+          },
+        ],
+      }),
+      reading({ namespaces: { shop: { storage: 0 } } }),
+      opencost,
+      null
+    );
+    const shop = picture.namespaces.find((n) => n.namespace === "shop")!;
+    expect(shop).toMatchObject({ perHour: 0, atLeast: true });
+    expect(shop.unpriced).toEqual(["cpu", "memory"]);
+    const bank = picture.namespaces.find((n) => n.namespace === "bank")!;
+    expect(bank.perHour).toBeNull();
+  });
+
   /** No series for any of a workload's pods is "not priced", never 0/h. */
   it("leaves a workload no series priced without a cost rather than at zero", () => {
     const picture = readingPicture(
@@ -315,6 +387,34 @@ describe("a picture from OpenCost's prices", () => {
     expect(picture.workloadsFailed).toBe("timed out after 20s");
     expect(picture.workloads[0]!.perHour).toBeNull();
     expect(picture.cluster!.perHour).toBeCloseTo(0.2);
+  });
+
+  /**
+   * On a cluster OpenCost has no price list for, no node carries a price.
+   * Idle is the nodes' cost less what was allocated; with none of that
+   * known it is not known, and 0 was the lie the page told.
+   */
+  it("has no idle where OpenCost prices no node", () => {
+    const picture = readingPicture(
+      basis({ nodes: [node("node-a"), node("node-b")] }),
+      reading({ nodes: [], allocatedByNode: {} }),
+      opencost,
+      null
+    );
+    expect(picture.idle).toBeNull();
+    expect(picture.nodes!.every((n) => n.idle === null)).toBe(true);
+  });
+
+  /** Some nodes priced: their idle is a floor. */
+  it("calls idle at least where some nodes carry no price", () => {
+    const picture = readingPicture(
+      basis({ nodes: [node("node-a"), node("worker-7")] }),
+      reading(),
+      opencost,
+      null
+    );
+    expect(picture.idle?.atLeast).toBe(true);
+    expect(picture.idle?.perHour).toBeCloseTo(0.15);
   });
 
   /** Idle is what the node costs less what OpenCost allocated on it. */
@@ -345,6 +445,51 @@ describe("a picture from OpenCost's prices", () => {
   });
 });
 
+describe("a Prometheus that prices another cluster's nodes too", () => {
+  /**
+   * A shared Prometheus holds staging's OpenCost series beside prod's.
+   * Where prod's node list was read, its total, its node table and its idle
+   * are prod's nodes only, and the others are named. Fails if a node the
+   * cluster does not list was added to its total.
+   */
+  it("counts only the nodes the cluster lists, and names the rest", () => {
+    const shared = reading({
+      nodes: [
+        { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+      allocatedByNode: { "node-a": 0.05, "staging-1": 0.1 },
+    });
+    const picture = readingPicture(basis(), shared, opencost, null);
+    expect(picture.cluster?.perHour).toBeCloseTo(0.2);
+    expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a"]);
+    expect(picture.idle?.perHour).toBeCloseTo(0.15);
+    expect(picture.foreignNodes).toEqual(["staging-1"]);
+  });
+
+  /**
+   * Without the node list there is nothing to tell another cluster's
+   * nodes by, so none is called foreign. Fails if a refused node list
+   * dropped every priced node from the total.
+   */
+  it("keeps every priced node where the cluster's node list was not read", () => {
+    const shared = reading({
+      nodes: [
+        { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+    });
+    const picture = readingPicture(
+      basis({ nodes: null }),
+      shared,
+      opencost,
+      null
+    );
+    expect(picture.cluster?.perHour).toBeCloseTo(0.7);
+    expect(picture.foreignNodes).toEqual([]);
+  });
+});
+
 describe("one object's cost", () => {
   /**
    * The detail pages read their line through this, the page reads the same
@@ -369,6 +514,28 @@ describe("one object's cost", () => {
         name: "gone",
       })
     ).toBeNull();
+  });
+});
+
+describe("whose row a Job's cost is", () => {
+  /** The rule `cost_basis` folds a Job by: its controller, when that is a CronJob. */
+  it("is its CronJob's where a CronJob controls it, and its own otherwise", () => {
+    const owner = (kind: string, controller: boolean) => ({
+      api_version: "batch/v1",
+      kind,
+      name: "backup",
+      uid: "u",
+      controller,
+    });
+    expect(cronJobOf({ ownerReferences: [owner("CronJob", true)] })).toEqual({
+      group: "batch",
+      kind: "CronJob",
+      name: "backup",
+    });
+    expect(
+      cronJobOf({ ownerReferences: [owner("CronJob", false)] })
+    ).toBeNull();
+    expect(cronJobOf({ ownerReferences: [] })).toBeNull();
   });
 });
 

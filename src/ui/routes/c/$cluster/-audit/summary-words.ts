@@ -37,7 +37,25 @@ export const anythingUnread = (page: AuditPage) =>
   page.summary.notChecked.length > 0 ||
   page.summary.reading > 0 ||
   page.summary.unattributed > 0 ||
-  page.summary.upgrade.read === null;
+  page.summary.upgrade.read === null ||
+  (page.summary.usage !== null && page.summary.usage.says !== "read") ||
+  page.summary.rules.some((rule) => rule.unchecked > 0);
+
+/** Where requests against use stand, or `null` where the page did not weigh them. */
+export function usageWords(page: AuditPage, t: T): string | null {
+  const usage = page.summary.usage;
+  if (usage === null) return null;
+  switch (usage.says) {
+    case "noSupplier":
+      return t("audit", "usageNoSupplier");
+    case "reading":
+      return t("audit", "usageReading");
+    case "failed":
+      return t("audit", "usageFailed", { said: usage.said });
+    case "read":
+      return t("audit", "usageRead", { window: usage.window });
+  }
+}
 
 /** When the upgrade rules last read, against which Kubernetes, or that they still are. */
 export function upgradeWords(page: AuditPage, t: T): string {

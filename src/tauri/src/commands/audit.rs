@@ -2,23 +2,30 @@
 
 use tauri::State;
 
-use crate::audit::{AuditPage, AuditQuery, ObjectAudit};
+use crate::audit::{AuditPage, AuditQuery, ObjectAudit, UsageRead};
 use crate::error::Result;
 use crate::state::AppState;
 
 /// One page of what is deployed in a way that will hurt later, across
 /// `scope` (`None` is the whole cluster), with the scope's summary. Starts
 /// Audit's watches on the first call and keeps them while it is asked.
+/// `usage` is what the webview read of the scope's usage, judged there.
 #[tauri::command]
 pub async fn get_audit(
     scope: Option<Vec<String>>,
     query: AuditQuery,
+    usage: Option<UsageRead>,
     state: State<'_, AppState>,
 ) -> Result<AuditPage> {
     crate::client::clock::timed(
         &state.perf,
         "getAudit",
-        Box::pin(crate::audit::audit_page(&state, scope, &query)),
+        Box::pin(crate::audit::audit_page(
+            &state,
+            scope,
+            &query,
+            usage.as_ref(),
+        )),
     )
     .await
 }
@@ -30,16 +37,18 @@ pub async fn get_audit_of(
     kind: String,
     namespace: Option<String>,
     name: String,
+    usage: Option<UsageRead>,
     state: State<'_, AppState>,
 ) -> Result<ObjectAudit> {
     crate::client::clock::timed(
         &state.perf,
         "getAuditOf",
-        Box::pin(crate::audit::object_audit(
+        Box::pin(crate::audit::object_audit_with(
             &state,
             &kind,
             namespace.as_deref(),
             &name,
+            usage.as_ref(),
         )),
     )
     .await

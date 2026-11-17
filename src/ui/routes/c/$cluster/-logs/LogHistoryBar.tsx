@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { AskAgain } from "../-supplier/AskAgain";
 import {
   USAGE_RANGES,
   type CapabilityState,
@@ -108,7 +109,8 @@ export function LogHistoryBar({
           {t("empty", "historyVendorUnreachable", {
             vendor: capability.vendor,
             reason: capability.reason,
-          })}
+          })}{" "}
+          <AskAgain power={capability} />
         </p>
       </Bar>
     );

@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { AskAgain } from "../../../-supplier/AskAgain";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -203,7 +204,8 @@ export function NodeUtilisation({
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.vendor,
             reason: power.reason,
-          })}
+          })}{" "}
+          <AskAgain power={power} />
         </p>
       )}
       {query.error && (

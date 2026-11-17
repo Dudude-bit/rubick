@@ -3,8 +3,9 @@
 //!
 //! An object is read as leaves: `spec.template.spec.containers[api].image`,
 //! with a list of named things keyed by name so a reorder is no change. Each
-//! leaf keeps the text it showed and a digest of what it was. An env literal
-//! and every `ConfigMap` or `Secret` value keep the digest alone.
+//! leaf keeps the text it showed and a digest of what it was. An env literal,
+//! every `ConfigMap` or `Secret` value and every annotation that may hold a
+//! copy of the object keep the digest alone.
 //!
 //! The digest is keyed `SipHash` with keys drawn once per process and held
 //! nowhere but in this process's memory. Without the keys a digest cannot
@@ -24,8 +25,23 @@ use super::FieldMove;
 use crate::resources::{annotations_of, shown_text};
 
 /// Never diffed: it holds the whole object as last applied, a Secret's
-/// values included.
+/// values included, and moves with every apply.
 pub const LAST_APPLIED: &str = "kubectl.kubernetes.io/last-applied-configuration";
+
+/// Whether an annotation's value is kept, or only its digest. kapp, Rancher
+/// and others keep a copy of the object in one under a name of their own,
+/// values and env literals with it, so this asks what it holds, not what it
+/// is called: on a kind whose values are never kept no annotation is, and on
+/// any other a document is not. A row could not show one whole anyway.
+fn annotation_kept(values_kind: bool, value: &str) -> bool {
+    !values_kind
+        && value.chars().count() <= VALUE_CHARS
+        && !value.contains('\n')
+        && !matches!(
+            serde_json::from_str::<Value>(value.trim()),
+            Ok(Value::Object(_) | Value::Array(_))
+        )
+}
 
 /// A kept value past this is clipped in what a row says; the digest still
 /// tells any change.
@@ -325,9 +341,21 @@ pub fn snapshot(followed: &Followed, object: &Value) -> Snapshot {
     let read: Option<ObjectMeta> = meta.and_then(|m| serde_json::from_value(m.clone()).ok());
     // Through the one door every annotation leaves this process by.
     let annotations = read.as_ref().map(annotations_of).unwrap_or_default();
-    for (key, value) in &annotations {
-        if key != LAST_APPLIED {
-            leaves.put(child("metadata.annotations", key), value, true);
+    let values_kind = followed
+        .parts
+        .iter()
+        .any(|part| matches!(part, Part::Values(_)));
+    let raw = read.as_ref().and_then(|meta| meta.annotations.as_ref());
+    for (key, shown) in &annotations {
+        if key == LAST_APPLIED {
+            continue;
+        }
+        let value = raw.and_then(|raw| raw.get(key)).unwrap_or(shown);
+        let path = child("metadata.annotations", key);
+        if annotation_kept(values_kind, value) {
+            leaves.put(path, shown, true);
+        } else {
+            leaves.put(path, value, false);
         }
     }
     for part in followed.parts {

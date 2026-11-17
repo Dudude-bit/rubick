@@ -9,6 +9,7 @@ import {
   checkedWords,
   notCheckedWords,
   upgradeWords,
+  usageWords,
 } from "./summary-words";
 
 /**
@@ -58,6 +59,16 @@ export function AuditSummaryBlock({
       >
         {upgradeWords(page, t)}
       </p>
+      {summary.usage !== null && (
+        <p
+          className={
+            summary.usage.says === "read" ? "text-fg-fnt" : "text-warn"
+          }
+          data-testid="audit-usage-read"
+        >
+          {usageWords(page, t)}
+        </p>
+      )}
       {summary.notChecked.length > 0 && (
         <div className="flex flex-col gap-0.5" data-testid="audit-not-checked">
           <span className="flex items-center gap-1 font-medium text-warn">

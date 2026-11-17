@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
 import { renderWithRouter } from "@/test/render";
+import { vendorLink } from "@/lib/links";
 import { LogHistoryBar } from "./LogHistoryBar";
 
 const props = {
@@ -35,5 +36,30 @@ describe("the log history bar", () => {
       { at: "/c/prod/pods", route: "/c/$cluster/pods" }
     );
     expect(document.querySelector('[data-testid^="log-history"]')).toBeNull();
+  });
+
+  /** A store that did not answer its probe is asked again from the bar. */
+  it("offers to ask a store that did not answer again", async () => {
+    await renderWithRouter(
+      <LogHistoryBar
+        {...props}
+        capability={{
+          state: "unreachable",
+          vendor: "Loki",
+          endpoint: "loki.example.com",
+          reason: "connection refused",
+          askAgain: () => {},
+          asking: false,
+          settings: vendorLink("loki", { tab: "connection" }),
+        }}
+      />,
+      { at: "/c/prod/pods", route: "/c/$cluster/pods" }
+    );
+    expect(
+      screen.getByRole("button", { name: "Ask again" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Loki connection" })
+    ).toHaveAttribute("href", "/c/prod/integrations/loki?tab=connection");
   });
 });

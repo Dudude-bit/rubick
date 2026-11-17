@@ -9,7 +9,8 @@ import type {
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
-import { formatWhen } from "@/lib/utils";
+import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
+import { formatAge, formatWhen } from "@/lib/utils";
 
 type AuditKey = keyof typeof en.audit;
 
@@ -150,6 +151,10 @@ export const RULE_WORDS: Record<RuleId, { title: AuditKey; why: AuditKey }> = {
     title: "deprecatedApiRequested",
     why: "deprecatedApiRequestedWhy",
   },
+  "requests-above-usage": {
+    title: "requestsAboveUsage",
+    why: "requestsAboveUsageWhy",
+  },
 };
 
 export const ruleTitle = (rule: RuleId, t: T) =>
@@ -200,6 +205,13 @@ const WHY_WORDS: {
   unserved: (_, t) => t("audit", "whyUnserved"),
   noPrometheus: (_, t) => t("audit", "whyNoPrometheus"),
   notScraped: (_, t) => t("audit", "whyNotScraped"),
+  noUsage: (_, t) => t("audit", "whyNoUsage"),
+  noSamples: (_, t) => t("audit", "whyNoSamples"),
+  young: (why, t) =>
+    why.says === "young" && why.since !== null
+      ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
+      : t("audit", "whyYoungUndated"),
+  folded: (_, t) => t("audit", "whyFolded"),
 };
 
 /** Why a kind was not read, worded. */
@@ -387,6 +399,18 @@ const SAYS: {
     w.requests === 0
       ? { key: "wRequestedTodayNone", values: {} }
       : { key: "wRequestedToday", values: { n: w.requests } },
+  overRequested: (w, t): Said => {
+    const cpu = w.resource === "cpu";
+    const amount = (n: number) => (cpu ? formatCPU(n) : formatBytes(n));
+    return {
+      key: "wOverRequested",
+      values: {
+        resource: t("audit", cpu ? "wCpu" : "wMemory"),
+        peak: amount(w.peak),
+        requested: amount(w.requested),
+      },
+    };
+  },
 };
 
 /** What one value of a finding says, as a key and its values. */

@@ -129,12 +129,20 @@ impl Graph {
     }
 
     /// Forget everything one slot read, when it stops.
-    pub fn drop_slot(&mut self, slot: &SlotKey) {
-        for uid in self.slots.remove(slot).unwrap_or_default() {
-            self.unlink(&uid);
-            self.nodes.remove(&uid);
+    /// Forgets what `slot` held, and says whose nodes those were.
+    pub fn drop_slot(&mut self, slot: &SlotKey) -> Vec<String> {
+        let uids: Vec<String> = self
+            .slots
+            .remove(slot)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        for uid in &uids {
+            self.unlink(uid);
+            self.nodes.remove(uid);
         }
         self.relisting.remove(slot);
+        uids
     }
 
     fn unlink(&mut self, uid: &str) {

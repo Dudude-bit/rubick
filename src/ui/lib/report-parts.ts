@@ -21,14 +21,13 @@ import type {
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import {
+  coverageOf,
   gapsOf,
   gapWords,
   isChange,
   letGoWords,
   REVISED_KINDS,
   rowWords,
-  spansCovering,
-  spansWatching,
   type Gap,
 } from "./changes";
 import { conditionRole } from "./condition-health";
@@ -386,11 +385,13 @@ export function changesSection(
 ): PlacedSection | null {
   if (targets.length === 0) return null;
   const namespaces = targets[0].namespace ? [targets[0].namespace] : [];
-  const followed = read.spans?.followed ?? [];
-  const spans = spansCovering(followed, {
-    kinds: targets.map((target) => target.kind),
+  // Each kind on the source that reads it, as the object's Changes tab does.
+  const { covering: spans, watching } = coverageOf(
+    read.spans,
+    targets.map((target) => target.kind),
     namespaces,
-  });
+    "changes"
+  );
   const all = read.rows
     .filter(isChange)
     .filter((row) =>
@@ -423,18 +424,7 @@ export function changesSection(
   const now = Date.parse(capturedAt);
   // As far back as the timeline keeps, or as the oldest row shown.
   const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
-  const gaps = watched
-    ? gapsOf(
-        spans,
-        from,
-        now,
-        spansWatching(
-          followed,
-          targets.map((target) => target.kind)
-        ),
-        namespaces
-      )
-    : [];
+  const gaps = watched ? gapsOf(spans, from, now, watching, namespaces) : [];
   const letGo = read.letGo?.changes;
   const rows: (ReportChange & { ms: number })[] = [
     ...out.map(({ ms, at, ref, parts }) => ({

@@ -655,6 +655,7 @@ export interface ResourceBudget {
 export interface CostBasis {
   nodes: NodeBasis[] | null;
   nodesUnread: ReadFailure | null;
+  heldUnread: ReadFailure | null;
   namespaces: NamespaceBasis[];
   workloads: WorkloadBasis[];
   rest: RestBasis | null;
@@ -2317,6 +2318,7 @@ export interface AuditSummary {
   unattributed: number;
   enforced: Enforced[];
   upgrade: UpgradeRead;
+  usage: UsageState | null;
 }
 
 export interface UpgradeRead {
@@ -2365,6 +2367,23 @@ export interface ByCategory {
   reliability: number;
   efficiency: number;
   upgrade: number;
+}
+
+export interface WorkloadUse {
+  namespace: string;
+  kind: string;
+  name: string;
+  verdict: UseVerdict;
+}
+
+export interface OverBy {
+  requested: number;
+  peak: number;
+}
+
+export interface UnreadPods {
+  namespace: string;
+  message: string;
 }
 
 export interface AuditQuery {
@@ -2648,6 +2667,7 @@ export interface WorkloadFold {
   unplaced: Unplaced[];
   unread: UnreadSums[];
   unlabelled: number;
+  since: (string | null)[];
 }
 
 export interface UnreadSums {
@@ -3517,7 +3537,11 @@ export type Why =
   | { says: "notAudited" }
   | { says: "unserved" }
   | { says: "noPrometheus" }
-  | { says: "notScraped" };
+  | { says: "notScraped" }
+  | { says: "noUsage" }
+  | { says: "noSamples" }
+  | { says: "young"; since: string | null }
+  | { says: "folded" };
 
 export type RuleId =
   | "pss-host-process"
@@ -3561,7 +3585,8 @@ export type RuleId =
   | "removed-api-in-helm-release"
   | "deprecated-api-writer"
   | "crd-version-deprecated"
-  | "deprecated-api-requested";
+  | "deprecated-api-requested"
+  | "requests-above-usage";
 
 export type What =
   | { says: "set"; at: At | null; field: string; value: string }
@@ -3624,7 +3649,13 @@ export type What =
       removed: string | null;
       replacement: string | null;
     }
-  | { says: "requestedToday"; requests: number };
+  | { says: "requestedToday"; requests: number }
+  | {
+      says: "overRequested";
+      resource: string;
+      requested: number;
+      peak: number;
+    };
 
 export type TrafficBy =
   | { says: "service"; name: string }
@@ -3658,6 +3689,30 @@ export type AuditRow =
     }
   | { row: "found"; subject: Subject; finding: AuditFinding }
   | { row: "blind"; subject: Subject; unchecked: Unchecked };
+
+export type UsageState =
+  | { says: "noSupplier" }
+  | { says: "reading" }
+  | { says: "failed"; said: string }
+  | { says: "read"; window: string };
+
+export type UsageRead =
+  | { state: "noSupplier" }
+  | { state: "reading" }
+  | { state: "failed"; said: string }
+  | {
+      state: "read";
+      window: string;
+      workloads: WorkloadUse[];
+      unread: UnreadPods[];
+      folded: number;
+    };
+
+export type UseVerdict =
+  | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
+  | { says: "within" }
+  | { says: "noSamples" }
+  | { says: "young"; since: string | null };
 
 export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 
@@ -4039,6 +4094,8 @@ export interface TimelinePage {
   letGo: LetGoes;
   keeping: Keeping;
   unreadable: number;
+  epoch: number;
+  identity: Identity;
 }
 
 export interface LetGoes {
@@ -4105,6 +4162,11 @@ export type Keeping =
   | { says: "kept" }
   | { says: "off" }
   | { says: "failed"; message: string };
+
+export type Identity =
+  | { says: "known" }
+  | { says: "notChecked" }
+  | { says: "unknown"; message: string };
 
 export type RowSays =
   | { says: "created" }

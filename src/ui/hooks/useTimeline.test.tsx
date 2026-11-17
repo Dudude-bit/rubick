@@ -61,6 +61,8 @@ function page(
     spans: { followed: [], meta: [] },
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
+    identity: { says: "known" },
+    epoch: 0,
     unreadable: 0,
     ...over,
   };
@@ -160,6 +162,97 @@ describe("one surface reading the timeline", () => {
     await waitFor(() => expect(result.current.rows).toHaveLength(3));
     expect(asked[1].before).toEqual({ at: 10, seq: 10 });
     expect(result.current.readFrom).toBeNull();
+  });
+
+  /**
+   * A relist records every live event again under a new number and its old
+   * time. Fails if one older than the last row read becomes the tail: the
+   * next page would start below it, past changes nobody read, and the page
+   * would draw that stretch as read.
+   */
+  it("leaves a row recorded since but older than what was read for the page that reads there", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: 60_000, show: "all" }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    answers = [page([row("c", 30), row("old-event", 5, 31)])];
+    told("prod");
+    await waitFor(() => expect(result.current.rows).toHaveLength(3));
+    expect(result.current.rows.map((each) => each.id)).toEqual(["c", "b", "a"]);
+    expect(result.current.readFrom).toBe(10);
+    answers = [page([row("x", 8), row("old-event", 5, 31)])];
+    act(() => result.current.loadOlder());
+    await waitFor(() => expect(result.current.rows).toHaveLength(5));
+    expect(asked[2].before).toEqual({ at: 10, seq: 10 });
+  });
+});
+
+describe("rows that started over", () => {
+  let announce: ((event: { payload: unknown }) => void) | null = null;
+  let answers: TimelinePage[] = [];
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {children}
+    </QueryClientProvider>
+  );
+
+  beforeEach(() => {
+    forgetChannels();
+    useClusterStore.setState({
+      currentContext: "kind-kind",
+      isConnected: true,
+    });
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "timeline-changed") announce = handler as typeof announce;
+      return () => {};
+    });
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "timeline_read" ? (answers.shift() ?? page([])) : undefined
+    );
+  });
+
+  /**
+   * kind was made again under the same name while the page was open: the
+   * backend started over, numbering from 1, and the page asked for rows after
+   * the old cluster's newest. Fails if the old cluster's rows stay on screen,
+   * or the new cluster's first rows are never read.
+   */
+  it("reads the timeline again from the top once the backend started over", async () => {
+    answers = [page([row("old-b", 800), row("old-a", 700)])];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: 60_000, show: "all" }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    answers = [
+      page([], { epoch: 1, newest: 3 }),
+      page([row("new-c", 30, 3), row("new-b", 20, 2), row("new-a", 10, 1)], {
+        epoch: 1,
+      }),
+    ];
+    act(() =>
+      announce?.({
+        payload: {
+          channel: "timeline-changed",
+          context: "kind-kind",
+          rows: true,
+          spans: true,
+        },
+      })
+    );
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual([
+        "new-c",
+        "new-b",
+        "new-a",
+      ])
+    );
   });
 });
 

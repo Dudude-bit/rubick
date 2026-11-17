@@ -48,7 +48,7 @@ vi.mock("@/lib/connections", async (original) => ({
 }));
 
 import { ServiceCard } from "./ServiceCard";
-import { pinShare } from "./service-card-share";
+import { lastChangeOf, pinShare } from "./service-card-share";
 import { translate } from "@/i18n";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { T } from "@/i18n/useT";
@@ -559,5 +559,61 @@ describe("the last change a card names", () => {
         atRelist: false,
       })
     ).toBe("spec.replicas 1 → 2");
+  });
+
+  /**
+   * After Settings › Clear, a Deployment edited three times this week read
+   * "nothing seen while this app was watching". Fails if a card whose
+   * changes were cleared or let go says none was seen, there or in Share.
+   */
+  it("says changes were let go or cleared rather than that none was seen", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { useClusterStore } = await import("@/stores/clusterStore");
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    const before = Date.UTC(2026, 10, 14, 9, 30);
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "timeline_read"
+        ? {
+            rows: [],
+            more: false,
+            newest: 0,
+            spans: { followed: [], meta: [] },
+            letGo: {
+              changes: { before, cleared: true },
+              warnings: null,
+              normal: null,
+            },
+            keeping: { says: "kept" },
+            unreadable: 0,
+          }
+        : undefined
+    );
+    await mount();
+    expect(
+      await screen.findByText(
+        /^nothing seen since .+, when the timeline was cleared$/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/while this app was watching/)).toBeNull();
+    const read = { read: true, rows: [] };
+    const words = (letGo: { before: number; cleared: boolean }) => {
+      const section = pinShare(
+        pin,
+        { state: "ready", ready: 1, total: 1 },
+        { entries: [], known: true },
+        [],
+        lastChangeOf({
+          ...read,
+          letGo: { changes: letGo, warnings: null, normal: null },
+        }),
+        [],
+        t
+      );
+      const rows = section.body.type === "facts" ? section.body.rows : [];
+      return rows.find((row) => row.label === "Last change")?.values[0].text;
+    };
+    expect(words({ before, cleared: false })).toBe(
+      "nothing seen since 2026-11-14 09:30 UTC: older changes were let go"
+    );
   });
 });

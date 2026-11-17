@@ -29,6 +29,7 @@ const page: AuditPage = {
     unattributed: 0,
     enforced: [],
     upgrade: { read: "2026-11-14T10:00:00Z", server: "v1.31.4" },
+    usage: null,
   },
   rows: [
     {
@@ -102,6 +103,29 @@ describe("Audit in a shared file", () => {
       type: "findings",
       items: [{ ref: { kind: "Helm release", stem: expect.any(String) } }],
     });
+  });
+
+  /**
+   * Requests not weighed against use make the file partial, saying why.
+   * Fails if a file written without a Prometheus read as a whole answer.
+   */
+  it("keeps requests not weighed against use out of the total", () => {
+    const section = auditScreenSection(
+      {
+        ...page,
+        summary: {
+          ...page.summary,
+          notChecked: [],
+          usage: { says: "noSupplier" },
+        },
+      },
+      "rule",
+      t
+    );
+    expect(section.count).toBeNull();
+    expect(section.notRead).toEqual([
+      "Requests against use: not weighed, since no Prometheus is connected to this cluster",
+    ]);
   });
 
   /** Fails if an object's unanswered rule reaches the file as a pass. */

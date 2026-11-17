@@ -163,6 +163,13 @@ const EVERY_WHAT: What[] = [
   { says: "requestedToday", requests: 14 },
   { says: "requestedToday", requests: 1 },
   { says: "requestedToday", requests: 0 },
+  { says: "overRequested", resource: "cpu", requested: 2000, peak: 300 },
+  {
+    says: "overRequested",
+    resource: "memory",
+    requested: 4294967296,
+    peak: 536870912,
+  },
 ];
 
 /** Every kind of value a finding carries: a new one fails to compile until it is listed. */
@@ -190,6 +197,7 @@ const SAYS: Record<What["says"], true> = {
   storedAs: true,
   requested: true,
   requestedToday: true,
+  overRequested: true,
 };
 
 describe("the words Audit draws its rules and findings with", () => {

@@ -15,6 +15,7 @@ mod objects;
 pub mod rules;
 mod template;
 mod upgrade;
+mod usage;
 
 use std::time::{Duration, Instant};
 
@@ -34,6 +35,7 @@ pub use detail::object_audit;
 pub use index::{feed_ask, AuditIndexes};
 pub use rules::{AuditSeverity, Category, RuleId, Standard};
 pub use upgrade::{Removal, HELM_RELEASE};
+pub use usage::{OverBy, UnreadPods, UsageRead, UsageState, UseVerdict, WorkloadUse};
 
 /// Which list of a pod spec a container is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -205,6 +207,13 @@ pub enum What {
     RequestedToday {
         requests: u64,
     },
+    /// What a workload requests of `resource`, `cpu` in millicores or
+    /// `memory` in bytes, and the most it used in the usage window.
+    OverRequested {
+        resource: String,
+        requested: u64,
+        peak: u64,
+    },
 }
 
 /// One rule an object breaks, and where.
@@ -250,6 +259,17 @@ pub enum Why {
     NoPrometheus,
     /// The connected Prometheus holds none of the API server's metrics.
     NotScraped,
+    /// Nothing keeps usage history for this cluster: no Prometheus connected.
+    NoUsage,
+    /// The usage supplier holds no sample of its pods in the window.
+    NoSamples,
+    /// Its youngest pod, started at `since` where known, has not been seen
+    /// to run the usage window.
+    Young {
+        since: Option<String>,
+    },
+    /// Past the row cap of the requests list, its usage was read only as a sum.
+    Folded,
 }
 
 /// Why a read did not answer: refused, or failed in the server's words.
@@ -381,6 +401,7 @@ pub async fn audit_page(
     state: &AppState,
     scope: Option<Vec<String>>,
     query: &AuditQuery,
+    usage: Option<&UsageRead>,
 ) -> Result<AuditPage> {
     let scope = crate::commands::helpers::scope_of(scope)?;
     let here = state.here()?;
@@ -396,7 +417,8 @@ pub async fn audit_page(
         .audit
         .ensure(state, &here, scope.clone(), minor)
         .await?;
-    let seen = answer::world(&index, owners.as_ref().map(AsRef::as_ref), scope.as_deref());
+    let mut seen = answer::world(&index, owners.as_ref().map(AsRef::as_ref), scope.as_deref());
+    usage::merge(&mut seen, usage);
     let enforced = enforced(state, &here, scope.as_deref()).await;
     let mut page = answer::page(
         &seen,
@@ -409,4 +431,18 @@ pub async fn audit_page(
         .get(&here.context)
         .map(|session| session.info.server_version.clone());
     Ok(page)
+}
+
+/// One object's findings with what the webview read of its usage judged in,
+/// for its tab, its peek and the row the Audit page opens.
+pub async fn object_audit_with(
+    state: &AppState,
+    kind: &str,
+    namespace: Option<&str>,
+    name: &str,
+    usage: Option<&UsageRead>,
+) -> Result<ObjectAudit> {
+    let mut audit = object_audit(state, kind, namespace, name).await?;
+    usage::apply(&mut audit, usage);
+    Ok(audit)
 }

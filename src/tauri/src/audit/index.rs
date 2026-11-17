@@ -80,6 +80,7 @@ pub fn feed_ask(scope: Option<Vec<String>>) -> Ask {
             .map(|(resource, _)| key_of(resource))
             .collect(),
         scope,
+        narrow: true,
         binding: Binding::Page,
     }
 }

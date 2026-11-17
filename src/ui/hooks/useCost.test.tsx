@@ -31,6 +31,7 @@ const { useCostPricesStore } = await import("@/stores/costPricesStore");
 const BASIS: CostBasis = {
   nodes: [],
   nodesUnread: null,
+  heldUnread: null,
   namespaces: [],
   workloads: [],
   rest: null,
@@ -48,7 +49,14 @@ const READING: CostReading = {
   nodes: [],
   allocatedByNode: null,
   namespaces: {},
-  workloads: { values: [], rest: [], unplaced: [], unread: [], unlabelled: 0 },
+  workloads: {
+    values: [],
+    rest: [],
+    unplaced: [],
+    unread: [],
+    unlabelled: 0,
+    since: [],
+  },
   storage: {
     total: null,
     unclaimed: null,
@@ -119,7 +127,14 @@ describe("which source a cost is read from", () => {
 
   /** OpenCost answering wins over entered prices: they are not mixed. */
   it("reads OpenCost's prices where its series answer, prices entered or not", async () => {
-    capability.mockReturnValue(ready(async () => READING));
+    capability.mockReturnValue(
+      ready(async () => ({
+        ...READING,
+        nodes: [
+          { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+        ],
+      }))
+    );
     useCostPricesStore.setState({ prices: { prod: PRICES } });
     const hook = render();
     await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
@@ -143,6 +158,41 @@ describe("which source a cost is read from", () => {
       "estimate"
     );
     expect(cost.state === "picture" && cost.trouble?.kind).toBe("noSeries");
+  });
+
+  /**
+   * OpenCost on kind prices no node. Entered prices then fill that in, and
+   * the picture says why it is an estimate; without prices it stays
+   * OpenCost's, whose page says what to do.
+   */
+  it("estimates from prices where OpenCost prices no node, and says why", async () => {
+    capability.mockReturnValue(ready(async () => READING));
+    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    const cost = hook.result.current.cost;
+    expect(cost.state === "picture" && cost.picture.source.kind).toBe(
+      "estimate"
+    );
+    expect(cost.state === "picture" && cost.trouble?.kind).toBe("noNodePrices");
+  });
+
+  /**
+   * A re-render with nothing new keeps the picture: the tables beneath it
+   * re-derive their rows and widths only when it changes.
+   */
+  it("keeps the picture across renders while nothing it is made of changed", async () => {
+    const answer = ready(async () => ({
+      ...READING,
+      nodes: [{ name: "node-a", perHour: 0.2, instanceType: null, spot: null }],
+    }));
+    capability.mockReturnValue(answer);
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    const first = hook.result.current.cost;
+    hook.rerender();
+    hook.rerender();
+    expect(hook.result.current.cost).toBe(first);
   });
 
   /** No series and no prices is its own sentence, not "nothing set up". */
