@@ -2810,6 +2810,10 @@ export const ru: Catalogue = {
     unreachable: "Prometheus по адресу {endpoint} не ответил: {said}",
     failed:
       "Не удалось прочитать стоимость из Prometheus по адресу {endpoint}: {said}",
+    lastFailed:
+      "Последнее чтение из Prometheus по адресу {endpoint} не удалось ({said}); цифры взяты из предыдущего.",
+    lineLastFailed:
+      "{line}. Последнее чтение не удалось ({said}); это цифры предыдущего.",
     estimateMeanwhile:
       "Цифры ниже оценены по ценам, введённым для этого кластера.",
     basisQuestion: "Что в этом кластере стоит денег?",

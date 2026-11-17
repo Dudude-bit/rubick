@@ -37,7 +37,9 @@ export type SupplierTrouble =
       /** The supplier's probe, to ask again from the sentence. */
       power: Extract<CapabilityState<"cost.now">, { state: "unreachable" }>;
     }
-  | { kind: "failed"; vendor: string; endpoint: string; said: string };
+  | { kind: "failed"; vendor: string; endpoint: string; said: string }
+  /** The latest read failed; the picture is the read before it. */
+  | { kind: "lastFailed"; vendor: string; endpoint: string; said: string };
 
 export type CostState =
   | { state: "loading" }
@@ -179,7 +181,15 @@ export function useCost(
             },
             namespaces
           ),
-          trouble: null,
+          // A refresh that failed keeps the last answer on screen, and says so.
+          trouble: reading.error
+            ? {
+                kind: "lastFailed",
+                vendor: power.vendor,
+                endpoint: power.endpoint,
+                said: errorToShow(reading.error),
+              }
+            : null,
         };
       if (reading.error)
         trouble = {
@@ -260,9 +270,10 @@ export function useWorkloadUsage(
     if (power.state === "reading") return { state: "reading", since: null };
     if (power.state === "unreachable")
       return { state: "failed", said: power.reason };
+    // A failed re-read is said, not hidden behind the read before it.
+    if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     if (usage.data)
       return { state: "read", keys: usage.data.keys, fold: usage.data.fold };
-    if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     return { state: "reading", since };
   }, [power, usage.data, usage.error, since]);
 }
@@ -303,14 +314,14 @@ export function useCostTrend(
     if (power.state === "reading") return { state: "reading" };
     if (power.state === "unreachable")
       return { state: "failed", endpoint: power.endpoint, said: power.reason };
-    if (trend.data)
-      return { state: "read", trend: trend.data, endpoint: power.endpoint };
     if (trend.error)
       return {
         state: "failed",
         endpoint: power.endpoint,
         said: errorToShow(trend.error),
       };
+    if (trend.data)
+      return { state: "read", trend: trend.data, endpoint: power.endpoint };
     return { state: "reading" };
   }, [power, trend.data, trend.error]);
 }

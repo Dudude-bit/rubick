@@ -24,7 +24,8 @@ vi.mock("@/lib/commands", () => ({
   commands: { costBasis: () => costBasis() },
 }));
 
-const { useCost, rowsKey } = await import("./useCost");
+const { useCost, useCostTrend, useWorkloadUsage, rowsKey } =
+  await import("./useCost");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useCostPricesStore } = await import("@/stores/costPricesStore");
 
@@ -342,5 +343,88 @@ describe("the rows a reading is keyed on", () => {
     expect(rowsKey(of("first.example"))).not.toBe(
       rowsKey(of("second.example"))
     );
+  });
+});
+
+describe("a read that failed after one that answered", () => {
+  /**
+   * React Query keeps the last answer when a re-read fails, and each hook
+   * looked at the answer before the error: a 403 or a timeout left the page
+   * showing the old figures as current. The cost keeps them and says the
+   * latest read failed; use and the trend say they failed. Fails if a
+   * failed re-read is hidden behind the read before it.
+   */
+  it("says the latest read failed, beside the figures it kept", async () => {
+    let answers = true;
+    capability.mockReturnValue(
+      ready(async () => {
+        if (!answers) throw new Error("query timed out");
+        return {
+          ...READING,
+          nodes: [
+            { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+          ],
+        };
+      })
+    );
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    answers = false;
+    act(() => hook.result.current.retry());
+    await waitFor(() => {
+      const cost = hook.result.current.cost;
+      expect(cost.state === "picture" && cost.trouble).toMatchObject({
+        kind: "lastFailed",
+        said: "query timed out",
+      });
+    });
+  });
+
+  it("says use and the trend failed rather than showing the read before", async () => {
+    let answers = true;
+    const answer = async (value: unknown) => {
+      if (!answers) throw new Error("query timed out");
+      return value;
+    };
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const key = {
+      namespace: "shop",
+      group: "apps",
+      kind: "Deployment",
+      name: "web",
+    };
+    capability.mockReturnValue(
+      ready(
+        () =>
+          answer({
+            ...READING.workloads,
+            values: [[1, 2, 3, 4]],
+            since: [null],
+          }) as never
+      )
+    );
+    const usage = renderHook(() => useWorkloadUsage(["shop"], [key]), {
+      wrapper,
+    });
+    await waitFor(() => expect(usage.result.current.state).toBe("read"));
+    capability.mockReturnValue(
+      ready(() => answer({ points: [], stepSeconds: 300 }) as never)
+    );
+    const trend = renderHook(() => useCostTrend(null, "24h", null), {
+      wrapper,
+    });
+    await waitFor(() => expect(trend.result.current.state).toBe("read"));
+
+    answers = false;
+    await act(() => client.refetchQueries());
+    await waitFor(() => expect(trend.result.current.state).toBe("failed"));
+    capability.mockReturnValue(ready(() => answer(null) as never));
+    usage.rerender();
+    await waitFor(() => expect(usage.result.current.state).toBe("failed"));
   });
 });

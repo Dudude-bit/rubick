@@ -2673,6 +2673,10 @@ export const en = {
       "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
+    lastFailed:
+      "The latest read from Prometheus at {endpoint} failed ({said}); these figures are from the one before it.",
+    lineLastFailed:
+      "{line}. The latest read failed ({said}); this is the one before it.",
     estimateMeanwhile:
       "The numbers below are an estimate from the prices entered for this cluster.",
     basisQuestion: "What does this cluster hold that costs money?",

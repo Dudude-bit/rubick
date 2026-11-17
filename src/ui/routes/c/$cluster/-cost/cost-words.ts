@@ -80,6 +80,11 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
         endpoint: trouble.endpoint,
         said: trouble.said,
       });
+    case "lastFailed":
+      return t("cost", "lastFailed", {
+        endpoint: trouble.endpoint,
+        said: trouble.said,
+      });
   }
 }
 

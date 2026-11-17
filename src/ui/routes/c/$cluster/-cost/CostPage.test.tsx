@@ -644,6 +644,48 @@ describe("the breakdown by workload's names", () => {
   });
 });
 
+describe("the latest read failed after one that answered", () => {
+  /**
+   * The page kept the last figures with nothing saying they were not the
+   * latest. The page says the latest read failed and that these are the
+   * figures before it, without calling them an estimate, and a workload's
+   * own line says it in amber. Fails if kept figures read as current.
+   */
+  it("says so on the page and on a workload's line", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: {
+        kind: "lastFailed",
+        vendor: "Prometheus",
+        endpoint: "prom.example.com",
+        said: "query timed out",
+      },
+    });
+    await open();
+    const trouble = screen.getByTestId("cost-trouble");
+    expect(trouble).toHaveTextContent(
+      "The latest read from Prometheus at prom.example.com failed (query timed out); these figures are from the one before it."
+    );
+    expect(trouble).not.toHaveTextContent(/estimate/);
+
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent(
+      "The latest read failed (query timed out); this is the one before it."
+    );
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
 describe("a namespace's line where a part of it has no price", () => {
   /**
    * `shop` holds volumes and no storage price is entered: its amount leaves

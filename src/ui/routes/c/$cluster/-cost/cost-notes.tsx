@@ -41,7 +41,9 @@ export function CostNotes({
       : null;
   useShareCaveat(why && t("cost", why, { prices: t("cost", "enterPrices") }));
   const said = trouble
-    ? `${troubleWords(trouble, t)} ${t("cost", "estimateMeanwhile")}`
+    ? picture.source.kind === "estimate"
+      ? `${troubleWords(trouble, t)} ${t("cost", "estimateMeanwhile")}`
+      : troubleWords(trouble, t)
     : null;
   useShareCaveat(said);
   useShareCaveat(notes.length > 0 ? notes.join(" ") : null);
