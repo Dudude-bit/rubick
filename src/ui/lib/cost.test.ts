@@ -16,6 +16,7 @@ import {
   cronJobOf,
   estimatePicture,
   monthOf,
+  pricesNoNode,
   readingPicture,
   type CostReading,
   type Prices,
@@ -532,6 +533,26 @@ describe("what the supplier's series cover", () => {
     );
     expect(all.workloads[0]!.atLeast).toBe(false);
     expect(all.namespaces[0]!.atLeast).toBe(false);
+  });
+});
+
+describe("whether OpenCost prices this cluster's nodes", () => {
+  /**
+   * A shared Prometheus priced only staging's node: OpenCost "priced a
+   * node", so entered prices were set aside, and then the staging node was
+   * left out and this cluster's nodes had no price at all. Only this
+   * cluster's nodes count, where they were listed. Fails if another
+   * cluster's priced node keeps entered prices from standing in.
+   */
+  it("counts only the nodes this cluster lists", () => {
+    const staging = reading({
+      nodes: [
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+    });
+    expect(pricesNoNode(staging, basis())).toBe(true);
+    expect(pricesNoNode(reading(), basis())).toBe(false);
+    expect(pricesNoNode(staging, basis({ nodes: null }))).toBe(false);
   });
 });
 

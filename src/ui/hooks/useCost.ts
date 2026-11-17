@@ -158,7 +158,11 @@ export function useCost(
     if (power.state === "ready") {
       // OpenCost found no price list for any node (kind, or a provider it
       // has none for): entered prices fill that in, saying why.
-      if (reading.data?.reading && prices && pricesNoNode(reading.data.reading))
+      if (
+        reading.data?.reading &&
+        prices &&
+        pricesNoNode(reading.data.reading, reading.data.basis)
+      )
         return {
           state: "picture",
           picture: estimatePicture(basis.data, prices, namespaces),

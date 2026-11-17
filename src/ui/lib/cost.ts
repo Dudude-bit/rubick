@@ -97,8 +97,15 @@ export type CostSource =
  * has no price list for, it logs "No pricing found" and writes no node
  * prices while every other series is there.
  */
-export const pricesNoNode = (reading: CostReading): boolean =>
-  reading.nodes.length === 0;
+export const pricesNoNode = (
+  reading: CostReading,
+  basis: CostBasis
+): boolean => {
+  // A shared Prometheus prices other clusters' nodes too: what counts is
+  // whether it prices one of this cluster's, where they were listed.
+  const listed = basis.nodes && new Set(basis.nodes.map((n) => n.name));
+  return !reading.nodes.some((n) => !listed || listed.has(n.name));
+};
 
 /** A sum that knows whether it is the whole of what it adds up. */
 export interface Amount {
