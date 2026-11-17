@@ -2485,6 +2485,8 @@ export const en = {
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellBelowHttp:
+      "{sources}: this pair is seen only below HTTP, so its requests, errors and latency are not counted.",
     cellFloor:
       "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
@@ -2502,6 +2504,8 @@ export const en = {
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelBelowHttp:
+      "Seen only below HTTP: requests, errors and latency are not counted for this pair.",
     panelSideServer: "From the server's proxy.",
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
@@ -2514,6 +2518,7 @@ export const en = {
     columnFrom: "From",
     columnTo: "To",
     columnRequests: "Requests/s",
+    columnEvents: "Flows/s",
     columnErrors: "Errors",
     columnBytes: "Bytes/s",
     columnDrops: "Drops/s",

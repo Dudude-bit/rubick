@@ -28,6 +28,7 @@ const END_WHOLE_GLYPHS = 48;
 
 type NumberId =
   | "requests"
+  | "events"
   | "errorShare"
   | "p50"
   | "p95"
@@ -38,6 +39,7 @@ type NumberId =
 /** The measure each number column is filled from. */
 export const COLUMN_MEASURE: Record<NumberId, Measure> = {
   requests: "requests",
+  events: "events",
   errorShare: "errors",
   p50: "p50",
   p95: "p95",
@@ -90,6 +92,7 @@ export function flowColumns(t: T): ColumnDef<FlowRow>[] {
     end("from", t("traffic", "columnFrom"), t),
     end("to", t("traffic", "columnTo"), t),
     number("requests", t("traffic", "columnRequests"), "rate"),
+    number("events", t("traffic", "columnEvents"), "rate", 7),
     number("errorShare", t("traffic", "columnErrors"), "share"),
     number("p50", "p50", "ms", 1),
     number("p95", "p95", "ms", 5),

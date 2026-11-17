@@ -265,7 +265,7 @@ describe("the Traffic page", () => {
       .map((header) => header.textContent);
     expect(headers.join(" ")).not.toContain("Bytes/s");
     expect(screen.getByTestId("columns-note").textContent).toBe(
-      "Not drawn, no source here measures them: Bytes/s, Drops/s"
+      "Not drawn, no source here measures them: Flows/s, Bytes/s, Drops/s"
     );
     page.unmount();
     const state = read({ requests: 12 });

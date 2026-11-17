@@ -82,7 +82,17 @@ export interface TrafficReading {
   window: FlowWindow;
 }
 
-export type CellState = "measured" | "notMeasured" | "notRead";
+/** `belowHttp`: the source measures it, and saw this pair only beneath HTTP. */
+export type CellState = "measured" | "notMeasured" | "notRead" | "belowHttp";
+
+/** The measures a source has for a pair only where it reads its HTTP. */
+const HTTP: ReadonlySet<Measure> = new Set([
+  "requests",
+  "errors",
+  "p50",
+  "p95",
+  "p99",
+]);
 
 /** One number on a row, the source it came from, or why there is none. */
 export interface Cell {
@@ -189,7 +199,8 @@ function readsOf(reading: TrafficReading) {
 /**
  * A cell from the first source, in the reading's order, that has the number;
  * where none has it, "not read" if any source that measures it failed to
- * read it, "not measured" if none of the pair's sources measures it at all.
+ * read it, "not measured" if none of the pair's sources measures it at all,
+ * "below HTTP" where those that measure it have no requests for the pair.
  */
 function cellOf(
   flows: readonly Flow[],
@@ -217,6 +228,9 @@ function cellOf(
     (source, index) =>
       source.measures.includes(measure) && failed(index, measure)
   );
+  const belowHttp =
+    HTTP.has(measure) &&
+    measuring.every((flow) => flow.values[at("requests")] == null);
   return {
     cell: {
       value: null,
@@ -224,9 +238,11 @@ function cellOf(
       state:
         unread >= 0
           ? "notRead"
-          : measuring.length > 0
-            ? "measured"
-            : "notMeasured",
+          : measuring.length === 0
+            ? "notMeasured"
+            : belowHttp
+              ? "belowHttp"
+              : "measured",
     },
     flow: null,
   };
@@ -538,6 +554,7 @@ export function liveRow(pair: LivePair): FlowRow {
   const name = LIVE_SOURCE.name;
   const http = pair.requests !== null;
   const unmeasured: Cell = { value: null, source: null, state: "notMeasured" };
+  const belowHttp: Cell = { value: null, source: name, state: "belowHttp" };
   const values = MEASURES.map((measure) => {
     switch (measure) {
       case "requests":
@@ -570,11 +587,11 @@ export function liveRow(pair: LivePair): FlowRow {
     toId: endId(pair.to),
     from: pair.from,
     to: pair.to,
-    requests: http ? measured(pair.requests, name) : unmeasured,
-    errorShare: http ? liveShare(pair) : unmeasured,
-    p50: http ? measured(pair.p50, name) : unmeasured,
-    p95: http ? measured(pair.p95, name) : unmeasured,
-    p99: http ? measured(pair.p99, name) : unmeasured,
+    requests: http ? measured(pair.requests, name) : belowHttp,
+    errorShare: http ? liveShare(pair) : belowHttp,
+    p50: http ? measured(pair.p50, name) : belowHttp,
+    p95: http ? measured(pair.p95, name) : belowHttp,
+    p99: http ? measured(pair.p99, name) : belowHttp,
     bytes: unmeasured,
     events: measured(pair.forwarded, name),
     drops: measured(pair.dropped, name),

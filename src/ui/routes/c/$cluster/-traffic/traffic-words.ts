@@ -171,6 +171,7 @@ export function cellText(cell: Cell, kind: CellKind, t: T): string {
 const CELL_EMPTY: Record<CellState, (t: T) => string> = {
   measured: (t) => t("traffic", "cellNone"),
   notMeasured: () => "",
+  belowHttp: () => "",
   notRead: (t) => t("traffic", "cellNotRead"),
 };
 
@@ -189,6 +190,8 @@ export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
       });
     case "notRead":
       return t("traffic", "cellNotReadBy", { source: cell.source ?? "" });
+    case "belowHttp":
+      return t("traffic", "cellBelowHttp", { sources: row.seenBy.join(", ") });
   }
 }
 
@@ -232,6 +235,8 @@ export function sourceLines(line: SourceLine, t: T): PanelLine[] {
   if (events !== null) say(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
   if (drops !== null) say(t("traffic", "panelDrops", { v: rate(drops) }));
+  if (requests === null && line.source.measures.includes("requests"))
+    say(t("traffic", "panelBelowHttp"));
   if (line.protocols.length > 0)
     say(t("traffic", "panelProtocols", { list: line.protocols.join(", ") }));
   return out;

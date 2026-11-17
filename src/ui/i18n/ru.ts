@@ -2606,6 +2606,8 @@ export const ru: Catalogue = {
     cellFrom: "по данным {source}",
     cellNotMeasured: "Не измеряется: {sources}",
     cellNotReadBy: "{source} не смог это прочитать",
+    cellBelowHttp:
+      "{sources}: эта пара видна только ниже HTTP, поэтому запросы, ошибки и задержки для неё не считаются.",
     cellFloor:
       "Не меньше этой доли: {source} считает только HTTP 5xx, а неудачный вызов gRPC отвечает кодом 200.",
     panelLabel: "Один поток",
@@ -2622,6 +2624,8 @@ export const ru: Catalogue = {
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
+    panelBelowHttp:
+      "Видна только ниже HTTP: запросы, ошибки и задержки для этой пары не считаются.",
     panelSideServer: "По данным прокси сервера.",
     panelSideCaller:
       "По данным прокси вызывающей стороны: прокси сервера ничего из этого не сообщил.",
@@ -2634,6 +2638,7 @@ export const ru: Catalogue = {
     columnFrom: "Откуда",
     columnTo: "Куда",
     columnRequests: "Запросы/с",
+    columnEvents: "Потоки/с",
     columnErrors: "Ошибки",
     columnBytes: "Байты/с",
     columnDrops: "Отброшено/с",
