@@ -12,6 +12,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { noNodePriced, type CostPicture } from "@/lib/cost";
 import { pageLink } from "@/lib/links";
+import { unreadNamespaceWords } from "@/lib/namespace-scope";
 import type { SupplierTrouble } from "@/hooks/useCost";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { pictureNotes, troubleWords } from "./cost-words";
@@ -44,6 +45,10 @@ export function CostNotes({
     : null;
   useShareCaveat(said);
   useShareCaveat(notes.length > 0 ? notes.join(" ") : null);
+  useShareCaveat(
+    unreadNamespaceWords(t, t("cost", "podsLabel"), picture.unread).join(" ") ||
+      null
+  );
   return (
     <div className="flex flex-col gap-1.5" data-testid="cost-notes">
       {said && trouble && (
