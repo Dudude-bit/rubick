@@ -55,7 +55,15 @@ const reading = (
 ): UsageReading => ({
   state: "read",
   keys: b.workloads.map((w) => w.key),
-  fold: { values, rest: [], unplaced: [], unread: [], unlabelled: 0, since },
+  fold: {
+    values,
+    rest: [],
+    unplaced: [],
+    unread: [],
+    unlabelled: 0,
+    covered: [],
+    since,
+  },
 });
 
 const shop = basis([

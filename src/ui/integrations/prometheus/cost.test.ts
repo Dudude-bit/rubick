@@ -39,6 +39,7 @@ const FOLD: WorkloadFold = {
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  covered: [],
   since: [],
 };
 

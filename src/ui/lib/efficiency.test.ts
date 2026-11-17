@@ -127,6 +127,7 @@ describe("efficiency", () => {
           },
         ],
         unlabelled: 0,
+        covered: [],
         since: [null],
       },
     };
@@ -165,6 +166,7 @@ describe("efficiency", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [DAY_OLD, TWO_HOURS_OLD],
       },
     };

@@ -2872,6 +2872,7 @@ export interface WorkloadFold {
   unplaced: Unplaced[];
   unread: UnreadSums[];
   unlabelled: number;
+  covered: number[][];
   since: (string | null)[];
 }
 

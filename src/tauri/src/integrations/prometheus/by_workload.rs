@@ -62,6 +62,10 @@ pub struct WorkloadFold {
     pub unread: Vec<UnreadSums>,
     /// Series naming no namespace or no pod, which say nothing about a workload.
     pub unlabelled: u32,
+    /// Positional like `values`, per query: how many of the workload's pods
+    /// the answer had a series for. Fewer than run is a sum over some of
+    /// them; more than one is a sum of each pod's own figure.
+    pub covered: Vec<Vec<u32>>,
     /// Positional like `values`: when the youngest of the workload's pods on
     /// a node started (or, not started yet, was created). A window of use is
     /// no longer than the pods it was read from have run.
@@ -184,6 +188,7 @@ pub(crate) fn fold(
         unplaced: Vec::new(),
         unread: Vec::new(),
         unlabelled: 0,
+        covered: Vec::new(),
         since: youngest
             .into_iter()
             .map(|at| at.map(|at| at.to_string()))
@@ -192,6 +197,7 @@ pub(crate) fn fold(
     let mut unplaced: BTreeMap<&str, (BTreeSet<&str>, Values)> = BTreeMap::new();
     let mut unread_sums: BTreeMap<&str, Values> = BTreeMap::new();
     let mut unlabelled = HashSet::new();
+    let mut seen: Vec<Vec<HashSet<&str>>> = vec![vec![HashSet::new(); width]; keys.len()];
     for (query, series) in answers.iter().enumerate() {
         for (at, one) in series.iter().enumerate() {
             let namespace = one
@@ -226,7 +232,10 @@ pub(crate) fn fold(
             }
             match places.get(&(namespace, pod)) {
                 Some(Place::Workload(key)) => match index.get(key) {
-                    Some(&row) => add(&mut fold.values[row], query, value),
+                    Some(&row) => {
+                        add(&mut fold.values[row], query, value);
+                        seen[row][query].insert(pod);
+                    }
                     None => add(&mut fold.rest, query, value),
                 },
                 Some(Place::OffNode) | None => {
@@ -240,6 +249,10 @@ pub(crate) fn fold(
         }
     }
     fold.unlabelled = unlabelled.len() as u32;
+    fold.covered = seen
+        .iter()
+        .map(|row| row.iter().map(|pods| pods.len() as u32).collect())
+        .collect();
     fold.unplaced = unplaced
         .into_iter()
         .map(|(namespace, (pods, values))| Unplaced {
@@ -363,6 +376,24 @@ mod tests {
         let answers = vec![vec![series("shop", "kept-0", 1.0)], vec![]];
         let fold = fold(&answers, &read, &[key("kept")], None);
         assert_eq!(fold.values, vec![vec![Some(1.0), None]]);
+    }
+
+    /// A workload of two pods with series for one: the row was the one
+    /// pod's figure, shown as the workload's. The fold says how many pods
+    /// each query's answer covered. Fails if a row cannot tell a sum over
+    /// some of its pods from one over all.
+    #[test]
+    fn the_fold_says_how_many_of_a_workload_s_pods_each_answer_covered() {
+        let read = read_of(vec![
+            pod(&running("shop", "kept-0", ("StatefulSet", "kept"))),
+            pod(&running("shop", "kept-1", ("StatefulSet", "kept"))),
+        ]);
+        let answers = vec![
+            vec![series("shop", "kept-0", 1.0)],
+            vec![series("shop", "kept-0", 1.0), series("shop", "kept-1", 2.0)],
+        ];
+        let fold = fold(&answers, &read, &[key("kept")], None);
+        assert_eq!(fold.covered, vec![vec![1, 2]]);
     }
 
     /// A window of use is no longer than the pods it was read from: the

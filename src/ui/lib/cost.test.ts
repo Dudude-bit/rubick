@@ -96,6 +96,7 @@ const fold = (
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  covered: [],
   since: values.map(() => null),
 });
 
@@ -497,6 +498,40 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
     expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a", "staging-1"]);
     expect(picture.cluster).toBeNull();
     expect(picture.foreignNodes).toEqual([]);
+  });
+});
+
+describe("what the supplier's series cover", () => {
+  /**
+   * A workload of two pods with series for one: the row was that pod's
+   * cost, shown as the workload's and its namespace's. Both are floors.
+   * Fails if a sum over some of a workload's pods reads as all of it.
+   */
+  it("makes a row a floor where its series cover fewer pods than run", () => {
+    const partly = fold([[0.03, 0.02, null, null]]);
+    partly.covered = [[1, 1, 0, 0]];
+    const picture = readingPicture(
+      basis(),
+      reading({ workloads: partly }),
+      opencost,
+      null
+    );
+    expect(picture.workloads[0]).toMatchObject({ atLeast: true });
+    expect(picture.namespaces[0]).toMatchObject({
+      namespace: "shop",
+      atLeast: true,
+    });
+
+    const whole = fold([[0.03, 0.02, null, null]]);
+    whole.covered = [[2, 2, 0, 0]];
+    const all = readingPicture(
+      basis(),
+      reading({ workloads: whole }),
+      opencost,
+      null
+    );
+    expect(all.workloads[0]!.atLeast).toBe(false);
+    expect(all.namespaces[0]!.atLeast).toBe(false);
   });
 });
 

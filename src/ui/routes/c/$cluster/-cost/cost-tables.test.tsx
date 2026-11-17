@@ -90,6 +90,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
       unplaced: [],
       unread: [],
       unlabelled: 0,
+      covered: [],
       since: keys.map(() => null),
     },
     storage: {
@@ -123,6 +124,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
       unplaced: [],
       unread: [],
       unlabelled: 0,
+      covered: [],
       since: keys.map(() => "2020-01-01T00:00:00Z"),
     },
   };

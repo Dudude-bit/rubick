@@ -480,6 +480,12 @@ function valuesTotal(values: readonly (number | null)[]): number | null {
   return values.every((v) => v === null) ? null : sum(values);
 }
 
+/** A row's amount as a floor where `partial`, as it is where a part has no price. */
+const floorWhere = <R extends { perHour: number | null; atLeast: boolean }>(
+  partial: boolean,
+  row: R
+): R => (partial && row.perHour !== null ? { ...row, atLeast: true } : row);
+
 /** The cluster as a supplier that prices it reads it. */
 export function readingPicture(
   basis: CostBasis,
@@ -550,23 +556,16 @@ export function readingPicture(
           atLeast,
         };
 
-  // Every namespace the cluster runs something in, priced or not: one
-  // nothing priced is a row that says so, not a row left out.
-  const held = new Map(basis.namespaces.map((n) => [n.namespace, n]));
-  const namespaces = [
-    ...new Set([...Object.keys(reading.namespaces), ...held.keys()]),
-  ]
-    .filter((namespace) => inScope(scope, namespace))
-    .sort((a, b) => a.localeCompare(b))
-    .map((namespace): NamespaceCost => ({
-      namespace,
-      ...pricedRow(
-        reading.namespaces[namespace] ?? {},
-        heldParts(held.get(namespace) ?? { pods: 0, gpus: 0, storageBytes: 0 })
-      ),
-    }));
-
   const fold = "failed" in reading.workloads ? null : reading.workloads;
+  // Series for fewer of its pods than run: the sum is of some of them.
+  const partly = (i: number, pods: number) => {
+    const covered = fold?.covered[i];
+    return (
+      covered !== undefined &&
+      covered.length > 0 &&
+      WORKLOAD_PARTS.slice(0, 2).some((_, at) => (covered[at] ?? 0) < pods)
+    );
+  };
   const workloads = basis.workloads.map((w, i): WorkloadCost => {
     const values = fold?.values[i] ?? [null];
     const parts: Parts = {};
@@ -579,11 +578,42 @@ export function readingPicture(
       pods: w.pods,
       // A failed read priced nothing it could vouch for: no total at all.
       ...(fold
-        ? pricedRow(parts, heldParts({ ...w, storageBytes: w.claimBytes }))
+        ? floorWhere(
+            partly(i, w.pods),
+            pricedRow(parts, heldParts({ ...w, storageBytes: w.claimBytes }))
+          )
         : { perHour: null, atLeast: false, parts, unpriced: [] }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });
+  // A namespace whose workloads' series cover some of their pods is summed
+  // from the same series, and is a floor for the same reason.
+  const partial = new Set(
+    basis.workloads
+      .filter((w, i) => partly(i, w.pods))
+      .map((w) => w.key.namespace)
+  );
+  // Every namespace the cluster runs something in, priced or not: one
+  // nothing priced is a row that says so, not a row left out.
+  const held = new Map(basis.namespaces.map((n) => [n.namespace, n]));
+  const namespaces = [
+    ...new Set([...Object.keys(reading.namespaces), ...held.keys()]),
+  ]
+    .filter((namespace) => inScope(scope, namespace))
+    .sort((a, b) => a.localeCompare(b))
+    .map((namespace): NamespaceCost => ({
+      namespace,
+      ...floorWhere(
+        partial.has(namespace),
+        pricedRow(
+          reading.namespaces[namespace] ?? {},
+          heldParts(
+            held.get(namespace) ?? { pods: 0, gpus: 0, storageBytes: 0 }
+          )
+        )
+      ),
+    }));
+
   const rest = basis.rest && {
     workloads: basis.rest.workloads,
     perHour: fold ? valuesTotal(fold.rest) : null,

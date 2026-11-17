@@ -107,6 +107,7 @@ const READING: CostReading = {
     unplaced: [],
     unread: [],
     unlabelled: 0,
+    covered: [],
     since: [null],
   },
   storage: {
@@ -453,6 +454,7 @@ describe("the Cost page", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [started],
       },
     });
@@ -552,6 +554,7 @@ describe("a workload minutes old", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [started],
       },
     });

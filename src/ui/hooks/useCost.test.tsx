@@ -57,6 +57,7 @@ const READING: CostReading = {
     unplaced: [],
     unread: [],
     unlabelled: 0,
+    covered: [],
     since: [],
   },
   storage: {
