@@ -32,9 +32,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::client::K8sClientManager;
 use crate::commands::cost::WorkloadKey;
+use crate::commands::cost::{cost_key, scoped_pods_on, ScopedPods};
 use crate::commands::helpers::scope_of;
 use crate::error::{Error, Result};
-use crate::integrations::prometheus::flows::FlowEnd;
+use crate::integrations::prometheus::flows::{FlowEnd, NotListedWhy};
 use crate::resources::facts_of;
 use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
@@ -181,6 +182,7 @@ pub async fn open_hubble_flows(
     let here = state.here()?;
     let context = here.context.clone();
     let clients = state.client_manager.clone();
+    let cache = state.overview_cache.clone();
     let stream_id = crate::utils::generate_id("hubble");
     let mut opened = state.hubble_streams.open(stream_id.clone());
     let events = state.event_tx.clone();
@@ -188,7 +190,7 @@ pub async fn open_hubble_flows(
     tokio::spawn(async move {
         let end = if opened.wait_for_subscriber(SUBSCRIBE_TIMEOUT).await {
             let (cancel, _held) = opened.split();
-            run(&clients, &context, scope, &id, &events, &cancel).await
+            run(&clients, &cache, &context, scope, &id, &events, &cancel).await
         } else {
             LiveEnd::Unsubscribed
         };
@@ -471,8 +473,30 @@ fn words_of(error: &(dyn std::error::Error + 'static)) -> String {
     said.join(": ")
 }
 
+/// How soon pods are read again when a flow names one the last read did not have.
+const OWNERS_AGAIN: u64 = 15;
+
+/// The pods of the scope, as their workloads, from the overview's stores
+/// where they serve, by listing otherwise.
+async fn owners_in(
+    clients: &K8sClientManager,
+    cache: &crate::overview::OverviewCache,
+    context: &str,
+    scope: Option<&[String]>,
+) -> Owners {
+    let Ok(client) = client_of(clients, context) else {
+        return Owners::unread();
+    };
+    match scoped_pods_on(cache, client, context, scope).await {
+        Ok(read) => Owners::of(&read),
+        Err(_) => Owners::unread(),
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 async fn run(
     clients: &Arc<K8sClientManager>,
+    cache: &Arc<crate::overview::OverviewCache>,
     context: &str,
     scope: Option<Vec<String>>,
     id: &str,
@@ -524,13 +548,42 @@ async fn run(
         });
     };
     send(Vec::new(), Vec::new(), Some(found.at), &fold);
+    let (owners_tx, mut owners_rx) = tokio::sync::mpsc::channel::<Owners>(1);
+    let read_owners = |tx: tokio::sync::mpsc::Sender<Owners>| {
+        let (clients, cache, context, scope) = (
+            clients.clone(),
+            cache.clone(),
+            context.to_string(),
+            scope.clone(),
+        );
+        tokio::spawn(async move {
+            let owners = owners_in(&clients, &cache, &context, scope.as_deref()).await;
+            let _ = tx.send(owners).await;
+        });
+    };
+    read_owners(owners_tx.clone());
+    let mut asked_at = now_secs();
+    let mut asking = true;
     let mut tick = tokio::time::interval(SEND_EVERY);
     loop {
         tokio::select! {
             biased;
             () = cancel.cancelled() => return LiveEnd::Closed,
+            Some(owners) = owners_rx.recv() => {
+                fold.owners_read(owners);
+                asking = false;
+            }
             _ = tick.tick() => {
-                let (pairs, gone) = fold.tick(now_secs());
+                let now = now_secs();
+                if !asking
+                    && !fold.owners.missing.is_empty()
+                    && now.saturating_sub(asked_at) >= OWNERS_AGAIN
+                {
+                    read_owners(owners_tx.clone());
+                    asked_at = now;
+                    asking = true;
+                }
+                let (pairs, gone) = fold.tick(now);
                 let nodes = std::mem::take(&mut fold.nodes_changed);
                 for (pairs, gone) in batches(pairs, gone, nodes) {
                     send(pairs, gone, None, &fold);
@@ -691,6 +744,68 @@ struct Second {
 
 type Key = (FlowEnd, FlowEnd);
 
+/// Each pod's workload as the window's flows and Cost name it (`cost_key`),
+/// for an end Hubble names by its pod alone: one workload is one node.
+#[derive(Default)]
+struct Owners {
+    of: HashMap<(String, String), WorkloadKey>,
+    /// Namespaces whose pods could not be read; `all` where none could.
+    unread: BTreeSet<String>,
+    all: bool,
+    /// Pods named by a flow and not in the last read: a reason to read again.
+    missing: BTreeSet<(String, String)>,
+}
+
+impl Owners {
+    fn of(read: &ScopedPods) -> Self {
+        Self {
+            of: read
+                .pods
+                .iter()
+                .filter_map(|pod| {
+                    let key = cost_key(pod, &read.cron_of);
+                    Some(((key.namespace.clone(), pod.metadata.name.clone()?), key))
+                })
+                .collect(),
+            unread: read.unread.iter().map(|u| u.namespace.clone()).collect(),
+            all: false,
+            missing: BTreeSet::new(),
+        }
+    }
+
+    fn unread() -> Self {
+        Self {
+            all: true,
+            ..Self::default()
+        }
+    }
+
+    /// A bare pod as its workload; one whose pods could not be read as not
+    /// listed for that reason; one nothing owns as itself.
+    fn resolve(&mut self, end: FlowEnd) -> FlowEnd {
+        let FlowEnd::Workload { key } = &end else {
+            return end;
+        };
+        if key.kind != "Pod" || !key.group.is_empty() {
+            return end;
+        }
+        let at = (key.namespace.clone(), key.name.clone());
+        if let Some(owner) = self.of.get(&at) {
+            return FlowEnd::Workload { key: owner.clone() };
+        }
+        if self.all || self.unread.contains(&key.namespace) {
+            return FlowEnd::NotListed {
+                namespace: at.0,
+                name: at.1,
+                kind: Some("Pod".into()),
+                why: NotListedWhy::PodsUnread,
+            };
+        }
+        self.missing.insert(at);
+        end
+    }
+}
+
 /// Every pair seen in the window, a bucket a second, and which changed.
 struct Fold {
     started: u64,
@@ -700,6 +815,10 @@ struct Fold {
     untracked: u64,
     unreached: BTreeMap<String, UnreachedNode>,
     nodes_changed: bool,
+    owners: Owners,
+    /// Each pair as last sent, so a second that changes nothing a reader
+    /// sees sends nothing.
+    sent: HashMap<Key, LivePair>,
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -733,6 +852,35 @@ impl Fold {
             untracked: 0,
             unreached: BTreeMap::new(),
             nodes_changed: false,
+            owners: Owners::default(),
+            sent: HashMap::new(),
+        }
+    }
+
+    /// A new read of the pods: pairs held under a pod it names are moved to
+    /// its workload, merged with what that pair already holds.
+    fn owners_read(&mut self, owners: Owners) {
+        self.owners = owners;
+        let held: Vec<Key> = self.pairs.keys().cloned().collect();
+        for old in held {
+            let new = (
+                self.owners.resolve(old.0.clone()),
+                self.owners.resolve(old.1.clone()),
+            );
+            if new == old {
+                continue;
+            }
+            let Some(moved) = self.pairs.remove(&old) else {
+                continue;
+            };
+            let into = self.pairs.entry(new.clone()).or_default();
+            let mut by: BTreeMap<u64, Second> = into.drain(..).collect();
+            for (at, second) in moved {
+                by.entry(at).or_default().absorb(&second);
+            }
+            into.extend(by);
+            self.touched.insert(old);
+            self.touched.insert(new);
         }
     }
 
@@ -801,6 +949,7 @@ impl Fold {
         });
         // Cilium logs an L7 response from the server to the client
         // (pkg/envoy/accesslog_server.go swaps the addresses); the pair is the caller's.
+        let (from, to) = (self.owners.resolve(from), self.owners.resolve(to));
         let key = if response.is_some() {
             (to, from)
         } else {
@@ -882,9 +1031,16 @@ impl Fold {
         let mut gone = Vec::new();
         for key in changed {
             match self.pairs.get(&key) {
-                Some(seconds) if !seconds.is_empty() => pairs.push(summary(&key, seconds, span)),
+                Some(seconds) if !seconds.is_empty() => {
+                    let pair = shown(summary(&key, seconds, span));
+                    if self.sent.get(&key) != Some(&pair) {
+                        self.sent.insert(key, pair.clone());
+                        pairs.push(pair);
+                    }
+                }
                 _ => {
                     self.pairs.remove(&key);
+                    self.sent.remove(&key);
                     gone.push(LiveKey {
                         from: key.0,
                         to: key.1,
@@ -896,19 +1052,61 @@ impl Fold {
     }
 }
 
+/// A rate as the page draws it: three significant figures, whole from 100.
+#[allow(clippy::cast_possible_truncation)]
+fn figure(value: f64) -> f64 {
+    if value == 0.0 || !value.is_finite() {
+        return value;
+    }
+    if value.abs() >= 100.0 {
+        return value.round();
+    }
+    let scale = 10f64.powi(2 - value.abs().log10().floor() as i32);
+    (value * scale).round() / scale
+}
+
+/// A pair at the precision it is drawn at.
+fn shown(pair: LivePair) -> LivePair {
+    let some = |v: Option<f64>| v.map(figure);
+    LivePair {
+        forwarded: figure(pair.forwarded),
+        dropped: figure(pair.dropped),
+        drops: pair
+            .drops
+            .into_iter()
+            .map(|drop| LiveDrop {
+                rate: figure(drop.rate),
+                ..drop
+            })
+            .collect(),
+        requests: some(pair.requests),
+        errors: some(pair.errors),
+        p50: some(pair.p50),
+        p95: some(pair.p95),
+        p99: some(pair.p99),
+        ..pair
+    }
+}
+
+impl Second {
+    fn absorb(&mut self, other: &Second) {
+        self.forwarded += other.forwarded;
+        self.requests += other.requests;
+        self.errors += other.errors;
+        for (why, tally) in &other.drops {
+            self.drops.entry(why.clone()).or_default().add(tally);
+        }
+        self.latencies.extend_from_slice(&other.latencies);
+        self.protocols.extend(other.protocols.iter().cloned());
+    }
+}
+
 #[allow(clippy::cast_precision_loss)]
 fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair {
     let per = |n: u32| f64::from(n) / span as f64;
     let mut sum = Second::default();
     for (_, second) in seconds {
-        sum.forwarded += second.forwarded;
-        sum.requests += second.requests;
-        sum.errors += second.errors;
-        for (why, tally) in &second.drops {
-            sum.drops.entry(why.clone()).or_default().add(tally);
-        }
-        sum.latencies.extend_from_slice(&second.latencies);
-        sum.protocols.extend(second.protocols.iter().cloned());
+        sum.absorb(second);
     }
     sum.latencies.sort_by(f64::total_cmp);
     let latencies = &sum.latencies;
@@ -1173,7 +1371,7 @@ mod tests {
         let mut fold = Fold::new(100);
         fold.add(102, &event(Verdict::Forwarded, "web", "api"));
         let first = fold.tick(103).0;
-        assert_eq!(first[0].forwarded, 1.0 / 3.0);
+        assert_eq!(first[0].forwarded, 0.333);
         let later = fold.tick(150).0;
         assert_eq!(later.len(), 1);
         assert_eq!(later[0].forwarded, 1.0 / 50.0);
@@ -1181,6 +1379,113 @@ mod tests {
             fold.tick(161).0.is_empty(),
             "a full window: only what changed"
         );
+    }
+
+    fn deployment(name: &str) -> WorkloadKey {
+        WorkloadKey {
+            namespace: "shop".into(),
+            group: "apps".into(),
+            kind: "Deployment".into(),
+            name: name.into(),
+        }
+    }
+
+    /// A flow from `pod` with no workload Hubble named, to Deployment web.
+    fn from_pod(pod: &str) -> flow::Flow {
+        flow::Flow {
+            verdict: Verdict::Forwarded as i32,
+            source: Some(endpoint("shop", None, pod)),
+            destination: Some(endpoint("shop", Some(("Deployment", "web")), "")),
+            ..Default::default()
+        }
+    }
+
+    /// Hubble names one end by its workload in one flow and by its pod alone
+    /// in the next: read through the pods, both are one workload, one pair.
+    #[test]
+    fn a_workload_hubble_names_by_its_pod_is_one_end() {
+        let mut fold = Fold::new(0);
+        fold.owners_read(Owners {
+            of: HashMap::from([(
+                ("shop".into(), "caller-649d545b48-c74f8".into()),
+                deployment("caller"),
+            )]),
+            ..Owners::default()
+        });
+        fold.add(100, &from_pod("caller-649d545b48-c74f8"));
+        fold.add(100, &event(Verdict::Forwarded, "caller", "web"));
+        let (pairs, _) = fold.tick(101);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(
+            pairs[0].from,
+            FlowEnd::Workload {
+                key: deployment("caller")
+            }
+        );
+        assert_eq!(pairs[0].forwarded, 0.0333);
+    }
+
+    /// Flows held under a pod before the pods were read move to its workload
+    /// when they are, merged with that pair, and the pod's row goes.
+    #[test]
+    fn pairs_held_under_a_pod_move_to_its_workload_once_the_pods_are_read() {
+        let mut fold = Fold::new(0);
+        fold.add(100, &from_pod("caller-649d545b48-c74f8"));
+        fold.add(100, &event(Verdict::Forwarded, "caller", "web"));
+        assert!(fold
+            .owners
+            .missing
+            .contains(&("shop".into(), "caller-649d545b48-c74f8".into())));
+        fold.tick(101);
+        fold.owners_read(Owners {
+            of: HashMap::from([(
+                ("shop".into(), "caller-649d545b48-c74f8".into()),
+                deployment("caller"),
+            )]),
+            ..Owners::default()
+        });
+        let (pairs, gone) = fold.tick(102);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].forwarded, 0.0333);
+        assert!(
+            matches!(&gone[..], [LiveKey { from: FlowEnd::Workload { key }, .. }] if key.kind == "Pod")
+        );
+    }
+
+    /// A pod whose namespace's pods could not be read is not called a pod
+    /// nothing owns; one the read holds no owner for stays a pod.
+    #[test]
+    fn a_pod_is_not_listed_where_pods_were_unread_and_itself_where_nothing_owns_it() {
+        let mut unread = Fold::new(0);
+        unread.owners_read(Owners::unread());
+        unread.add(100, &from_pod("caller-649d545b48-c74f8"));
+        assert!(matches!(
+            &unread.tick(101).0[0].from,
+            FlowEnd::NotListed { why: NotListedWhy::PodsUnread, kind: Some(kind), .. } if kind == "Pod"
+        ));
+        let mut read = Fold::new(0);
+        read.owners_read(Owners::default());
+        read.add(100, &from_pod("debug"));
+        assert!(matches!(
+            &read.tick(101).0[0].from,
+            FlowEnd::Workload { key } if key.kind == "Pod" && key.name == "debug"
+        ));
+    }
+
+    /// A pair whose numbers, as drawn, did not move is not sent again: an
+    /// unchanged second costs the page nothing.
+    #[test]
+    fn a_pair_whose_drawn_numbers_did_not_move_is_not_sent_again() {
+        let mut fold = Fold::new(0);
+        let mut sent = Vec::new();
+        for now in 100..200 {
+            fold.add(now, &event(Verdict::Forwarded, "caller", "web"));
+            sent.push(fold.tick(now + 1).0.len());
+        }
+        assert_eq!(sent[0], 1);
+        assert!(sent[70..].iter().all(|n| *n == 0), "{sent:?}");
+        assert_eq!(figure(4.7412), 4.74);
+        assert_eq!(figure(1234.4), 1234.0);
     }
 
     /// Past the cap a new pair is counted and not held.

@@ -59,6 +59,45 @@ const homeOf = (end: FlowEnd): string | null => {
   }
 };
 
+/**
+ * What the last build handed the canvas, by id. The canvas draws an object
+ * again only when it is a new one, so one that says the same is handed back
+ * and a batch that moved one flow redraws one edge, not the map.
+ */
+export interface FlowMemo {
+  groups: Map<string, GraphGroup>;
+  nodes: Map<string, GraphNode>;
+  edges: Map<string, GraphEdge>;
+}
+
+export const newFlowMemo = (): FlowMemo => ({
+  groups: new Map(),
+  nodes: new Map(),
+  edges: new Map(),
+});
+
+const same = (a: object, b: object) => {
+  const keys = Object.keys(a) as (keyof typeof a)[];
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.is(a[key], b[key]))
+  );
+};
+
+/** The objects of one kind, each the one handed out last where it says the same. */
+function kept<Item extends { id: string }>(
+  held: Map<string, Item>,
+  items: readonly Item[]
+): Item[] {
+  const out = items.map((item) => {
+    const was = held.get(item.id);
+    return was && same(was, item) ? was : item;
+  });
+  held.clear();
+  for (const item of out) held.set(item.id, item);
+  return out;
+}
+
 export function trafficModel(input: {
   rows: readonly FlowRow[];
   nodes: ReadonlyMap<string, TopologyNode>;
@@ -68,6 +107,7 @@ export function trafficModel(input: {
   toneOf: (node: TopologyNode) => MapTone;
   t: T;
   memo: ModelMemo;
+  flows?: FlowMemo;
 }): TrafficModel {
   const { rows, nodes, t } = input;
   const held = new Map<string, TopologyNode>();
@@ -165,10 +205,11 @@ export function trafficModel(input: {
       sub: edgeSub(row, t),
     });
   }
+  const flows = input.flows ?? newFlowMemo();
   return {
-    groups,
-    nodes: [...drawn.nodes, ...standInNodes],
-    edges,
+    groups: kept(flows.groups, groups),
+    nodes: [...drawn.nodes, ...kept(flows.nodes, standInNodes)],
+    edges: kept(flows.edges, edges),
     endOf,
     rowOf,
   };

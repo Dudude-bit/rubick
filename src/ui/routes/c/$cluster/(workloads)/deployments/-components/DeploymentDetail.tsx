@@ -79,7 +79,7 @@ import {
   ReasonTip,
 } from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
-import { WorkloadFlows } from "../../-components/workload-traffic";
+import { WorkloadFlows } from "../../../-traffic/workload-traffic";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";

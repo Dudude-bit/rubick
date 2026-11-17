@@ -458,9 +458,104 @@ describe("the Cost page", () => {
       "title",
       expect.stringContaining("started 2h ago")
     );
+    expect(screen.getAllByText(/^50m average$/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^100m peak, over 2h$/).length).toBeGreaterThan(
+      0
+    );
+  });
+});
+
+describe("the cost line where Prometheus holds no OpenCost series", () => {
+  /**
+   * No cost source is how most clusters are, not this object's fault: every
+   * workload page wore two amber lines about OpenCost's series. Its line is
+   * one quiet sentence and a way to the Cost page; what failed stays amber.
+   * Fails if the ordinary state is toned as a warning, or a failure is not.
+   */
+  it("is one muted line that leads to the Cost page, and amber only for a failure", async () => {
+    const trouble = {
+      kind: "noSeries" as const,
+      vendor: "Prometheus",
+      endpoint: "localhost:19090",
+    };
+    cost.mockReturnValue({ state: "supplier", trouble });
+    await renderWithRouter(
+      <>
+        <WorkloadCostLine
+          group="apps"
+          kind="Deployment"
+          name="web"
+          namespace="shop"
+        />
+        <NamespaceCostLine namespace="shop" />
+      </>,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    for (const id of ["workload-cost", "namespace-cost"]) {
+      const line = screen.getByTestId(id);
+      expect(line).toHaveTextContent(
+        "No OpenCost series in this Prometheus; more on the Cost page."
+      );
+      expect(line).not.toHaveTextContent("node_total_hourly_cost");
+      expect(line.querySelector(".text-warn")).toBeNull();
+      expect(
+        within(line).getByRole("link", { name: "the Cost page" })
+      ).toHaveAttribute("href", "/c/prod/cost");
+    }
+  });
+
+  it("stays amber where the supplier did not answer", async () => {
+    cost.mockReturnValue({
+      state: "supplier",
+      trouble: {
+        kind: "failed",
+        vendor: "Prometheus",
+        endpoint: "localhost:19090",
+        said: "query timed out",
+      },
+    });
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    const line = screen.getByTestId("namespace-cost");
+    expect(line).toHaveTextContent("query timed out");
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
+describe("a workload minutes old", () => {
+  /**
+   * Its youngest pod started three minutes ago and Prometheus holds no
+   * sample yet. The row read "not measured · CPU no samples in 24h", as of
+   * a workload a whole day went unsampled. Fails if a young workload's
+   * empty reading is worded as a day without samples.
+   */
+  it("says it has no samples yet and when it started", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    const started = new Date(Date.now() - 3 * 60_000 - 5_000).toISOString();
+    usage.mockReturnValue({
+      state: "read",
+      keys: [BASIS.workloads[0]!.key],
+      fold: {
+        values: [[null, null, null, null]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        since: [started],
+      },
+    });
+    await open();
     expect(
-      screen.getAllByText(/^50m average · 100m peak, over 2h$/).length
+      screen.getAllByText(/^CPU no samples yet, started 3m ago$/).length
     ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^no samples yet$/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no samples in 24h/)).toBeNull();
   });
 });
 
@@ -490,9 +585,8 @@ describe("a namespace no OpenCost series prices", () => {
     cost.mockReturnValue({ state: "picture", picture, trouble: null });
     useClusterStore.setState({ namespaceScope: ["ml"] });
     await open();
-    // The scope is `ml` alone, so the one namespace row is its own.
     const [, row] = screen.getAllByRole("row");
-    expect(row).toHaveTextContent(/^not priced/);
+    expect(row).toHaveTextContent(/^Namespace mlnot priced/);
     expect(
       screen.queryByText("Nothing in this scope runs on a node.")
     ).toBeNull();
@@ -504,6 +598,76 @@ describe("a namespace no OpenCost series prices", () => {
     expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
       "No OpenCost series priced its pods."
     );
+  });
+});
+
+describe("the breakdown by workload's names", () => {
+  /**
+   * One table showed "Pod/lonely" beside a bare "two-replicas-no-budget":
+   * the cell drops its "Kind/" where a long name needs the room. Every row
+   * is drawn one way, the kind's icon and the name, the kind said to a
+   * screen reader. Fails if any row draws a kind label.
+   */
+  it("draws every workload as its kind's icon and its name", async () => {
+    const of = (kind: string, group: string, name: string) => ({
+      ...BASIS.workloads[0]!,
+      key: { namespace: "shop", group, kind, name },
+    });
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        {
+          ...BASIS,
+          workloads: [
+            of("Deployment", "apps", "two-replicas-no-budget"),
+            of("Pod", "", "lonely"),
+            of("StatefulSet", "apps", "as-root"),
+          ],
+        },
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "" },
+        null
+      ),
+      trouble: null,
+    });
+    await open();
+    for (const name of [
+      "Deployment two-replicas-no-budget",
+      "Pod lonely",
+      "StatefulSet as-root",
+    ])
+      expect(screen.getByRole("link", { name })).toBeInTheDocument();
+    expect(screen.queryAllByTestId("resource-ref-label")).toEqual([]);
+  });
+});
+
+describe("the window on one namespace", () => {
+  /**
+   * A namespace-bound reader with prices entered, the window on `shop`: the
+   * by-namespace table drew one row of amounts and nothing saying whose,
+   * because one namespace chosen hides every Namespace column. There it is
+   * the row's own name; the by-workload table, where it repeats beside
+   * each name, still drops it. Fails if either table changes sides.
+   */
+  it("names the namespace on its row, and drops it beside each workload", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        BASIS,
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "EUR" },
+        ["shop"]
+      ),
+      trouble: null,
+    });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    await open();
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(headers.filter((h) => h === "Namespace")).toHaveLength(1);
+    const [, row] = screen.getAllByRole("row");
+    expect(
+      within(row!).getByRole("link", { name: /shop/ })
+    ).toBeInTheDocument();
   });
 });
 

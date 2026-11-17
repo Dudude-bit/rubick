@@ -2580,8 +2580,10 @@ export const ru: Catalogue = {
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
     measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
-    coverage:
-      "Меш {source}: все поды у {marked}, часть подов у {partly}, {of} здесь.",
+    coverage: "В меше {source} {of} здесь: {parts}.",
+    coverageWhole: "{n} всеми подами",
+    coveragePartly: "{n} частью подов",
+    coverageNone: "{n} ни одним",
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
     nothingInWindow: "{sources}: потоков в {scope} нет ({window}).",
@@ -2610,6 +2612,8 @@ export const ru: Catalogue = {
     cellFrom: "по данным {source}",
     cellNotMeasured: "Не измеряется: {sources}",
     cellNotReadBy: "{source} не смог это прочитать",
+    cellBelowHttp:
+      "{sources}: эта пара видна только ниже HTTP, поэтому запросы, ошибки и задержки для неё не считаются.",
     cellFloor:
       "Не меньше этой доли: {source} считает только HTTP 5xx, а неудачный вызов gRPC отвечает кодом 200.",
     panelLabel: "Один поток",
@@ -2626,6 +2630,8 @@ export const ru: Catalogue = {
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
+    panelBelowHttp:
+      "Видна только ниже HTTP: запросы, ошибки и задержки для этой пары не считаются.",
     panelSideServer: "По данным прокси сервера.",
     panelSideCaller:
       "По данным прокси вызывающей стороны: прокси сервера ничего из этого не сообщил.",
@@ -2638,10 +2644,13 @@ export const ru: Catalogue = {
     columnFrom: "Откуда",
     columnTo: "Куда",
     columnRequests: "Запросы/с",
+    columnEvents: "Потоки/с",
     columnErrors: "Ошибки",
     columnBytes: "Байты/с",
     columnDrops: "Отброшено/с",
     columnSeenBy: "Видит",
+    columnsUnmeasured:
+      "Не показаны, их не измеряет ни один источник здесь: {columns}",
     callers: "Кто вызывает",
     callees: "Кого вызывает",
     blockCaption: "{sources} через {endpoint} · {window}",
@@ -2704,6 +2713,9 @@ export const ru: Catalogue = {
     memoryUsed: "Потрачено памяти, {window}",
     usedAvgPeak: "{avg} в среднем · {peak} в пике",
     usedAvgPeakFor: "{avg} в среднем · {peak} в пике, за {age}",
+    usedAvg: "{avg} в среднем",
+    usedPeak: "{peak} в пике",
+    usedPeakFor: "{peak} в пике, за {age}",
     efficiency: "Эффективность",
     effMeasured: "{avg} в среднем, {peak} в пике",
     effMeasuredFor: "{avg} в среднем, {peak} в пике, за {age}",
@@ -2715,6 +2727,8 @@ export const ru: Catalogue = {
     effReading: "читаю…",
     effFailed: "не удалось прочитать потребление: {said}",
     effNoSamples: "нет замеров за {window}",
+    effNoSamplesYet: "замеров ещё нет, под запущен {age} назад",
+    noSamplesYet: "замеров ещё нет",
     effUnrequested: "ничего не запрошено",
     overRequested: "За сутки пик не дошёл и до половины запроса.",
     instanceType: "Тип машины",
@@ -2857,6 +2871,8 @@ export const ru: Catalogue = {
       "Не входит в {kept} нагрузок этого пространства имён, которые запрашивают больше всего; остальные страница «Стоимость» складывает.",
     lineBilledTo: "Оплачивается как {kind} {name}: {line}",
     lineNotRead: "В прочитанной стоимости её пока нет.",
+    lineNoSeries: "В этом Prometheus нет рядов OpenCost; подробнее на {page}.",
+    lineCostPage: "странице «Стоимость»",
     lineUnread: "Не удалось прочитать, сколько это стоит.",
   },
   hints: {
@@ -9707,10 +9723,10 @@ export const ru: Catalogue = {
       other: "{n} потока",
     },
     ofWorkloads: {
-      one: "из {n} рабочей нагрузки",
-      few: "из {n} рабочих нагрузок",
-      many: "из {n} рабочих нагрузок",
-      other: "из {n} рабочей нагрузки",
+      one: "из {n} нагрузки",
+      few: "из {n} нагрузок",
+      many: "из {n} нагрузок",
+      other: "из {n} нагрузки",
     },
     itsPods: {
       one: "её {n} пода",

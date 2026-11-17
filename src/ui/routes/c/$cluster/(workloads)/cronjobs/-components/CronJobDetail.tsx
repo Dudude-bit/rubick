@@ -62,7 +62,7 @@ import {
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
-import { WorkloadFlows } from "../../-components/workload-traffic";
+import { WorkloadFlows } from "../../../-traffic/workload-traffic";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";

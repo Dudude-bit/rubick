@@ -252,6 +252,35 @@ describe("the Traffic page", () => {
     expect(stream.closed).toBe(1);
   });
 
+  /**
+   * Bytes/s and Drops/s stood empty and as wide as the rest where no source
+   * measures them; a source that could not be looked for might, so then
+   * they stay.
+   */
+  it("draws no column no found source measures, and names those it left out", async () => {
+    traffic.mockReturnValue(read({ requests: 12 }));
+    const page = await open();
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers.join(" ")).not.toContain("Bytes/s");
+    expect(screen.getByTestId("columns-note").textContent).toBe(
+      "Not drawn, no source here measures them: Flows/s, Bytes/s, Drops/s"
+    );
+    page.unmount();
+    const state = read({ requests: 12 });
+    if (state.says !== "read") throw new Error("a reading");
+    traffic.mockReturnValue({
+      ...state,
+      sources: [
+        ...state.sources,
+        { ...HUBBLE, state: { says: "failed", said: "timed out" } },
+      ],
+    });
+    await open();
+    expect(screen.queryByTestId("columns-note")).toBeNull();
+  });
+
   /** A source that answered with nothing in the window says so, by name and window. */
   it("says which source saw no flows in the window", async () => {
     traffic.mockReturnValue(read(null));

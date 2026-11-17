@@ -4,25 +4,31 @@
  * sources has series: one line of advice per page would be a nag.
  */
 import { Link } from "@tanstack/react-router";
+import { Fragment, type ReactNode } from "react";
 
 import { useShareSection } from "@/components/share/screen-share";
 import { Section, SectionHeader } from "@/components/ui/section";
-import type { OwnerReference, WorkloadKey } from "@/generated/types";
+import type { WorkloadKey } from "@/generated/types";
 import { useTraffic, type TrafficState } from "@/hooks/useTraffic";
 import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink } from "@/lib/links";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
-import { isEnd, type FlowRow } from "@/lib/traffic";
+import { isEnd, shareTone, type FlowRow } from "@/lib/traffic";
 import { cn } from "@/lib/utils";
-import { AskAgain } from "../../-supplier/AskAgain";
-import { WINDOW_WORD } from "../../-traffic/traffic-words";
+import { AskAgain } from "../-supplier/AskAgain";
+import { WINDOW_WORD } from "./traffic-words";
+import { TONE_TEXT } from "../-map/tone-classes";
 import {
   cronJobOf,
+  type Owned,
   rowWords,
   subjectNotes,
   subjectOf,
   trafficSection,
 } from "./workload-traffic-words";
+
+/** Where `rowWords` puts the share of errors, after the name. */
+const ERRORS_PART = 1;
 
 function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
   const t = useT();
@@ -51,7 +57,21 @@ function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
         <span className="min-w-0 truncate font-mono">{name}</span>
       )}
       <span className="ml-auto shrink-0 font-mono tabular-nums text-fg-mut">
-        {rest.filter(Boolean).join(" · ")}
+        {rest
+          .map((part, at) => ({ part, at }))
+          .filter(({ part }) => part)
+          .map(({ part, at }, shown) => (
+            <Fragment key={at}>
+              {shown > 0 && " · "}
+              {at === ERRORS_PART ? (
+                <span className={TONE_TEXT[shareTone(row.errorShare)]}>
+                  {part}
+                </span>
+              ) : (
+                part
+              )}
+            </Fragment>
+          ))}
       </span>
     </li>
   );
@@ -65,7 +85,8 @@ export function WorkloadFlows(props: {
   kind: string;
   namespace: string | null | undefined;
   name: string | null | undefined;
-  owners?: readonly OwnerReference[];
+  owners?: readonly Owned[];
+  frame?: Frame;
 }) {
   if (props.kind === "Job" && !props.owners) return null;
   const cron = props.kind === "Job" ? cronJobOf(props.owners ?? []) : null;
@@ -73,16 +94,22 @@ export function WorkloadFlows(props: {
     ? subjectOf("CronJob", props.namespace, cron)
     : subjectOf(props.kind, props.namespace, props.name);
   return subject ? (
-    <WorkloadTraffic subject={subject} viaCronJob={cron !== null} />
+    <WorkloadTraffic
+      subject={subject}
+      viaCronJob={cron !== null}
+      frame={props.frame}
+    />
   ) : null;
 }
 
 export function WorkloadTraffic({
   subject,
   viaCronJob = false,
+  frame,
 }: {
   subject: WorkloadKey;
   viaCronJob?: boolean;
+  frame?: Frame;
 }) {
   const state = useTraffic({
     scope: [subject.namespace],
@@ -90,18 +117,41 @@ export function WorkloadTraffic({
     subject,
     refresh: "steady",
   });
-  return <Block state={state} subject={subject} viaCronJob={viaCronJob} />;
+  return (
+    <Block
+      state={state}
+      subject={subject}
+      viaCronJob={viaCronJob}
+      frame={frame}
+    />
+  );
 }
+
+/** How the block is set: a section of a page, or a group of the peek. */
+export type Frame = (
+  title: string,
+  caption: string | undefined,
+  body: ReactNode
+) => ReactNode;
+
+const SECTION: Frame = (title, caption, body) => (
+  <Section>
+    <SectionHeader title={title} count={caption} />
+    {body}
+  </Section>
+);
 
 export function Block({
   state,
   subject,
   viaCronJob = false,
+  frame = SECTION,
 }: {
   state: TrafficState;
   subject: WorkloadKey;
   /** The subject is the CronJob that made the page's Job. */
   viaCronJob?: boolean;
+  frame?: Frame;
 }) {
   const t = useT();
   const window = t("traffic", WINDOW_WORD["5m"]);
@@ -135,49 +185,43 @@ export function Block({
       return null;
     case "unreachable":
     case "failed":
-      return (
-        <Section>
-          <SectionHeader title={t("traffic", "title")} />
-          <p className="px-1.5 text-[11.5px] text-err">
-            {state.says === "unreachable" ? (
-              <>
-                {t("traffic", "unreachable", {
-                  endpoint: state.power.endpoint,
-                  reason: state.power.reason,
-                })}{" "}
-                <AskAgain power={state.power} />
-              </>
-            ) : (
-              t("traffic", "failed", {
-                endpoint: state.endpoint,
-                said: state.said,
-              })
-            )}
-          </p>
-        </Section>
+      return frame(
+        t("traffic", "title"),
+        undefined,
+        <p className="px-1.5 text-[11.5px] text-err">
+          {state.says === "unreachable" ? (
+            <>
+              {t("traffic", "unreachable", {
+                endpoint: state.power.endpoint,
+                reason: state.power.reason,
+              })}{" "}
+              <AskAgain power={state.power} />
+            </>
+          ) : (
+            t("traffic", "failed", {
+              endpoint: state.endpoint,
+              said: state.said,
+            })
+          )}
+        </p>
       );
     case "reading":
-      return (
-        <Section>
-          <SectionHeader
-            title={t("traffic", "title")}
-            count={t("traffic", "reading", { endpoint: state.endpoint })}
-          />
-        </Section>
+      return frame(
+        t("traffic", "title"),
+        t("traffic", "reading", { endpoint: state.endpoint }),
+        null
       );
     case "read":
-      return (
-        <Section>
-          <SectionHeader
-            title={t("traffic", "title")}
-            count={t("traffic", "blockCaption", {
-              sources: state.reading.sources
-                .map((source) => source.name)
-                .join(", "),
-              endpoint: state.endpoint,
-              window,
-            })}
-          />
+      return frame(
+        t("traffic", "title"),
+        t("traffic", "blockCaption", {
+          sources: state.reading.sources
+            .map((source) => source.name)
+            .join(", "),
+          endpoint: state.endpoint,
+          window,
+        }),
+        <>
           {state.lastFailed !== null && (
             <p className="px-1.5 text-[11.5px] text-err">
               {t("traffic", "lastFailed", { said: state.lastFailed })}
@@ -218,7 +262,7 @@ export function Block({
               </ul>
             </div>
           )}
-        </Section>
+        </>
       );
   }
 }

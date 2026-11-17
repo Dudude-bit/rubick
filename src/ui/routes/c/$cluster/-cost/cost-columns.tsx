@@ -33,10 +33,11 @@ import {
   share,
   sortable,
   totalOf,
+  usedLines,
   usedWords,
   type Said,
 } from "./cost-words";
-import { EfficiencyCell, Money } from "./cost-cells";
+import { EfficiencyCell, Money, UsedCell } from "./cost-cells";
 
 interface Priced {
   perHour: number | null;
@@ -91,6 +92,7 @@ export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
         />
       ),
       meta: {
+        names: true,
         floor: (_t: T, rows: readonly NamespaceRow[]) =>
           refCellPx(rows, (row) => row.namespace, 31),
       },
@@ -169,10 +171,13 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
           crd={row.original.crd}
           name={row.original.key.name}
           namespace={row.original.key.namespace}
+          showKind={false}
         />
       ),
       meta: {
         share: (row: WorkloadRow) => `${row.key.kind} ${row.key.name}`,
+        // Every row the same way: the kind's icon and the name. A "Kind/"
+        // the cell drops where a long name needs the room read as two forms.
         floor: (_t: T, rows: readonly WorkloadRow[]) =>
           refCellPx(rows, (row) => row.key.name, 31),
       },
@@ -187,7 +192,9 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
           {row.original.key.namespace}
         </span>
       ),
-      meta: { floor: NAMESPACE_CELL_PX, yields: 7 },
+      // Never given up for width: two `web`s in two namespaces read alike
+      // without it. One namespace chosen drops it, the scope bar saying it.
+      meta: { floor: NAMESPACE_CELL_PX },
     },
     {
       id: "pods",
@@ -259,16 +266,13 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       }),
       accessorFn: (row) => avgOf(row.efficiency.cpu),
       cell: ({ row }) => (
-        <span className="text-[11px]">
-          {usedWords(row.original.efficiency.cpu, "cpu", t)}
-        </span>
+        <UsedCell efficiency={row.original.efficiency.cpu} kind="cpu" />
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
           usedWords(row.efficiency.cpu, "cpu", tt),
-        floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.efficiency.cpu, "cpu", tt)
-        ),
+        floor: (tt: T, rows: readonly WorkloadRow[]) =>
+          Math.max(cpuUsedFloors[0](tt, rows), cpuUsedFloors[1](tt, rows)),
         yields: 6,
       },
     },
@@ -300,16 +304,16 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       }),
       accessorFn: (row) => avgOf(row.efficiency.memory),
       cell: ({ row }) => (
-        <span className="text-[11px]">
-          {usedWords(row.original.efficiency.memory, "memory", t)}
-        </span>
+        <UsedCell efficiency={row.original.efficiency.memory} kind="memory" />
       ),
       meta: {
         share: (row: WorkloadRow, tt: T) =>
           usedWords(row.efficiency.memory, "memory", tt),
-        floor: saying((row: WorkloadRow, tt) =>
-          usedWords(row.efficiency.memory, "memory", tt)
-        ),
+        floor: (tt: T, rows: readonly WorkloadRow[]) =>
+          Math.max(
+            memoryUsedFloors[0](tt, rows),
+            memoryUsedFloors[1](tt, rows)
+          ),
         yields: 5,
       },
     },
@@ -333,19 +337,33 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
         // Two lines, each its resource's word and its own; the wider one.
         floor: (tt: T, rows: readonly WorkloadRow[]) =>
           Math.max(
-            saying(
-              (row: WorkloadRow, t2) =>
-                `${t2("cost", "cpu")} ${efficiencyWords(row.efficiency.cpu, t2)}`
-            )(tt, rows),
-            saying(
-              (row: WorkloadRow, t2) =>
-                `${t2("cost", "memory")} ${efficiencyWords(row.efficiency.memory, t2)}`
-            )(tt, rows)
+            cpuEfficiencyFloor(tt, rows),
+            memoryEfficiencyFloor(tt, rows)
           ),
       },
     },
   ];
 }
+
+/** A Used cell's two lines, each floored on its own, as the cell draws them. */
+const usedFloors = (kind: "cpu" | "memory") =>
+  [0, 1].map((line) =>
+    saying(
+      (row: WorkloadRow, t: T) =>
+        usedLines(row.efficiency[kind], kind, t)[line] ?? ""
+    )
+  );
+const cpuUsedFloors = usedFloors("cpu");
+const memoryUsedFloors = usedFloors("memory");
+
+const cpuEfficiencyFloor = saying(
+  (row: WorkloadRow, t: T) =>
+    `${t("cost", "cpu")} ${efficiencyWords(row.efficiency.cpu, t)}`
+);
+const memoryEfficiencyFloor = saying(
+  (row: WorkloadRow, t: T) =>
+    `${t("cost", "memory")} ${efficiencyWords(row.efficiency.memory, t)}`
+);
 
 export function nodeColumns(t: T, estimate: boolean): ColumnDef<NodeRow>[] {
   const moneyColumn = (

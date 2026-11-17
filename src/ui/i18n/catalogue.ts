@@ -2454,8 +2454,10 @@ export const en = {
     railUnpaired: "series without source or destination",
     railFailed: "could not look: {said}",
     measureFailed: "Its {measure} could not be read: {said}",
-    coverage:
-      "{source}'s mesh: every pod of {marked}, some pods of {partly}, {of} here.",
+    coverage: "In {source}'s mesh, {of} here: {parts}.",
+    coverageWhole: "{n} with every pod",
+    coveragePartly: "{n} with some pods",
+    coverageNone: "{n} with none",
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
@@ -2484,6 +2486,8 @@ export const en = {
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellBelowHttp:
+      "{sources}: this pair is seen only below HTTP, so its requests, errors and latency are not counted.",
     cellFloor:
       "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
@@ -2501,6 +2505,8 @@ export const en = {
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelBelowHttp:
+      "Seen only below HTTP: requests, errors and latency are not counted for this pair.",
     panelSideServer: "From the server's proxy.",
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
@@ -2513,10 +2519,12 @@ export const en = {
     columnFrom: "From",
     columnTo: "To",
     columnRequests: "Requests/s",
+    columnEvents: "Flows/s",
     columnErrors: "Errors",
     columnBytes: "Bytes/s",
     columnDrops: "Drops/s",
     columnSeenBy: "Seen by",
+    columnsUnmeasured: "Not drawn, no source here measures them: {columns}",
     callers: "Calls it",
     callees: "It calls",
     blockCaption: "{sources} via {endpoint} · {window}",
@@ -2579,6 +2587,9 @@ export const en = {
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
     usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
+    usedAvg: "{avg} average",
+    usedPeak: "{peak} peak",
+    usedPeakFor: "{peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
     effMeasuredFor: "{avg} average, {peak} peak, over {age}",
@@ -2590,6 +2601,8 @@ export const en = {
     effReading: "reading…",
     effFailed: "could not read use: {said}",
     effNoSamples: "no samples in {window}",
+    effNoSamplesYet: "no samples yet, started {age} ago",
+    noSamplesYet: "no samples yet",
     effUnrequested: "nothing requested",
     overRequested:
       "Its peak over 24 hours stayed under half of what it requests.",
@@ -2715,6 +2728,8 @@ export const en = {
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
     lineNotRead: "Not in the cost read yet.",
+    lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
+    lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
   },
   hints: {

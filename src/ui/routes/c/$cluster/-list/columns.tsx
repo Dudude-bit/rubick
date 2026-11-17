@@ -155,22 +155,44 @@ export const metricCellFloor =
 
 const GLYPH_PX: Record<"sans" | "mono", number> = { sans: 7, mono: 7.2 };
 
-/** As wide as the widest of what its rows say, up to `glyphs` of it, the rest on hover. */
-export const wordsFloor =
-  <Row,>(
-    words: (row: Row, t: Translate) => string,
-    face: Extract<TextFace, "sans" | "mono"> = "sans",
-    glyphs = Infinity
-  ) =>
-  (t: Translate, rows: readonly Row[]) =>
-    Math.min(
-      widestText(
-        rows.map((row) => words(row, t)),
-        face,
-        GLYPH_PX[face]
-      ),
-      glyphs * GLYPH_PX[face]
-    ) + CELL_PADS_PX;
+/**
+ * As wide as the widest of what its rows say, up to `glyphs` of it, the rest
+ * on hover. A row's words are kept while the row is the same object, so a
+ * table whose rows keep their identity words only the rows that moved.
+ */
+export const wordsFloor = <Row,>(
+  words: (row: Row, t: Translate) => string,
+  face: Extract<TextFace, "sans" | "mono"> = "sans",
+  glyphs = Infinity
+) => {
+  let said = new WeakMap<object, string>();
+  let saidIn: Translate | null = null;
+  const wordsOf = (row: Row, t: Translate) => {
+    if (typeof row !== "object" || row === null) return words(row, t);
+    let text = said.get(row);
+    if (text === undefined) {
+      text = words(row, t);
+      said.set(row, text);
+    }
+    return text;
+  };
+  return (t: Translate, rows: readonly Row[]) => {
+    if (t !== saidIn) {
+      said = new WeakMap();
+      saidIn = t;
+    }
+    return (
+      Math.min(
+        widestText(
+          rows.map((row) => wordsOf(row, t)),
+          face,
+          GLYPH_PX[face]
+        ),
+        glyphs * GLYPH_PX[face]
+      ) + CELL_PADS_PX
+    );
+  };
+};
 
 /** "59 мин" and "999 д." are the widest ages, 41px of 12px Inter, and a cell's 20px of padding. */
 export const AGE_CELL_PX = 62;

@@ -151,7 +151,7 @@ describe("a workload's Traffic block", () => {
     expect(screen.getByText("Calls it")).toBeTruthy();
     expect(screen.getByText(/^web/).textContent).toContain("shop");
     expect(screen.getByText(/^pay/)).toBeTruthy();
-    expect(screen.getByText(/50% errors/)).toBeTruthy();
+    expect(screen.getByText("50% errors").className).toContain("text-err");
   });
 
   /**

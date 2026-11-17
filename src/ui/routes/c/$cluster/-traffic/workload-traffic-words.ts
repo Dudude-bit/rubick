@@ -1,7 +1,7 @@
 /** The words of a workload's Traffic block, for the block and its Share. */
 import { ArrowRightLeft } from "lucide-react";
 
-import type { OwnerReference, WorkloadKey } from "@/generated/types";
+import type { WorkloadKey } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
@@ -18,7 +18,7 @@ import {
   endSub,
   ms,
   rate,
-} from "../../-traffic/traffic-words";
+} from "./traffic-words";
 
 /** The API group of each kind this block is drawn for. */
 const GROUP: Record<string, string> = {
@@ -43,7 +43,14 @@ export function subjectOf(
  * The CronJob a Job's flows are filed under: its pods are keyed to it, and
  * Hubble strips the run's suffix too, so no flow ever names the Job.
  */
-export function cronJobOf(owners: readonly OwnerReference[]): string | null {
+/** An owner reference, in either shape the app reads one. */
+export interface Owned {
+  kind: string;
+  name: string;
+  controller?: boolean | null;
+}
+
+export function cronJobOf(owners: readonly Owned[]): string | null {
   return (
     owners.find(
       (owner) => owner.controller === true && owner.kind === "CronJob"
