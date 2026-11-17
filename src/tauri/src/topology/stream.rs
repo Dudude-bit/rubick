@@ -331,7 +331,12 @@ pub async fn run(opening: Opening) -> TopologyEnd {
             }
             change = changes.recv() => match change {
                 Ok(change) => touched.merge(change),
-                Err(broadcast::error::RecvError::Lagged(_)) => touched.all = true,
+                // What was lost may have been a kind's reading: the rail is
+                // sent again with the map.
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    touched.all = true;
+                    touched.reads = true;
+                }
                 Err(broadcast::error::RecvError::Closed) => return TopologyEnd::Replaced,
             },
         }
@@ -344,7 +349,10 @@ pub async fn run(opening: Opening) -> TopologyEnd {
         loop {
             match changes.try_recv() {
                 Ok(change) => touched.merge(change),
-                Err(broadcast::error::TryRecvError::Lagged(_)) => touched.all = true,
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {
+                    touched.all = true;
+                    touched.reads = true;
+                }
                 Err(_) => break,
             }
         }

@@ -663,3 +663,34 @@ fn a_namespace_known_only_by_a_stateful_set_is_drawn_when_namespaces_were_refuse
         BTreeSet::from(["data".to_string(), "shop".to_string()])
     );
 }
+
+/// A kind refused while the stream lagged behind kept its last reading on
+/// the rail: the lag redrew the map and sent no kinds. Fails if a lag does
+/// not send the kinds again with the map.
+#[tokio::test]
+async fn a_stream_that_lagged_sends_the_kinds_again() {
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    let (events, mut rx) = broadcast::channel(4096);
+    let (open, cancel) = opening(map.clone(), &events);
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+
+    map.feed([read(
+        Kind::Service,
+        None,
+        Reading::Refused {
+            message: SAID.into(),
+        },
+    )]);
+    for at in 0..300 {
+        map.feed([Feed::Applied(deployment("shop", &format!("d{at}")))]);
+    }
+    let mut seen = Vec::new();
+    while !seen.contains(&"apps/Deployment/shop/d299".to_string()) {
+        seen.extend(next(&mut rx).await);
+    }
+    assert!(seen.contains(&"kinds".to_string()), "{seen:?}");
+    cancel.cancel();
+    task.await.expect("ends");
+}
