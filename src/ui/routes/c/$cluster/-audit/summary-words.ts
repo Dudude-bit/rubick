@@ -1,5 +1,6 @@
 import type { AuditPage, NotChecked } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { windowWords } from "@/lib/efficiency";
 import { formatWhen } from "@/lib/utils";
 import { whyWords } from "./rules";
 import { kindWords } from "./subjects";
@@ -53,7 +54,7 @@ export function usageWords(page: AuditPage, t: T): string | null {
     case "failed":
       return t("audit", "usageFailed", { said: usage.said });
     case "read":
-      return t("audit", "usageRead", { window: usage.window });
+      return t("audit", "usageRead", { window: windowWords(usage.window, t) });
   }
 }
 

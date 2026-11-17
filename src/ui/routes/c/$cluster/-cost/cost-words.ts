@@ -15,7 +15,11 @@ import {
   type CostPicture,
   type CostTarget,
 } from "@/lib/cost";
-import { EFFICIENCY_WINDOW, type Efficiency } from "@/lib/efficiency";
+import {
+  EFFICIENCY_WINDOW,
+  windowWords,
+  type Efficiency,
+} from "@/lib/efficiency";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
 import { formatAge } from "@/lib/utils";
@@ -198,7 +202,8 @@ const EFFICIENCY_WORDS: Record<
   reading: (_, t) => t("cost", "effReading"),
   failed: (e, t) =>
     t("cost", "effFailed", { said: e.state === "failed" ? e.said : "" }),
-  noSamples: (_, t) => t("cost", "effNoSamples", { window: EFFICIENCY_WINDOW }),
+  noSamples: (_, t) =>
+    t("cost", "effNoSamples", { window: windowWords(EFFICIENCY_WINDOW, t) }),
   unrequested: (_, t) => t("cost", "effUnrequested"),
 };
 

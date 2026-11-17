@@ -14,6 +14,7 @@ import {
 } from "@/lib/cost";
 import {
   EFFICIENCY_WINDOW,
+  windowWords,
   type Efficiency,
   type WorkloadEfficiency,
 } from "@/lib/efficiency";
@@ -253,7 +254,9 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
     {
       id: "cpuUsed",
       size: 180,
-      header: t("cost", "cpuUsed", { window: EFFICIENCY_WINDOW }),
+      header: t("cost", "cpuUsed", {
+        window: windowWords(EFFICIENCY_WINDOW, t),
+      }),
       accessorFn: (row) => avgOf(row.efficiency.cpu),
       cell: ({ row }) => (
         <span className="text-[11px]">
@@ -292,7 +295,9 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
     {
       id: "memoryUsed",
       size: 180,
-      header: t("cost", "memoryUsed", { window: EFFICIENCY_WINDOW }),
+      header: t("cost", "memoryUsed", {
+        window: windowWords(EFFICIENCY_WINDOW, t),
+      }),
       accessorFn: (row) => avgOf(row.efficiency.memory),
       cell: ({ row }) => (
         <span className="text-[11px]">
