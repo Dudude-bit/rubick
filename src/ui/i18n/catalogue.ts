@@ -2380,6 +2380,7 @@ export const en = {
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
+    olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
     identityUnknown:
       "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",

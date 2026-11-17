@@ -378,12 +378,30 @@ export function changesSection(
     rows: readonly TimelineRow[];
     spans: SpanSets | undefined;
     letGo: LetGoes | undefined;
+    /** Older rows than this were not read; `null` where every one was. */
+    readFrom?: number | null;
+    /** Why nothing could be read, where the timeline did not answer. */
+    unread?: string | null;
   },
   targets: readonly TimelineTarget[],
   capturedAt: string,
   t: T
 ): PlacedSection | null {
   if (targets.length === 0) return null;
+  const shell = {
+    id: "changes",
+    order: ORDER.changes,
+    title: t("share", "sectionChanges"),
+    icon: iconSvg(History),
+  };
+  // A read that failed or never answered is not a history with no change.
+  if (read.unread)
+    return {
+      ...shell,
+      unread: read.unread,
+      body: { type: "changes", changes: [] },
+    };
+  const readFrom = read.readFrom ?? null;
   const namespaces = targets[0].namespace ? [targets[0].namespace] : [];
   // Each kind on the source that reads it, as the object's Changes tab does.
   const { covering: spans, watching } = coverageOf(
@@ -422,8 +440,12 @@ export function changesSection(
     else out.push({ key, ms: row.at, at, ref: refOf(row), parts });
   }
   const now = Date.parse(capturedAt);
-  // As far back as the timeline keeps, or as the oldest row shown.
-  const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
+  // As far back as the timeline keeps, or as the oldest row shown; never
+  // below the rows read, where nothing is known either way.
+  const from = Math.max(
+    Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms)),
+    readFrom ?? Number.NEGATIVE_INFINITY
+  );
   const gaps = watched ? gapsOf(spans, from, now, watching, namespaces) : [];
   const letGo = read.letGo?.changes;
   const rows: (ReportChange & { ms: number })[] = [
@@ -460,12 +482,13 @@ export function changesSection(
       ]
     : rows.map(({ at, ref, parts }) => ({ at, ref, parts }));
   return {
-    id: "changes",
-    order: ORDER.changes,
-    title: t("share", "sectionChanges"),
-    icon: iconSvg(History),
+    ...shell,
     // Changes, as the Changes tab counts them; a row holds every change of one moment.
     count: all.length,
+    partial:
+      readFrom === null
+        ? null
+        : t("changes", "olderNotRead", { at: utcMoment(readFrom) }),
     body: { type: "changes", changes },
   };
 }
