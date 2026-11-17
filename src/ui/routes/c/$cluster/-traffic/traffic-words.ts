@@ -2,7 +2,7 @@
  * The words for flows: an end, a cell, a source's own line. Every map from
  * a state to words is a `Record` the compiler holds total.
  */
-import type { FlowEnd, Measure, PolicyRef } from "@/generated/types";
+import type { Coverage, FlowEnd, Measure, PolicyRef } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { formatShare } from "@/lib/cost";
 import { formatQuantity } from "@/lib/metric-format";
@@ -89,6 +89,29 @@ export function endSub(end: FlowEnd, t: T): string {
         cluster: end.cluster,
       });
   }
+}
+
+/** How much of the workloads here a source's mesh holds, each part said only where it is not zero. */
+export function coverageWords(
+  coverage: Coverage,
+  source: string,
+  t: T
+): string {
+  const none = coverage.workloads - coverage.marked - coverage.partly;
+  const parts = (
+    [
+      ["coverageWhole", coverage.marked],
+      ["coveragePartly", coverage.partly],
+      ["coverageNone", none],
+    ] as const
+  )
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => t("traffic", key, { n }));
+  return t("traffic", "coverage", {
+    source,
+    of: t("count", "ofWorkloads", { n: coverage.workloads }),
+    parts: parts.join(", "),
+  });
 }
 
 /** What an end's cell says on its one line, for the width it takes. */

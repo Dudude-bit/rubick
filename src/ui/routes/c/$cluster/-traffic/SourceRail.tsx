@@ -5,7 +5,11 @@
 import { useT } from "@/i18n/useT";
 import type { FlowSource, TrafficReading } from "@/lib/traffic";
 import { cn } from "@/lib/utils";
-import { MEASURE_WORD, SOURCE_STATE_WORD } from "./traffic-words";
+import {
+  coverageWords,
+  MEASURE_WORD,
+  SOURCE_STATE_WORD,
+} from "./traffic-words";
 
 const STATE_TONE = {
   present: "text-ok",
@@ -69,12 +73,7 @@ export function SourceRail({
             ))}
             {coverage && (
               <p className="text-[11px] text-fg-mut">
-                {t("traffic", "coverage", {
-                  source: source.name,
-                  marked: coverage.marked,
-                  partly: coverage.partly,
-                  of: t("count", "ofWorkloads", { n: coverage.workloads }),
-                })}
+                {coverageWords(coverage, source.name, t)}
               </p>
             )}
             {source.state.says === "present" && source.nodeAgent && (

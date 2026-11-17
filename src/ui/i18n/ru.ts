@@ -2574,8 +2574,10 @@ export const ru: Catalogue = {
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
     measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
-    coverage:
-      "Меш {source}: все поды у {marked}, часть подов у {partly}, {of} здесь.",
+    coverage: "В меше {source} {of} здесь: {parts}.",
+    coverageWhole: "{n} всеми подами",
+    coveragePartly: "{n} частью подов",
+    coverageNone: "{n} ни одним",
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
     nothingInWindow: "{sources}: потоков в {scope} нет ({window}).",
@@ -9703,10 +9705,10 @@ export const ru: Catalogue = {
       other: "{n} потока",
     },
     ofWorkloads: {
-      one: "из {n} рабочей нагрузки",
-      few: "из {n} рабочих нагрузок",
-      many: "из {n} рабочих нагрузок",
-      other: "из {n} рабочей нагрузки",
+      one: "из {n} нагрузки",
+      few: "из {n} нагрузок",
+      many: "из {n} нагрузок",
+      other: "из {n} нагрузки",
     },
     itsPods: {
       one: "её {n} пода",

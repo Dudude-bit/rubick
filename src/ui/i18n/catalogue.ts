@@ -2453,8 +2453,10 @@ export const en = {
     railUnpaired: "series without source or destination",
     railFailed: "could not look: {said}",
     measureFailed: "Its {measure} could not be read: {said}",
-    coverage:
-      "{source}'s mesh: every pod of {marked}, some pods of {partly}, {of} here.",
+    coverage: "In {source}'s mesh, {of} here: {parts}.",
+    coverageWhole: "{n} with every pod",
+    coveragePartly: "{n} with some pods",
+    coverageNone: "{n} with none",
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
