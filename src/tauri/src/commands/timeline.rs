@@ -120,9 +120,10 @@ pub async fn timeline_kept(state: State<'_, AppState>) -> Result<Kept> {
 /// stays until it is cleared.
 #[tauri::command]
 pub async fn timeline_set_keep(keep: bool, state: State<'_, AppState>) -> Result<()> {
-    with_config(move |config| config.timeline.keep = keep).await?;
-    state.timeline.set_keep(keep);
-    Ok(())
+    state
+        .timeline
+        .keep_saved(keep, with_config(move |config| config.timeline.keep = keep))
+        .await
 }
 
 /// Forgets every cluster's timeline, here and on disk.

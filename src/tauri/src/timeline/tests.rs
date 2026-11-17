@@ -844,6 +844,38 @@ fn with_no_data_folder_keeping_on_is_said_to_keep_nothing() {
     assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Nowhere);
 }
 
+/// Two switches of keeping that meet: one saves on, the other saves off and
+/// applies it, then the first applies on. Fails if the file and the app end
+/// up disagreeing, which keeps writing a timeline the reader turned off.
+#[tokio::test]
+async fn two_keeping_switches_that_meet_end_as_the_file_says() {
+    let (timelines, _rx) = holder(None, false);
+    let saved = Arc::new(Mutex::new(None));
+    let slow = {
+        let saved = saved.clone();
+        async move {
+            *saved.lock() = Some(true);
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok::<(), ()>(())
+        }
+    };
+    let fast = {
+        let saved = saved.clone();
+        async move {
+            *saved.lock() = Some(false);
+            Ok::<(), ()>(())
+        }
+    };
+    let first = {
+        let timelines = timelines.clone();
+        tokio::spawn(async move { timelines.keep_saved(true, slow).await })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    timelines.keep_saved(false, fast).await.unwrap();
+    first.await.unwrap().unwrap();
+    assert_eq!(*saved.lock(), Some(timelines.keeps()));
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {

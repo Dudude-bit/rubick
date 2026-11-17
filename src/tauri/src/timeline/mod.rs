@@ -385,6 +385,8 @@ pub struct Timelines {
     writer: OnceLock<()>,
     /// The one context being recorded: the cluster on screen.
     following: Mutex<Option<follow::Follower>>,
+    /// One keeping switch at a time, saved and then applied.
+    keeping_turn: tokio::sync::Mutex<()>,
 }
 
 impl Timelines {
@@ -398,6 +400,7 @@ impl Timelines {
             events,
             writer: OnceLock::new(),
             following: Mutex::new(None),
+            keeping_turn: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -438,6 +441,24 @@ impl Timelines {
             inner.keeping = keeping_of(keep, cluster.dir.as_ref());
             inner.told.spans = true;
         }
+    }
+
+    /// Keeping saved by `save` and then set here, as one step: two switches
+    /// that meet are applied in the order they were saved, and the file and
+    /// the app never disagree about whether the timeline is kept.
+    ///
+    /// # Errors
+    ///
+    /// What `save` failed with; keeping is then left as it was.
+    pub async fn keep_saved<E>(
+        &self,
+        keep: bool,
+        save: impl std::future::Future<Output = Result<(), E>>,
+    ) -> Result<(), E> {
+        let _turn = self.keeping_turn.lock().await;
+        save.await?;
+        self.set_keep(keep);
+        Ok(())
     }
 
     /// A context's timeline, read back from disk the first time it is asked
