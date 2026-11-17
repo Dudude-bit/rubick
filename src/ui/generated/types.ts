@@ -3071,7 +3071,7 @@ export type ObjectFacts =
       currentHealthy: number;
       desiredHealthy: number;
       expectedPods: number;
-      cannotAllow: boolean;
+      cannotAllow: boolean | null;
       conditions: ConditionInfo[];
     };
 

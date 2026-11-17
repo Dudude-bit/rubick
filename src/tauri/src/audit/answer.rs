@@ -401,12 +401,13 @@ pub(super) fn world(
             continue;
         }
         *world.checked.entry(entry.subject.kind.clone()).or_default() += 1;
-        let (mut findings, unchecked) = namespace
+        let (mut findings, mut unchecked) = namespace
             .and_then(|ns| store.beside.get(ns))
             .and_then(|found| found.get(uid))
             .cloned()
             .unwrap_or_default();
         findings.extend(entry.own.iter().cloned());
+        unchecked.extend(entry.unread.iter().cloned());
         world.objects.push(Audited {
             subject: entry.subject.clone(),
             system: entry.system,
@@ -1406,6 +1407,52 @@ mod tests {
         let blind = shop(&world(&index, Err(&missing), Some(&["shop".to_string()])));
         assert!(blind.findings.is_empty());
         assert_eq!(blind.unchecked[0].kind, POD);
+    }
+
+    /// A budget whose controller has not written a status cannot be judged:
+    /// its rule says so rather than passing it. Fails if a budget made a
+    /// moment ago reads as one that allows an eviction.
+    #[tokio::test]
+    async fn a_budget_with_no_status_is_not_checked_rather_than_passed() {
+        let index = crate::audit::index::AuditIndex::holding(client().await, None);
+        let budget = |name: &str, status: Option<serde_json::Value>| {
+            let mut value = json!({
+                "apiVersion": "policy/v1", "kind": "PodDisruptionBudget",
+                "metadata": { "name": name, "namespace": "shop", "uid": name, "resourceVersion": "1" },
+                "spec": { "minAvailable": 1, "selector": { "matchLabels": { "app": name } } }
+            });
+            if let Some(status) = status {
+                value["status"] = status;
+            }
+            value
+        };
+        index.feed(&budgets(), budget("new", None));
+        index.feed(
+            &budgets(),
+            budget(
+                "written",
+                Some(json!({ "disruptionsAllowed": 1, "currentHealthy": 2,
+                    "desiredHealthy": 1, "expectedPods": 2, "observedGeneration": 1 })),
+            ),
+        );
+        let seen = world(&index, Err(&Why::Reading), None);
+        let of = |name: &str| {
+            seen.objects
+                .iter()
+                .find(|o| o.subject.name == name)
+                .cloned()
+                .unwrap()
+        };
+        let new = of("new");
+        assert!(new.findings.is_empty());
+        assert!(new
+            .unchecked
+            .iter()
+            .any(|u| u.rule == RuleId::BudgetBlocksDisruption));
+        assert!(!of("written")
+            .unchecked
+            .iter()
+            .any(|u| u.rule == RuleId::BudgetBlocksDisruption));
     }
 
     /// kubeadm's own cluster-admin binding folds with the system's, its

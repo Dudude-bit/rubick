@@ -141,7 +141,8 @@ const TONE_OF: Toner = {
   },
   budget: (_verdict, node, { t }) => {
     const facts = node.ref.facts;
-    if (facts?.kind !== "budget") return "unknown";
+    if (facts?.kind !== "budget" || facts.cannotAllow === null)
+      return "unknown";
     const finding = budgetFinding(node.ref.name, facts, t);
     return finding ? FINDING_TONE[finding.tone] : "ok";
   },

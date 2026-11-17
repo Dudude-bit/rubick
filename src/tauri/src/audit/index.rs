@@ -32,7 +32,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::context::{beside, Beside, Defaults, Replicated, Scales};
 use super::template::{judge, TemplateFacts};
-use super::{is_system, objects, AuditFinding, Subject, Unchecked, Why};
+use super::{is_system, objects, AuditFinding, RuleId, Subject, Unchecked, Why};
 use crate::error::Result;
 use crate::feeds::{Ask, Binding, FeedState, Lease, Update};
 use crate::ownership::{KindKey, SlotKey};
@@ -115,6 +115,8 @@ pub(super) struct Entry {
     pub version: String,
     pub system: bool,
     pub own: Vec<AuditFinding>,
+    /// Its own rules that could not answer from what it holds.
+    pub unread: Vec<Unchecked>,
     pub body: Body,
 }
 
@@ -260,6 +262,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
     let version = meta.resource_version.clone().unwrap_or_default();
     let subject = meta_subject(kind, &meta);
     let mut installers = false;
+    let mut unread = Vec::new();
     let (own, body) = match kind {
         "Deployment" => {
             let it: Deployment = object.try_parse().ok()?;
@@ -309,6 +312,16 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         "PodDisruptionBudget" => {
             let it: PodDisruptionBudget = object.try_parse().ok()?;
             let selector = it.spec.as_ref().and_then(|s| s.selector.clone());
+            // Its controller has not written a status: how many it needs
+            // healthy is not known yet, which is not "allows an eviction".
+            if it.status.is_none() {
+                unread.push(Unchecked {
+                    rule: RuleId::BudgetBlocksDisruption,
+                    kind: "PodDisruptionBudget".to_string(),
+                    namespace: meta.namespace.clone(),
+                    why: Why::Reading,
+                });
+            }
             (objects::budget(&it), Body::Budget(selector))
         }
         "HorizontalPodAutoscaler" => {
@@ -378,6 +391,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         subject,
         version,
         own,
+        unread,
         body,
     })
 }
