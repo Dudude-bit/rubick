@@ -60,9 +60,11 @@ pub(super) struct Snapshot {
     /// ordinarily attaches to a Gateway in another one, and a
     /// namespace-scoped list would call every such parent missing.
     pub(super) gateways: Option<Vec<crate::resources::GatewayInfo>>,
-    /// Every `GatewayClass`, read by the reader the Gateways pages use, or
-    /// `None` where they were not read.
-    pub(super) gateway_classes: Option<Vec<crate::resources::GatewayClassInfo>>,
+    /// Every `GatewayClass`, read by the reader the Gateways pages use: `Err`
+    /// with the cluster's words where the list was refused or failed, and
+    /// `None` where this caller does not ask about classes at all.
+    pub(super) gateway_classes:
+        Option<std::result::Result<Vec<crate::resources::GatewayClassInfo>, String>>,
     /// The Gateway API kinds whose list failed.
     pub(super) gateway_unread: Vec<UnexploredKind>,
 }
@@ -613,7 +615,7 @@ pub(super) async fn gateway_lists(
 ) -> Result<(
     Vec<crate::resources::RouteInfo>,
     Option<Vec<crate::resources::GatewayInfo>>,
-    Option<Vec<crate::resources::GatewayClassInfo>>,
+    Option<std::result::Result<Vec<crate::resources::GatewayClassInfo>, String>>,
     Vec<UnexploredKind>,
 )> {
     use crate::resources::{GatewayClassInfo, GatewayInfo, ListenerSetInfo, RouteInfo};
@@ -666,7 +668,10 @@ pub(super) async fn gateway_lists(
     // found none are different facts, and the graph reports a route's
     // Gateway missing on the strength of the second.
     let mut sets: Option<Vec<ListenerSetInfo>> = None;
-    let mut classes: Option<Vec<GatewayClassInfo>> = None;
+    // As the Routes page reads them: a cluster that serves no GatewayClass
+    // has none, and a list that was refused or failed is said so, never
+    // taken for "every class is claimed".
+    let mut classes: std::result::Result<Vec<GatewayClassInfo>, String> = Ok(Vec::new());
     let mut unread = Vec::new();
     for (kind, api_resource, list, here) in futures::future::join_all(fetches).await {
         let items = match (list, here) {
@@ -685,6 +690,9 @@ pub(super) async fn gateway_lists(
                 list.items
             }
             (Err(failed), _) => {
+                if kind == "GatewayClass" {
+                    classes = Err(failed.said());
+                }
                 unread.push(UnexploredKind::unanswered(
                     &kind,
                     &api_resource.api_version,
@@ -707,9 +715,7 @@ pub(super) async fn gateway_lists(
                     }));
             }
             "GatewayClass" => {
-                classes
-                    .get_or_insert_with(Vec::new)
-                    .extend(items.iter().map(GatewayClassInfo::read));
+                classes = Ok(items.iter().map(GatewayClassInfo::read).collect());
             }
             "ListenerSet" => {
                 sets.get_or_insert_with(Vec::new)
@@ -731,7 +737,7 @@ pub(super) async fn gateway_lists(
             gateway.merge_listener_sets(sets.as_deref());
         }
     }
-    Ok((routes, gateways, classes, unread))
+    Ok((routes, gateways, Some(classes), unread))
 }
 
 #[cfg(test)]

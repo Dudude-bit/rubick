@@ -698,6 +698,9 @@ export function describeStop(
             })
           : t("empty", "gwClassSilentBody", { controller: stop.controller }),
       };
+    // The Routes page's class step is blind on the same read, in these words.
+    case "gatewayClassUnread":
+      return { title: t("empty", "gwClassBlind"), note: stop.said };
   }
 }
 

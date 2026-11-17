@@ -464,6 +464,17 @@ pub enum ChainStop {
         condition_reason: Option<String>,
         message: Option<String>,
     },
+    /// The Gateway's class could not be read (its list was refused or
+    /// failed): whether anything claims it is not known, so nothing through
+    /// the Gateway may be called serving. The Routes page's class step is
+    /// blind for the same reason.
+    GatewayClassUnread {
+        route: ObjectRef,
+        gateway: ObjectRef,
+        class: String,
+        /// The cluster's words for why the classes were not read.
+        said: String,
+    },
     /// A Service's selector matches no pod in its namespace.
     ///
     /// Only a reader that listed the pods may say this. A reader holding the

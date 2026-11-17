@@ -3446,6 +3446,13 @@ export type ChainStop =
       message: string | null;
     }
   | {
+      reason: "gatewayClassUnread";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      class: string;
+      said: string;
+    }
+  | {
       reason: "selectsNothing";
       service: ObjectRef;
       selector: string;

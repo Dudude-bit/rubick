@@ -30,6 +30,7 @@ import {
 } from "./connections";
 import type { DoorAsk, DoorRead } from "./policy-door";
 import { classStep } from "./route-trace";
+import { stopMood } from "./stop-mood";
 import type {
   ChainStop,
   ConditionInfo,
@@ -1876,6 +1877,19 @@ describe("the traffic chain", () => {
         message: "bad params",
       })
     ).toEqual(page([{ ...unclaimed, accepted: false, conditions: [refusal] }]));
+
+    // Classes that could not be read: the page's class step is blind, and
+    // the tab's stop is not checked, never a stop it can pass.
+    const blind: ChainStop = {
+      reason: "gatewayClassUnread",
+      ...ends,
+      said: "gatewayclasses is forbidden",
+    };
+    expect(describeStop(blind, t)).toEqual({
+      title: classStep(gateway, [], false, t).say,
+      note: "gatewayclasses is forbidden",
+    });
+    expect(stopMood(blind)).toBe("unchecked");
   });
 
   /**

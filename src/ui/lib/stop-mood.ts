@@ -15,7 +15,8 @@ export const makersUnread = (stop: ChainStop): boolean =>
 
 /** The mood of a stop no subject turns idle. */
 export function stopMood(stop: ChainStop): StopMood {
-  if (makersUnread(stop)) return "unchecked";
+  if (makersUnread(stop) || stop.reason === "gatewayClassUnread")
+    return "unchecked";
   if (stop.reason === "scaledToZero") return "idle";
   if (stop.reason === "podsBeingMade") return "coming";
   if (stop.reason === "publishesNothingYet")
