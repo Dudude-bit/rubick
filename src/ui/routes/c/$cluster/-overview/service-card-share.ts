@@ -31,13 +31,22 @@ import type { UnexploredKind } from "@/generated/types";
  * kept past what was let go or cleared, which may have held one; `null` for
  * none seen; `undefined` where the timeline was not read.
  */
-export type LastChange = ChangeRow | LetGo | null | undefined;
+export type LastChange =
+  | ChangeRow
+  | LetGo
+  /** Kept rows that could not be read: one of them may be the last change. */
+  | { unreadable: number }
+  | null
+  | undefined;
 
 export function lastChangeOf(
-  read: Pick<TimelineRead, "read" | "rows" | "letGo">
+  read: Pick<TimelineRead, "read" | "rows" | "letGo" | "unreadable">
 ): LastChange {
   if (!read.read) return undefined;
-  return read.rows.find(isChange) ?? read.letGo?.changes ?? null;
+  const latest = read.rows.find(isChange);
+  if (latest) return latest;
+  if (read.unreadable > 0) return { unreadable: read.unreadable };
+  return read.letGo?.changes ?? null;
 }
 
 /** The last change in words, the row's own aside, on the card and in its Share. */
@@ -48,6 +57,8 @@ export function lastChangeWords(
 ): string {
   if (latest === undefined) return t("services", "notReadYet");
   if (latest === null) return t("services", "nothingSeen");
+  if ("unreadable" in latest)
+    return t("changes", "keptUnreadable", { n: latest.unreadable });
   if ("before" in latest)
     return t(
       "services",

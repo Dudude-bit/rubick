@@ -221,7 +221,7 @@ export function ServiceCard({
 
         <dt className="text-fg-fnt">{t("services", "lastChange")}</dt>
         <dd className="min-w-0 truncate text-fg-mut">
-          {!latest || "before" in latest ? (
+          {!latest || !("what" in latest) ? (
             <span className="text-fg-fnt">
               {lastChangeWords(latest, t, (ms) => formatWhen(ms, "moment"))}
             </span>
