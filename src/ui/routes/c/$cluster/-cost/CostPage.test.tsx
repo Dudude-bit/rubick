@@ -644,6 +644,35 @@ describe("the breakdown by workload's names", () => {
   });
 });
 
+describe("a namespace's line where a part of it has no price", () => {
+  /**
+   * `shop` holds volumes and no storage price is entered: its amount leaves
+   * them out, so its line says "at least" as its row on the Cost page does.
+   * Fails if the line prints a floor as the whole of it.
+   */
+  it("says at least, as the Cost page's row does", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        {
+          ...BASIS,
+          namespaces: [{ ...BASIS.namespaces[0]!, storageBytes: 10 * GIB }],
+        },
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "" },
+        ["shop"]
+      ),
+      trouble: null,
+    });
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
+      /^Costat least .+ per hour · at least .+ per month projected/
+    );
+  });
+});
+
 describe("the summary Share writes for one namespace", () => {
   /**
    * The tiles of a namespace's page leave out what only the cluster pays
