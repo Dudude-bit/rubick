@@ -105,6 +105,39 @@ describe("efficiency", () => {
     );
   });
 
+  /**
+   * The usage read was refused this namespace's pods after the rows were
+   * listed: its rows carry no values, which read as "no samples". They say
+   * the refusal. Fails if a refused namespace reads as unsampled.
+   */
+  it("says a refused namespace was refused, not unsampled", () => {
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[null, null, null, null]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [
+          {
+            namespace: "shop",
+            code: "PERMISSION_DENIED",
+            message: "pods is forbidden",
+            values: [null, null, null, null],
+          },
+        ],
+        unlabelled: 0,
+        since: [null],
+      },
+    };
+    expect(
+      workloadEfficiency(reading, key, { cpu: 1, memory: 1 }, NOW)
+    ).toEqual({
+      cpu: { state: "failed", said: "pods is forbidden" },
+      memory: { state: "failed", said: "pods is forbidden" },
+    });
+  });
+
   /** Where the reading itself is missing, both resources say why. */
   it("carries the reading's own state to both resources", () => {
     const failed: UsageReading = { state: "failed", said: "timed out" };

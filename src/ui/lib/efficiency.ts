@@ -137,6 +137,14 @@ export function workloadEfficiency(
   now: number = Date.now()
 ): WorkloadEfficiency {
   if (reading.state !== "read") return { cpu: reading, memory: reading };
+  // Its namespace's pods were refused to the read: no sample is not "none".
+  const refused = reading.fold.unread.find(
+    (u) => u.namespace === key.namespace
+  );
+  if (refused) {
+    const failed: Efficiency = { state: "failed", said: refused.message };
+    return { cpu: failed, memory: failed };
+  }
   const at = positionOf(reading.keys, key);
   const values = at === -1 ? undefined : reading.fold.values[at];
   if (!values) {
