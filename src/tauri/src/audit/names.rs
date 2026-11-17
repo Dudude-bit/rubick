@@ -112,7 +112,8 @@ pub fn floats(image: &str) -> bool {
 /// The sockets a container runtime listens on by default: containerd and
 /// CRI-O (setup/production-environment/container-runtimes), cri-dockerd
 /// (same page) and Docker Engine (moby docs/reference/dockerd.md); k3s's
-/// containerd and cri-dockerd (k3s `pkg/agent/config/config_linux.go`) and
+/// containerd and cri-dockerd (k3s `pkg/agent/config/config_linux.go`; RKE2
+/// names the same containerd socket, `pkg/executor/staticpod/spw.go`) and
 /// `MicroK8s`'s (`--address ${SNAP_COMMON}/run/containerd.sock`,
 /// `microk8s-resources/default-args/containerd`).
 const SOCKETS: &[&str] = &[
