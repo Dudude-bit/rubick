@@ -902,6 +902,58 @@ fn what_a_flush_took_before_a_clear_is_not_written_after_it() {
         .is_empty());
 }
 
+/// Another cluster under the name, and the folder of the one before would
+/// not go. Fails if the wipe is forgotten after the failure, so the next
+/// write puts the new cluster's name on the old cluster's rows.
+#[cfg(unix)]
+#[test]
+fn a_wipe_that_failed_is_done_on_the_next_write() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    cluster.change(change(
+        "old",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    timelines.flush();
+    let dir = disk::dir_of(root.path(), "kind");
+    let mode = |mode| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode));
+    assert!(cluster.seen_cluster("uid-b".into()));
+    mode(0o500).unwrap();
+    timelines.flush();
+    mode(0o700).unwrap();
+    assert!(matches!(
+        cluster.page(&query(Show::All)).keeping,
+        Keeping::Failed { .. }
+    ));
+    cluster.change(change(
+        "new",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    timelines.flush();
+    let (again, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let ids: Vec<String> = again
+        .cluster("kind")
+        .page(&query(Show::All))
+        .rows
+        .iter()
+        .map(|row| row.id.clone())
+        .collect();
+    assert_eq!(
+        ids,
+        ["new"],
+        "the old cluster's row read back as this one's"
+    );
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {

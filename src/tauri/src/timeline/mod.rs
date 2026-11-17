@@ -614,6 +614,11 @@ impl Timelines {
                     keeping_of(keep, Some(dir))
                 }
                 Err(error) => {
+                    // A wipe not done is done next time: written over, the old
+                    // cluster's rows would read back as this one's.
+                    if pending.wipe {
+                        inner.pending.wipe = true;
+                    }
                     if !pending.rows.is_empty() {
                         inner.unkept.push((since, now));
                         inner.told.spans = true;
