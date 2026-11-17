@@ -49,6 +49,8 @@ import { jobEndRow, jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
 import { useT } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 import { ownStatusWord } from "@/lib/status-words";
 
 export function JobDetail() {
@@ -138,7 +140,12 @@ export function JobDetail() {
     refresh: "slow",
   });
 
-  const share = useJobShare(job, pods, podsError);
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "Job", namespace, name } : null,
+    job ? job.uid : null,
+    !!job
+  );
+  const share = useJobShare(job, pods, podsError, audit);
 
   const tabs = useMemo(
     () => [
@@ -320,6 +327,7 @@ export function JobDetail() {
           </Section>
         ),
       },
+      auditTab(audit, t),
       eventsTab(events, t, { kind: ResourceType.Job, name: name ?? "" }),
       yamlTab({
         yaml,
@@ -331,6 +339,7 @@ export function JobDetail() {
       }),
     ],
     [
+      audit,
       events,
       t,
       job,

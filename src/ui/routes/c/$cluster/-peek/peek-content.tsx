@@ -71,6 +71,8 @@ import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
 import { PeekHeading } from "./peek-heading";
 import { PeekTraffic } from "./peek-traffic";
+import { PeekAudit } from "../-audit/PeekAudit";
+import { useObjectAudit } from "../-audit/useAudit";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
 import { usePeekHost } from "./peek-dock";
 import { usePodWatch } from "@/hooks/usePodWatch";
@@ -598,6 +600,13 @@ function LiveReads({ target }: { target: PeekTarget }) {
       {kind && TRAFFIC_KINDS.has(kind) && (
         <PeekTraffic target={target} kind={kind} />
       )}
+      {kind && AUDITED_KINDS.has(kind) && target.namespace && (
+        <PeekAuditOf
+          kind={kind}
+          namespace={target.namespace}
+          name={target.name}
+        />
+      )}
       {kind === "Service" && target.namespace && (
         <BackendPolicies
           service={{ name: target.name, namespace: target.namespace }}
@@ -869,6 +878,30 @@ function NamespaceContents({ namespace }: { namespace: string }) {
 }
 
 /** The kinds a request travels through, each owed its up and its down. */
+/** The kinds Audit judges on their own page and peek. */
+const AUDITED_KINDS = new Set<string>([
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "Job",
+  "CronJob",
+]);
+
+/** The peek's Audit group, reading the answer the object's tab reads. */
+function PeekAuditOf({
+  kind,
+  namespace,
+  name,
+}: {
+  kind: string;
+  namespace: string;
+  name: string;
+}) {
+  const query = useObjectAudit({ kind, namespace, name });
+  return <PeekAudit query={query} />;
+}
+
 const TRAFFIC_KINDS = new Set<string>([
   "Service",
   "Endpoints",

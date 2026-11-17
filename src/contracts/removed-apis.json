@@ -1,0 +1,237 @@
+{
+  "source": "https://kubernetes.io/docs/reference/using-api/deprecation-guide/",
+  "removed": [
+    {
+      "apiVersion": "flowcontrol.apiserver.k8s.io/v1beta3",
+      "kinds": ["FlowSchema", "PriorityLevelConfiguration"],
+      "removedIn": "1.32",
+      "replacement": "flowcontrol.apiserver.k8s.io/v1",
+      "since": "1.29"
+    },
+    {
+      "apiVersion": "flowcontrol.apiserver.k8s.io/v1beta2",
+      "kinds": ["FlowSchema", "PriorityLevelConfiguration"],
+      "removedIn": "1.29",
+      "replacement": "flowcontrol.apiserver.k8s.io/v1",
+      "since": "1.29"
+    },
+    {
+      "apiVersion": "storage.k8s.io/v1beta1",
+      "kinds": ["CSIStorageCapacity"],
+      "removedIn": "1.27",
+      "replacement": "storage.k8s.io/v1",
+      "since": "1.24"
+    },
+    {
+      "apiVersion": "flowcontrol.apiserver.k8s.io/v1beta1",
+      "kinds": ["FlowSchema", "PriorityLevelConfiguration"],
+      "removedIn": "1.26",
+      "replacement": "flowcontrol.apiserver.k8s.io/v1beta2",
+      "since": null
+    },
+    {
+      "apiVersion": "autoscaling/v2beta2",
+      "kinds": ["HorizontalPodAutoscaler"],
+      "removedIn": "1.26",
+      "replacement": "autoscaling/v2",
+      "since": "1.23"
+    },
+    {
+      "apiVersion": "batch/v1beta1",
+      "kinds": ["CronJob"],
+      "removedIn": "1.25",
+      "replacement": "batch/v1",
+      "since": "1.21"
+    },
+    {
+      "apiVersion": "discovery.k8s.io/v1beta1",
+      "kinds": ["EndpointSlice"],
+      "removedIn": "1.25",
+      "replacement": "discovery.k8s.io/v1",
+      "since": "1.21"
+    },
+    {
+      "apiVersion": "events.k8s.io/v1beta1",
+      "kinds": ["Event"],
+      "removedIn": "1.25",
+      "replacement": "events.k8s.io/v1",
+      "since": "1.19"
+    },
+    {
+      "apiVersion": "autoscaling/v2beta1",
+      "kinds": ["HorizontalPodAutoscaler"],
+      "removedIn": "1.25",
+      "replacement": "autoscaling/v2",
+      "since": "1.23"
+    },
+    {
+      "apiVersion": "policy/v1beta1",
+      "kinds": ["PodDisruptionBudget"],
+      "removedIn": "1.25",
+      "replacement": "policy/v1",
+      "since": "1.21"
+    },
+    {
+      "apiVersion": "policy/v1beta1",
+      "kinds": ["PodSecurityPolicy"],
+      "removedIn": "1.25",
+      "replacement": null,
+      "since": null
+    },
+    {
+      "apiVersion": "node.k8s.io/v1beta1",
+      "kinds": ["RuntimeClass"],
+      "removedIn": "1.25",
+      "replacement": "node.k8s.io/v1",
+      "since": "1.20"
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1beta1",
+      "kinds": [
+        "MutatingWebhookConfiguration",
+        "ValidatingWebhookConfiguration"
+      ],
+      "removedIn": "1.22",
+      "replacement": "admissionregistration.k8s.io/v1",
+      "since": "1.16"
+    },
+    {
+      "apiVersion": "apiextensions.k8s.io/v1beta1",
+      "kinds": ["CustomResourceDefinition"],
+      "removedIn": "1.22",
+      "replacement": "apiextensions.k8s.io/v1",
+      "since": "1.16"
+    },
+    {
+      "apiVersion": "apiregistration.k8s.io/v1beta1",
+      "kinds": ["APIService"],
+      "removedIn": "1.22",
+      "replacement": "apiregistration.k8s.io/v1",
+      "since": "1.10"
+    },
+    {
+      "apiVersion": "authentication.k8s.io/v1beta1",
+      "kinds": ["TokenReview"],
+      "removedIn": "1.22",
+      "replacement": "authentication.k8s.io/v1",
+      "since": "1.6"
+    },
+    {
+      "apiVersion": "authorization.k8s.io/v1beta1",
+      "kinds": [
+        "LocalSubjectAccessReview",
+        "SelfSubjectAccessReview",
+        "SubjectAccessReview",
+        "SelfSubjectRulesReview"
+      ],
+      "removedIn": "1.22",
+      "replacement": "authorization.k8s.io/v1",
+      "since": "1.6"
+    },
+    {
+      "apiVersion": "certificates.k8s.io/v1beta1",
+      "kinds": ["CertificateSigningRequest"],
+      "removedIn": "1.22",
+      "replacement": "certificates.k8s.io/v1",
+      "since": "1.19"
+    },
+    {
+      "apiVersion": "coordination.k8s.io/v1beta1",
+      "kinds": ["Lease"],
+      "removedIn": "1.22",
+      "replacement": "coordination.k8s.io/v1",
+      "since": "1.14"
+    },
+    {
+      "apiVersion": "extensions/v1beta1",
+      "kinds": ["Ingress"],
+      "removedIn": "1.22",
+      "replacement": "networking.k8s.io/v1",
+      "since": "1.19"
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1beta1",
+      "kinds": ["Ingress", "IngressClass"],
+      "removedIn": "1.22",
+      "replacement": "networking.k8s.io/v1",
+      "since": "1.19"
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1beta1",
+      "kinds": ["ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"],
+      "removedIn": "1.22",
+      "replacement": "rbac.authorization.k8s.io/v1",
+      "since": "1.8"
+    },
+    {
+      "apiVersion": "scheduling.k8s.io/v1beta1",
+      "kinds": ["PriorityClass"],
+      "removedIn": "1.22",
+      "replacement": "scheduling.k8s.io/v1",
+      "since": "1.14"
+    },
+    {
+      "apiVersion": "storage.k8s.io/v1beta1",
+      "kinds": ["CSIDriver"],
+      "removedIn": "1.22",
+      "replacement": "storage.k8s.io/v1",
+      "since": "1.19"
+    },
+    {
+      "apiVersion": "storage.k8s.io/v1beta1",
+      "kinds": ["CSINode"],
+      "removedIn": "1.22",
+      "replacement": "storage.k8s.io/v1",
+      "since": "1.17"
+    },
+    {
+      "apiVersion": "storage.k8s.io/v1beta1",
+      "kinds": ["StorageClass"],
+      "removedIn": "1.22",
+      "replacement": "storage.k8s.io/v1",
+      "since": "1.6"
+    },
+    {
+      "apiVersion": "storage.k8s.io/v1beta1",
+      "kinds": ["VolumeAttachment"],
+      "removedIn": "1.22",
+      "replacement": "storage.k8s.io/v1",
+      "since": "1.13"
+    },
+    {
+      "apiVersion": "extensions/v1beta1",
+      "kinds": ["NetworkPolicy"],
+      "removedIn": "1.16",
+      "replacement": "networking.k8s.io/v1",
+      "since": "1.8"
+    },
+    {
+      "apiVersion": "extensions/v1beta1",
+      "kinds": ["DaemonSet", "Deployment", "ReplicaSet"],
+      "removedIn": "1.16",
+      "replacement": "apps/v1",
+      "since": "1.9"
+    },
+    {
+      "apiVersion": "apps/v1beta1",
+      "kinds": ["Deployment", "StatefulSet", "ReplicaSet"],
+      "removedIn": "1.16",
+      "replacement": "apps/v1",
+      "since": "1.9"
+    },
+    {
+      "apiVersion": "apps/v1beta2",
+      "kinds": ["DaemonSet", "Deployment", "StatefulSet", "ReplicaSet"],
+      "removedIn": "1.16",
+      "replacement": "apps/v1",
+      "since": "1.9"
+    },
+    {
+      "apiVersion": "extensions/v1beta1",
+      "kinds": ["PodSecurityPolicy"],
+      "removedIn": "1.16",
+      "replacement": "policy/v1beta1",
+      "since": "1.10"
+    }
+  ]
+}

@@ -330,6 +330,38 @@ pub async fn prometheus_query(
     parse_result(&value)
 }
 
+/// This cluster's Prometheus as a backend reader reaches it: `None` where
+/// nobody configured one, and the refusal's words where its address is a
+/// tunnel into another cluster.
+///
+/// # Errors
+///
+/// The configuration could not be read.
+pub(crate) async fn connection_for(
+    context: &str,
+    sessions: &dashmap::DashMap<String, crate::state::PortForwardSession>,
+) -> Result<Option<std::result::Result<PrometheusEntry, String>>> {
+    let owned = context.to_string();
+    let entry = crate::commands::settings::read_config(move |config| {
+        config.integrations.prometheus.get(&owned).cloned()
+    })
+    .await?;
+    Ok(entry.map(|entry| super::own_tunnel_among(sessions, context, &entry.url).map(|()| entry)))
+}
+
+/// One instant query for a backend reader, through the same door as the
+/// webview's.
+///
+/// # Errors
+///
+/// The server did not answer, or refused the query, in its own words.
+pub(crate) async fn instant(entry: &PrometheusEntry, query: &str) -> Result<Vec<PromSeries>> {
+    let value = get_json(entry, "/api/v1/query", &[("query", query.to_string())])
+        .await
+        .map_err(unreachable)?;
+    parse_result(&value)
+}
+
 /// One range query — the whole point of having a Prometheus.
 ///
 /// `start` and `end` are epoch **ms** and `step` is seconds, matching the

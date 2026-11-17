@@ -13,7 +13,7 @@
 //! does not exist.
 
 mod graph;
-mod slots;
+pub(crate) mod slots;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -32,8 +32,8 @@ use crate::commands::catalog::{CatalogEntry, UnreadGroup};
 use crate::error::Result;
 use crate::state::AppState;
 
-pub use graph::{Dependent, KindCount, KindKey, DEPENDENTS_PAGE};
-use graph::{Graph, SlotKey};
+use graph::Graph;
+pub use graph::{Dependent, KindCount, KindKey, SlotKey, DEPENDENTS_PAGE};
 
 /// Watches nobody has asked anything of for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
@@ -79,7 +79,7 @@ const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
 
 /// How one kind is being read, across the cluster or in one namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum SlotState {
+pub(crate) enum SlotState {
     /// No watch is free, and its first turn to be listed has not come.
     Queued,
     Syncing,
@@ -392,6 +392,12 @@ impl OwnershipIndexes {
             }
             held == context
         });
+    }
+
+    /// The watches and list turns every index shares, for another reader
+    /// that holds watches of its own.
+    pub(crate) fn budget(&self) -> (Arc<Semaphore>, Arc<Semaphore>) {
+        (self.watches.clone(), self.turns.clone())
     }
 
     /// A context's index where one is already running; none is started.
@@ -772,6 +778,55 @@ impl ClusterIndex {
     }
 }
 
+/// One object the index holds: what it is, and the uid of its controller.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Held {
+    pub uid: String,
+    pub kind: String,
+    pub name: String,
+    pub namespace: Option<String>,
+    pub controller: Option<String>,
+}
+
+impl Held {
+    fn of(uid: &str, node: &graph::Node) -> Self {
+        Self {
+            uid: uid.to_string(),
+            kind: node.kind.clone(),
+            name: node.name.clone(),
+            namespace: node.namespace.clone(),
+            controller: node
+                .owners
+                .iter()
+                .find(|owner| owner.controller)
+                .map(|owner| owner.uid.clone()),
+        }
+    }
+}
+
+/// What other readers of the index ask of it, without changing it.
+impl ClusterIndex {
+    /// Every object of `kind` the index holds, wherever it read it.
+    pub(crate) fn held(&self, kind: &KindKey) -> Vec<Held> {
+        let graph = self.graph.read();
+        graph
+            .of_kind(kind)
+            .iter()
+            .filter_map(|uid| graph.node(uid).map(|node| Held::of(uid, node)))
+            .collect()
+    }
+
+    /// The object `uid`, where the index holds it.
+    pub(crate) fn held_one(&self, uid: &str) -> Option<Held> {
+        self.graph.read().node(uid).map(|node| Held::of(uid, node))
+    }
+
+    /// How every slot reads now.
+    pub(crate) fn slot_states(&self) -> BTreeMap<SlotKey, SlotState> {
+        self.slots_now()
+    }
+}
+
 #[cfg(test)]
 impl ClusterIndex {
     /// An index watching `kinds`, each still listing, with no watch behind it.
@@ -826,6 +881,41 @@ impl ClusterIndex {
             );
         }
         Arc::new(index)
+    }
+
+    /// One object held as the watch of `key` across the cluster holds it,
+    /// controlled by `controller` where one is given.
+    pub(crate) fn hold(
+        &self,
+        key: &KindKey,
+        kind: &str,
+        uid: &str,
+        (name, namespace): (&str, Option<&str>),
+        controller: Option<&str>,
+    ) {
+        let slot = SlotKey {
+            kind: key.clone(),
+            namespace: None,
+        };
+        self.graph.write().apply(
+            &slot,
+            uid.to_string(),
+            graph::Node {
+                key: key.clone(),
+                kind: kind.to_string(),
+                version: "v1".to_string(),
+                name: name.to_string(),
+                namespace: namespace.map(str::to_string),
+                owners: controller
+                    .map(|uid| graph::OwnerLink {
+                        uid: uid.to_string(),
+                        controller: true,
+                    })
+                    .into_iter()
+                    .collect(),
+            },
+        );
+        self.slots.lock().insert(slot, SlotState::Live);
     }
 
     /// One watched kind done listing, holding `names`.

@@ -139,6 +139,8 @@ import type {
   PodInfo,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 import {
   toastedUnanswered,
   toastError,
@@ -514,7 +516,12 @@ export function PodDetail() {
   const waiting = usePodWaiting(pod) && !warned;
   const notUpTone = waiting ? ("info" as const) : ("warn" as const);
 
-  const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "Pod", namespace, name } : null,
+    pod ? pod.uid : null,
+    !!pod && !gone
+  );
+  const share = usePodShare(pod, podEvents.data ?? [], podEvents.error, audit);
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
   // The kubelet on this pod's node writes its status. If the node stopped
   // answering, everything below is the last thing it said, not the state now.
@@ -1244,6 +1251,7 @@ export function PodDetail() {
               </Section>
             ),
           },
+          auditTab(audit, t),
           eventsTab(podEvents, t, { kind: ResourceType.Pod, name: name ?? "" }),
           yamlTab({
             yaml,

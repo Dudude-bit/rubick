@@ -24,6 +24,7 @@ impl OptionTimeExt for Option<&Time> {
 }
 
 mod connections;
+pub mod disruption;
 mod gateway;
 mod helm;
 mod kinds;

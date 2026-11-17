@@ -18,6 +18,7 @@ pub mod helpers;
 
 pub mod access;
 pub mod app_events;
+pub mod audit;
 pub mod auth;
 pub mod autoscalers;
 pub mod binaries;

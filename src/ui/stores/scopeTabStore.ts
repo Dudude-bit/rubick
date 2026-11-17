@@ -679,6 +679,7 @@ function decoded(segment: string): string {
 const PAGE_NAMES: Record<string, ((t: T) => string) | undefined> = {
   helm: () => "Helm",
   changes: (t) => t("nav", "changes"),
+  audit: (t) => t("nav", "audit"),
   integrations: (t) => t("nav", "integrations"),
   routes: (t) => t("nav", "routes"),
   "api-resources": (t) => t("nav", "apiResources"),

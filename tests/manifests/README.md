@@ -282,6 +282,36 @@ the viewer says which labels it tried rather than showing an empty panel.
 
 ---
 
+## Audit (`audit.yaml`)
+
+One object for each rule Audit judges, in `audit-test`, and a namespace
+that breaks none, `audit-clean`. Some pods never start: Audit judges
+templates, and those are what the file is for.
+
+```bash
+kubectl apply -f audit.yaml
+kubectl delete ns audit-test audit-clean && kubectl delete clusterrolebinding audit-test-admin
+```
+
+`audit-reader` is a ServiceAccount with rights in both namespaces and no
+PodDisruptionBudgets in `audit-test`; `kubectl create token audit-reader -n audit-test`
+makes a token for a kubeconfig user that sees Audit say "not checked".
+
+`audit-upgrade.yaml` adds two Helm releases to `audit-test`, stored the way
+Helm 3 stores them: `legacy-web` names versions Kubernetes removed (High) and
+`moved-on` dropped its old one in the deployed revision (nothing).
+`audit-upgrade-1.31.yaml`, on a 1.31 cluster or older, writes a FlowSchema
+through `flowcontrol.apiserver.k8s.io/v1beta3`, which 1.32 removes (Medium).
+`audit-reader` may not list Secrets, so for it the releases are not checked.
+`audit-upgrade-crd.yaml` adds a CRD whose `v1alpha1` is served and marked
+deprecated (Low; Medium once `storedVersions` names it, the patch is in the
+file) and a CronTab written at that version.
+
+```bash
+kubectl apply -f audit-upgrade.yaml
+kubectl -n audit-test delete secret -l owner=helm
+```
+
 ## Troubleshooting
 
 ### The StatefulSet stays pending

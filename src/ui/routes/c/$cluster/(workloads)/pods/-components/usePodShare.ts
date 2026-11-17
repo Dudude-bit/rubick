@@ -26,6 +26,7 @@ import { formatSince } from "@/lib/utils";
 import { describeTermination, lastTermination } from "@/lib/pod-status";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { errorToShow } from "@/lib/error-utils";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import type { ContainerInfo, EventInfo, PodInfo } from "@/generated/types";
@@ -191,7 +192,9 @@ function containersSection(pod: PodInfo, t: T): PlacedSection {
 export function usePodShare(
   pod: PodInfo | undefined,
   events: EventInfo[],
-  eventsError: unknown
+  eventsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   const waiting = usePodWaiting(pod);
@@ -241,6 +244,7 @@ export function usePodShare(
             count: logs.reduce((sum, log) => sum + log.lines.length, 0),
             body: { type: "logs", logs, absent },
           },
+          ...auditSections(audit, t),
         ],
       };
     },
@@ -254,6 +258,7 @@ export function usePodShare(
       trouble,
       chain,
       eventsError,
+      audit,
     ]
   );
 }

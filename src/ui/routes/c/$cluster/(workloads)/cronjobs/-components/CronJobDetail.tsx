@@ -77,6 +77,8 @@ import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
 import type { JobStatus } from "@/lib/status-meaning";
 import { useT, type T } from "@/i18n/useT";
+import { auditTab } from "../../../-audit/audit-tab";
+import { useObjectAudit } from "../../../-audit/useAudit";
 import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 
@@ -475,7 +477,12 @@ export function CronJobDetail() {
     refresh: "slow",
   });
 
-  const share = useCronJobShare(cronJob, told, jobsError);
+  const audit = useObjectAudit(
+    name && namespace ? { kind: "CronJob", namespace, name } : null,
+    cronJob ? cronJob.uid : null,
+    !!cronJob
+  );
+  const share = useCronJobShare(cronJob, told, jobsError, audit);
 
   const tabs = useMemo(
     () => [
@@ -648,6 +655,7 @@ export function CronJobDetail() {
           </div>
         ),
       },
+      auditTab(audit, t),
       eventsTab(events, t, { kind: ResourceType.CronJob, name: name ?? "" }),
       yamlTab({
         yaml,
@@ -659,6 +667,7 @@ export function CronJobDetail() {
       }),
     ],
     [
+      audit,
       events,
       cronJob,
       jobs,

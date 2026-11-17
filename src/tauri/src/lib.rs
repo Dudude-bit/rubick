@@ -30,6 +30,7 @@
 #![allow(clippy::too_many_lines)]
 
 pub mod app_log;
+pub mod audit;
 pub mod auth;
 pub mod cli;
 pub mod client;
@@ -38,6 +39,7 @@ pub mod config;
 pub mod diagnostics;
 pub mod drain;
 pub mod error;
+pub mod feeds;
 pub mod files;
 pub mod integrations;
 pub mod logs;

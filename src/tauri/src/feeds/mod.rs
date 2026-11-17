@@ -1,0 +1,2592 @@
+//! One watch per cluster and kind, however many readers in the backend
+//! follow it.
+//!
+//! A reader subscribes to kinds and is handed, per slot (a kind across the
+//! cluster, or in one namespace where the cluster refused the kind across
+//! it), the whole set when it joins, then each change in order, the whole
+//! set again after every relist, and each change of the slot's state. The
+//! first subscriber of a kind starts its watch; the last one leaving lets it
+//! linger, then stops it. The watches draw on the budget the ownership index
+//! holds, through the same slot loop.
+//!
+//! What is kept is what a late subscriber needs: the current version of each
+//! object, once, shared by `Arc` with every reader, `managedFields` dropped.
+//! A late subscriber's whole set is read from it under the lock every change
+//! is fanned out under, so it sees each change once and needs no watch of
+//! its own.
+
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant};
+
+use dashmap::DashMap;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
+use k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::core::v1::{
+    ConfigMap, Event as CoreEvent, LimitRange, Namespace, Node, PersistentVolumeClaim, Pod, Secret,
+    Service, ServiceAccount,
+};
+use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
+use k8s_openapi::api::policy::v1::PodDisruptionBudget;
+use k8s_openapi::api::rbac::v1::{ClusterRole, ClusterRoleBinding, Role, RoleBinding};
+use kube::api::{Api, DynamicObject, ListParams};
+use kube::discovery::ApiResource;
+use kube::runtime::watcher::{self, Event};
+use kube::Client;
+use parking_lot::Mutex;
+use tokio::sync::{mpsc, Semaphore};
+use tokio_util::sync::CancellationToken;
+
+use crate::error::Result;
+use crate::ownership::slots::{spawn_slot, SlotHost, PAGE_WITHIN};
+use crate::ownership::{KindKey, SlotKey, SlotState};
+
+/// How long a kind nobody follows keeps its watch: a page left and opened
+/// again does not list the cluster twice.
+const LINGER: Duration = Duration::from_mins(1);
+/// How long a page-bound subscription lives without a `touch`.
+const PAGE_IDLE: Duration = Duration::from_mins(3);
+const REAP_EVERY: Duration = Duration::from_secs(5);
+/// How long a kind with no watch free waits for its next list.
+const RELIST_EVERY: Duration = Duration::from_secs(30);
+/// Updates a subscriber may leave unread before it is resent the whole set.
+const QUEUE: usize = 4096;
+/// Objects per page of a list served to one late reader.
+const LIST_PAGE: u32 = 500;
+
+/// How one slot is being read, as a subscriber is told it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeedState {
+    Syncing,
+    /// Waiting for a watch: the app holds as many open as it allows itself.
+    Queued,
+    Synced,
+    /// The watch broke after its list answered; what was served is as of `since`.
+    Blind {
+        since: String,
+    },
+    Refused {
+        message: String,
+    },
+    Failed {
+        message: String,
+    },
+    /// Discovery serves no such kind on this cluster.
+    Unserved,
+}
+
+impl FeedState {
+    pub(crate) fn of(state: &SlotState) -> Self {
+        match state {
+            SlotState::Queued => Self::Queued,
+            SlotState::Syncing => Self::Syncing,
+            SlotState::Live | SlotState::Listed { .. } => Self::Synced,
+            SlotState::Stale { since } => Self::Blind {
+                since: since.clone(),
+            },
+            SlotState::Refused { message } => Self::Refused {
+                message: message.clone(),
+            },
+            SlotState::Failed { message } => Self::Failed {
+                message: message.clone(),
+            },
+        }
+    }
+
+    /// Whether a new client's read of the slot has said what it will say.
+    fn settled(&self) -> bool {
+        !matches!(self, Self::Syncing | Self::Queued)
+    }
+}
+
+/// Why a subscriber is handed a slot's whole set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Whole {
+    /// The first set of this slot it is handed.
+    Fresh,
+    /// After a break or a list turn: what it held and is not here was
+    /// deleted while nobody watched.
+    Relist,
+    /// A new client (a renewal, a reconnect) took the slot over, with no gap.
+    Handover,
+}
+
+#[derive(Debug, Clone)]
+pub enum Update {
+    Whole {
+        slot: SlotKey,
+        why: Whole,
+        objects: Vec<Arc<DynamicObject>>,
+    },
+    /// An object added or changed. May repeat one a `Whole` already held.
+    Applied {
+        slot: SlotKey,
+        object: Arc<DynamicObject>,
+    },
+    Deleted {
+        slot: SlotKey,
+        object: Arc<DynamicObject>,
+    },
+    State {
+        slot: SlotKey,
+        state: FeedState,
+    },
+    /// Every kind is now served by the context's newest client.
+    HandedOver,
+}
+
+/// What keeps a subscription.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Binding {
+    /// A page's: let go when not touched for `PAGE_IDLE`.
+    Page,
+    /// A session's: held until dropped or the cluster disconnects.
+    Session,
+}
+
+#[derive(Debug, Clone)]
+pub struct Ask {
+    pub kinds: Vec<KindKey>,
+    /// Where a kind refused across the cluster is read instead; `None` is
+    /// the whole cluster. Objects outside it are not handed over.
+    pub scope: Option<Vec<String>>,
+    pub binding: Binding,
+}
+
+pub struct Subscription {
+    pub updates: mpsc::Receiver<Update>,
+    pub lease: Lease,
+}
+
+/// Held while the subscriber follows its kinds; dropping it lets them go.
+pub struct Lease {
+    context: Weak<ContextFeeds>,
+    id: u64,
+}
+
+impl Lease {
+    /// A page-bound subscriber says it is still on screen.
+    pub fn touch(&self) {
+        if let Some(context) = self.context.upgrade() {
+            if let Some(sub) = context.inner.lock().subscribers.get_mut(&self.id) {
+                sub.touched = Instant::now();
+            }
+        }
+    }
+
+    /// The window's namespaces changed: a kind refused across the cluster
+    /// is read in the new ones.
+    pub fn rescope(&self, scope: Option<Vec<String>>) {
+        if let Some(context) = self.context.upgrade() {
+            let kinds = {
+                let mut inner = context.inner.lock();
+                let Some(sub) = inner.subscribers.get_mut(&self.id) else {
+                    return;
+                };
+                sub.scope = scope;
+                sub.kinds.clone()
+            };
+            for kind in kinds {
+                context.fall_back_all(&kind);
+            }
+        }
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        if let Some(context) = self.context.upgrade() {
+            context.inner.lock().leave(self.id);
+        }
+    }
+}
+
+/// What the layer keeps of a kind's objects between changes.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum Keep {
+    /// Each object as it arrived, `managedFields` dropped.
+    #[default]
+    Whole,
+    /// Each object cut at arrival to what readers read; they are handed
+    /// the same cut copy.
+    Trimmed(fn(&mut DynamicObject)),
+    /// Nothing between changes: a reader joining late is served its set by
+    /// one list, never by a second watch.
+    Nothing,
+}
+
+/// Fixed per kind, never per subscriber: one watch has one shape.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Params {
+    pub fields: Option<&'static str>,
+    pub keep: Keep,
+}
+
+/// Helm keeps every release whole in a Secret of this type, megabytes each,
+/// and its history is read elsewhere.
+const NOT_HELM_RELEASES: &str = "type!=helm.sh/release.v1";
+
+/// A Secret's values and a `ConfigMap`'s data sitting in the process for a
+/// whole session is more than any reader needs; a pod's env, probes and
+/// mounts are most of its bytes and no reader of a feed reads them.
+#[must_use]
+pub fn params(kind: &KindKey) -> Params {
+    match (kind.group.as_str(), kind.plural.as_str()) {
+        ("", "secrets") => Params {
+            fields: Some(NOT_HELM_RELEASES),
+            keep: Keep::Nothing,
+        },
+        ("", "configmaps") => Params {
+            fields: None,
+            keep: Keep::Nothing,
+        },
+        ("", "pods") => Params {
+            fields: None,
+            keep: Keep::Trimmed(trim_pod),
+        },
+        _ => Params::default(),
+    }
+}
+
+/// What a container carries that no feed reader reads.
+const CONTAINER_DROPPED: &[&str] = &[
+    "command",
+    "args",
+    "workingDir",
+    "livenessProbe",
+    "readinessProbe",
+    "startupProbe",
+    "lifecycle",
+    "volumeDevices",
+    "securityContext",
+    "terminationMessagePath",
+    "terminationMessagePolicy",
+    "imagePullPolicy",
+    "resizePolicy",
+    "stdin",
+    "stdinOnce",
+    "tty",
+];
+
+const SPEC_DROPPED: &[&str] = &[
+    "tolerations",
+    "affinity",
+    "securityContext",
+    "dnsConfig",
+    "topologySpreadConstraints",
+    "enableServiceLinks",
+    "preemptionPolicy",
+    "schedulerName",
+    "terminationGracePeriodSeconds",
+    "hostAliases",
+];
+
+const STATUS_DROPPED: &[&str] = &[
+    "imageID",
+    "containerID",
+    "allocatedResources",
+    "resources",
+    "volumeMounts",
+    "user",
+];
+
+/// What a container reads from `ConfigMap`s, `Secret`s and volumes, kept as
+/// references: an env entry only where it names a key of a `ConfigMap` or a
+/// `Secret`, and never its literal value; `envFrom` whole, which names no
+/// value; each mount's volume, path, subPath and readOnly.
+fn keep_references(container: &mut serde_json::Map<String, serde_json::Value>) {
+    if let Some(serde_json::Value::Array(env)) = container.get_mut("env") {
+        env.retain_mut(|entry| {
+            let name = entry.get("name").cloned();
+            let reference = ["configMapKeyRef", "secretKeyRef"].iter().find_map(|key| {
+                let held = entry.pointer(&format!("/valueFrom/{key}"))?;
+                Some(serde_json::json!({ *key: held }))
+            });
+            match (name, reference) {
+                (Some(name), Some(reference)) => {
+                    *entry = serde_json::json!({ "name": name, "valueFrom": reference });
+                    true
+                }
+                _ => false,
+            }
+        });
+        if env.is_empty() {
+            container.remove("env");
+        }
+    }
+    if let Some(serde_json::Value::Array(mounts)) = container.get_mut("volumeMounts") {
+        for mount in mounts.iter_mut() {
+            if let serde_json::Value::Object(mount) = mount {
+                mount.retain(|field, _| {
+                    matches!(
+                        field.as_str(),
+                        "name" | "mountPath" | "subPath" | "readOnly"
+                    )
+                });
+            }
+        }
+    }
+}
+
+/// A pod cut to its identity, owners, placement, containers' names, images,
+/// ports, resources and the references they read, volumes, and status
+/// without the runtime's ids.
+pub fn trim_pod(pod: &mut DynamicObject) {
+    if let Some(annotations) = pod.metadata.annotations.as_mut() {
+        annotations.remove("kubectl.kubernetes.io/last-applied-configuration");
+    }
+    let drop_all = |value: Option<&mut serde_json::Value>, fields: &[&str]| {
+        if let Some(serde_json::Value::Object(map)) = value {
+            for field in fields {
+                map.remove(*field);
+            }
+        }
+    };
+    let each = |list: Option<&mut serde_json::Value>, fields: &[&str]| {
+        if let Some(serde_json::Value::Array(items)) = list {
+            for item in items {
+                if let serde_json::Value::Object(map) = item {
+                    for field in fields {
+                        map.remove(*field);
+                    }
+                }
+            }
+        }
+    };
+    let spec = pod.data.get_mut("spec");
+    if let Some(spec) = spec {
+        for list in ["containers", "initContainers", "ephemeralContainers"] {
+            each(spec.get_mut(list), CONTAINER_DROPPED);
+        }
+        for list in ["containers", "initContainers"] {
+            if let Some(serde_json::Value::Array(containers)) = spec.get_mut(list) {
+                for container in containers.iter_mut() {
+                    if let serde_json::Value::Object(container) = container {
+                        keep_references(container);
+                    }
+                }
+            }
+        }
+        each(
+            spec.get_mut("ephemeralContainers"),
+            &["env", "envFrom", "volumeMounts"],
+        );
+        drop_all(Some(spec), SPEC_DROPPED);
+    }
+    if let Some(status) = pod.data.get_mut("status") {
+        for list in [
+            "containerStatuses",
+            "initContainerStatuses",
+            "ephemeralContainerStatuses",
+        ] {
+            each(status.get_mut(list), STATUS_DROPPED);
+        }
+    }
+}
+
+/// The kinds the app knows without asking discovery, and their scope.
+#[must_use]
+pub fn built_in(kind: &KindKey) -> Option<(ApiResource, bool)> {
+    let known = [
+        (ApiResource::erase::<Deployment>(&()), true),
+        (ApiResource::erase::<StatefulSet>(&()), true),
+        (ApiResource::erase::<DaemonSet>(&()), true),
+        (ApiResource::erase::<ReplicaSet>(&()), true),
+        (ApiResource::erase::<Job>(&()), true),
+        (ApiResource::erase::<CronJob>(&()), true),
+        (ApiResource::erase::<Pod>(&()), true),
+        (ApiResource::erase::<Service>(&()), true),
+        (ApiResource::erase::<ServiceAccount>(&()), true),
+        (ApiResource::erase::<ConfigMap>(&()), true),
+        (ApiResource::erase::<Secret>(&()), true),
+        (ApiResource::erase::<LimitRange>(&()), true),
+        (ApiResource::erase::<PersistentVolumeClaim>(&()), true),
+        (ApiResource::erase::<CoreEvent>(&()), true),
+        (ApiResource::erase::<Ingress>(&()), true),
+        (ApiResource::erase::<NetworkPolicy>(&()), true),
+        (ApiResource::erase::<PodDisruptionBudget>(&()), true),
+        (ApiResource::erase::<HorizontalPodAutoscaler>(&()), true),
+        (ApiResource::erase::<Role>(&()), true),
+        (ApiResource::erase::<RoleBinding>(&()), true),
+        (ApiResource::erase::<ClusterRole>(&()), false),
+        (ApiResource::erase::<ClusterRoleBinding>(&()), false),
+        (ApiResource::erase::<Node>(&()), false),
+        (ApiResource::erase::<Namespace>(&()), false),
+    ];
+    known
+        .into_iter()
+        .find(|(resource, _)| resource.group == kind.group && resource.plural == kind.plural)
+}
+
+#[must_use]
+pub fn key_of(resource: &ApiResource) -> KindKey {
+    KindKey {
+        group: resource.group.clone(),
+        plural: resource.plural.clone(),
+    }
+}
+
+type Refusals = Arc<Mutex<BTreeMap<SlotKey, String>>>;
+
+/// A slot as a subscriber joining now is told it: its state, and its set where listed.
+type Known = (SlotKey, FeedState, Option<Vec<Arc<DynamicObject>>>);
+
+/// What a take-over lets go of, done once the context's lock is released:
+/// a generation's own locks are never taken under it.
+enum Retire {
+    Generation(Arc<Generation>),
+    Kind(Arc<Generation>, KindKey),
+}
+
+/// Every context's feeds.
+pub struct Feeds {
+    contexts: Arc<DashMap<String, Arc<ContextFeeds>>>,
+    watches: Arc<Semaphore>,
+    turns: Arc<Semaphore>,
+    linger: Duration,
+    page_idle: Duration,
+    queue: usize,
+}
+
+impl Feeds {
+    /// `budget` is the ownership index's: watches and list turns, shared.
+    #[must_use]
+    pub fn new(budget: (Arc<Semaphore>, Arc<Semaphore>)) -> Self {
+        Self {
+            contexts: Arc::new(DashMap::new()),
+            watches: budget.0,
+            turns: budget.1,
+            linger: LINGER,
+            page_idle: PAGE_IDLE,
+            queue: QUEUE,
+        }
+    }
+
+    /// Follows `ask.kinds` of the cluster in hand. A kind discovery does not
+    /// serve is said `Unserved` and nothing more.
+    pub async fn subscribe(&self, here: &crate::state::Here<'_>, ask: Ask) -> Result<Subscription> {
+        let mut kinds = Vec::new();
+        let mut unserved = Vec::new();
+        for kind in &ask.kinds {
+            let resolved = match built_in(kind) {
+                Some(found) => Some(found),
+                None => here
+                    .served(&kind.group, &kind.plural)
+                    .await?
+                    .map(|served| (served.resource, served.namespaced)),
+            };
+            match resolved {
+                Some(found) => kinds.push((kind.clone(), found)),
+                None => unserved.push(kind.clone()),
+            }
+        }
+        let context = self.context_for(&here.context, (*here.client).clone());
+        Ok(context.join(&ask, &kinds, &unserved))
+    }
+
+    fn context_for(&self, name: &str, client: Client) -> Arc<ContextFeeds> {
+        if let Some(held) = self.contexts.get(name) {
+            return held.clone();
+        }
+        let context = Arc::new(ContextFeeds {
+            name: name.to_string(),
+            inner: Mutex::new(Inner::default()),
+            stop: CancellationToken::new(),
+            watches: self.watches.clone(),
+            turns: self.turns.clone(),
+            refusals: Refusals::default(),
+            linger: self.linger,
+            page_idle: self.page_idle,
+            queue: self.queue,
+        });
+        let context = self
+            .contexts
+            .entry(name.to_string())
+            .or_insert(context)
+            .clone();
+        if context.inner.lock().generations.is_empty() {
+            let generation = context.generation(client);
+            let first = {
+                let mut inner = context.inner.lock();
+                let first = inner.generations.is_empty();
+                if first {
+                    inner.serving = generation.id;
+                    inner.generations.insert(generation.id, generation);
+                }
+                first
+            };
+            if first {
+                spawn_reaper(self.contexts.clone(), context.clone());
+            }
+        }
+        context
+    }
+
+    /// A context's client was replaced or let go. With a new client every
+    /// kind is read again on it, the old one serving until the new one has
+    /// said what it will; with none every subscription ends.
+    pub fn client_replaced(&self, context: &str, client: Option<Client>) {
+        let Some(held) = self.contexts.get(context).map(|held| held.clone()) else {
+            return;
+        };
+        match client {
+            None => {
+                self.contexts.remove(context);
+                held.end();
+            }
+            Some(client) => held.hand_over(client),
+        }
+    }
+
+    pub fn forget_all(&self) {
+        for entry in self.contexts.iter() {
+            entry.end();
+        }
+        self.contexts.clear();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn lingering(mut self, linger: Duration, page_idle: Duration, queue: usize) -> Self {
+        self.linger = linger;
+        self.page_idle = page_idle;
+        self.queue = queue;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn context(&self, name: &str) -> Option<Arc<ContextFeeds>> {
+        self.contexts.get(name).map(|held| held.clone())
+    }
+}
+
+struct Subscriber {
+    kinds: BTreeSet<KindKey>,
+    scope: Option<Vec<String>>,
+    binding: Binding,
+    touched: Instant,
+    tx: mpsc::Sender<Update>,
+    /// Slots it has been handed a whole set of.
+    seen: BTreeSet<SlotKey>,
+    /// Its queue filled: it is resent every whole set once there is room.
+    lagged: bool,
+    /// Slots of a kind kept as nothing whose set is being listed for it,
+    /// and the changes that arrived meanwhile.
+    pending: BTreeMap<SlotKey, Vec<Update>>,
+}
+
+struct KindFeed {
+    resource: ApiResource,
+    namespaced: bool,
+    /// The generation whose reads subscribers are handed.
+    serving: u64,
+    released_at: Option<Instant>,
+}
+
+/// What a late reader is served from, one per live object: the object as
+/// compact JSON, a fraction of what it costs as a tree, read back on demand.
+#[derive(Default)]
+struct SlotStore {
+    objects: HashMap<String, Box<str>>,
+    /// What a list under way has handed so far.
+    listing: Option<HashMap<String, Arc<DynamicObject>>>,
+    synced: bool,
+}
+
+#[derive(Default)]
+struct Inner {
+    generations: BTreeMap<u64, Arc<Generation>>,
+    serving: u64,
+    next_generation: u64,
+    kinds: BTreeMap<KindKey, KindFeed>,
+    subscribers: BTreeMap<u64, Subscriber>,
+    next_subscriber: u64,
+    states: BTreeMap<(u64, SlotKey), FeedState>,
+    stores: BTreeMap<(u64, SlotKey), SlotStore>,
+    /// Lists to start once the lock is let go: a subscriber and the slot.
+    to_list: Vec<(u64, SlotKey)>,
+}
+
+fn uid_of(object: &DynamicObject) -> Option<String> {
+    object.metadata.uid.clone()
+}
+
+fn kept(slot: &SlotKey, mut object: DynamicObject) -> Arc<DynamicObject> {
+    object.metadata.managed_fields = None;
+    if let Keep::Trimmed(trim) = params(&slot.kind).keep {
+        trim(&mut object);
+    }
+    Arc::new(object)
+}
+
+fn pack(object: &DynamicObject) -> Option<Box<str>> {
+    serde_json::to_string(object)
+        .ok()
+        .map(String::into_boxed_str)
+}
+
+fn unpacked<'a>(objects: impl Iterator<Item = &'a Box<str>>) -> Vec<Arc<DynamicObject>> {
+    objects
+        .filter_map(|text| serde_json::from_str(text).ok().map(Arc::new))
+        .collect()
+}
+
+fn keeps(kind: &KindKey) -> bool {
+    !matches!(params(kind).keep, Keep::Nothing)
+}
+
+/// A resourceVersion as the number etcd writes, where it is one.
+fn version_of(object: &DynamicObject) -> Option<u64> {
+    object.metadata.resource_version.as_deref()?.parse().ok()
+}
+
+fn in_scope(scope: Option<&[String]>, object: &DynamicObject) -> bool {
+    match (scope, object.metadata.namespace.as_deref()) {
+        (Some(names), Some(namespace)) => names.iter().any(|name| name == namespace),
+        _ => true,
+    }
+}
+
+impl Inner {
+    fn leave(&mut self, id: u64) {
+        let Some(sub) = self.subscribers.remove(&id) else {
+            return;
+        };
+        let now = Instant::now();
+        for kind in sub.kinds {
+            let followed = self.subscribers.values().any(|s| s.kinds.contains(&kind));
+            if let (false, Some(feed)) = (followed, self.kinds.get_mut(&kind)) {
+                feed.released_at = Some(now);
+            }
+        }
+    }
+
+    /// Hands `update` to every subscriber of `slot`'s kind whose scope holds it.
+    fn fan_out(&mut self, slot: &SlotKey, update: &Update) {
+        let ids: Vec<u64> = self
+            .subscribers
+            .iter()
+            .filter(|(_, sub)| sub.kinds.contains(&slot.kind))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            if let Some(sub) = self.subscribers.get_mut(&id) {
+                if let Some(buffer) = sub.pending.get_mut(slot) {
+                    match update {
+                        Update::Applied { .. } | Update::Deleted { .. } => {
+                            buffer.push(update.clone());
+                            continue;
+                        }
+                        // A whole set supersedes the list under way.
+                        Update::Whole { .. } => {
+                            sub.pending.remove(slot);
+                        }
+                        Update::State { .. } | Update::HandedOver => {}
+                    }
+                }
+            }
+            let scoped = {
+                let sub = &self.subscribers[&id];
+                match update {
+                    Update::Whole { slot, why, objects } => {
+                        let mut why = *why;
+                        if !sub.seen.contains(slot) {
+                            why = Whole::Fresh;
+                        }
+                        Update::Whole {
+                            slot: slot.clone(),
+                            why,
+                            objects: objects
+                                .iter()
+                                .filter(|o| in_scope(sub.scope.as_deref(), o))
+                                .cloned()
+                                .collect(),
+                        }
+                    }
+                    Update::Applied { object, .. } | Update::Deleted { object, .. }
+                        if !in_scope(sub.scope.as_deref(), object) =>
+                    {
+                        continue;
+                    }
+                    other => other.clone(),
+                }
+            };
+            self.send(id, scoped);
+        }
+    }
+
+    fn send(&mut self, id: u64, update: Update) {
+        let resync = self.subscribers.get(&id).is_some_and(|sub| sub.lagged);
+        if resync {
+            self.resync(id);
+            return;
+        }
+        let Some(sub) = self.subscribers.get_mut(&id) else {
+            return;
+        };
+        if let Update::Whole { slot, .. } = &update {
+            sub.seen.insert(slot.clone());
+        }
+        match sub.tx.try_send(update) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => sub.lagged = true,
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                self.leave(id);
+            }
+        }
+    }
+
+    /// A subscriber that fell behind is handed every slot it follows whole,
+    /// and is caught up when all of them fit.
+    fn resync(&mut self, id: u64) {
+        let Some(sub) = self.subscribers.get(&id) else {
+            return;
+        };
+        let serving = |generation: u64, slot: &SlotKey| {
+            sub.kinds.contains(&slot.kind)
+                && self
+                    .kinds
+                    .get(&slot.kind)
+                    .is_some_and(|f| f.serving == generation)
+        };
+        let unkept: Vec<SlotKey> = self
+            .stores
+            .iter()
+            .filter(|((generation, slot), store)| {
+                store.synced && !keeps(&slot.kind) && serving(*generation, slot)
+            })
+            .map(|((_, slot), _)| slot.clone())
+            .collect();
+        let wholes: Vec<Update> = self
+            .stores
+            .iter()
+            .filter(|((generation, slot), store)| {
+                store.synced && keeps(&slot.kind) && serving(*generation, slot)
+            })
+            .map(|((_, slot), store)| Update::Whole {
+                slot: slot.clone(),
+                why: Whole::Relist,
+                objects: unpacked(store.objects.values())
+                    .into_iter()
+                    .filter(|o| in_scope(sub.scope.as_deref(), o))
+                    .collect(),
+            })
+            .collect();
+        let Some(sub) = self.subscribers.get_mut(&id) else {
+            return;
+        };
+        if sub.tx.capacity() < wholes.len() + 1 {
+            return;
+        }
+        for whole in wholes {
+            if let Update::Whole { slot, .. } = &whole {
+                sub.seen.insert(slot.clone());
+            }
+            let _ = sub.tx.try_send(whole);
+        }
+        sub.lagged = false;
+        for slot in unkept {
+            self.list_for(id, slot);
+        }
+    }
+
+    /// Lists `slot` for subscriber `id` alone, once the lock is let go; the
+    /// slot's changes wait in its queue until the set has arrived.
+    fn list_for(&mut self, id: u64, slot: SlotKey) {
+        let Some(sub) = self.subscribers.get_mut(&id) else {
+            return;
+        };
+        if sub.pending.contains_key(&slot) {
+            return;
+        }
+        sub.pending.insert(slot.clone(), Vec::new());
+        let _ = sub.tx.try_send(Update::State {
+            slot: slot.clone(),
+            state: FeedState::Syncing,
+        });
+        self.to_list.push((id, slot));
+    }
+
+    /// The set listed for `id` arrived: handed whole, then each change
+    /// that came meanwhile and is newer than the list.
+    fn listed_for(
+        &mut self,
+        id: u64,
+        slot: &SlotKey,
+        objects: Vec<Arc<DynamicObject>>,
+        at: Option<u64>,
+    ) {
+        let Some(sub) = self.subscribers.get_mut(&id) else {
+            return;
+        };
+        let Some(waited) = sub.pending.remove(slot) else {
+            return;
+        };
+        let why = if sub.seen.contains(slot) {
+            Whole::Relist
+        } else {
+            Whole::Fresh
+        };
+        let scope = sub.scope.clone();
+        let state = self
+            .kinds
+            .get(&slot.kind)
+            .and_then(|feed| self.states.get(&(feed.serving, slot.clone())))
+            .cloned()
+            .unwrap_or(FeedState::Synced);
+        self.send(
+            id,
+            Update::State {
+                slot: slot.clone(),
+                state,
+            },
+        );
+        self.send(
+            id,
+            Update::Whole {
+                slot: slot.clone(),
+                why,
+                objects: objects
+                    .into_iter()
+                    .filter(|o| in_scope(scope.as_deref(), o))
+                    .collect(),
+            },
+        );
+        for update in waited {
+            let newer = match &update {
+                Update::Applied { object, .. } => match (version_of(object), at) {
+                    (Some(version), Some(at)) => version > at,
+                    _ => true,
+                },
+                _ => true,
+            };
+            if newer {
+                self.send(id, update);
+            }
+        }
+    }
+
+    /// A list for `id` failed: it is told, and the list is tried again.
+    fn list_failed(&mut self, id: u64, slot: &SlotKey, message: String) {
+        if let Some(sub) = self.subscribers.get_mut(&id) {
+            if sub.pending.contains_key(slot) {
+                let _ = sub.tx.try_send(Update::State {
+                    slot: slot.clone(),
+                    state: FeedState::Failed { message },
+                });
+            }
+        }
+    }
+
+    /// The generation `generation` has settled every slot of `kind` it
+    /// reads: it serves the kind from now, and the one before lets it go.
+    fn take_over(&mut self, generation: u64, kind: &KindKey) -> Vec<Retire> {
+        let Some(feed) = self.kinds.get(kind) else {
+            return Vec::new();
+        };
+        if feed.serving >= generation {
+            return Vec::new();
+        }
+        let settled = self
+            .states
+            .iter()
+            .filter(|((g, slot), _)| *g == generation && slot.kind == *kind)
+            .all(|(_, state)| state.settled());
+        if !settled {
+            return Vec::new();
+        }
+        let old = feed.serving;
+        if let Some(feed) = self.kinds.get_mut(kind) {
+            feed.serving = generation;
+        }
+        let slots: Vec<SlotKey> = self
+            .states
+            .keys()
+            .filter(|(g, slot)| *g == generation && slot.kind == *kind)
+            .map(|(_, slot)| slot.clone())
+            .collect();
+        for slot in slots {
+            let state = self.states[&(generation, slot.clone())].clone();
+            self.fan_out(
+                &slot,
+                &Update::State {
+                    slot: slot.clone(),
+                    state,
+                },
+            );
+            let objects = self
+                .stores
+                .get(&(generation, slot.clone()))
+                .filter(|store| store.synced)
+                .map(|store| unpacked(store.objects.values()));
+            if let Some(objects) = objects {
+                self.fan_out(
+                    &slot,
+                    &Update::Whole {
+                        slot: slot.clone(),
+                        why: Whole::Handover,
+                        objects,
+                    },
+                );
+            }
+        }
+        self.stores
+            .retain(|(g, slot), _| !(*g == old && slot.kind == *kind));
+        if !keeps(kind) {
+            for ((g, slot), store) in &mut self.stores {
+                if *g == generation && slot.kind == *kind {
+                    store.objects.clear();
+                }
+            }
+        }
+        self.states
+            .retain(|(g, slot), _| !(*g == old && slot.kind == *kind));
+        let still_serves = self.kinds.values().any(|feed| feed.serving == old);
+        if let (false, Some(gone)) = (still_serves, self.generations.remove(&old)) {
+            if self.generations.len() == 1 {
+                self.serving = generation;
+                let ids: Vec<u64> = self.subscribers.keys().copied().collect();
+                for id in ids {
+                    self.send(id, Update::HandedOver);
+                }
+            }
+            vec![Retire::Generation(gone)]
+        } else {
+            self.generations
+                .get(&old)
+                .map(|old| Retire::Kind(old.clone(), kind.clone()))
+                .into_iter()
+                .collect()
+        }
+    }
+
+    fn serves(&self, generation: u64, kind: &KindKey) -> bool {
+        self.kinds
+            .get(kind)
+            .is_some_and(|feed| feed.serving == generation)
+    }
+
+    /// Records a slot's state; tells subscribers where the generation serves it.
+    fn state(&mut self, generation: u64, slot: &SlotKey, state: FeedState) {
+        let key = (generation, slot.clone());
+        if self.states.get(&key) == Some(&state) {
+            return;
+        }
+        self.states.insert(key, state.clone());
+        if self.serves(generation, &slot.kind) {
+            self.fan_out(
+                slot,
+                &Update::State {
+                    slot: slot.clone(),
+                    state,
+                },
+            );
+        }
+    }
+}
+
+pub(crate) struct ContextFeeds {
+    name: String,
+    inner: Mutex<Inner>,
+    stop: CancellationToken,
+    watches: Arc<Semaphore>,
+    turns: Arc<Semaphore>,
+    refusals: Refusals,
+    linger: Duration,
+    page_idle: Duration,
+    queue: usize,
+}
+
+impl ContextFeeds {
+    fn generation(self: &Arc<Self>, client: Client) -> Arc<Generation> {
+        let id = {
+            let mut inner = self.inner.lock();
+            inner.next_generation += 1;
+            inner.next_generation
+        };
+        Arc::new(Generation {
+            id,
+            client,
+            stop: self.stop.child_token(),
+            slots: Mutex::new(BTreeMap::new()),
+            stops: Mutex::new(BTreeMap::new()),
+            feeds: Arc::downgrade(self),
+            watches: self.watches.clone(),
+            turns: self.turns.clone(),
+            refusals: self.refusals.clone(),
+        })
+    }
+
+    fn join(
+        self: &Arc<Self>,
+        ask: &Ask,
+        kinds: &[(KindKey, (ApiResource, bool))],
+        unserved: &[KindKey],
+    ) -> Subscription {
+        let (tx, updates) = mpsc::channel(self.queue);
+        let mut start: Vec<(Arc<Generation>, KindKey, ApiResource)> = Vec::new();
+        let id = {
+            let mut inner = self.inner.lock();
+            inner.next_subscriber += 1;
+            let id = inner.next_subscriber;
+            inner.subscribers.insert(
+                id,
+                Subscriber {
+                    kinds: kinds.iter().map(|(kind, _)| kind.clone()).collect(),
+                    scope: ask.scope.clone(),
+                    binding: ask.binding,
+                    touched: Instant::now(),
+                    tx,
+                    seen: BTreeSet::new(),
+                    lagged: false,
+                    pending: BTreeMap::new(),
+                },
+            );
+            let serving = inner.serving;
+            for (kind, (resource, namespaced)) in kinds {
+                if let Some(feed) = inner.kinds.get_mut(kind) {
+                    feed.released_at = None;
+                    continue;
+                }
+                inner.kinds.insert(
+                    kind.clone(),
+                    KindFeed {
+                        resource: resource.clone(),
+                        namespaced: *namespaced,
+                        serving,
+                        released_at: None,
+                    },
+                );
+                for generation in inner.generations.values() {
+                    start.push((generation.clone(), kind.clone(), resource.clone()));
+                }
+            }
+            // What is already known, as a subscriber joining then would see it.
+            let known: Vec<Known> = inner
+                .states
+                .iter()
+                .filter(|((generation, slot), _)| {
+                    inner.subscribers[&id].kinds.contains(&slot.kind)
+                        && inner.serves(*generation, &slot.kind)
+                })
+                .map(|((generation, slot), state)| {
+                    let objects = inner
+                        .stores
+                        .get(&(*generation, slot.clone()))
+                        .filter(|store| store.synced)
+                        .map(|store| unpacked(store.objects.values()));
+                    (slot.clone(), state.clone(), objects)
+                })
+                .collect();
+            for (slot, state, objects) in known {
+                if objects.is_some() && !keeps(&slot.kind) {
+                    inner.list_for(id, slot);
+                    continue;
+                }
+                inner.send(
+                    id,
+                    Update::State {
+                        slot: slot.clone(),
+                        state,
+                    },
+                );
+                if let Some(objects) = objects {
+                    let scope = ask.scope.clone();
+                    let objects = objects
+                        .into_iter()
+                        .filter(|o| in_scope(scope.as_deref(), o))
+                        .collect();
+                    inner.send(
+                        id,
+                        Update::Whole {
+                            slot,
+                            why: Whole::Fresh,
+                            objects,
+                        },
+                    );
+                }
+            }
+            for kind in unserved {
+                inner.send(
+                    id,
+                    Update::State {
+                        slot: SlotKey {
+                            kind: kind.clone(),
+                            namespace: None,
+                        },
+                        state: FeedState::Unserved,
+                    },
+                );
+            }
+            (id, std::mem::take(&mut inner.to_list))
+        };
+        let (id, lists) = id;
+        for (subscriber, slot) in lists {
+            self.spawn_list(subscriber, slot);
+        }
+        for (generation, kind, resource) in start {
+            generation.start(&kind, resource);
+        }
+        for (kind, _) in kinds {
+            self.fall_back_all(kind);
+        }
+        Subscription {
+            updates,
+            lease: Lease {
+                context: Arc::downgrade(self),
+                id,
+            },
+        }
+    }
+
+    /// Lists `slot` for subscriber `id` on the client serving its kind, a
+    /// page at a time, until it answers or the subscriber stops waiting.
+    fn spawn_list(self: &Arc<Self>, id: u64, slot: SlotKey) {
+        let context = self.clone();
+        tokio::spawn(async move {
+            let mut failures = 0;
+            loop {
+                let asked = {
+                    let inner = context.inner.lock();
+                    let waiting = inner
+                        .subscribers
+                        .get(&id)
+                        .is_some_and(|sub| sub.pending.contains_key(&slot));
+                    let feed = inner.kinds.get(&slot.kind);
+                    match (
+                        waiting,
+                        feed.and_then(|f| inner.generations.get(&f.serving)),
+                    ) {
+                        (true, Some(generation)) => {
+                            (generation.client.clone(), feed.map(|f| f.resource.clone()))
+                        }
+                        _ => return,
+                    }
+                };
+                let (client, Some(resource)) = asked else {
+                    return;
+                };
+                let listed = tokio::select! {
+                    biased;
+                    () = context.stop.cancelled() => return,
+                    listed = list_slot(client, &resource, &slot) => listed,
+                };
+                match listed {
+                    Ok((objects, at)) => {
+                        context.inner.lock().listed_for(id, &slot, objects, at);
+                        return;
+                    }
+                    Err(error) => {
+                        failures += 1;
+                        context.inner.lock().list_failed(id, &slot, error.said());
+                        tokio::select! {
+                            biased;
+                            () = context.stop.cancelled() => return,
+                            () = tokio::time::sleep(crate::watch::backoff_for(failures)) => {}
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// Reads a kind refused across the cluster in every namespace a
+    /// subscriber's scope names, in each generation that refused it.
+    fn fall_back_all(&self, kind: &KindKey) {
+        let (generations, namespaces, resource) = {
+            let inner = self.inner.lock();
+            let Some(feed) = inner.kinds.get(kind).filter(|feed| feed.namespaced) else {
+                return;
+            };
+            let namespaces: BTreeSet<String> = inner
+                .subscribers
+                .values()
+                .filter(|sub| sub.kinds.contains(kind))
+                .filter_map(|sub| sub.scope.clone())
+                .flatten()
+                .collect();
+            (
+                inner.generations.values().cloned().collect::<Vec<_>>(),
+                namespaces,
+                feed.resource.clone(),
+            )
+        };
+        for generation in generations {
+            let whole = SlotKey {
+                kind: kind.clone(),
+                namespace: None,
+            };
+            let refused = matches!(
+                generation.slots.lock().get(&whole),
+                Some(SlotState::Refused { .. })
+            );
+            if !refused {
+                continue;
+            }
+            for namespace in &namespaces {
+                let slot = SlotKey {
+                    kind: kind.clone(),
+                    namespace: Some(namespace.clone()),
+                };
+                if generation.stops.lock().contains_key(&slot)
+                    || generation.slots.lock().contains_key(&slot)
+                {
+                    continue;
+                }
+                spawn_slot(
+                    &generation,
+                    slot,
+                    resource.clone(),
+                    RELIST_EVERY,
+                    PAGE_WITHIN,
+                );
+            }
+        }
+    }
+
+    /// Starts every followed kind again on `client`; the generation serving
+    /// now goes on serving each kind until the new one has settled it.
+    fn hand_over(self: &Arc<Self>, client: Client) {
+        self.refusals.lock().clear();
+        let generation = self.generation(client);
+        let kinds: Vec<(KindKey, ApiResource)> = {
+            let mut inner = self.inner.lock();
+            inner.generations.insert(generation.id, generation.clone());
+            inner
+                .kinds
+                .iter()
+                .map(|(kind, feed)| (kind.clone(), feed.resource.clone()))
+                .collect()
+        };
+        for (kind, resource) in kinds {
+            generation.start(&kind, resource);
+            self.fall_back_all(&kind);
+        }
+    }
+
+    /// Every subscription of the context ends: its senders are dropped.
+    fn end(&self) {
+        self.stop.cancel();
+        let mut inner = self.inner.lock();
+        inner.subscribers.clear();
+        inner.kinds.clear();
+        inner.stores.clear();
+        inner.states.clear();
+        inner.generations.clear();
+    }
+
+    /// Lets go of page subscriptions nobody touched, and of kinds nobody
+    /// has followed for the linger. `true` once nothing is left.
+    fn reap(&self, now: Instant) -> bool {
+        let mut stopping: Vec<(Arc<Generation>, KindKey)> = Vec::new();
+        let empty = {
+            let mut inner = self.inner.lock();
+            let idle: Vec<u64> = inner
+                .subscribers
+                .iter()
+                .filter(|(_, sub)| {
+                    sub.binding == Binding::Page && now.duration_since(sub.touched) > self.page_idle
+                })
+                .map(|(id, _)| *id)
+                .collect();
+            for id in idle {
+                inner.leave(id);
+            }
+            let done: Vec<KindKey> = inner
+                .kinds
+                .iter()
+                .filter(|(_, feed)| {
+                    feed.released_at
+                        .is_some_and(|at| now.duration_since(at) >= self.linger)
+                })
+                .map(|(kind, _)| kind.clone())
+                .collect();
+            for kind in done {
+                inner.kinds.remove(&kind);
+                inner.stores.retain(|(_, slot), _| slot.kind != kind);
+                inner.states.retain(|(_, slot), _| slot.kind != kind);
+                for generation in inner.generations.values() {
+                    stopping.push((generation.clone(), kind.clone()));
+                }
+            }
+            inner.kinds.is_empty() && inner.subscribers.is_empty()
+        };
+        for (generation, kind) in stopping {
+            generation.stop_kind(&kind);
+        }
+        empty
+    }
+
+    #[cfg(test)]
+    pub(crate) fn serving(&self) -> Arc<Generation> {
+        let inner = self.inner.lock();
+        inner.generations[&inner.serving].clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn newest(&self) -> Arc<Generation> {
+        let inner = self.inner.lock();
+        inner
+            .generations
+            .values()
+            .next_back()
+            .expect("a generation")
+            .clone()
+    }
+}
+
+/// Every object of `slot`, narrowed and cut as its watch is, and the
+/// collection's resourceVersion the list was read at.
+async fn list_slot(
+    client: Client,
+    resource: &ApiResource,
+    slot: &SlotKey,
+) -> Result<(Vec<Arc<DynamicObject>>, Option<u64>)> {
+    let api: Api<DynamicObject> = match &slot.namespace {
+        Some(namespace) => Api::namespaced_with(client, namespace, resource),
+        None => Api::all_with(client, resource),
+    };
+    let mut params = ListParams::default().limit(LIST_PAGE);
+    if let Some(fields) = self::params(&slot.kind).fields {
+        params = params.fields(fields);
+    }
+    let mut objects = Vec::new();
+    let mut at = None;
+    loop {
+        let page = api.list(&params).await?;
+        at = at.or_else(|| page.metadata.resource_version.as_deref()?.parse().ok());
+        objects.extend(page.items.into_iter().map(|object| kept(slot, object)));
+        match page.metadata.continue_.filter(|token| !token.is_empty()) {
+            Some(token) => params = params.continue_token(&token),
+            None => return Ok((objects, at)),
+        }
+    }
+}
+
+fn spawn_reaper(contexts: Arc<DashMap<String, Arc<ContextFeeds>>>, context: Arc<ContextFeeds>) {
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                biased;
+                () = context.stop.cancelled() => break,
+                () = tokio::time::sleep(REAP_EVERY) => {}
+            }
+            if context.reap(Instant::now()) {
+                contexts.remove_if(&context.name, |_, held| Arc::ptr_eq(held, &context));
+                context.stop.cancel();
+                break;
+            }
+        }
+    });
+}
+
+/// Every watch one client holds for a context: the slot loop's host.
+pub(crate) struct Generation {
+    id: u64,
+    client: Client,
+    stop: CancellationToken,
+    slots: Mutex<BTreeMap<SlotKey, SlotState>>,
+    stops: Mutex<BTreeMap<SlotKey, CancellationToken>>,
+    feeds: Weak<ContextFeeds>,
+    watches: Arc<Semaphore>,
+    turns: Arc<Semaphore>,
+    refusals: Refusals,
+}
+
+impl Generation {
+    fn start(self: &Arc<Self>, kind: &KindKey, resource: ApiResource) {
+        let slot = SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        };
+        spawn_slot(self, slot, resource, RELIST_EVERY, PAGE_WITHIN);
+    }
+
+    fn stop_kind(&self, kind: &KindKey) {
+        let mut slots = self.slots.lock();
+        let mut stops = self.stops.lock();
+        slots.retain(|slot, _| {
+            if slot.kind != *kind {
+                return true;
+            }
+            if let Some(stop) = stops.remove(slot) {
+                stop.cancel();
+            }
+            false
+        });
+    }
+
+    /// Hands the context what changed, under its lock; the slots' lock is
+    /// held by the caller, which is the order every path takes them in.
+    fn tell(&self, change: impl FnOnce(&mut Inner) -> Vec<Retire>) {
+        let Some(feeds) = self.feeds.upgrade() else {
+            return;
+        };
+        let (retired, lists) = {
+            let mut inner = feeds.inner.lock();
+            // A retired generation's last words are nobody's.
+            if !inner.generations.contains_key(&self.id) {
+                return;
+            }
+            let retired = change(&mut inner);
+            (retired, std::mem::take(&mut inner.to_list))
+        };
+        for (id, slot) in lists {
+            feeds.spawn_list(id, slot);
+        }
+        for retire in retired {
+            match retire {
+                Retire::Generation(generation) => generation.stop.cancel(),
+                Retire::Kind(generation, kind) => generation.stop_kind(&kind),
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn holds(&self, slot: &SlotKey) -> bool {
+        self.slots.lock().contains_key(slot)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+}
+
+impl SlotHost for Generation {
+    type Object = DynamicObject;
+
+    fn api(&self, slot: &SlotKey, resource: &ApiResource) -> Api<DynamicObject> {
+        match &slot.namespace {
+            Some(namespace) => Api::namespaced_with(self.client.clone(), namespace, resource),
+            None => Api::all_with(self.client.clone(), resource),
+        }
+    }
+
+    fn narrowed(&self, slot: &SlotKey, config: watcher::Config) -> watcher::Config {
+        match params(&slot.kind).fields {
+            Some(fields) => config.fields(fields),
+            None => config,
+        }
+    }
+
+    fn stop(&self) -> &CancellationToken {
+        &self.stop
+    }
+
+    fn watches(&self) -> &Arc<Semaphore> {
+        &self.watches
+    }
+
+    fn turns(&self) -> &Arc<Semaphore> {
+        &self.turns
+    }
+
+    fn slots(&self) -> &Mutex<BTreeMap<SlotKey, SlotState>> {
+        &self.slots
+    }
+
+    fn stops(&self) -> &Mutex<BTreeMap<SlotKey, CancellationToken>> {
+        &self.stops
+    }
+
+    fn known_refusal(&self, slot: &SlotKey) -> Option<String> {
+        self.refusals.lock().get(slot).cloned()
+    }
+
+    fn told_refused(&self, slot: &SlotKey) {
+        let (group, plural) = (&slot.kind.group, &slot.kind.plural);
+        let namespace = slot.namespace.as_deref().unwrap_or_default();
+        tracing::debug!(group, plural, namespace, "feeds: refused");
+    }
+
+    fn saw(
+        &self,
+        slot: &SlotKey,
+        _resource: &ApiResource,
+        event: Event<DynamicObject>,
+        stop: &CancellationToken,
+    ) {
+        let mut slots = self.slots.lock();
+        if stop.is_cancelled() {
+            return;
+        }
+        let id = self.id;
+        match event {
+            Event::Init => {
+                if !matches!(
+                    slots.get(slot),
+                    Some(SlotState::Stale { .. } | SlotState::Listed { .. })
+                ) {
+                    slots.insert(slot.clone(), SlotState::Syncing);
+                }
+                let state = FeedState::of(&slots[slot]);
+                self.tell(|inner| {
+                    inner.stores.entry((id, slot.clone())).or_default().listing =
+                        Some(HashMap::new());
+                    inner.state(id, slot, state);
+                    Vec::new()
+                });
+            }
+            Event::InitApply(object) => {
+                self.tell(|inner| {
+                    let store = inner.stores.entry((id, slot.clone())).or_default();
+                    if let (Some(uid), Some(listing)) = (uid_of(&object), store.listing.as_mut()) {
+                        listing.insert(uid, kept(slot, object));
+                    }
+                    Vec::new()
+                });
+            }
+            Event::InitDone => {
+                slots.insert(slot.clone(), SlotState::Live);
+                self.tell(|inner| {
+                    let store = inner.stores.entry((id, slot.clone())).or_default();
+                    let listed = store.listing.take().unwrap_or_default();
+                    let again = store.synced;
+                    let objects: Vec<Arc<DynamicObject>> = listed.values().cloned().collect();
+                    store.synced = true;
+                    // A kind kept as nothing holds its set only while a new
+                    // client is to hand it over.
+                    let serving = inner.serves(id, &slot.kind);
+                    let store = inner.stores.entry((id, slot.clone())).or_default();
+                    store.objects = if serving && !keeps(&slot.kind) {
+                        HashMap::new()
+                    } else {
+                        listed
+                            .iter()
+                            .filter_map(|(uid, object)| Some((uid.clone(), pack(object)?)))
+                            .collect()
+                    };
+                    inner.state(id, slot, FeedState::Synced);
+                    if serving {
+                        inner.fan_out(
+                            slot,
+                            &Update::Whole {
+                                slot: slot.clone(),
+                                why: if again { Whole::Relist } else { Whole::Fresh },
+                                objects,
+                            },
+                        );
+                        Vec::new()
+                    } else {
+                        inner.take_over(id, &slot.kind)
+                    }
+                });
+            }
+            Event::Apply(object) => {
+                self.tell(|inner| {
+                    let Some(uid) = uid_of(&object) else {
+                        return Vec::new();
+                    };
+                    let object = kept(slot, object);
+                    let serving = inner.serves(id, &slot.kind);
+                    if keeps(&slot.kind) || !serving {
+                        if let Some(text) = pack(&object) {
+                            inner
+                                .stores
+                                .entry((id, slot.clone()))
+                                .or_default()
+                                .objects
+                                .insert(uid, text);
+                        }
+                    }
+                    if serving {
+                        inner.fan_out(
+                            slot,
+                            &Update::Applied {
+                                slot: slot.clone(),
+                                object,
+                            },
+                        );
+                    }
+                    Vec::new()
+                });
+            }
+            Event::Delete(object) => {
+                self.tell(|inner| {
+                    let Some(uid) = uid_of(&object) else {
+                        return Vec::new();
+                    };
+                    inner
+                        .stores
+                        .entry((id, slot.clone()))
+                        .or_default()
+                        .objects
+                        .remove(&uid);
+                    if inner.serves(id, &slot.kind) {
+                        inner.fan_out(
+                            slot,
+                            &Update::Deleted {
+                                slot: slot.clone(),
+                                object: kept(slot, object),
+                            },
+                        );
+                    }
+                    Vec::new()
+                });
+            }
+        }
+    }
+
+    fn listed(&self, slot: &SlotKey, stop: &CancellationToken) {
+        let mut slots = self.slots.lock();
+        if stop.is_cancelled() {
+            return;
+        }
+        slots.insert(
+            slot.clone(),
+            SlotState::Listed {
+                at: chrono::Utc::now(),
+            },
+        );
+    }
+
+    fn failed(&self, slot: &SlotKey, message: String, stop: &CancellationToken) {
+        let mut slots = self.slots.lock();
+        if stop.is_cancelled() {
+            return;
+        }
+        let next = match slots.get(slot) {
+            Some(SlotState::Live) => SlotState::Stale {
+                since: chrono::Utc::now().to_rfc3339(),
+            },
+            Some(SlotState::Listed { at }) => SlotState::Stale {
+                since: at.to_rfc3339(),
+            },
+            Some(stale @ SlotState::Stale { .. }) => stale.clone(),
+            _ => SlotState::Failed { message },
+        };
+        let state = FeedState::of(&next);
+        slots.insert(slot.clone(), next);
+        let id = self.id;
+        self.tell(|inner| {
+            inner.state(id, slot, state);
+            inner.take_over(id, &slot.kind)
+        });
+    }
+
+    fn refused(
+        self: &Arc<Self>,
+        slot: &SlotKey,
+        message: String,
+        stop: Option<&CancellationToken>,
+    ) {
+        self.refusals.lock().insert(slot.clone(), message.clone());
+        {
+            let mut slots = self.slots.lock();
+            if stop.is_some_and(CancellationToken::is_cancelled) {
+                return;
+            }
+            self.stops.lock().remove(slot);
+            slots.insert(
+                slot.clone(),
+                SlotState::Refused {
+                    message: message.clone(),
+                },
+            );
+            let id = self.id;
+            self.tell(|inner| {
+                inner.stores.remove(&(id, slot.clone()));
+                inner.state(id, slot, FeedState::Refused { message });
+                inner.take_over(id, &slot.kind)
+            });
+        }
+        if slot.namespace.is_none() {
+            if let Some(feeds) = self.feeds.upgrade() {
+                feeds.fall_back_all(&slot.kind);
+            }
+        }
+    }
+
+    fn retire(&self, kind: &KindKey) {
+        self.stop_kind(kind);
+        let id = self.id;
+        let slot = SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        };
+        self.tell(|inner| {
+            inner
+                .stores
+                .retain(|(g, s), _| !(*g == id && s.kind == *kind));
+            inner.state(id, &slot, FeedState::Unserved);
+            inner.take_over(id, kind)
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::client::served::test_server::{answering, failure};
+
+    /// Feeds whose watches never get a permit: every slot waits, and the
+    /// test hands its events in by hand.
+    fn feeds() -> Feeds {
+        Feeds::new((Arc::new(Semaphore::new(0)), Arc::new(Semaphore::new(0))))
+    }
+
+    async fn client() -> Client {
+        answering(|_, _| failure(500, "InternalError")).await.0
+    }
+
+    fn deployments() -> (KindKey, (ApiResource, bool)) {
+        let resource = ApiResource::erase::<Deployment>(&());
+        (key_of(&resource), (resource, true))
+    }
+
+    fn whole(kind: &KindKey) -> SlotKey {
+        SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        }
+    }
+
+    fn deployment(namespace: &str, name: &str, version: &str) -> DynamicObject {
+        serde_json::from_value(json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": name, "namespace": namespace, "uid": format!("{namespace}/{name}"),
+                "resourceVersion": version, "managedFields": [{ "manager": "kubectl" }] }
+        }))
+        .unwrap()
+    }
+
+    fn ask(scope: Option<Vec<&str>>, binding: Binding) -> Ask {
+        Ask {
+            kinds: vec![deployments().0],
+            scope: scope.map(|names| names.into_iter().map(str::to_string).collect()),
+            binding,
+        }
+    }
+
+    fn drain(sub: &mut Subscription) -> Vec<Update> {
+        let mut seen = Vec::new();
+        while let Ok(update) = sub.updates.try_recv() {
+            seen.push(update);
+        }
+        seen
+    }
+
+    fn names(objects: &[Arc<DynamicObject>]) -> Vec<String> {
+        let mut names: Vec<String> = objects
+            .iter()
+            .map(|o| o.metadata.name.clone().unwrap_or_default())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Lists `objects` on `generation`'s slot, as a watch's first list would.
+    fn list(generation: &Generation, slot: &SlotKey, objects: Vec<DynamicObject>) {
+        let resource = deployments().1 .0;
+        let stop = CancellationToken::new();
+        generation.saw(slot, &resource, Event::Init, &stop);
+        for object in objects {
+            generation.saw(slot, &resource, Event::InitApply(object), &stop);
+        }
+        generation.saw(slot, &resource, Event::InitDone, &stop);
+    }
+
+    fn apply(generation: &Generation, slot: &SlotKey, object: DynamicObject) {
+        let resource = deployments().1 .0;
+        generation.saw(
+            slot,
+            &resource,
+            Event::Apply(object),
+            &CancellationToken::new(),
+        );
+    }
+
+    /// Three features following Deployments is one watch of them. Fails if
+    /// a second subscriber starts a second slot.
+    #[tokio::test]
+    async fn two_subscribers_of_a_kind_share_one_watch() {
+        let feeds = feeds();
+        let client = client().await;
+        let context = feeds.context_for("prod", client.clone());
+        let again = feeds.context_for("prod", client);
+        assert!(Arc::ptr_eq(&context, &again));
+        let _first = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let _second = again.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let generation = context.serving();
+        assert_eq!(generation.stops.lock().len(), 1);
+        assert!(generation.holds(&whole(&deployments().0)));
+        context.end();
+    }
+
+    /// A subscriber arriving after the list is handed what is there from
+    /// the store, with no watch of its own, and then each change once, as
+    /// the first one is. Fails if it misses the set, or a change reaches
+    /// either of them twice or not at all.
+    #[tokio::test]
+    async fn a_late_subscriber_is_handed_what_is_there_then_each_change_once() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut first = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("shop", "api", "1"),
+            ],
+        );
+        let mut late = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let joined = drain(&mut late);
+        assert!(joined.iter().any(|u| matches!(
+            u,
+            Update::State {
+                state: FeedState::Synced,
+                ..
+            }
+        )));
+        let set = joined.iter().find_map(|u| match u {
+            Update::Whole {
+                why: Whole::Fresh,
+                objects,
+                ..
+            } => Some(names(objects)),
+            _ => None,
+        });
+        assert_eq!(set, Some(vec!["api".to_string(), "web".to_string()]));
+        assert!(
+            generation.stops.lock().len() == 1,
+            "the late one opened a watch"
+        );
+        drain(&mut first);
+
+        apply(&generation, &slot, deployment("shop", "cart", "1"));
+        for sub in [&mut first, &mut late] {
+            let changes = drain(sub);
+            assert_eq!(changes.len(), 1);
+            let Update::Applied { object, .. } = &changes[0] else {
+                panic!("{changes:?}");
+            };
+            assert_eq!(object.metadata.name.as_deref(), Some("cart"));
+            assert!(object.metadata.managed_fields.is_none());
+        }
+        context.end();
+    }
+
+    /// After a break the whole set comes again, marked as a relist, so what
+    /// went missing while nobody watched can be told. Fails if the relist
+    /// is handed as changes, or as a first set.
+    #[tokio::test]
+    async fn a_relist_after_a_break_hands_the_whole_set_again() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("shop", "api", "1"),
+            ],
+        );
+        drain(&mut sub);
+        generation.failed(
+            &slot,
+            "connection reset".to_string(),
+            &CancellationToken::new(),
+        );
+        let broke = drain(&mut sub);
+        assert!(matches!(
+            broke.as_slice(),
+            [Update::State {
+                state: FeedState::Blind { .. },
+                ..
+            }]
+        ));
+        list(&generation, &slot, vec![deployment("shop", "web", "2")]);
+        let relisted = drain(&mut sub);
+        let set = relisted.iter().find_map(|u| match u {
+            Update::Whole { why, objects, .. } => Some((*why, names(objects))),
+            _ => None,
+        });
+        assert_eq!(set, Some((Whole::Relist, vec!["web".to_string()])));
+        context.end();
+    }
+
+    /// Refused across the cluster, the kind is read in each namespace a
+    /// subscriber's scope names, and the refusal is told with the cluster's
+    /// words. Fails if a namespace-bound reader is left with nothing.
+    #[tokio::test]
+    async fn a_kind_refused_across_the_cluster_is_read_in_each_namespace_asked_for() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(
+            &ask(Some(vec!["shop", "billing"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(
+            &generation,
+            &whole(&kind),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        for namespace in ["shop", "billing"] {
+            assert!(generation.holds(&SlotKey {
+                kind: kind.clone(),
+                namespace: Some(namespace.to_string()),
+            }));
+        }
+        assert!(drain(&mut sub).iter().any(|u| matches!(
+            u,
+            Update::State { state: FeedState::Refused { message }, .. } if message == "deployments is forbidden"
+        )));
+        let _other = context.join(
+            &ask(Some(vec!["ops"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        assert!(generation.holds(&SlotKey {
+            kind,
+            namespace: Some("ops".to_string()),
+        }));
+        context.end();
+    }
+
+    /// A renewed client reads every kind again; the old one serves until the
+    /// new one has listed, then the new set is handed over with no gap.
+    /// Fails if a change on the old client is lost before the hand-over, or
+    /// one on it is still handed after.
+    #[tokio::test]
+    async fn a_renewed_client_takes_over_once_synced_with_no_gap() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let old = context.serving();
+        let slot = whole(&deployments().0);
+        list(&old, &slot, vec![deployment("shop", "web", "1")]);
+        drain(&mut sub);
+
+        feeds.client_replaced("prod", Some(client().await));
+        let new = context.newest();
+        assert_ne!(new.id(), old.id());
+        assert!(new.holds(&slot));
+        apply(&old, &slot, deployment("shop", "api", "1"));
+        assert!(matches!(
+            drain(&mut sub).as_slice(),
+            [Update::Applied { .. }]
+        ));
+
+        list(
+            &new,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("shop", "api", "1"),
+            ],
+        );
+        let handed = drain(&mut sub);
+        let set = handed.iter().find_map(|u| match u {
+            Update::Whole {
+                why: Whole::Handover,
+                objects,
+                ..
+            } => Some(names(objects)),
+            _ => None,
+        });
+        assert_eq!(set, Some(vec!["api".to_string(), "web".to_string()]));
+        assert!(handed.iter().any(|u| matches!(u, Update::HandedOver)));
+        assert!(old.stop.is_cancelled());
+
+        apply(&old, &slot, deployment("shop", "late", "1"));
+        assert!(drain(&mut sub).is_empty(), "the old client still speaks");
+        context.end();
+    }
+
+    /// A disconnect ends every subscription. Fails if a reader keeps waiting
+    /// on a cluster no client reads.
+    #[tokio::test]
+    async fn a_disconnect_ends_every_subscription() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        feeds.client_replaced("prod", None);
+        let ended = tokio::time::timeout(Duration::from_secs(2), sub.updates.recv()).await;
+        assert!(matches!(ended, Ok(None)), "{ended:?}");
+        assert!(feeds.context("prod").is_none());
+    }
+
+    /// The last subscriber leaving lets the kind linger, then stops its
+    /// watch; a page nobody touches is let go. Fails if a watch outlives
+    /// every reader, or a page-bound one is kept for good.
+    #[tokio::test]
+    async fn the_last_reader_leaving_stops_the_watch_after_the_linger() {
+        let feeds = feeds().lingering(Duration::ZERO, Duration::ZERO, QUEUE);
+        let context = feeds.context_for("prod", client().await);
+        let session = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let page = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        assert!(!context.reap(Instant::now()));
+        assert!(
+            generation.holds(&slot),
+            "a session-bound reader still follows it"
+        );
+        drop(session);
+        context.reap(Instant::now());
+        assert!(context.reap(Instant::now()));
+        assert!(!generation.holds(&slot));
+        drop(page);
+        context.end();
+    }
+
+    /// A reader that falls behind is handed the whole set once there is
+    /// room, not left holding half of the changes.
+    #[tokio::test]
+    async fn a_reader_that_falls_behind_is_handed_the_whole_set_again() {
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 2);
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(&generation, &slot, vec![deployment("shop", "web", "1")]);
+        for n in 0..5 {
+            apply(
+                &generation,
+                &slot,
+                deployment("shop", &format!("burst-{n}"), "1"),
+            );
+        }
+        drain(&mut sub);
+        apply(&generation, &slot, deployment("shop", "after", "1"));
+        let caught_up = drain(&mut sub);
+        let set = caught_up.iter().find_map(|u| match u {
+            Update::Whole {
+                why: Whole::Relist,
+                objects,
+                ..
+            } => Some(objects.len()),
+            _ => None,
+        });
+        assert_eq!(set, Some(7));
+        context.end();
+    }
+
+    /// Helm keeps each release whole in a Secret, megabytes apiece, and its
+    /// history is read elsewhere. Fails if Secrets are watched with them.
+    #[tokio::test]
+    async fn secrets_are_watched_without_helm_releases() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let generation = context.serving();
+        let secrets = SlotKey {
+            kind: KindKey {
+                group: String::new(),
+                plural: "secrets".to_string(),
+            },
+            namespace: None,
+        };
+        let narrowed = generation.narrowed(&secrets, watcher::Config::default());
+        assert_eq!(
+            narrowed.field_selector.as_deref(),
+            Some("type!=helm.sh/release.v1")
+        );
+        let other = generation.narrowed(&whole(&deployments().0), watcher::Config::default());
+        assert_eq!(other.field_selector, None);
+        context.end();
+    }
+
+    /// Heap bytes a JSON tree holds, as the `BTreeMap` serde keeps an object
+    /// in: each entry's key and value plus a node's share, each array's
+    /// slots, each string's buffer.
+    fn heap_bytes(value: &serde_json::Value) -> usize {
+        use serde_json::Value;
+        let slot = std::mem::size_of::<Value>();
+        let entry = std::mem::size_of::<String>() + slot;
+        match value {
+            Value::String(text) => text.capacity(),
+            Value::Array(items) => {
+                items.capacity() * slot + items.iter().map(heap_bytes).sum::<usize>()
+            }
+            Value::Object(map) => map
+                .iter()
+                .map(|(key, value)| entry * 3 / 2 + key.capacity() + heap_bytes(value))
+                .sum(),
+            _ => 0,
+        }
+    }
+
+    /// What the store of one slot holds, in heap bytes and as JSON.
+    fn resident(context: &ContextFeeds, slot: &SlotKey) -> (usize, usize) {
+        let inner = context.inner.lock();
+        inner
+            .stores
+            .iter()
+            .filter(|((_, held), _)| held == slot)
+            .flat_map(|(_, store)| store.objects.iter())
+            .map(|(uid, text)| {
+                let entry = std::mem::size_of::<String>() + std::mem::size_of::<Box<str>>();
+                (entry * 2 + uid.capacity() + text.len(), text.len())
+            })
+            .fold((0, 0), |(heap, json), (h, j)| (heap + h, json + j))
+    }
+
+    fn hex(n: usize, width: usize) -> String {
+        format!("{n:0width$x}")
+    }
+
+    /// A pod as a Deployment stamps it out on a real cluster: two
+    /// containers with env, probes and mounts, the projected token volume,
+    /// five conditions and two container statuses.
+    pub(crate) fn realistic_pod(n: usize) -> serde_json::Value {
+        let mut env: Vec<serde_json::Value> = (0..8)
+            .map(|e| json!({ "name": format!("SETTING_{e}"), "value": format!("value-for-setting-{e}-of-the-web-app") }))
+            .collect();
+        env.extend([
+            json!({ "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "web-db", "key": "password" } } }),
+            json!({ "name": "FEATURE", "valueFrom": { "configMapKeyRef": { "name": "web-flags", "key": "feature", "optional": true } } }),
+            json!({ "name": "POD_IP", "valueFrom": { "fieldRef": { "apiVersion": "v1", "fieldPath": "status.podIP" } } }),
+        ]);
+        let probe = json!({ "httpGet": { "path": "/healthz", "port": 8080, "scheme": "HTTP" },
+            "timeoutSeconds": 1, "periodSeconds": 10, "successThreshold": 1, "failureThreshold": 3 });
+        let container = |name: &str| {
+            json!({
+                "name": name, "image": format!("registry.example.com/team/{name}:1.4.2"),
+                "ports": [{ "name": "http", "containerPort": 8080, "protocol": "TCP" }],
+                "env": env, "envFrom": [{ "configMapRef": { "name": "web-env" } }],
+                "args": ["--config=/etc/web/config.yaml", "--log-level=info"],
+                "resources": { "requests": { "cpu": "100m", "memory": "128Mi" }, "limits": { "memory": "256Mi" } },
+                "volumeMounts": [{ "name": "config", "mountPath": "/etc/web", "mountPropagation": "None" },
+                    { "name": "kube-api-access-x2k9p", "readOnly": true, "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount" }],
+                "livenessProbe": probe, "readinessProbe": probe,
+                "terminationMessagePath": "/dev/termination-log", "terminationMessagePolicy": "File",
+                "imagePullPolicy": "IfNotPresent",
+                "securityContext": { "allowPrivilegeEscalation": false, "runAsNonRoot": true, "capabilities": { "drop": ["ALL"] } }
+            })
+        };
+        let condition = |kind: &str| json!({ "type": kind, "status": "True", "lastProbeTime": null, "lastTransitionTime": "2026-11-01T10:00:05Z" });
+        let status = |name: &str| {
+            json!({
+                "name": name, "state": { "running": { "startedAt": "2026-11-01T10:00:03Z" } }, "lastState": {},
+                "ready": true, "restartCount": 0, "image": format!("registry.example.com/team/{name}:1.4.2"),
+                "imageID": format!("registry.example.com/team/{name}@sha256:{}", hex(n, 64)),
+                "containerID": format!("containerd://{}", hex(n + 1, 64)), "started": true
+            })
+        };
+        json!({
+            "apiVersion": "v1", "kind": "Pod",
+            "metadata": {
+                "name": format!("web-7d9f8c6b5d-{n:05}"), "generateName": "web-7d9f8c6b5d-",
+                "namespace": format!("team-{}", n % 50), "uid": format!("{}-pod", hex(n, 24)),
+                "resourceVersion": format!("{}", 100_000 + n), "creationTimestamp": "2026-11-01T10:00:00Z",
+                "labels": { "app": "web", "pod-template-hash": "7d9f8c6b5d", "app.kubernetes.io/name": "web",
+                    "app.kubernetes.io/instance": "web", "app.kubernetes.io/version": "1.4.2" },
+                "annotations": { "kubectl.kubernetes.io/restartedAt": "2026-11-01T10:00:00Z",
+                    "prometheus.io/scrape": "true", "prometheus.io/port": "9090" },
+                "ownerReferences": [{ "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-7d9f8c6b5d",
+                    "uid": hex(n, 32), "controller": true, "blockOwnerDeletion": true }]
+            },
+            "spec": {
+                "volumes": [
+                    { "name": "config", "configMap": { "name": "web-config", "defaultMode": 420 } },
+                    { "name": "kube-api-access-x2k9p", "projected": { "defaultMode": 420, "sources": [
+                        { "serviceAccountToken": { "expirationSeconds": 3607, "path": "token" } },
+                        { "configMap": { "name": "kube-root-ca.crt", "items": [{ "key": "ca.crt", "path": "ca.crt" }] } },
+                        { "downwardAPI": { "items": [{ "path": "namespace", "fieldRef": { "apiVersion": "v1", "fieldPath": "metadata.namespace" } }] } }
+                    ] } }
+                ],
+                "containers": [container("web"), container("proxy")],
+                "restartPolicy": "Always", "terminationGracePeriodSeconds": 30, "dnsPolicy": "ClusterFirst",
+                "serviceAccountName": "web", "serviceAccount": "web", "nodeName": format!("node-{}", n % 20),
+                "securityContext": {}, "schedulerName": "default-scheduler",
+                "tolerations": [
+                    { "key": "node.kubernetes.io/not-ready", "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 300 },
+                    { "key": "node.kubernetes.io/unreachable", "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 300 }
+                ],
+                "priority": 0, "enableServiceLinks": true, "preemptionPolicy": "PreemptLowerPriority"
+            },
+            "status": {
+                "phase": "Running",
+                "conditions": [condition("PodReadyToStartContainers"), condition("Initialized"), condition("Ready"),
+                    condition("ContainersReady"), condition("PodScheduled")],
+                "hostIP": "10.0.0.2", "hostIPs": [{ "ip": "10.0.0.2" }],
+                "podIP": format!("10.244.{}.{}", n / 250 % 250, n % 250), "podIPs": [{ "ip": "10.244.0.5" }],
+                "startTime": "2026-11-01T10:00:00Z",
+                "containerStatuses": [status("web"), status("proxy")], "qosClass": "Burstable"
+            }
+        })
+    }
+
+    /// A `ConfigMap` of an app's settings, about a kilobyte and a half.
+    fn realistic_config_map(n: usize) -> serde_json::Value {
+        json!({ "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": { "name": format!("settings-{n:05}"), "namespace": format!("team-{}", n % 50),
+                "uid": format!("{}-cm", hex(n, 24)), "resourceVersion": format!("{}", 200_000 + n),
+                "creationTimestamp": "2026-11-01T10:00:00Z", "labels": { "app": "web" } },
+            "data": { "config.yaml": "x: 1\n".repeat(200), "feature-flags": "on,".repeat(100) } })
+    }
+
+    /// A Secret with three keys, about two kilobytes, built at run time.
+    fn realistic_secret(n: usize) -> serde_json::Value {
+        let value = "QUJD".repeat(160);
+        json!({ "apiVersion": "v1", "kind": "Secret", "type": "Opaque",
+            "metadata": { "name": format!("credentials-{n:05}"), "namespace": format!("team-{}", n % 50),
+                "uid": format!("{}-s", hex(n, 24)), "resourceVersion": format!("{}", 300_000 + n),
+                "creationTimestamp": "2026-11-01T10:00:00Z" },
+            "data": { "one": value, "two": value, "three": value } })
+    }
+
+    fn slot_of(group: &str, plural: &str) -> SlotKey {
+        SlotKey {
+            kind: KindKey {
+                group: group.to_string(),
+                plural: plural.to_string(),
+            },
+            namespace: None,
+        }
+    }
+
+    /// Lists `objects` on a slot whatever its kind.
+    fn list_values(
+        generation: &Generation,
+        slot: &SlotKey,
+        objects: impl Iterator<Item = serde_json::Value>,
+    ) {
+        let resource = deployments().1 .0;
+        let stop = CancellationToken::new();
+        generation.saw(slot, &resource, Event::Init, &stop);
+        for object in objects {
+            generation.saw(
+                slot,
+                &resource,
+                Event::InitApply(serde_json::from_value(object).unwrap()),
+                &stop,
+            );
+        }
+        generation.saw(slot, &resource, Event::InitDone, &stop);
+    }
+
+    /// What the layer keeps of 10 000 pods, `ConfigMaps` and Secrets, beside
+    /// what keeping each whole would cost. Fails if a `ConfigMap` or a Secret
+    /// is kept between changes, or a pod is kept with what nobody reads.
+    /// Run with `--nocapture` for the numbers.
+    #[tokio::test]
+    async fn ten_thousand_pods_config_maps_and_secrets_keep_what_readers_need() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let _reader = context.join(
+            &Ask {
+                kinds: vec![
+                    slot_of("", "pods").kind,
+                    slot_of("", "configmaps").kind,
+                    slot_of("", "secrets").kind,
+                ],
+                scope: None,
+                binding: Binding::Session,
+            },
+            &[
+                (
+                    slot_of("", "pods").kind,
+                    (ApiResource::erase::<Pod>(&()), true),
+                ),
+                (
+                    slot_of("", "configmaps").kind,
+                    (ApiResource::erase::<ConfigMap>(&()), true),
+                ),
+                (
+                    slot_of("", "secrets").kind,
+                    (ApiResource::erase::<Secret>(&()), true),
+                ),
+            ],
+            &[],
+        );
+        let generation = context.serving();
+        let mut report = Vec::new();
+        for (slot, build) in [
+            (
+                slot_of("", "pods"),
+                realistic_pod as fn(usize) -> serde_json::Value,
+            ),
+            (slot_of("", "configmaps"), realistic_config_map),
+            (slot_of("", "secrets"), realistic_secret),
+        ] {
+            let whole: usize = (0..10_000)
+                .map(|n| heap_bytes(&build(n)) + std::mem::size_of::<DynamicObject>())
+                .sum();
+            let whole_json: usize = (0..10_000).map(|n| build(n).to_string().len()).sum();
+            list_values(&generation, &slot, (0..10_000).map(build));
+            let (heap, json) = resident(&context, &slot);
+            report.push(format!(
+                "{}: {} MiB whole ({} MiB as JSON), {} MiB kept ({} MiB as JSON)",
+                slot.kind.plural,
+                whole >> 20,
+                whole_json >> 20,
+                heap >> 20,
+                json >> 20
+            ));
+            eprintln!("{}", report.last().unwrap());
+            match slot.kind.plural.as_str() {
+                "pods" => {
+                    assert!(heap * 4 < whole, "pods kept as trees");
+                    assert!(
+                        json * 5 < whole_json * 3,
+                        "a pod kept with what nobody reads"
+                    );
+                }
+                _ => assert_eq!(heap, 0, "{} kept between changes", slot.kind.plural),
+            }
+        }
+        eprintln!("feeds, 10 000 each: {}", report.join("; "));
+        context.end();
+    }
+
+    /// A pod is cut at arrival to what readers read, and readers are handed
+    /// the cut copy. Fails if env, probes or mounts are kept, or if what a
+    /// map draws from (owners, labels, node, images, ports, status) is lost.
+    #[tokio::test]
+    async fn a_pod_is_cut_at_arrival_to_what_readers_read() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let pods = slot_of("", "pods");
+        let mut sub = context.join(
+            &Ask {
+                kinds: vec![pods.kind.clone()],
+                scope: None,
+                binding: Binding::Session,
+            },
+            &[(pods.kind.clone(), (ApiResource::erase::<Pod>(&()), true))],
+            &[],
+        );
+        list_values(&context.serving(), &pods, std::iter::once(realistic_pod(7)));
+        let handed = drain(&mut sub)
+            .into_iter()
+            .find_map(|u| match u {
+                Update::Whole { objects, .. } => objects.into_iter().next(),
+                _ => None,
+            })
+            .expect("the pod is handed over");
+        let container = &handed.data["spec"]["containers"][0];
+        assert!(container.get("livenessProbe").is_none() && container.get("args").is_none());
+        assert_eq!(
+            container["env"],
+            json!([
+                { "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "web-db", "key": "password" } } },
+                { "name": "FEATURE", "valueFrom": { "configMapKeyRef": { "name": "web-flags", "key": "feature", "optional": true } } },
+            ])
+        );
+        assert_eq!(
+            container["envFrom"],
+            json!([{ "configMapRef": { "name": "web-env" } }])
+        );
+        assert_eq!(
+            container["volumeMounts"][0],
+            json!({ "name": "config", "mountPath": "/etc/web" })
+        );
+        assert_eq!(container["image"], "registry.example.com/team/web:1.4.2");
+        assert_eq!(container["ports"][0]["containerPort"], 8080);
+        assert_eq!(handed.data["spec"]["nodeName"], "node-7");
+        assert_eq!(handed.data["status"]["phase"], "Running");
+        assert!(handed.data["status"]["containerStatuses"][0]
+            .get("imageID")
+            .is_none());
+        assert_eq!(
+            handed.metadata.owner_references.as_ref().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(
+            handed.metadata.labels.as_ref().map(|l| l["app"].as_str()),
+            Some("web")
+        );
+        context.end();
+    }
+
+    /// What a pod reads from a `ConfigMap` or a `Secret` survives the trim as a
+    /// reference, on containers and init containers alike, and no literal
+    /// value does; an ephemeral container keeps none of it. Would break if a
+    /// pod owned by a custom resource lost the edges the map draws from its
+    /// environment, or a literal came back with them.
+    #[test]
+    fn a_trimmed_pod_keeps_the_references_its_containers_read_and_no_literal() {
+        let literal = format!("lit-{}", "eral");
+        let mut pod: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "v1", "kind": "Pod", "metadata": { "name": "cart-0", "namespace": "shop" },
+            "spec": {
+                "initContainers": [{ "name": "migrate", "image": "cart:1",
+                    "envFrom": [{ "secretRef": { "name": "cart-env" }, "prefix": "DB_" }],
+                    "env": [{ "name": "MODE", "value": literal }] }],
+                "containers": [{ "name": "cart", "image": "cart:1",
+                    "env": [{ "name": "TOKEN", "valueFrom": { "secretKeyRef": { "name": "cart-api", "key": "token" } } },
+                            { "name": "LIMIT", "valueFrom": { "resourceFieldRef": { "resource": "limits.memory" } } }],
+                    "volumeMounts": [{ "name": "data", "mountPath": "/data", "subPath": "cart", "readOnly": true,
+                                       "subPathExpr": "$(POD)" }] }],
+                "ephemeralContainers": [{ "name": "debug", "image": "busybox",
+                    "envFrom": [{ "secretRef": { "name": "cart-env" } }],
+                    "volumeMounts": [{ "name": "data", "mountPath": "/data" }] }]
+            }
+        }))
+        .unwrap();
+
+        trim_pod(&mut pod);
+
+        let spec = &pod.data["spec"];
+        assert_eq!(
+            spec["initContainers"][0]["envFrom"],
+            json!([{ "secretRef": { "name": "cart-env" }, "prefix": "DB_" }])
+        );
+        assert!(spec["initContainers"][0].get("env").is_none());
+        assert_eq!(
+            spec["containers"][0]["env"],
+            json!([{ "name": "TOKEN", "valueFrom": { "secretKeyRef": { "name": "cart-api", "key": "token" } } }])
+        );
+        assert_eq!(
+            spec["containers"][0]["volumeMounts"],
+            json!([{ "name": "data", "mountPath": "/data", "subPath": "cart", "readOnly": true }])
+        );
+        let debug = &spec["ephemeralContainers"][0];
+        assert!(debug.get("envFrom").is_none() && debug.get("volumeMounts").is_none());
+        assert!(!pod.data.to_string().contains(&literal));
+    }
+
+    fn config_map_list(at: &str, names: &[&str]) -> String {
+        let items: Vec<serde_json::Value> = names
+            .iter()
+            .map(|name| json!({ "metadata": { "name": name, "namespace": "shop", "uid": format!("shop/{name}"), "resourceVersion": "450" }, "data": { "k": "v" } }))
+            .collect();
+        json!({ "apiVersion": "v1", "kind": "ConfigMapList", "metadata": { "resourceVersion": at }, "items": items }).to_string()
+    }
+
+    fn config_map(name: &str, version: &str) -> DynamicObject {
+        serde_json::from_value(json!({ "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": { "name": name, "namespace": "shop", "uid": format!("shop/{name}"), "resourceVersion": version } }))
+        .unwrap()
+    }
+
+    fn config_maps_of(context: &Arc<ContextFeeds>) -> Ask {
+        let _ = context;
+        Ask {
+            kinds: vec![slot_of("", "configmaps").kind],
+            scope: None,
+            binding: Binding::Session,
+        }
+    }
+
+    async fn whole_within(sub: &mut Subscription) -> Vec<Update> {
+        let mut seen = Vec::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while let Ok(Some(update)) = tokio::time::timeout_at(deadline, sub.updates.recv()).await {
+            let done = matches!(update, Update::Whole { .. });
+            seen.push(update);
+            if done {
+                break;
+            }
+        }
+        while let Ok(update) = sub.updates.try_recv() {
+            seen.push(update);
+        }
+        seen
+    }
+
+    /// A `ConfigMap` is kept by nobody between changes, so a reader joining
+    /// late is served its set by one list, not the store and not a second
+    /// watch; a change that came while the list was out is handed after it
+    /// only where it is newer than the list. Fails if the late reader waits
+    /// for good, is handed nothing, or is handed a change the list already held.
+    #[tokio::test]
+    async fn a_late_reader_of_a_kind_kept_as_nothing_is_served_by_one_list() {
+        let (client, hits) = answering(|path, _| {
+            if path == "/api/v1/configmaps" {
+                (200, config_map_list("500", &["app", "db"]))
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut first = context.join(&config_maps_of(&context), std::slice::from_ref(&maps), &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut first);
+        assert_eq!(resident(&context, &slot).0, 0);
+
+        let mut late = context.join(&config_maps_of(&context), &[maps], &[]);
+        apply(&generation, &slot, config_map("db", "400"));
+        apply(&generation, &slot, config_map("cache", "600"));
+        let seen = whole_within(&mut late).await;
+        let set = seen.iter().find_map(|u| match u {
+            Update::Whole {
+                why: Whole::Fresh,
+                objects,
+                ..
+            } => Some(names(objects)),
+            _ => None,
+        });
+        assert_eq!(set, Some(vec!["app".to_string(), "db".to_string()]));
+        let after: Vec<String> = seen
+            .iter()
+            .filter_map(|u| match u {
+                Update::Applied { object, .. } => object.metadata.name.clone(),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(after, vec!["cache".to_string()]);
+        assert_eq!(hits.lock().unwrap().get("/api/v1/configmaps"), Some(&1));
+        assert_eq!(
+            generation.stops.lock().len(),
+            1,
+            "a second watch was opened"
+        );
+        context.end();
+    }
+
+    /// A reader of a kind kept as nothing that falls behind is listed its
+    /// set again, there being no store to resend it from.
+    #[tokio::test]
+    async fn a_reader_that_falls_behind_on_a_kind_kept_as_nothing_is_listed_again() {
+        let (client, _) = answering(|path, _| {
+            if path == "/api/v1/configmaps" {
+                (200, config_map_list("900", &["app", "db", "cache"]))
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 2);
+        let context = feeds.context_for("prod", client);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut sub = context.join(&config_maps_of(&context), &[maps], &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        for n in 0..5 {
+            apply(&generation, &slot, config_map(&format!("burst-{n}"), "200"));
+        }
+        drain(&mut sub);
+        apply(&generation, &slot, config_map("after", "300"));
+        let seen = whole_within(&mut sub).await;
+        let set = seen.iter().find_map(|u| match u {
+            Update::Whole { objects, .. } => Some(names(objects)),
+            _ => None,
+        });
+        assert_eq!(
+            set,
+            Some(vec![
+                "app".to_string(),
+                "cache".to_string(),
+                "db".to_string()
+            ])
+        );
+        context.end();
+    }
+}

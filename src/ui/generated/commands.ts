@@ -11,6 +11,8 @@ import type {
   AppEvent,
   AppInfo,
   Applied,
+  AuditPage,
+  AuditQuery,
   AutoscalerInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -94,6 +96,7 @@ import type {
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
+  ObjectAudit,
   ObjectMetadata,
   OtherPolicyKinds,
   OwnRules,
@@ -291,6 +294,21 @@ export async function runPodCheck(
     check,
     copy,
   });
+}
+
+export async function getAudit(
+  scope: string[] | null,
+  query: AuditQuery
+): Promise<AuditPage> {
+  return invoke<AuditPage>("get_audit", { scope, query });
+}
+
+export async function getAuditOf(
+  kind: string,
+  namespace: string | null,
+  name: string
+): Promise<ObjectAudit> {
+  return invoke<ObjectAudit>("get_audit_of", { kind, namespace, name });
 }
 
 export async function listDeployments(

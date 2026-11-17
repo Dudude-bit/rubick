@@ -25,6 +25,7 @@ import { lastRunRefused } from "../../../-peek/cron-runs";
 import { ownStatusWord } from "@/lib/status-words";
 import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 
 export function cronJobStatusOf(
@@ -141,7 +142,9 @@ export function jobsSection(
 export function useCronJobShare(
   cronJob: CronJobDetailInfo | undefined,
   jobs: readonly JobInfo[],
-  jobsError: unknown
+  jobsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -152,9 +155,13 @@ export function useCronJobShare(
       return {
         status: cronJobStatusOf(cronJob, t, lastRunRefused(jobs)),
         stats: cronJobStatsOf(cronJob, capturedAt, t, lastRunRefused(jobs)),
-        sections: [templateContainersSection(cronJob, t), jobs_],
+        sections: [
+          templateContainersSection(cronJob, t),
+          jobs_,
+          ...auditSections(audit, t),
+        ],
       };
     },
-    [cronJob, jobs, jobsError, t]
+    [cronJob, jobs, jobsError, t, audit]
   );
 }

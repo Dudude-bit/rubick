@@ -507,6 +507,8 @@ fn main() {
             commands::gateway::probe_tcp_connect,
             // Stats commands
             commands::overview::get_cluster_overview,
+            commands::audit::get_audit,
+            commands::audit::get_audit_of,
             commands::overview::follow_cluster_overview,
             commands::overview::name_holder,
             // Metrics API

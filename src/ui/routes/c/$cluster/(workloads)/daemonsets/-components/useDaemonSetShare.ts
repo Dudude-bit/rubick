@@ -9,6 +9,7 @@ import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
 import { rolloutStatusOf } from "@/lib/workload-status";
 import type { DaemonSetDetailInfo, PodInfo } from "@/generated/types";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 
 export function daemonSetStatsOf(
@@ -44,7 +45,9 @@ export function daemonSetStatsOf(
 export function useDaemonSetShare(
   daemonSet: DaemonSetDetailInfo | undefined,
   pods: readonly PodInfo[],
-  podsError: unknown
+  podsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -67,9 +70,13 @@ export function useDaemonSetShare(
           t
         ),
         stats: daemonSetStatsOf(daemonSet, t),
-        sections: [templateContainersSection(daemonSet, t), pods_],
+        sections: [
+          templateContainersSection(daemonSet, t),
+          pods_,
+          ...auditSections(audit, t),
+        ],
       };
     },
-    [daemonSet, pods, podsError, t]
+    [daemonSet, pods, podsError, t, audit]
   );
 }

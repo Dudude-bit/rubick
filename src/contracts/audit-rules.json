@@ -1,0 +1,301 @@
+{
+  "about": "Audit's rules, as both halves read them: RULES in src/tauri/src/audit/rules.rs judges with them and src/ui/routes/c/$cluster/-audit/rules.ts draws them. severity is the rule's usual one; a finding may carry a higher one where the rule says why (pss-run-as-non-root stated false, no-readiness-probe behind a Service). standard is the Pod Security Standards profile the control belongs to, from https://kubernetes.io/docs/concepts/security/pod-security-standards/. needs is every other kind the rule reads before it may answer; a rule whose kind went unread there says not checked.",
+  "helmRelease": "HelmRelease.helm.sh",
+  "deprecatedApi": "DeprecatedAPI.k8s.io",
+  "rules": [
+    {
+      "id": "pss-host-process",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-host-namespaces",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-privileged",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-capabilities",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-host-path",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-host-ports",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-host-probes",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-apparmor",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-selinux",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-proc-mount",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-seccomp-unconfined",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-sysctls",
+      "category": "security",
+      "severity": "high",
+      "standard": "baseline",
+      "needs": []
+    },
+    {
+      "id": "pss-volume-types",
+      "category": "security",
+      "severity": "low",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "pss-privilege-escalation",
+      "category": "security",
+      "severity": "low",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "pss-run-as-non-root",
+      "category": "security",
+      "severity": "low",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "pss-run-as-user-root",
+      "category": "security",
+      "severity": "medium",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "pss-seccomp-required",
+      "category": "security",
+      "severity": "low",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "pss-drop-capabilities",
+      "category": "security",
+      "severity": "low",
+      "standard": "restricted",
+      "needs": []
+    },
+    {
+      "id": "runtime-socket",
+      "category": "security",
+      "severity": "high",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "config-map-private-key",
+      "category": "security",
+      "severity": "high",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "env-secret-literal",
+      "category": "security",
+      "severity": "medium",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "writable-root-filesystem",
+      "category": "security",
+      "severity": "low",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "cluster-admin-binding",
+      "category": "security",
+      "severity": "high",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "wildcard-role",
+      "category": "security",
+      "severity": "high",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "default-service-account-token",
+      "category": "security",
+      "severity": "low",
+      "standard": null,
+      "needs": ["ServiceAccount"]
+    },
+    {
+      "id": "namespace-without-network-policy",
+      "category": "security",
+      "severity": "medium",
+      "standard": null,
+      "needs": ["Pod", "NetworkPolicy"]
+    },
+    {
+      "id": "no-readiness-probe",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": ["Service"]
+    },
+    {
+      "id": "no-liveness-probe",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "image-tag-latest",
+      "category": "reliability",
+      "severity": "medium",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "single-replica",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": ["HorizontalPodAutoscaler"]
+    },
+    {
+      "id": "no-disruption-budget",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": ["HorizontalPodAutoscaler", "PodDisruptionBudget"]
+    },
+    {
+      "id": "budget-blocks-disruption",
+      "category": "reliability",
+      "severity": "medium",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "no-spread",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": ["HorizontalPodAutoscaler"]
+    },
+    {
+      "id": "no-memory-limit",
+      "category": "reliability",
+      "severity": "medium",
+      "standard": null,
+      "needs": ["LimitRange"]
+    },
+    {
+      "id": "autoscaler-pinned",
+      "category": "reliability",
+      "severity": "low",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "autoscaler-target-missing",
+      "category": "reliability",
+      "severity": "high",
+      "standard": null,
+      "needs": ["Deployment", "StatefulSet"]
+    },
+    {
+      "id": "no-cpu-request",
+      "category": "efficiency",
+      "severity": "medium",
+      "standard": null,
+      "needs": ["LimitRange"]
+    },
+    {
+      "id": "no-memory-request",
+      "category": "efficiency",
+      "severity": "medium",
+      "standard": null,
+      "needs": ["LimitRange"]
+    },
+    {
+      "id": "removed-api-in-helm-release",
+      "category": "upgrade",
+      "severity": "high",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "deprecated-api-writer",
+      "category": "upgrade",
+      "severity": "medium",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "crd-version-deprecated",
+      "category": "upgrade",
+      "severity": "low",
+      "standard": null,
+      "needs": []
+    },
+    {
+      "id": "deprecated-api-requested",
+      "category": "upgrade",
+      "severity": "medium",
+      "standard": null,
+      "needs": []
+    }
+  ]
+}

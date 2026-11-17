@@ -274,6 +274,35 @@ export const queryKeys = {
     scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
   ],
   everyOverview: (): string[] => ["cluster-overview"],
+  /** One page of the Audit page's answer for a scope. */
+  audit: (
+    context: string | null,
+    namespaces: readonly string[],
+    query: object
+  ): (string | null | object)[] => [
+    "audit",
+    context,
+    scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
+    query,
+  ],
+  /** One workload's or pod's findings, at the version of it the page holds. */
+  auditOf: (
+    context: string | null,
+    kind: string,
+    namespace: string | null | undefined,
+    name: string,
+    version: string | null
+  ): (string | null)[] => [
+    "audit",
+    context,
+    "object",
+    kind,
+    home(namespace),
+    name,
+    version,
+  ],
+  /** Everything Audit answered for a context, read again when its watches move. */
+  everyAudit: (context: string | null): (string | null)[] => ["audit", context],
   /** The Deployments an overview whose pods went unread follows by watch, where its pods went unread. */
   overviewDeployments: (
     context: string | null,

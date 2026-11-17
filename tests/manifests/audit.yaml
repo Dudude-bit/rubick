@@ -1,0 +1,426 @@
+# Audit: one object for each rule, and a namespace that breaks none.
+# Apply: kubectl apply -f tests/manifests/audit.yaml
+# Clean up: kubectl delete ns audit-test audit-clean && kubectl delete clusterrolebinding audit-test-admin
+#
+# Some pods here never start (an unsafe sysctl, an NFS server that is not
+# there, a Windows HostProcess on Linux nodes): Audit judges templates, and
+# the templates are what is being shown.
+#
+# A reader with rights in both namespaces and no PodDisruptionBudgets in
+# audit-test: the audit-reader account below. Make a kubeconfig user for it
+# with `kubectl create token audit-reader -n audit-test`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: audit-test
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: audit-clean
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+# Baseline: privileged, host namespaces, a hostPath on the runtime socket's
+# directory, a host port, SYS_ADMIN, AppArmor and seccomp off, a host in a
+# probe. Also: latest image, a secret-looking literal, no requests, no
+# limits, one replica, the default ServiceAccount's token.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: everything-wrong
+  namespace: audit-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: everything-wrong }
+  template:
+    metadata:
+      labels: { app: everything-wrong }
+    spec:
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        seccompProfile: { type: Unconfined }
+      volumes:
+        - name: run
+          hostPath: { path: /var/run }
+      containers:
+        - name: app
+          image: busybox
+          command: ["sleep", "infinity"]
+          env:
+            - name: DB_PASSWORD
+              value: not-a-real-one
+            - name: TOKEN_FILE
+              value: /var/run/token
+          ports:
+            - containerPort: 8080
+              hostPort: 18080
+          securityContext:
+            privileged: true
+            capabilities: { add: ["SYS_ADMIN"] }
+            appArmorProfile: { type: Unconfined }
+          readinessProbe:
+            httpGet: { path: /, port: 8080, host: 10.0.0.1 }
+          volumeMounts:
+            - { name: run, mountPath: /host-run }
+---
+# An unsafe sysctl, a custom SELinux user, an NFS volume: the pod never starts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kernel-and-volumes
+  namespace: audit-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: kernel-and-volumes }
+  template:
+    metadata:
+      labels: { app: kernel-and-volumes }
+    spec:
+      securityContext:
+        sysctls: [{ name: kernel.msgmax, value: "65536" }]
+        seLinuxOptions: { user: system_u, type: spc_t }
+      volumes:
+        - name: share
+          nfs: { server: 127.0.0.1, path: /exports }
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          volumeMounts:
+            - { name: share, mountPath: /share }
+---
+# Root on purpose: runAsUser 0 and runAsNonRoot false.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: as-root
+  namespace: audit-test
+spec:
+  serviceName: as-root
+  replicas: 1
+  selector:
+    matchLabels: { app: as-root }
+  template:
+    metadata:
+      labels: { app: as-root }
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+---
+# A Windows HostProcess template: pending on Linux nodes, judged all the same.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: windows-host-process
+  namespace: audit-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: windows-host-process }
+  template:
+    metadata:
+      labels: { app: windows-host-process }
+    spec:
+      os: { name: windows }
+      nodeSelector: { kubernetes.io/os: windows }
+      hostNetwork: true
+      securityContext:
+        windowsOptions: { hostProcess: true, runAsUserName: "NT AUTHORITY\\SYSTEM" }
+      containers:
+        - name: app
+          image: mcr.microsoft.com/windows/nanoserver:ltsc2022
+---
+# Three replicas a Service sends traffic to: no readiness probe (medium,
+# behind a Service), no spread, a budget that allows no eviction.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: three-replicas
+  namespace: audit-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: three-replicas }
+  template:
+    metadata:
+      labels: { app: three-replicas }
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: three-replicas
+  namespace: audit-test
+spec:
+  selector: { app: three-replicas }
+  ports: [{ port: 80 }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: blocks-every-eviction
+  namespace: audit-test
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels: { app: three-replicas }
+---
+# Two replicas with no budget at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: two-replicas-no-budget
+  namespace: audit-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: two-replicas-no-budget }
+  template:
+    metadata:
+      labels: { app: two-replicas-no-budget }
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+---
+# An autoscaler pinned at 2, and one whose target is gone.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pinned
+  namespace: audit-test
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: two-replicas-no-budget }
+  minReplicas: 2
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 80 } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: scales-nothing
+  namespace: audit-test
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: renamed-long-ago }
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 80 } }
+---
+# A key named as a private key, in a ConfigMap. Its value is not a key, so
+# nothing secret-shaped sits in this repository; the name is the net that catches it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: holds-a-key
+  namespace: audit-test
+data:
+  tls.key: "placeholder"
+  app.conf: "port=8080"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: everything
+  namespace: audit-test
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: installer
+  namespace: audit-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: installer-admin
+  namespace: audit-test
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin }
+subjects:
+  - { kind: ServiceAccount, name: installer }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: audit-test-admin
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin }
+subjects:
+  - { kind: ServiceAccount, name: installer, namespace: audit-test }
+---
+# A pod no controller owns, judged on its own.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lonely
+  namespace: audit-test
+spec:
+  containers:
+    - name: app
+      image: busybox
+      command: ["sleep", "infinity"]
+---
+# A CronJob is judged once; its Jobs are not judged again beside it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly
+  namespace: audit-test
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: run
+              image: busybox:latest
+              command: ["true"]
+---
+# The clean namespace: restricted, a policy, a budget, a LimitRange that
+# fills the requests and the memory limit the Deployment leaves out.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: defaults
+  namespace: audit-clean
+spec:
+  limits:
+    - type: Container
+      default: { memory: 128Mi }
+      defaultRequest: { cpu: 50m, memory: 64Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: audit-clean
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: web
+  namespace: audit-clean
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clean
+  namespace: audit-clean
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: clean }
+  template:
+    metadata:
+      labels: { app: clean }
+    spec:
+      serviceAccountName: web
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app: clean } }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+      containers:
+        - name: app
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          readinessProbe: { tcpSocket: { port: 8080 } }
+          livenessProbe: { tcpSocket: { port: 8080 } }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: clean
+  namespace: audit-clean
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: clean }
+---
+# A reader bound to the two namespaces, refused PodDisruptionBudgets in audit-test.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: audit-reader
+  namespace: audit-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: audit-reader
+  namespace: audit-test
+rules:
+  - apiGroups: ["", "apps", "batch", "autoscaling", "networking.k8s.io", "rbac.authorization.k8s.io"]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - serviceaccounts
+      - limitranges
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+      - jobs
+      - cronjobs
+      - horizontalpodautoscalers
+      - networkpolicies
+      - roles
+      - rolebindings
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: audit-reader
+  namespace: audit-test
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: audit-reader }
+subjects:
+  - { kind: ServiceAccount, name: audit-reader, namespace: audit-test }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: audit-reader
+  namespace: audit-clean
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view }
+subjects:
+  - { kind: ServiceAccount, name: audit-reader, namespace: audit-test }

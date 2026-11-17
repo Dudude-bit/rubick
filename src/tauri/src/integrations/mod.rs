@@ -229,8 +229,16 @@ pub(crate) fn own_tunnel(
     context: &str,
     url: &str,
 ) -> std::result::Result<(), String> {
-    let tunnels: Vec<(u16, String)> = state
-        .port_forward_sessions
+    own_tunnel_among(&state.port_forward_sessions, context, url)
+}
+
+/// [`own_tunnel`] for a reader that holds the tunnels and not the state.
+pub(crate) fn own_tunnel_among(
+    sessions: &dashmap::DashMap<String, crate::state::PortForwardSession>,
+    context: &str,
+    url: &str,
+) -> std::result::Result<(), String> {
+    let tunnels: Vec<(u16, String)> = sessions
         .iter()
         .map(|session| (session.local_port, session.context.clone()))
         .collect();

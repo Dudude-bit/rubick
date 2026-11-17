@@ -1,0 +1,26 @@
+# Audit, Upgrade: a writer through a version a later Kubernetes removes.
+# Only on Kubernetes 1.31 or older, which still serve flowcontrol v1beta3:
+#   kind create cluster --image kindest/node:v1.31.4
+#   kubectl apply -f tests/manifests/audit.yaml -f tests/manifests/audit-upgrade-1.31.yaml
+# kubectl apply records it in managedFields as written through v1beta3, which
+# 1.32 stops serving: Audit says Medium and names kubectl-client-side-apply.
+# Clean up: kubectl delete flowschema audit-legacy-writer
+apiVersion: flowcontrol.apiserver.k8s.io/v1beta3
+kind: FlowSchema
+metadata:
+  name: audit-legacy-writer
+spec:
+  priorityLevelConfiguration:
+    name: workload-low
+  matchingPrecedence: 9000
+  rules:
+    - subjects:
+        - kind: ServiceAccount
+          serviceAccount:
+            name: audit-reader
+            namespace: audit-test
+      resourceRules:
+        - verbs: ["list"]
+          apiGroups: [""]
+          resources: ["configmaps"]
+          namespaces: ["audit-test"]

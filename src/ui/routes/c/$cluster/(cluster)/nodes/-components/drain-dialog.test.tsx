@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+import { cannotAllowOf } from "@/lib/governance";
 import { DrainDialog } from "./drain-dialog";
 import type { DrainReport, DrainState, RefusedPod } from "@/stores/drainStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
@@ -56,6 +57,10 @@ const onNode = (
             minAvailable: "1",
             maxUnavailable: null,
             conditions: [],
+            cannotAllow: cannotAllowOf(
+              counts.desiredHealthy,
+              counts.expectedPods
+            ),
             ...counts,
           },
         },

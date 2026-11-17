@@ -39,7 +39,7 @@ import type {
 } from "@/stores/drainStore";
 import { useConnections } from "@/hooks/useConnections";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
-import { budgetRule, cannotAllow, drainBlockers } from "@/lib/governance";
+import { budgetRule, drainBlockers } from "@/lib/governance";
 import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import type { en } from "@/i18n/catalogue";
@@ -201,7 +201,7 @@ function DrainConfirm({
                   expected: budget.facts.expectedPods,
                   pods: t("cluster", "podCount", { n: pods }),
                 })}
-                {cannotAllow(budget.facts) && (
+                {budget.facts.cannotAllow && (
                   <span className="text-warn">
                     {" "}
                     {t("empty", "budgetCannotAllow")}

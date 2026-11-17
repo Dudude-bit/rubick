@@ -17,6 +17,7 @@ import type {
   PodInfo,
   ReplicaSetInfo,
 } from "@/generated/types";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 
 export function deploymentStatsOf(
@@ -119,7 +120,9 @@ export function useDeploymentShare(
   /** `null` when the ReplicaSets could not be read. */
   revisions: readonly ReplicaSetInfo[] | null,
   pods: readonly PodInfo[],
-  podsError: unknown
+  podsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -146,9 +149,10 @@ export function useDeploymentShare(
           templateContainersSection(deployment, t),
           revisionsSection(revisions, frame.capturedAt, t),
           pods_,
+          ...auditSections(audit, t),
         ],
       };
     },
-    [deployment, revisions, pods, podsError, t]
+    [deployment, revisions, pods, podsError, t, audit]
   );
 }

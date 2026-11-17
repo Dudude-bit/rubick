@@ -29,6 +29,14 @@ export interface AppSearch {
   listOf?: string;
   /** The rows a list is narrowed to, comma-separated `<namespace>/<name>`, an empty namespace for a cluster-scoped one. */
   names?: string;
+  /** Audit's severity filter. */
+  severity?: string;
+  /** Audit's category filter. */
+  category?: string;
+  /** The object a page has opened, as `<kind>/<namespace>/<name>`, an empty namespace for a cluster-scoped one. */
+  open?: string;
+  /** Which part of Audit is shown: `system` for the system's own namespaces and roles. */
+  part?: string;
 }
 
 export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -50,6 +58,10 @@ export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
   "namespace",
   "listOf",
   "names",
+  "severity",
+  "category",
+  "open",
+  "part",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

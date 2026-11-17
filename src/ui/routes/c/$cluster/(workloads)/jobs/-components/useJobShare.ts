@@ -11,6 +11,7 @@ import { statusRole } from "@/lib/status-role";
 import { ownStatusWord } from "@/lib/status-words";
 import { jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 
 export function jobStatusOf(job: JobDetailInfo, t: T) {
@@ -59,7 +60,9 @@ export function jobStatsOf(
 export function useJobShare(
   job: JobDetailInfo | undefined,
   pods: readonly PodInfo[],
-  podsError: unknown
+  podsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -77,9 +80,13 @@ export function useJobShare(
       return {
         status: jobStatusOf(job, t),
         stats: jobStatsOf(job, frame.capturedAt, t),
-        sections: [templateContainersSection(job, t), pods_],
+        sections: [
+          templateContainersSection(job, t),
+          pods_,
+          ...auditSections(audit, t),
+        ],
       };
     },
-    [job, pods, podsError, t]
+    [job, pods, podsError, t, audit]
   );
 }

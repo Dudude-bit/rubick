@@ -2104,6 +2104,132 @@ export interface TerminalSessionInfo {
   openedAt: string;
 }
 
+export interface ObjectAudit {
+  subject: Subject;
+  system: boolean;
+  findings: AuditFinding[];
+  unchecked: Unchecked[];
+  judgedOn: Subject | null;
+}
+
+export interface Unchecked {
+  rule: RuleId;
+  kind: string;
+  namespace: string | null;
+  why: Why;
+}
+
+export interface AuditFinding {
+  rule: RuleId;
+  severity: AuditSeverity;
+  what: What[];
+}
+
+export interface Removal {
+  removed: string;
+  replacement: string | null;
+  since: string | null;
+}
+
+export interface At {
+  list: ContainerList;
+  container: string;
+}
+
+export interface Subject {
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface AuditPage {
+  revision: number;
+  summary: AuditSummary;
+  rows: AuditRow[];
+  total: number;
+  next: number | null;
+}
+
+export interface BySeverity {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface AuditSummary {
+  findings: number;
+  severities: BySeverity;
+  categories: ByCategory;
+  rules: RuleCount[];
+  checked: KindChecked[];
+  notChecked: NotChecked[];
+  late: Late[];
+  system: SystemPart;
+  reading: number;
+  unattributed: number;
+  enforced: Enforced[];
+  upgrade: UpgradeRead;
+}
+
+export interface UpgradeRead {
+  read: string | null;
+  server: string | null;
+}
+
+export interface Enforced {
+  namespace: string;
+  level: string;
+}
+
+export interface SystemPart {
+  namespaces: string[];
+  objects: number;
+  findings: number;
+}
+
+export interface Late {
+  kind: string;
+  namespace: string | null;
+  since: string;
+}
+
+export interface NotChecked {
+  kind: string;
+  namespace: string | null;
+  why: Why;
+  rules: RuleId[];
+}
+
+export interface KindChecked {
+  kind: string;
+  objects: number;
+}
+
+export interface RuleCount {
+  rule: RuleId;
+  objects: number;
+  unchecked: number;
+  system: number;
+}
+
+export interface ByCategory {
+  security: number;
+  reliability: number;
+  efficiency: number;
+  upgrade: number;
+}
+
+export interface AuditQuery {
+  by: Grouping;
+  categories: Category[];
+  severities: AuditSeverity[];
+  rules: RuleId[];
+  rule?: RuleId;
+  system: boolean;
+  offset: number;
+  limit?: number;
+}
+
 export interface ControllerRevisionInfo {
   name: string;
   revision: number;
@@ -2567,6 +2693,7 @@ export type ObjectFacts =
       currentHealthy: number;
       desiredHealthy: number;
       expectedPods: number;
+      cannotAllow: boolean;
       conditions: ConditionInfo[];
     };
 
@@ -3101,6 +3228,160 @@ export type TerminalState =
   | "disconnected"
   | "error";
 
+export type Why =
+  | { says: "reading" }
+  | { says: "queued" }
+  | { says: "refused"; message: string }
+  | { says: "failed"; message: string }
+  | { says: "notAudited" }
+  | { says: "unserved" }
+  | { says: "noPrometheus" }
+  | { says: "notScraped" };
+
+export type RuleId =
+  | "pss-host-process"
+  | "pss-host-namespaces"
+  | "pss-privileged"
+  | "pss-capabilities"
+  | "pss-host-path"
+  | "pss-host-ports"
+  | "pss-host-probes"
+  | "pss-apparmor"
+  | "pss-selinux"
+  | "pss-proc-mount"
+  | "pss-seccomp-unconfined"
+  | "pss-sysctls"
+  | "pss-volume-types"
+  | "pss-privilege-escalation"
+  | "pss-run-as-non-root"
+  | "pss-run-as-user-root"
+  | "pss-seccomp-required"
+  | "pss-drop-capabilities"
+  | "runtime-socket"
+  | "config-map-private-key"
+  | "env-secret-literal"
+  | "writable-root-filesystem"
+  | "cluster-admin-binding"
+  | "wildcard-role"
+  | "default-service-account-token"
+  | "namespace-without-network-policy"
+  | "no-readiness-probe"
+  | "no-liveness-probe"
+  | "image-tag-latest"
+  | "single-replica"
+  | "no-disruption-budget"
+  | "budget-blocks-disruption"
+  | "no-spread"
+  | "no-memory-limit"
+  | "autoscaler-pinned"
+  | "autoscaler-target-missing"
+  | "no-cpu-request"
+  | "no-memory-request"
+  | "removed-api-in-helm-release"
+  | "deprecated-api-writer"
+  | "crd-version-deprecated"
+  | "deprecated-api-requested";
+
+export type What =
+  | { says: "set"; at: At | null; field: string; value: string }
+  | { says: "unset"; at: At | null; field: string }
+  | { says: "volume"; volume: string; source: string; path: string | null }
+  | { says: "socket"; volume: string; path: string; socket: string }
+  | { says: "envLiteral"; at: At; variable: string }
+  | { says: "key"; key: string; net: Withheld }
+  | { says: "image"; at: At; image: string }
+  | { says: "replicas"; replicas: number; autoscaler: string | null }
+  | { says: "budget"; required: number; selected: number }
+  | { says: "token"; by: TokenBy }
+  | {
+      says: "subject";
+      kind: string;
+      name: string;
+      namespace: string | null;
+      role: string;
+    }
+  | { says: "wildcard"; groups: string[] }
+  | { says: "range"; min: number; max: number }
+  | { says: "target"; kind: string; name: string }
+  | { says: "pods"; pods: number }
+  | { says: "traffic"; by: TrafficBy }
+  | { says: "revision"; revision: number; status: string }
+  | {
+      says: "stored";
+      kind: string;
+      name: string;
+      api: string;
+      served: boolean;
+      removal: Removal | null;
+    }
+  | {
+      says: "written";
+      manager: string;
+      operation: string;
+      time: string | null;
+      api: string;
+      removal: Removal;
+    }
+  | {
+      says: "deprecated";
+      version: string;
+      warning: string | null;
+      stored: boolean;
+      storage: boolean;
+    }
+  | {
+      says: "storedAs";
+      group: string;
+      kind: string;
+      storage: string | null;
+      stored: string[];
+      current: string[];
+    }
+  | {
+      says: "requested";
+      kind: string | null;
+      removed: string | null;
+      replacement: string | null;
+    }
+  | { says: "requestedToday"; requests: number };
+
+export type TrafficBy =
+  | { says: "service"; name: string }
+  | { says: "noService" }
+  | { says: "notRead"; why: Why };
+
+export type TokenBy = "pod" | "account" | "default";
+
+export type ContainerList =
+  | "containers"
+  | "initContainers"
+  | "ephemeralContainers";
+
+export type AuditSeverity = "high" | "medium" | "low";
+
+export type AuditRow =
+  | {
+      row: "rule";
+      rule: RuleId;
+      worst: AuditSeverity;
+      objects: number;
+      unchecked: number;
+    }
+  | {
+      row: "object";
+      subject: Subject;
+      worst: AuditSeverity | null;
+      severities: BySeverity;
+      rules: RuleId[];
+      unchecked: number;
+    }
+  | { row: "found"; subject: Subject; finding: AuditFinding }
+  | { row: "blind"; subject: Subject; unchecked: Unchecked };
+
+export type Category = "security" | "reliability" | "efficiency" | "upgrade";
+
+export type Grouping = "rule" | "object";
+
 export type RollbackOutcome =
   | { outcome: "rolledBack" }
   | { outcome: "alreadyThere" };
@@ -3286,7 +3567,8 @@ export type AppEvent =
       context: string;
       namespaces: string[];
       cluster: boolean;
-    };
+    }
+  | { channel: "audit-changed"; context: string; revision: number };
 
 export type ListingFailure =
   | "noTools"

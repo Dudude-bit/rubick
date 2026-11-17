@@ -9,6 +9,7 @@ import {
   Package,
   Server,
   Settings,
+  ShieldCheck,
   ShieldUser,
   SquareTerminal,
 } from "lucide-react";
@@ -119,6 +120,12 @@ const quickActions: Array<{
     label: "goToApiResources",
     words: "apiResources",
     path: pageLink("api-resources"),
+  },
+  {
+    icon: ShieldCheck,
+    label: "goToAudit",
+    words: "audit",
+    path: pageLink("audit"),
   },
   {
     icon: ShieldUser,

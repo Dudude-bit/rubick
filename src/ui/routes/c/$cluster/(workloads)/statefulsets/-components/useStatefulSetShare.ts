@@ -10,6 +10,7 @@ import type { ReportStat } from "@/lib/report";
 import { refOf } from "@/lib/report-parts";
 import { rolloutStatusOf } from "@/lib/workload-status";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
+import { auditSections, type AuditRead } from "../../../-audit/audit-share";
 import { useT, type T } from "@/i18n/useT";
 
 export function statefulSetStatsOf(
@@ -54,7 +55,9 @@ export function statefulSetStatsOf(
 export function useStatefulSetShare(
   statefulSet: StatefulSetDetailInfo | undefined,
   pods: readonly PodInfo[],
-  podsError: unknown
+  podsError: unknown,
+  /** The Audit tab's answer, which the file carries as the tab shows it. */
+  audit?: AuditRead
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -73,9 +76,13 @@ export function useStatefulSetShare(
       return {
         status: rolloutStatusOf(ready, desired, statefulSet.rollout, t),
         stats: statefulSetStatsOf(statefulSet, t),
-        sections: [templateContainersSection(statefulSet, t), pods_],
+        sections: [
+          templateContainersSection(statefulSet, t),
+          pods_,
+          ...auditSections(audit, t),
+        ],
       };
     },
-    [statefulSet, pods, podsError, t]
+    [statefulSet, pods, podsError, t, audit]
   );
 }

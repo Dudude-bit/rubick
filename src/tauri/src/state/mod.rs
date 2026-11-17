@@ -173,6 +173,10 @@ pub struct AppState {
     /// Which contexts' metrics API was not installed or refused, and when.
     pub metrics_unserved: crate::metrics::Unserved,
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
+    /// One watch per cluster and kind, for every backend reader that follows one.
+    pub feeds: Arc<crate::feeds::Feeds>,
+    /// Audit's watches, held while the Audit page is on screen.
+    pub audit: Arc<crate::audit::AuditIndexes>,
 }
 
 impl AppState {
@@ -189,6 +193,9 @@ impl AppState {
         let renew_manager = Arc::new(crate::auth::renew::RenewManager::new());
 
         let overview_cache = Arc::new(crate::overview::OverviewCache::announcing(event_tx.clone()));
+        let event_tx_audit = event_tx.clone();
+
+        let ownership = Arc::new(crate::ownership::OwnershipIndexes::default());
 
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
@@ -219,7 +226,9 @@ impl AppState {
             perf: Arc::new(perf::PerfCounters::default()),
             overview_cache,
             metrics_unserved: crate::metrics::Unserved::default(),
-            ownership: Arc::new(crate::ownership::OwnershipIndexes::default()),
+            feeds: Arc::new(crate::feeds::Feeds::new(ownership.budget())),
+            ownership,
+            audit: Arc::new(crate::audit::AuditIndexes::new(event_tx_audit)),
         })
     }
 
@@ -431,6 +440,9 @@ impl AppState {
     pub fn client_replaced(&self, context: &str) {
         self.overview_cache.forget(context);
         self.ownership.forget(context);
+        self.feeds
+            .client_replaced(context, self.client_of(context).ok().map(|c| (*c).clone()));
+        self.audit.forget(context);
         self.metrics_unserved.forget_refusals(context);
     }
 
