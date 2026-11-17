@@ -293,6 +293,51 @@ describe("a basic-auth address where it is drawn", () => {
   });
 
   /**
+   * Two clusters whose Prometheus did not answer in the same words: the
+   * state kept the first one's object, and "ask again" on the second asked
+   * the first. Each cluster's state asks its own. Fails if a state that
+   * reads the same is kept across a switch of cluster.
+   */
+  it("asks the cluster on screen again, though another said the same", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue(saved);
+    const refused = {
+      ok: false,
+      at: 1,
+      latencyMs: 0,
+      reason: "connection refused",
+      noAddress: false,
+    };
+    vi.mocked(commands.probePrometheus)
+      .mockResolvedValueOnce(refused)
+      .mockResolvedValueOnce(refused)
+      .mockResolvedValueOnce(refused);
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const power = renderHook(() => useCapabilityState("usage.history"), {
+      wrapper,
+    });
+    await waitFor(() => expect(power.result.current.state).toBe("unreachable"));
+    const first = power.result.current;
+    act(() => useClusterStore.setState({ currentContext: "prod-us" }));
+    await waitFor(() => expect(power.result.current).not.toBe(first));
+    await waitFor(() => expect(power.result.current.state).toBe("unreachable"));
+    // Back to the first cluster, whose answer is already held: its state
+    // reads exactly as the second's did a moment ago.
+    act(() => useClusterStore.setState({ currentContext: "prod-eu" }));
+    await waitFor(() => expect(power.result.current.state).toBe("unreachable"));
+    vi.mocked(commands.probePrometheus).mockClear();
+    const back = power.result.current;
+    if (back.state !== "unreachable") throw new Error("unreachable");
+    act(() => back.askAgain());
+    await waitFor(() => expect(commands.probePrometheus).toHaveBeenCalled());
+  });
+
+  /**
    * The state was built afresh on every render, so every reader memoizing
    * on it rebuilt on every render: the Cost page re-derived its picture,
    * three tables and their widths each time, and the stall counter climbed.
