@@ -195,8 +195,9 @@ function readsOf(reading: TrafficReading) {
   return {
     failed: (source: number, measure: Measure) =>
       failed.has(`${source}:${measure}`),
-    // A cell can turn "not read" with its pair's flows unchanged.
-    key: JSON.stringify([reading.sources.map((s) => s.name), [...failed]]),
+    // A cell can turn "not read", or a source measure more, with its
+    // pair's flows unchanged: a row reads the sources whole.
+    key: JSON.stringify([reading.sources, [...failed]]),
   };
 }
 
