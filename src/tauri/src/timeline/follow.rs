@@ -282,7 +282,10 @@ pub(crate) fn spawn(
                     None => break,
                 },
                 control = controls.recv() => match control {
-                    Some(Control::Rescope(scope)) => lease.rescope(scope),
+                    Some(Control::Rescope(scope)) => {
+                        recorder.rescope(scope.as_deref());
+                        lease.rescope(scope);
+                    }
                     Some(Control::Meta(rx)) => meta = Some(rx),
                     None => break,
                 },

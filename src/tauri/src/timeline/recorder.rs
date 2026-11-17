@@ -318,6 +318,23 @@ impl Recorder {
         self.settle(source, was.as_ref(), since);
     }
 
+    /// The window's namespaces moved: a kind refused across the cluster is
+    /// no longer asked for in the namespaces it left, so what stood there is
+    /// not this watch's to name or to wait on. A slot live for another
+    /// reader is still handed over, and stays.
+    pub fn rescope(&mut self, scope: Option<&[String]>) {
+        let was = self.cover(Source::Followed);
+        self.slots.retain(|(source, slot), state| {
+            *source != Source::Followed
+                || *state == SlotState::Live
+                || slot
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| scope.is_some_and(|names| names.contains(namespace)))
+        });
+        self.settle(Source::Followed, was.as_ref(), None);
+    }
+
     /// How one watch stands, as last told.
     #[must_use]
     pub fn slot_state(&self, source: Source, slot: &Slot) -> Option<SlotState> {

@@ -1443,6 +1443,33 @@ mod recording {
             .all(|span| span.to.is_some()));
     }
 
+    /// The window opened on `team-a`, refused, then moved to `audit-test`:
+    /// minutes later the header still named `team-a` as refused. Fails if a
+    /// namespace the window left is still named, or still holds the span.
+    #[test]
+    fn a_namespace_the_window_left_is_no_longer_named_as_refused() {
+        let (_t, cluster, mut recorder) = recorder();
+        for (namespace, state) in [
+            (None, SlotState::Refused),
+            (Some("team-a"), SlotState::Refused),
+            (Some("audit-test"), SlotState::Live),
+            (Some("ops"), SlotState::Listing),
+        ] {
+            recorder.state(Source::Followed, slot("Deployment", namespace), state, None);
+        }
+        assert!(
+            followed_spans(&cluster)
+                .iter()
+                .all(|span| span.to.is_some()),
+            "ops lists"
+        );
+        recorder.rescope(Some(&["audit-test".to_string()]));
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(span.to, None);
+        assert_eq!(span.scope, ["audit-test"]);
+        assert!(span.unwatched_in.is_empty(), "{:?}", span.unwatched_in);
+    }
+
     /// A refusal that arrives while watching is a new stretch with its own
     /// words. Fails if the span goes on claiming the kind it lost.
     #[test]
