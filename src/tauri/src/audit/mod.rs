@@ -18,7 +18,7 @@ mod template;
 mod upgrade;
 mod usage;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{Api, ListParams};
@@ -373,6 +373,7 @@ async fn enforced(
     let all = if let Some(all) = kept {
         all
     } else {
+        let era = state.audit.era(&here.context);
         let api: Api<Namespace> = Api::all((*here.client).clone());
         let read: Vec<Enforced> = api
             .list_metadata(&ListParams::default())
@@ -390,10 +391,7 @@ async fn enforced(
                     .collect()
             })
             .unwrap_or_default();
-        state
-            .audit
-            .enforced
-            .insert(here.context.clone(), (Instant::now(), read.clone()));
+        state.audit.keep_enforced(era, &here.context, read.clone());
         read
     };
     all.into_iter()
