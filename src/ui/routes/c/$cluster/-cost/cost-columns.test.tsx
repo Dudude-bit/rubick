@@ -3,7 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { AppColumnMeta } from "@/components/ui/table-features";
-import { workloadColumns } from "./cost-columns";
+import { yieldedColumns } from "@/components/ui/column-shares";
+import { columnFloor } from "@/lib/column-label";
+import { namespaceColumns, workloadColumns } from "./cost-columns";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -74,6 +76,41 @@ describe("the breakdown by workload", () => {
     expect(floorOf("workload", rows)).toBeGreaterThanOrEqual(widest * 7.2);
   });
 
+  /**
+   * Beside a peek, By workload gave its Namespace column up for width and
+   * showed two rows both "Deployment/web", one in live51 and one in shop.
+   * What tells a row from another is never given up; the rest scroll.
+   * Fails if a narrow port hides a row's name or its namespace.
+   */
+  it("keeps what tells the rows apart at any width", () => {
+    const rows = [
+      row("web"),
+      { ...row("web"), key: { ...row("web").key, namespace: "live51" } },
+    ];
+    const namespaces = ["shop", "live51"].map((namespace) => ({
+      namespace,
+      perHour: 0.01,
+      atLeast: false,
+      parts: { cpu: 0.01 },
+      unpriced: [],
+      currency: "EUR",
+      share: 0.5,
+    }));
+    for (const [columns, held] of [
+      [workloadColumns(t), rows],
+      [namespaceColumns(t), namespaces],
+    ] as const) {
+      const specs = columns.map((c) => ({
+        id: c.id!,
+        floor: columnFloor(c, t, held as never),
+        yields: (c.meta as AppColumnMeta).yields,
+      }));
+      const hidden = yieldedColumns(specs, 200);
+      expect(hidden).not.toContain("workload");
+      expect(hidden).not.toContain("namespace");
+    }
+  });
+
   /** "CPU nothing requestec": the efficiency cell's widest words must fit its floor. */
   it("floors efficiency at its widest words", () => {
     const words = `${t("cost", "memory")} ${t("cost", "effUnrequested")}`;
@@ -96,10 +133,9 @@ describe("the breakdown by workload", () => {
     const yields = Object.fromEntries(
       columns.map((c) => [c.id, (c.meta as AppColumnMeta).yields])
     );
-    for (const kept of ["workload", "perHour", "efficiency"])
+    for (const kept of ["workload", "namespace", "perHour", "efficiency"])
       expect(yields[kept], kept).toBeUndefined();
     expect(yields.memoryRequested!).toBeLessThan(yields.memoryUsed!);
     expect(yields.cpuRequested!).toBeLessThan(yields.cpuUsed!);
-    expect(yields.cpuUsed!).toBeLessThan(yields.namespace!);
   });
 });

@@ -199,7 +199,9 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
           {row.original.key.namespace}
         </span>
       ),
-      meta: { floor: NAMESPACE_CELL_PX, yields: 7 },
+      // Never given up for width: two `web`s in two namespaces read alike
+      // without it. One namespace chosen drops it, the scope bar saying it.
+      meta: { floor: NAMESPACE_CELL_PX },
     },
     {
       id: "pods",
