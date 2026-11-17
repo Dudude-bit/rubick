@@ -101,11 +101,24 @@ describe("the cost PromQL", () => {
     const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = usageQueries(null);
     const summed = "avg_over_time((sum by (namespace, pod) (";
     expect(cpuAvg.startsWith(summed)).toBe(true);
-    expect(cpuAvg).toContain("[5m])))[24h:5m])");
+    expect(cpuAvg).toContain("[5m]))))[24h:5m])");
     expect(memoryAvg.startsWith(summed)).toBe(true);
-    expect(memoryAvg).toContain("))[24h:5m])");
+    expect(memoryAvg).toContain(")))[24h:5m])");
     expect(cpuPeak).toContain("[24h:5m]");
     expect(memoryPeak).toContain("max_over_time");
+  });
+
+  /**
+   * A cAdvisor scraped by two jobs answers twice for each container: 300m
+   * read as 600m, and a request far above use looked met. Each container is
+   * taken once at each step before the pod's are summed. Fails if any of
+   * the four sums every series it finds.
+   */
+  it("takes each container once before summing a pod's use", () => {
+    for (const query of usageQueries(["shop"]))
+      expect(query).toContain(
+        "sum by (namespace, pod) (max by (namespace, pod, container) ("
+      );
   });
 
   /** An unentered price leaves its resource out of the trend rather than at zero. */
