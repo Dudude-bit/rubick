@@ -605,6 +605,14 @@ export function readingPicture(
     fee: reading.fee,
     unpriced,
     ...unread(basis),
+    // The supplier's own read of the pods may be refused where the basis's
+    // was not: its rows there have no values, and say why.
+    unread: [
+      ...basis.unread,
+      ...(fold?.unread ?? [])
+        .filter((u) => !basis.unread.some((b) => b.namespace === u.namespace))
+        .map(({ namespace, code, message }) => ({ namespace, code, message })),
+    ],
     unplaced: (fold?.unplaced ?? []).map((u) => ({
       namespace: u.namespace,
       pods: u.pods,

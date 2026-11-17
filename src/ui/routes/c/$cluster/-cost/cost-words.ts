@@ -162,6 +162,10 @@ export function costLineWords(
   t: T
 ): string {
   const of = costOf(picture, target);
+  // Its namespace's pods could not be read: no row, or one with no price,
+  // is the refusal, not an absence.
+  const refused = picture.unread.some((u) => u.namespace === target.namespace);
+  if (refused && (!of || of.perHour === null)) return t("cost", "lineUnread");
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)

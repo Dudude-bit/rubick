@@ -498,6 +498,39 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
   });
 });
 
+describe("a namespace the supplier's own read was refused", () => {
+  /**
+   * The cost basis read `shop`, the supplier's read of the same pods was
+   * refused a moment later: Rust kept the refusal in the fold, and the
+   * picture dropped it, so the rows had no price and no reason. Fails if a
+   * refusal in either read is left out of the picture's unread.
+   */
+  it("carries the refusal into what the picture could not read", () => {
+    const refused = fold([[null, null, null, null]]);
+    refused.unread = [
+      {
+        namespace: "shop",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+        values: [null, null, null, null],
+      },
+    ];
+    const picture = readingPicture(
+      basis(),
+      reading({ workloads: refused }),
+      opencost,
+      null
+    );
+    expect(picture.unread).toEqual([
+      {
+        namespace: "shop",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+  });
+});
+
 describe("one object's cost", () => {
   /**
    * The detail pages read their line through this, the page reads the same
