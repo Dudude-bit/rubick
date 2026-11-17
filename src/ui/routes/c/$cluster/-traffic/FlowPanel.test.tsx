@@ -172,6 +172,7 @@ describe("a flow opened from its edge", () => {
       <FlowPanel row={both} window="last 5 minutes" onClose={() => {}} />,
       { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
     );
+    expect(screen.getByText(/of them errors/).className).toContain("text-err");
     expect(
       screen.getByText(
         "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server."

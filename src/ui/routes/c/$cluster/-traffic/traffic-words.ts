@@ -16,7 +16,8 @@ import type {
   TrafficReading,
   TrafficWord,
 } from "@/lib/traffic";
-import { MEASURES, silenceOf } from "@/lib/traffic";
+import type { MapTone } from "@/integrations";
+import { lineShare, MEASURES, shareTone, silenceOf } from "@/lib/traffic";
 import { formatRate } from "@/lib/utils";
 
 export const WINDOW_WORD = {
@@ -170,22 +171,30 @@ export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
 
 const at = (measure: Measure) => MEASURES.indexOf(measure);
 
+/** A line of a source's numbers; `tone` where it is a share of errors. */
+export interface PanelLine {
+  text: string;
+  tone: MapTone | null;
+}
+
 /** One source's own numbers on a pair, each said as what it counted. */
-export function sourceLines(line: SourceLine, t: T): string[] {
+export function sourceLines(line: SourceLine, t: T): PanelLine[] {
   const value = (measure: Measure) => line.values[at(measure)] ?? null;
-  const out: string[] = [];
+  const out: PanelLine[] = [];
+  const say = (text: string) => out.push({ text, tone: null });
   const requests = value("requests");
   if (requests !== null) {
-    out.push(t("traffic", "panelRequests", { v: rate(requests) }));
-    const errors = value("errors");
-    if (errors !== null && requests > 0)
-      out.push(
-        t(
+    say(t("traffic", "panelRequests", { v: rate(requests) }));
+    const share = lineShare(line);
+    if (share.value !== null)
+      out.push({
+        text: t(
           "traffic",
           line.source.grpcErrors ? "panelErrors" : "panelErrorsHttp",
-          { share: formatShare(errors / requests) }
-        )
-      );
+          { share: formatShare(share.value) }
+        ),
+        tone: shareTone(share),
+      });
   }
   const quantiles = (["p50", "p95", "p99"] as const)
     .map((measure) => {
@@ -193,19 +202,15 @@ export function sourceLines(line: SourceLine, t: T): string[] {
       return v === null ? null : `${measure} ${ms(v, t)}`;
     })
     .filter((part): part is string => part !== null);
-  if (quantiles.length > 0) out.push(quantiles.join(" · "));
+  if (quantiles.length > 0) say(quantiles.join(" · "));
   const bytes = value("bytes");
-  if (bytes !== null)
-    out.push(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
+  if (bytes !== null) say(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
   const events = value("events");
-  if (events !== null)
-    out.push(t("traffic", "panelEvents", { v: rate(events) }));
+  if (events !== null) say(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
-  if (drops !== null) out.push(t("traffic", "panelDrops", { v: rate(drops) }));
+  if (drops !== null) say(t("traffic", "panelDrops", { v: rate(drops) }));
   if (line.protocols.length > 0)
-    out.push(
-      t("traffic", "panelProtocols", { list: line.protocols.join(", ") })
-    );
+    say(t("traffic", "panelProtocols", { list: line.protocols.join(", ") }));
   return out;
 }
 

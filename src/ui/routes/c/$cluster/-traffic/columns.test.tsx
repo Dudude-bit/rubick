@@ -8,7 +8,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { MEASURES, pairRows, type FlowRow } from "@/lib/traffic";
 import { drawnColumns, flowColumns } from "./columns";
-import { End } from "./flow-cells";
+import { End, Figure } from "./flow-cells";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -202,6 +202,31 @@ describe("an end in the flows table", () => {
     expect(shown).toHaveLength(1);
     expect(screen.getByTestId("resource-ref-name").textContent).toContain(
       "ratings"
+    );
+  });
+});
+
+describe("a share of errors in the flows table", () => {
+  /**
+   * The map drew the fault-abort edges red while their 100% read in the
+   * table's grey, like 0%: a share is toned by the one function the edge is.
+   */
+  it("is toned as its edge is: red at 100%, green at 0%, grey as a floor", () => {
+    const [row] = standRows();
+    const tone = (cell: FlowRow["errorShare"]) => {
+      const { container } = render(
+        <Figure cell={cell} kind="share" row={row} />
+      );
+      const className = container.firstElementChild?.className ?? "";
+      container.remove();
+      return className;
+    };
+    const measured = { source: "Istio", state: "measured" as const };
+    expect(tone({ ...measured, value: 1 })).toContain("text-err");
+    expect(tone({ ...measured, value: 0.02 })).toContain("text-warn");
+    expect(tone({ ...measured, value: 0 })).toContain("text-ok");
+    expect(tone({ ...measured, value: 0, floor: true })).not.toContain(
+      "text-ok"
     );
   });
 });

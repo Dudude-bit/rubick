@@ -6,8 +6,9 @@ import {
 import type { FlowEnd } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { drawnCrd } from "@/lib/links";
-import type { Cell, FlowRow } from "@/lib/traffic";
+import { shareTone, type Cell, type FlowRow } from "@/lib/traffic";
 import { cn } from "@/lib/utils";
+import { TONE_TEXT } from "../-map/tone-classes";
 import {
   cellText,
   cellTitle,
@@ -80,7 +81,8 @@ export function Figure({
       className={cn(
         "font-mono tabular-nums",
         cell.value === null && "text-fg-fnt",
-        cell.state === "notRead" && "text-warn"
+        cell.state === "notRead" && "text-warn",
+        kind === "share" && cell.value !== null && TONE_TEXT[shareTone(cell)]
       )}
     >
       {cellText(cell, kind, t)}

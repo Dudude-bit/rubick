@@ -13,6 +13,8 @@ import type { PolicyRef } from "@/generated/types";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { parts } from "@/i18n/parts";
 import { crdInGroup, objectLink } from "@/lib/links";
+import { cn } from "@/lib/utils";
+import { TONE_TEXT } from "../-map/tone-classes";
 import {
   endLabel,
   endSub,
@@ -101,9 +103,15 @@ export function FlowPanel({
             </p>
             {side && <p className="text-[11.5px] text-fg-mut">{side}</p>}
             {lines.length > 0 ? (
-              lines.map((text) => (
-                <p key={text} className="font-mono text-[11.5px] text-fg-mut">
-                  {text}
+              lines.map((said) => (
+                <p
+                  key={said.text}
+                  className={cn(
+                    "font-mono text-[11.5px]",
+                    said.tone ? TONE_TEXT[said.tone] : "text-fg-mut"
+                  )}
+                >
+                  {said.text}
                 </p>
               ))
             ) : (

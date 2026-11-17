@@ -407,21 +407,42 @@ export const ERROR_AT = 0.05;
  * flows are never green.
  */
 export function flowTone(row: FlowRow): MapTone {
-  const share = row.errorShare;
-  const shareTone: MapTone =
-    share.state === "notRead"
-      ? "unknown"
-      : share.value === null
-        ? "mute"
-        : share.value >= ERROR_AT
-          ? "err"
-          : share.value >= WARN_AT
-            ? "warn"
-            : share.floor
-              ? "mute"
-              : "ok";
-  if ((row.drops.value ?? 0) > 0 && shareTone !== "err") return "warn";
-  return shareTone;
+  const tone = shareTone(row.errorShare);
+  if ((row.drops.value ?? 0) > 0 && tone !== "err") return "warn";
+  return tone;
+}
+
+/**
+ * The tone of a share of errors wherever it is drawn: the edge, the table,
+ * the panel and the workload block. Unread is the not-checked dash, none is
+ * neutral, and a floor under the warning line is never green.
+ */
+export function shareTone(share: Cell): MapTone {
+  if (share.state === "notRead") return "unknown";
+  if (share.value === null) return "mute";
+  if (share.value >= ERROR_AT) return "err";
+  if (share.value >= WARN_AT) return "warn";
+  return share.floor ? "mute" : "ok";
+}
+
+/** A source's own share on a pair, as its panel line says it. */
+export function lineShare(line: SourceLine): Cell {
+  const requests = line.values[at("requests")] ?? null;
+  const errors = line.values[at("errors")] ?? null;
+  const value =
+    requests === null || errors === null || requests <= 0
+      ? null
+      : errors / requests;
+  return {
+    value,
+    source: line.source.name,
+    state: "measured",
+    ...(value !== null &&
+    !line.source.grpcErrors &&
+    mayCarryGrpc(line.protocols)
+      ? { floor: true as const }
+      : {}),
+  };
 }
 
 /** The number that weighs an edge, and its unit, by the first family the row has. */

@@ -4,6 +4,7 @@
  * sources has series: one line of advice per page would be a nag.
  */
 import { Link } from "@tanstack/react-router";
+import { Fragment } from "react";
 
 import { useShareSection } from "@/components/share/screen-share";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -12,10 +13,11 @@ import { useTraffic, type TrafficState } from "@/hooks/useTraffic";
 import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink } from "@/lib/links";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
-import { isEnd, type FlowRow } from "@/lib/traffic";
+import { isEnd, shareTone, type FlowRow } from "@/lib/traffic";
 import { cn } from "@/lib/utils";
 import { AskAgain } from "../../-supplier/AskAgain";
 import { WINDOW_WORD } from "../../-traffic/traffic-words";
+import { TONE_TEXT } from "../../-map/tone-classes";
 import {
   cronJobOf,
   rowWords,
@@ -23,6 +25,9 @@ import {
   subjectOf,
   trafficSection,
 } from "./workload-traffic-words";
+
+/** Where `rowWords` puts the share of errors, after the name. */
+const ERRORS_PART = 1;
 
 function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
   const t = useT();
@@ -51,7 +56,21 @@ function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
         <span className="min-w-0 truncate font-mono">{name}</span>
       )}
       <span className="ml-auto shrink-0 font-mono tabular-nums text-fg-mut">
-        {rest.filter(Boolean).join(" · ")}
+        {rest
+          .map((part, at) => ({ part, at }))
+          .filter(({ part }) => part)
+          .map(({ part, at }, shown) => (
+            <Fragment key={at}>
+              {shown > 0 && " · "}
+              {at === ERRORS_PART ? (
+                <span className={TONE_TEXT[shareTone(row.errorShare)]}>
+                  {part}
+                </span>
+              ) : (
+                part
+              )}
+            </Fragment>
+          ))}
       </span>
     </li>
   );
