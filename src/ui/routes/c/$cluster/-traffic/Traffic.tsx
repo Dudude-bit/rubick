@@ -43,7 +43,7 @@ import { toneOf } from "../-topology/tone";
 import { COLLAPSE_ABOVE } from "../-topology/Topology";
 import { drawnColumns, flowColumns } from "./columns";
 import { FlowPanel } from "./FlowPanel";
-import { trafficModel } from "./model";
+import { newFlowMemo, trafficModel } from "./model";
 import { SourceRail } from "./SourceRail";
 import { liveStopped } from "./live-words";
 import { nothingWords, unreadNotes, WINDOW_WORD } from "./traffic-words";
@@ -298,9 +298,9 @@ function FlowsView({
     [map.kinds]
   );
   const memo = useMemo(
-    () => ({ for: [t, stale], drawn: newMemo() }),
+    () => ({ for: [t, stale], drawn: newMemo(), flows: newFlowMemo() }),
     [t, stale]
-  ).drawn;
+  );
   const several = scope === null || scope.length > 1;
   const model = useMemo(
     () =>
@@ -312,7 +312,8 @@ function FlowsView({
         collapsedAtFirst: several && rows.length * 2 > COLLAPSE_ABOVE,
         toneOf: (node) => toneOf(node, { t, ingress: () => null, stale }),
         t,
-        memo,
+        memo: memo.drawn,
+        flows: memo.flows,
       }),
     [rows, map.nodes, map.reads, toggled, several, t, stale, memo]
   );

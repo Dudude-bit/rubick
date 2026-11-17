@@ -816,6 +816,9 @@ struct Fold {
     unreached: BTreeMap<String, UnreachedNode>,
     nodes_changed: bool,
     owners: Owners,
+    /// Each pair as last sent, so a second that changes nothing a reader
+    /// sees sends nothing.
+    sent: HashMap<Key, LivePair>,
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -850,6 +853,7 @@ impl Fold {
             unreached: BTreeMap::new(),
             nodes_changed: false,
             owners: Owners::default(),
+            sent: HashMap::new(),
         }
     }
 
@@ -1027,9 +1031,16 @@ impl Fold {
         let mut gone = Vec::new();
         for key in changed {
             match self.pairs.get(&key) {
-                Some(seconds) if !seconds.is_empty() => pairs.push(summary(&key, seconds, span)),
+                Some(seconds) if !seconds.is_empty() => {
+                    let pair = shown(summary(&key, seconds, span));
+                    if self.sent.get(&key) != Some(&pair) {
+                        self.sent.insert(key, pair.clone());
+                        pairs.push(pair);
+                    }
+                }
                 _ => {
                     self.pairs.remove(&key);
+                    self.sent.remove(&key);
                     gone.push(LiveKey {
                         from: key.0,
                         to: key.1,
@@ -1038,6 +1049,42 @@ impl Fold {
             }
         }
         (pairs, gone)
+    }
+}
+
+/// A rate as the page draws it: three significant figures, whole from 100.
+#[allow(clippy::cast_possible_truncation)]
+fn figure(value: f64) -> f64 {
+    if value == 0.0 || !value.is_finite() {
+        return value;
+    }
+    if value.abs() >= 100.0 {
+        return value.round();
+    }
+    let scale = 10f64.powi(2 - value.abs().log10().floor() as i32);
+    (value * scale).round() / scale
+}
+
+/// A pair at the precision it is drawn at.
+fn shown(pair: LivePair) -> LivePair {
+    let some = |v: Option<f64>| v.map(figure);
+    LivePair {
+        forwarded: figure(pair.forwarded),
+        dropped: figure(pair.dropped),
+        drops: pair
+            .drops
+            .into_iter()
+            .map(|drop| LiveDrop {
+                rate: figure(drop.rate),
+                ..drop
+            })
+            .collect(),
+        requests: some(pair.requests),
+        errors: some(pair.errors),
+        p50: some(pair.p50),
+        p95: some(pair.p95),
+        p99: some(pair.p99),
+        ..pair
     }
 }
 
@@ -1324,7 +1371,7 @@ mod tests {
         let mut fold = Fold::new(100);
         fold.add(102, &event(Verdict::Forwarded, "web", "api"));
         let first = fold.tick(103).0;
-        assert_eq!(first[0].forwarded, 1.0 / 3.0);
+        assert_eq!(first[0].forwarded, 0.333);
         let later = fold.tick(150).0;
         assert_eq!(later.len(), 1);
         assert_eq!(later[0].forwarded, 1.0 / 50.0);
@@ -1375,7 +1422,7 @@ mod tests {
                 key: deployment("caller")
             }
         );
-        assert_eq!(pairs[0].forwarded, 2.0 / 60.0);
+        assert_eq!(pairs[0].forwarded, 0.0333);
     }
 
     /// Flows held under a pod before the pods were read move to its workload
@@ -1399,7 +1446,7 @@ mod tests {
         });
         let (pairs, gone) = fold.tick(102);
         assert_eq!(pairs.len(), 1);
-        assert_eq!(pairs[0].forwarded, 2.0 / 60.0);
+        assert_eq!(pairs[0].forwarded, 0.0333);
         assert!(
             matches!(&gone[..], [LiveKey { from: FlowEnd::Workload { key }, .. }] if key.kind == "Pod")
         );
@@ -1423,6 +1470,22 @@ mod tests {
             &read.tick(101).0[0].from,
             FlowEnd::Workload { key } if key.kind == "Pod" && key.name == "debug"
         ));
+    }
+
+    /// A pair whose numbers, as drawn, did not move is not sent again: an
+    /// unchanged second costs the page nothing.
+    #[test]
+    fn a_pair_whose_drawn_numbers_did_not_move_is_not_sent_again() {
+        let mut fold = Fold::new(0);
+        let mut sent = Vec::new();
+        for now in 100..200 {
+            fold.add(now, &event(Verdict::Forwarded, "caller", "web"));
+            sent.push(fold.tick(now + 1).0.len());
+        }
+        assert_eq!(sent[0], 1);
+        assert!(sent[70..].iter().all(|n| *n == 0), "{sent:?}");
+        assert_eq!(figure(4.7412), 4.74);
+        assert_eq!(figure(1234.4), 1234.0);
     }
 
     /// Past the cap a new pair is counted and not held.
