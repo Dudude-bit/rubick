@@ -20,6 +20,7 @@ use super::upgrade::{removal, Group, Groups, Read};
 use super::{AuditFinding, AuditSeverity, RuleId, Subject, What, Why};
 use crate::config::PrometheusEntry;
 use crate::integrations::prometheus::{instant, PromSeries};
+use crate::resources::shown_text;
 
 /// A deprecated API the server was asked for, as a subject: no kind holds a dot.
 pub const DEPRECATED_API: &str = "DeprecatedAPI.k8s.io";
@@ -97,7 +98,7 @@ pub fn judge_crd(facts: &CrdFacts) -> Option<AuditFinding> {
         .iter()
         .map(|(version, warning)| What::Deprecated {
             version: version.clone(),
-            warning: warning.clone(),
+            warning: warning.as_deref().map(shown_text),
             stored: facts.stored.contains(version),
             storage: facts.storage.as_ref() == Some(version),
         })
@@ -425,6 +426,35 @@ mod tests {
 
     fn facts(value: serde_json::Value) -> CrdFacts {
         crd_facts(&serde_json::from_value(value).expect("a CRD"))
+    }
+
+    /// A CRD's warning is its author's text and reaches the screen, so it
+    /// passes the one door every string does. Fails if a key someone pasted
+    /// into a `deprecationWarning` leaves this process.
+    #[test]
+    fn a_crd_warning_holding_a_private_key_is_withheld() {
+        let label = ["PRIVATE", "KEY"].join(" ");
+        let key = format!(
+            "-----BEGIN {label}-----\nMIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEA\n-----END {label}-----\n"
+        );
+        let pasted = facts(crd(
+            &json!([
+                version("v1alpha1", true, false, Some(&key)),
+                version("v1", true, true, None)
+            ]),
+            &["v1"],
+            "7",
+        ));
+        let finding = judge_crd(&pasted).expect("a finding");
+        let said = serde_json::to_string(&finding.what).expect("json");
+        assert!(!said.contains("MIIBVgIBADAN"), "{said}");
+        assert!(matches!(
+            &finding.what[0],
+            What::Deprecated {
+                warning: Some(_),
+                ..
+            }
+        ));
     }
 
     /// A served version its CRD marks deprecated is named with the CRD's
