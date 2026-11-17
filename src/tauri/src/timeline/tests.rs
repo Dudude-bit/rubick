@@ -258,6 +258,31 @@ fn an_annotation_that_may_copy_the_object_is_compared_by_digest_alone() {
     }
 }
 
+/// Istio renews its election in a `ConfigMap` annotation every few seconds:
+/// three such rows took nine of sixteen lines on screen, without end. Fails
+/// if a renewal alone is a row, or a data change made with it is lost.
+#[test]
+fn a_leader_election_renewal_is_not_a_change() {
+    let lock = |renewed: &str, data: &str| {
+        let record = format!(r#"{{"holderIdentity":"istiod-1","renewTime":"{renewed}"}}"#);
+        json!({"metadata": {"name": "istio-leader", "namespace": "istio-system",
+            "annotations": {"control-plane.alpha.kubernetes.io/leader": record}},
+            "data": {"k": data}})
+    };
+    let at = |renewed: &str, data: &str| snap("ConfigMap", "", &lock(renewed, data));
+    let before = at("2026-11-17T10:00:00Z", "a");
+    assert!(changed(&before, &at("2026-11-17T10:00:02Z", "a")).is_none());
+    let found = moves(&before, &at("2026-11-17T10:00:04Z", "b"));
+    assert_eq!(
+        found,
+        [FieldMove::NotKept {
+            path: "data.k".into(),
+            was: true,
+            is: true
+        }]
+    );
+}
+
 /// A private key never reaches the screen, whatever field carries it.
 /// Fails if a kept value skips the one door.
 #[test]
