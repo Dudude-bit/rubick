@@ -352,10 +352,11 @@ pub fn judge_requested(counted: &Counted, groups: &Groups) -> Vec<Audited> {
                 r.resource.clone(),
                 r.subresource.clone(),
             );
-            if let Some(today) = &counted.today {
-                what.push(What::RequestedToday {
-                    requests: today.get(&key).copied().unwrap_or(0),
-                });
+            // `increase` answers a series only once it has two samples in
+            // the window: a key absent from the answer is a count nobody
+            // knows, not none.
+            if let Some(&requests) = counted.today.as_ref().and_then(|today| today.get(&key)) {
+                what.push(What::RequestedToday { requests });
             }
             let resource = if r.subresource.is_empty() {
                 r.resource.clone()
@@ -763,14 +764,11 @@ mod tests {
         assert_eq!(judged[1].subject.name, "example.com/v1beta1 widgets/status");
         assert_eq!(
             judged[1].findings[0].what,
-            vec![
-                What::Requested {
-                    kind: None,
-                    removed: None,
-                    replacement: None
-                },
-                What::RequestedToday { requests: 0 },
-            ]
+            vec![What::Requested {
+                kind: None,
+                removed: None,
+                replacement: None
+            },]
         );
 
         let uncounted = Counted {
