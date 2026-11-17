@@ -68,19 +68,20 @@ function page(
   };
 }
 
+/** A window wide enough that rows dated near 1970 stay in it. */
+const WIDE = 1e15;
+
 describe("one surface reading the timeline", () => {
   let announce: ((event: { payload: unknown }) => void) | null = null;
   let asked: TimelineQuery[] = [];
-  let answers: TimelinePage[] = [];
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      {children}
-    </QueryClientProvider>
-  );
+  let answers: (TimelinePage | Promise<TimelinePage>)[] = [];
+  const fresh = () =>
+    new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapperOf =
+    (client: QueryClient) =>
+    ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
   const told = (context: string) =>
     act(() =>
       announce?.({
@@ -92,6 +93,9 @@ describe("one surface reading the timeline", () => {
         },
       })
     );
+  /** The first page and the catch-up made once it is held. */
+  const settled = () =>
+    waitFor(() => expect(asked.length).toBeGreaterThanOrEqual(2));
 
   beforeEach(() => {
     forgetChannels();
@@ -119,16 +123,17 @@ describe("one surface reading the timeline", () => {
   it("reads only what was recorded since the newest row it holds", async () => {
     answers = [page([row("b", 20), row("a", 10)])];
     const { result } = renderHook(
-      () => useTimeline({ windowMs: 60_000, show: "all" }),
-      { wrapper }
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
     );
     await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    await settled();
     told("staging");
-    expect(asked).toHaveLength(1);
+    expect(asked).toHaveLength(2);
     answers = [page([row("c", 30)], { newest: 30 })];
     told("prod");
     await waitFor(() => expect(result.current.rows).toHaveLength(3));
-    expect(asked[1].after).toBe(20);
+    expect(asked[2].after).toBe(20);
     expect(result.current.rows.map((each) => each.id)).toEqual(["c", "b", "a"]);
   });
 
@@ -136,31 +141,33 @@ describe("one surface reading the timeline", () => {
   it("reads the whole first page again when more arrived than one answer holds", async () => {
     answers = [page([row("a", 10)])];
     const { result } = renderHook(
-      () => useTimeline({ windowMs: 60_000, show: "all" }),
-      { wrapper }
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
     );
     await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await settled();
     answers = [
       page([row("z", 90)], { more: true }),
       page([row("z", 90), row("y", 80), row("a", 10)]),
     ];
     told("prod");
     await waitFor(() => expect(result.current.rows).toHaveLength(3));
-    expect(asked[2].after).toBeNull();
+    expect(asked[3].after).toBeNull();
   });
 
   /** Older rows not read yet are said to be: fails if the last row read is drawn as the end of the window. */
   it("says where the rows read end while older ones remain, and reads them on asking", async () => {
     answers = [page([row("b", 20), row("a", 10)], { more: true })];
     const { result } = renderHook(
-      () => useTimeline({ windowMs: 60_000, show: "all" }),
-      { wrapper }
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
     );
     await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
     answers = [page([row("x", 5)])];
     act(() => result.current.loadOlder());
     await waitFor(() => expect(result.current.rows).toHaveLength(3));
-    expect(asked[1].before).toEqual({ at: 10, seq: 10 });
+    expect(asked[2].before).toEqual({ at: 10, seq: 10 });
     expect(result.current.readFrom).toBeNull();
   });
 
@@ -173,10 +180,11 @@ describe("one surface reading the timeline", () => {
   it("leaves a row recorded since but older than what was read for the page that reads there", async () => {
     answers = [page([row("b", 20), row("a", 10)], { more: true })];
     const { result } = renderHook(
-      () => useTimeline({ windowMs: 60_000, show: "all" }),
-      { wrapper }
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
     );
     await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
     answers = [page([row("c", 30), row("old-event", 5, 31)])];
     told("prod");
     await waitFor(() => expect(result.current.rows).toHaveLength(3));
@@ -185,8 +193,60 @@ describe("one surface reading the timeline", () => {
     answers = [page([row("x", 8), row("old-event", 5, 31)])];
     act(() => result.current.loadOlder());
     await waitFor(() => expect(result.current.rows).toHaveLength(5));
-    expect(asked[2].before).toEqual({ at: 10, seq: 10 });
+    expect(asked[3].before).toEqual({ at: 10, seq: 10 });
   });
+
+  /**
+   * A Changes tab closed and opened again within the cache's life: its rows
+   * were held and never read again, so what was recorded while it was closed
+   * stayed off screen until the next change. Fails if a surface opened on
+   * held rows does not catch up.
+   */
+  it("catches up rows recorded while it was closed, once it listens again", async () => {
+    const client = fresh();
+    answers = [page([row("b", 20), row("a", 10)])];
+    const first = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(client) }
+    );
+    await waitFor(() => expect(first.result.current.rows).toHaveLength(2));
+    await settled();
+    first.unmount();
+    answers = [page([row("c", 30)], { newest: 30 })];
+    const again = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(client) }
+    );
+    await waitFor(() =>
+      expect(again.result.current.rows.map((each) => each.id)).toEqual([
+        "c",
+        "b",
+        "a",
+      ])
+    );
+  });
+
+  /**
+   * A row recorded while the first page was on its way: the news came
+   * before there was anything held to catch up from. Fails if that row
+   * stays off screen until the next change.
+   */
+  it("catches up a news that came before the first page was held", async () => {
+    let answer: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (answer = resolve))];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(asked).toHaveLength(1));
+    told("prod");
+    answers = [page([row("c", 30)], { newest: 30 })];
+    act(() => answer(page([row("a", 10)])));
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["c", "a"])
+    );
+  });
+
   /**
    * Two surfaces of one key, their catch-ups answered out of order: the
    * older answer replaced the newer version of a series and lowered what was
@@ -204,6 +264,7 @@ describe("one surface reading the timeline", () => {
 describe("rows that started over", () => {
   let announce: ((event: { payload: unknown }) => void) | null = null;
   let answers: TimelinePage[] = [];
+  let reads = 0;
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider
       client={
@@ -224,9 +285,12 @@ describe("rows that started over", () => {
       if (event === "timeline-changed") announce = handler as typeof announce;
       return () => {};
     });
-    vi.mocked(invoke).mockImplementation(async (command) =>
-      command === "timeline_read" ? (answers.shift() ?? page([])) : undefined
-    );
+    reads = 0;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command !== "timeline_read") return undefined;
+      reads += 1;
+      return answers.shift() ?? page([]);
+    });
   });
 
   /**
@@ -238,10 +302,11 @@ describe("rows that started over", () => {
   it("reads the timeline again from the top once the backend started over", async () => {
     answers = [page([row("old-b", 800), row("old-a", 700)])];
     const { result } = renderHook(
-      () => useTimeline({ windowMs: 60_000, show: "all" }),
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
       { wrapper }
     );
     await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
     answers = [
       page([], { epoch: 1, newest: 3 }),
       page([row("new-c", 30, 3), row("new-b", 20, 2), row("new-a", 10, 1)], {

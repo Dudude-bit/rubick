@@ -151,6 +151,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     staleTime: Number.POSITIVE_INFINITY,
   });
 
+  const hasData = query.data !== undefined;
   useEffect(() => {
     if (!enabled) return;
     let reading = false;
@@ -204,8 +205,14 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     const off = listenEvent("timeline-changed", ({ payload }) => {
       if (payload.context === context) void catchUp();
     });
+    // Rows held from before this surface listened, kept by the cache while
+    // it was closed or read before a news it missed, are caught up once
+    // the listener is in place.
+    void off.then(() => {
+      if (hasData) void catchUp();
+    });
     return () => void off.then((unlisten) => unlisten());
-  }, [enabled, client, key, question, context]);
+  }, [enabled, client, key, question, context, hasData]);
 
   const data = query.data;
   const loadOlder = useCallback(() => {
