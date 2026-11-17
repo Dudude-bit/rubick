@@ -37,6 +37,7 @@ import type {
   ContextInfo,
   ControllerRevisionInfo,
   CopyWith,
+  CostBasis,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -149,6 +150,8 @@ import type {
   TlsCertificate,
   UpdaterConfig,
   Via,
+  WorkloadFold,
+  WorkloadKey,
   YamlHistoryEntryDto,
 } from "./types";
 
@@ -821,6 +824,13 @@ export async function logFrontendEventsBatch(
 
 export async function checkKubectlAvailability(): Promise<CliAvailability> {
   return invoke<CliAvailability>("check_kubectl_availability");
+}
+
+export async function costBasis(
+  scope: string[] | null,
+  heldOnNodes: boolean
+): Promise<CostBasis> {
+  return invoke<CostBasis>("cost_basis", { scope, heldOnNodes });
 }
 
 export async function collectDiagnostics(
@@ -1972,6 +1982,18 @@ export async function prometheusTargets(): Promise<ScrapeTarget[]> {
 
 export async function prometheusRules(): Promise<AlertRule[]> {
   return invoke<AlertRule[]>("prometheus_rules");
+}
+
+export async function prometheusByWorkload(
+  queries: string[],
+  scope: string[] | null,
+  keys: WorkloadKey[]
+): Promise<WorkloadFold> {
+  return invoke<WorkloadFold>("prometheus_by_workload", {
+    queries,
+    scope,
+    keys,
+  });
 }
 
 export async function getLokiConnection(): Promise<LokiConnection | null> {

@@ -1816,6 +1816,68 @@ mod tests {
         context.end();
     }
 
+    /// Audit and the cluster map on screen together follow each kind they
+    /// share through one watch: both pages reach the same context, and the
+    /// slots opened are the kinds either asks for, not the sum of both asks.
+    /// Would break if one of them spelled a kind other than the layer does,
+    /// or reached a context of its own.
+    #[tokio::test]
+    async fn audit_and_the_map_together_open_one_watch_per_kind() {
+        type Resolved = Vec<(KindKey, (ApiResource, bool))>;
+        let feeds = feeds();
+        let client = client().await;
+        let context = feeds.context_for("prod", client.clone());
+        let theirs = feeds.context_for("prod", client);
+        assert!(Arc::ptr_eq(&context, &theirs));
+        let audit = crate::audit::feed_ask(None);
+        let map = crate::topology::ask(None);
+        let resolved = |ask: &Ask| -> (Resolved, Vec<KindKey>) {
+            let (known, unknown): (Vec<_>, Vec<_>) =
+                ask.kinds.iter().partition(|kind| built_in(kind).is_some());
+            (
+                known
+                    .into_iter()
+                    .map(|kind| (kind.clone(), built_in(kind).expect("built in")))
+                    .collect(),
+                unknown.into_iter().cloned().collect(),
+            )
+        };
+        let (audit_kinds, audit_unserved) = resolved(&audit);
+        let (map_kinds, map_unserved) = resolved(&map);
+        let _audit = context.join(&audit, &audit_kinds, &audit_unserved);
+        let _map = theirs.join(&map, &map_kinds, &map_unserved);
+
+        let shared = audit_kinds
+            .iter()
+            .filter(|(kind, _)| map_kinds.iter().any(|(other, _)| other == kind))
+            .count();
+        let either: BTreeSet<&KindKey> = audit_kinds
+            .iter()
+            .chain(&map_kinds)
+            .map(|(kind, _)| kind)
+            .collect();
+        assert!(shared >= 8, "the two pages share {shared} kinds");
+        // One resource spelled two ways would be two slots, or one and none.
+        let mut spelled: BTreeMap<(&str, &str), BTreeSet<&KindKey>> = BTreeMap::new();
+        for kind in audit.kinds.iter().chain(&map.kinds) {
+            let stem = kind.plural.trim_end_matches('s');
+            spelled
+                .entry((kind.group.as_str(), stem))
+                .or_default()
+                .insert(kind);
+        }
+        let twice: Vec<_> = spelled.values().filter(|keys| keys.len() > 1).collect();
+        assert!(twice.is_empty(), "{twice:?}");
+        assert!(audit_unserved.is_empty(), "{audit_unserved:?}");
+        let opened = context.serving().stops.lock().len();
+        assert_eq!(
+            opened,
+            either.len(),
+            "watches opened against kinds asked for"
+        );
+        context.end();
+    }
+
     /// A subscriber arriving after the list is handed what is there from
     /// the store, with no watch of its own, and then each change once, as
     /// the first one is. Fails if it misses the set, or a change reaches

@@ -95,6 +95,55 @@ export function formatDecimal(
   return format.format(value);
 }
 
+const amountFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * An amount of money: whole above a hundred, to the cent above one, and
+ * three significant digits below, so a pod's 0.0042 an hour is not 0.00.
+ */
+export function formatAmount(
+  value: number,
+  locale: string = currentLocale()
+): string {
+  const abs = Math.abs(value);
+  const shape =
+    abs >= 100 || abs === 0 ? "whole" : abs >= 1 ? "cents" : "small";
+  const key = `${locale}|${shape}`;
+  let format = amountFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(
+      locale,
+      shape === "whole"
+        ? { maximumFractionDigits: 0 }
+        : shape === "cents"
+          ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+          : { maximumSignificantDigits: 3 }
+    );
+    amountFormats.set(key, format);
+  }
+  return format.format(value);
+}
+
+const percentFormats = new Map<string, Intl.NumberFormat>();
+
+/** A ratio as a per cent, with `fractionDigits` decimals at most. */
+export function formatPercent(
+  ratio: number,
+  fractionDigits: number,
+  locale: string = currentLocale()
+): string {
+  const key = `${locale}|${fractionDigits}`;
+  let format = percentFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, {
+      style: "percent",
+      maximumFractionDigits: fractionDigits,
+    });
+    percentFormats.set(key, format);
+  }
+  return format.format(ratio);
+}
+
 /**
  * The same age as {@link formatAge}, from a timestamp and a clock the caller
  * owns: the largest whole unit only.

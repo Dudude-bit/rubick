@@ -168,6 +168,8 @@ pub type RefusedCounts = DashSet<String>;
 /// are looked at, not copied, on every request.
 pub struct Snapshot {
     pub pods: Vec<Arc<Pod>>,
+    /// The claims each of `pods` mounts, by uid.
+    pub claims: Arc<KeptClaims>,
     pub nodes: Vec<Arc<Node>>,
     pub deployments: Vec<Arc<Deployment>>,
     pub stateful_sets: Vec<Arc<StatefulSet>>,
@@ -179,6 +181,7 @@ pub struct Snapshot {
 
 struct ClusterWatch {
     pods: Store<Pod>,
+    claims: Arc<KeptClaims>,
     nodes: Store<Node>,
     deployments: Store<Deployment>,
     stateful_sets: Store<StatefulSet>,
@@ -332,6 +335,7 @@ impl OverviewCache {
         // cluster did, and which differs from what listing shows.
         Some(Snapshot {
             pods: by_name(watch.pods.state()),
+            claims: watch.claims.clone(),
             nodes: by_name(watch.nodes.state()),
             deployments: by_name(watch.deployments.state()),
             stateful_sets: by_name(watch.stateful_sets.state()),
@@ -453,7 +457,18 @@ impl OverviewCache {
                 .page_size(PAGE_SIZE)
         };
 
-        let pods = cluster.spawn("Pod", Api::all(client.clone()), watcher_config(), strip_pod);
+        let claims: Arc<KeptClaims> = Arc::default();
+        let kept = claims.clone();
+        let pods = cluster.spawn(
+            "Pod",
+            Api::all(client.clone()),
+            watcher_config(),
+            move |pod: &mut Pod| {
+                keep_claims(&kept, pod);
+                strip_pod(pod);
+            },
+        );
+        cluster.spawn_claims_pruner(pods.clone(), claims.clone());
         let nodes = cluster.spawn(
             "Node",
             Api::all(client.clone()),
@@ -493,6 +508,7 @@ impl OverviewCache {
         tracing::info!(context, "overview watches started");
         ClusterWatch {
             pods,
+            claims,
             nodes,
             deployments,
             stateful_sets,
@@ -560,7 +576,7 @@ impl WatchConfigs {
         kind: &'static str,
         api: Api<K>,
         config: WatcherConfig,
-        strip: fn(&mut K),
+        strip: impl FnMut(&mut K) + Send + 'static,
     ) -> Store<K>
     where
         K: Resource + Clone + DeserializeOwned + Debug + Send + Sync + 'static,
@@ -671,6 +687,22 @@ impl WatchConfigs {
         });
     }
 
+    /// Lets go of departed pods' claims on the reaper's beat: a delete the
+    /// watch missed across a relist would otherwise keep its entry forever.
+    fn spawn_claims_pruner(&self, pods: Store<Pod>, claims: Arc<KeptClaims>) {
+        let stop = self.stop.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = tokio::time::sleep(REAP_EVERY) => {}
+                }
+                prune_claims(&claims, &pods);
+            }
+        });
+    }
+
     /// Stops the cluster's watches once nothing has asked for them in `idle`.
     fn spawn_reaper(&self, idle: Duration) {
         let health = self.health.clone();
@@ -715,6 +747,7 @@ fn strip_container(container: &mut Container) {
 /// are most of its bytes. The readiness probe stays: a not-Ready pod's cause
 /// quotes it, and without it every one read as declaring none. So does a
 /// static pod's mirror annotation, the uid its events carry (`events_uid`).
+/// The claims a pod mounts are kept beside it ([`KeptClaims`]), never on it.
 pub fn strip_pod(pod: &mut Pod) {
     pod.metadata.managed_fields = None;
     pod.metadata.annotations = pod.metadata.annotations.take().and_then(|mut kept| {
@@ -733,6 +766,43 @@ pub fn strip_pod(pod: &mut Pod) {
             ephemeral.clear();
         }
     }
+}
+
+/// The claims each stored pod mounts, by its uid: what the cost page bills
+/// to the pod's workload. Beside the store rather than on the pod, so no
+/// reader of a stored pod is shown something the cluster did not write.
+pub type KeptClaims = DashMap<String, Arc<[String]>>;
+
+/// Notes `pod`'s claims before it is stripped of its volumes.
+pub fn keep_claims(kept: &KeptClaims, pod: &Pod) {
+    let Some(uid) = pod.metadata.uid.as_deref() else {
+        return;
+    };
+    let claims: Vec<String> = pod
+        .spec
+        .iter()
+        .flat_map(|s| s.volumes.iter().flatten())
+        .filter_map(|v| {
+            v.persistent_volume_claim
+                .as_ref()
+                .map(|c| c.claim_name.clone())
+        })
+        .collect();
+    if claims.is_empty() {
+        kept.remove(uid);
+    } else {
+        kept.insert(uid.to_string(), claims.into());
+    }
+}
+
+/// Lets go of the claims of pods the store no longer holds.
+fn prune_claims(kept: &KeptClaims, pods: &Store<Pod>) {
+    let live: std::collections::HashSet<String> = pods
+        .state()
+        .iter()
+        .filter_map(|pod| pod.metadata.uid.clone())
+        .collect();
+    kept.retain(|uid, _| live.contains(uid));
 }
 
 pub fn strip_node(node: &mut Node) {
@@ -790,6 +860,42 @@ pub fn strip_event(event: &mut Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stored pod carries nothing the cluster did not write: its claims
+    /// are kept beside it by uid, for the cost page, and let go once the
+    /// store no longer holds it. Fails if they go back onto the pod, where
+    /// every reader of a stored pod would show them as the cluster's.
+    #[test]
+    fn a_stored_pod_s_claims_are_kept_beside_it_and_never_on_it() {
+        let mut pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "db-0", "namespace": "shop", "uid": "u-db-0"},
+            "spec": {"containers": [], "volumes": [
+                {"name": "data", "persistentVolumeClaim": {"claimName": "data-db-0"}},
+                {"name": "kube-api-access", "projected": {"sources": []}},
+            ]},
+        }))
+        .unwrap();
+        let kept = KeptClaims::default();
+        keep_claims(&kept, &pod);
+        strip_pod(&mut pod);
+        assert!(pod.spec.as_ref().unwrap().volumes.is_none());
+        assert!(
+            pod.metadata.annotations.is_none(),
+            "nothing written onto the pod"
+        );
+        assert_eq!(
+            &*kept.get("u-db-0").unwrap().clone(),
+            ["data-db-0".to_string()]
+        );
+
+        let (store, mut writer) = reflector::store::<Pod>();
+        writer.apply_watcher_event(&watcher::Event::InitDone);
+        prune_claims(&kept, &store);
+        assert!(
+            kept.is_empty(),
+            "a pod the store does not hold keeps no claims"
+        );
+    }
 
     fn in_namespace(namespace: Option<&str>) -> Pod {
         let mut pod = Pod::default();

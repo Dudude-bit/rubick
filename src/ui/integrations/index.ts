@@ -79,6 +79,8 @@ import type {
   Connect,
   Gate,
   ConnectionDraft,
+  CostRange,
+  CostTrend,
   CrdView,
   EdgeConfig,
   Extension,
@@ -109,7 +111,12 @@ import type {
   VolumeFullness,
 } from "./registry";
 
-export { RANGE_WINDOW_MS, RelatedShort, USAGE_RANGES } from "./registry";
+export {
+  COST_RANGES,
+  RANGE_WINDOW_MS,
+  RelatedShort,
+  USAGE_RANGES,
+} from "./registry";
 export type {
   CapabilityKey,
   CapabilityState,
@@ -117,6 +124,8 @@ export type {
   ClusterProvider,
   Connect,
   ConnectionDraft,
+  CostRange,
+  CostTrend,
   CrdView,
   EdgeConfig,
   Extension,
@@ -415,6 +424,7 @@ export function useCapabilityState<K extends CapabilityKey>(
     (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
   );
 
+  let reading = false;
   for (const vendor of VENDORS) {
     const implementation = vendor.provides?.[key];
     if (!implementation) continue;
@@ -435,7 +445,10 @@ export function useCapabilityState<K extends CapabilityKey>(
 
     const connection = connections.get(vendor.id);
     if (!connection || connection.state === "notConfigured") continue;
-    if (connection.state === "reading") continue;
+    if (connection.state === "reading") {
+      reading = true;
+      continue;
+    }
     if (connection.state === "unreachable") {
       return {
         state: "unreachable",
@@ -453,7 +466,7 @@ export function useCapabilityState<K extends CapabilityKey>(
     };
   }
 
-  return { state: "absent" };
+  return reading ? { state: "reading" } : { state: "absent" };
 }
 
 /**

@@ -231,6 +231,31 @@ describe("a basic-auth address where it is drawn", () => {
     useClusterStore.setState({ isConnected: false, currentContext: null });
   });
 
+  /**
+   * A configured supplier whose probe has not come back is not "absent":
+   * every reader that answers absent with "connect one" offered the reader
+   * what they had already done, for as long as the probe took.
+   */
+  it("is reading, not absent, while a configured supplier's probe is out", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue(saved);
+    vi.mocked(commands.probePrometheus).mockClear();
+    vi.mocked(commands.probePrometheus).mockReturnValueOnce(
+      new Promise(() => {})
+    );
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const power = renderHook(() => useCapabilityState("usage.history"), {
+      wrapper,
+    });
+    await waitFor(() => expect(commands.probePrometheus).toHaveBeenCalled());
+    expect(power.result.current.state).toBe("reading");
+  });
+
   it("names the host alone as where a chart's numbers come from", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },

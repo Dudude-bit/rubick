@@ -31,7 +31,7 @@ pub use answer::{
 };
 pub use deprecated::DEPRECATED_API;
 pub use detail::object_audit;
-pub use index::AuditIndexes;
+pub use index::{feed_ask, AuditIndexes};
 pub use rules::{AuditSeverity, Category, RuleId, Standard};
 pub use upgrade::{Removal, HELM_RELEASE};
 

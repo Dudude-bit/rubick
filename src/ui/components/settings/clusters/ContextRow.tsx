@@ -6,7 +6,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { useState } from "react";
+
 import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
+import { PricesDialog } from "@/components/cost/PricesDialog";
+import { formatMoney } from "@/lib/cost";
+import { useCostPrices } from "@/stores/costPricesStore";
 import { Checkbox } from "@/components/ui/checkbox";
 import { clusterColor, clusterNameParts } from "@/lib/cluster-identity";
 import { criticalityOf } from "@/lib/critical";
@@ -207,6 +212,8 @@ export function ContextRow({
           </span>
         </label>
 
+        <CostPricesLine context={context.name} />
+
         {unbound === "aws" && (
           <div className="mt-1 text-[11px] text-fg-fnt">
             {t("settings", "awsNoProfilesPrefix")}{" "}
@@ -233,6 +240,32 @@ export function ContextRow({
         <status.icon className="h-3 w-3 flex-none" aria-hidden />
         {CONTEXT_STATUS[reading.status](t)}
       </span>
+    </div>
+  );
+}
+
+/** The prices the Cost page estimates from, for this cluster, and the way to change them. */
+function CostPricesLine({ context }: { context: string }) {
+  const t = useT();
+  const prices = useCostPrices(context);
+  const [open, setOpen] = useState(false);
+  const say = (value: number) => formatMoney(value, prices?.currency ?? "");
+  return (
+    <div className="mt-1 text-[11px] text-fg-mut">
+      {prices
+        ? t("cost", "settingsPrices", {
+            cpu: say(prices.cpu),
+            memory: say(prices.memory),
+          })
+        : t("cost", "settingsNoPrices")}{" "}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+      >
+        {t("cost", prices ? "pricesEdit" : "pricesEnter")}
+      </button>
+      <PricesDialog context={context} open={open} onOpenChange={setOpen} />
     </div>
   );
 }
