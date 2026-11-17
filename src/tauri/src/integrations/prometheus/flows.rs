@@ -731,26 +731,29 @@ pub(crate) fn fold(
         .collect();
 
     let in_scope_pod = |key: &WorkloadKey| scope.is_none_or(|s| s.contains(&key.namespace));
-    let observed = subject.filter(|_| pods.read).map(|subject| {
-        markers
-            .iter()
-            .map(|marker| {
-                let mine: Vec<_> = pods
-                    .listed
-                    .iter()
-                    .filter(|(_, key)| key == subject)
-                    .collect();
-                Observed {
-                    source: marker.source,
-                    pods: u32::try_from(mine.len()).unwrap_or(u32::MAX),
-                    marked: u32::try_from(
-                        mine.iter().filter(|(pod, _)| marks(pod, marker)).count(),
-                    )
-                    .unwrap_or(u32::MAX),
-                }
-            })
-            .collect()
-    });
+    // A subject whose namespace's pods were refused has no count to give.
+    let observed = subject
+        .filter(|subject| pods.read && !pods.unread.contains(subject.namespace.as_str()))
+        .map(|subject| {
+            markers
+                .iter()
+                .map(|marker| {
+                    let mine: Vec<_> = pods
+                        .listed
+                        .iter()
+                        .filter(|(_, key)| key == subject)
+                        .collect();
+                    Observed {
+                        source: marker.source,
+                        pods: u32::try_from(mine.len()).unwrap_or(u32::MAX),
+                        marked: u32::try_from(
+                            mine.iter().filter(|(pod, _)| marks(pod, marker)).count(),
+                        )
+                        .unwrap_or(u32::MAX),
+                    }
+                })
+                .collect()
+        });
     let coverage = if pods.read {
         markers
             .iter()
@@ -1078,6 +1081,52 @@ mod tests {
             kind: None,
             why: NotListedWhy::NoSuch,
         }));
+    }
+
+    /// A subject whose namespace's pods were refused is observed on nothing
+    /// known, while another namespace's subject still has its count.
+    #[test]
+    fn a_subject_whose_namespace_was_not_read_has_no_count_of_its_pods() {
+        let mut read = read_of(vec![pod(
+            "bank",
+            "c-0",
+            Some(("StatefulSet", "c")),
+            json!({}),
+        )]);
+        read.unread.push(UnreadNamespace::of(
+            "shop".into(),
+            &Error::PermissionDenied("pods is forbidden".into()),
+        ));
+        let marker = PodMarker {
+            source: 0,
+            containers: vec!["istio-proxy".into()],
+            annotated: vec![],
+        };
+        let observed = |subject: WorkloadKey| {
+            fold(
+                &[by_name(0, Measure::Requests)],
+                vec![Ok(vec![])],
+                Some(&read),
+                None,
+                None,
+                Some(&subject),
+                std::slice::from_ref(&marker),
+            )
+            .observed
+        };
+        assert_eq!(observed(key("StatefulSet", "a")), None);
+        let bank = WorkloadKey {
+            namespace: "bank".into(),
+            ..key("StatefulSet", "c")
+        };
+        assert_eq!(
+            observed(bank),
+            Some(vec![Observed {
+                source: 0,
+                pods: 1,
+                marked: 0
+            }])
+        );
     }
 
     /// Where the namespace's pods could not be read, a bare name is not
