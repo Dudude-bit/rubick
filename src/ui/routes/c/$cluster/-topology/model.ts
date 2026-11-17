@@ -84,6 +84,8 @@ export interface ModelSettings {
   toggled: ReadonlyMap<string, boolean>;
   /** Whether a group nobody toggled starts collapsed. */
   collapsedAtFirst: boolean;
+  /** What another page says of a node, added to the line under it. */
+  pageSays?: (node: TopologyNode) => string | null;
 }
 
 export interface Model {
@@ -252,7 +254,10 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
  * any of them changes.
  */
 export interface ModelMemo {
-  nodes: WeakMap<TopologyNode, { graph: GraphNode; optional: boolean }>;
+  nodes: WeakMap<
+    TopologyNode,
+    { graph: GraphNode; optional: boolean; says: string | null }
+  >;
   edges: WeakMap<TopologyEdge, { graph: GraphEdge; ends: string }>;
 }
 
@@ -294,14 +299,17 @@ export function modelOf(
     // Ingress's health, a stale kind) may change without throwing away every
     // node's drawing; a node whose tone did not change keeps its object.
     const tone = optional ? "warn" : toneOf(node);
+    const says = settings.pageSays?.(node) ?? null;
     const kept = memo.nodes.get(node);
     let graph = kept?.graph;
-    if (graph && kept?.optional === optional && graph.tone !== tone) {
+    const same = kept?.optional === optional && kept.says === says;
+    if (graph && same && graph.tone !== tone) {
       graph = { ...graph, tone };
-      memo.nodes.set(node, { graph, optional });
+      memo.nodes.set(node, { graph, optional, says });
     }
-    if (!graph || kept?.optional !== optional) {
-      const sub = subOf(node, t);
+    if (!graph || !same) {
+      const sub =
+        [subOf(node, t), says].filter(Boolean).join(" · ") || undefined;
       graph = {
         id: node.id,
         group: groupIdOf(node, settings.grouping),
@@ -318,7 +326,7 @@ export function modelOf(
         badge: settings.policies ? coverBadge(node, t) : undefined,
         rank: RANK[kind] ?? WORKLOAD_RANK,
       };
-      memo.nodes.set(node, { graph, optional });
+      memo.nodes.set(node, { graph, optional, says });
     }
     tones.set(node.id, graph.tone);
     groupOf.set(node.id, graph.group);
@@ -350,79 +358,94 @@ export function modelOf(
       ? [...reads.keys(), ...members.keys()]
       : [...members.keys(), ...refusedIds]
   );
+  // A group a route elsewhere attaches to is packed before the rest, so a
+  // Gateway's card stands before (left of or above) its routes' cards.
+  const doors = new Set<string>();
+  for (const edge of edges.values()) {
+    if (edge.relations[0]?.verb !== "attachesTo") continue;
+    const into = groupOf.get(edge.to);
+    if (into && groupOf.get(edge.from) !== into) doors.add(into);
+  }
   const summaries = new Map<string, string>();
-  const groups: GraphGroup[] = [...ids].sort().map((id) => {
-    const held = members.get(id) ?? [];
-    // The namespaces a group was read from: its own, or every one its
-    // members came from. One not read at all is outside the scope.
-    const namespaces =
-      settings.grouping === "namespace"
-        ? [id]
-        : id.startsWith("ns:")
-          ? [id.slice(3)]
-          : [...new Set(held.flatMap((node) => node.home ?? []))];
-    const read = namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
-    // Before any namespace is read the whole map is opening, not outside.
-    const outside =
-      reads.size === 0
-        ? []
-        : namespaces.filter((namespace) => !reads.has(namespace));
-    const counts = new Map<string, number>();
-    for (const node of held)
-      counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
-    const failing = held.filter((node) => tones.get(node.id) === "err").length;
-    const warning = held.filter((node) => tones.get(node.id) === "warn").length;
-    const unread = [
-      ...new Set(
-        namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
-      ),
-    ];
-    const refused = refusedWhole(read);
-    const lines = refused
-      ? [
-          t("topology", "refusedWhole", {
-            namespace: namespaces[0],
-            said:
-              read?.notLookedAt[0]?.why.says === "unanswered"
-                ? read.notLookedAt[0].why.said
-                : "",
-          }),
-        ]
-      : [
-          MAP_KINDS.filter((kind) => counts.has(kind))
-            .map((kind) => `${kind} ${counts.get(kind)}`)
-            .join(" · ") || t("topology", "nothingDrawn"),
-          [
-            failing > 0 && t("count", "failingNodes", { n: failing }),
-            warning > 0 && t("count", "warningNodes", { n: warning }),
+  const groups: GraphGroup[] = [...ids]
+    .sort((a, b) => Number(doors.has(b)) - Number(doors.has(a)) || byName(a, b))
+    .map((id) => {
+      const held = members.get(id) ?? [];
+      // The namespaces a group was read from: its own, or every one its
+      // members came from. One not read at all is outside the scope.
+      const namespaces =
+        settings.grouping === "namespace"
+          ? [id]
+          : id.startsWith("ns:")
+            ? [id.slice(3)]
+            : [...new Set(held.flatMap((node) => node.home ?? []))];
+      const read =
+        namespaces.length === 1 ? reads.get(namespaces[0]) : undefined;
+      // Before any namespace is read the whole map is opening, not outside.
+      const outside =
+        reads.size === 0
+          ? []
+          : namespaces.filter((namespace) => !reads.has(namespace));
+      const counts = new Map<string, number>();
+      for (const node of held)
+        counts.set(node.ref.kind, (counts.get(node.ref.kind) ?? 0) + 1);
+      const failing = held.filter(
+        (node) => tones.get(node.id) === "err"
+      ).length;
+      const warning = held.filter(
+        (node) => tones.get(node.id) === "warn"
+      ).length;
+      const unread = [
+        ...new Set(
+          namespaces.flatMap((namespace) => unreadKinds(reads.get(namespace)))
+        ),
+      ];
+      const refused = refusedWhole(read);
+      const lines = refused
+        ? [
+            t("topology", "refusedWhole", {
+              namespace: namespaces[0],
+              said:
+                read?.notLookedAt[0]?.why.says === "unanswered"
+                  ? read.notLookedAt[0].why.said
+                  : "",
+            }),
           ]
-            .filter(Boolean)
-            .join(" · "),
-          unread.length > 0 &&
-            t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
-          outside.length > 0 &&
-            t("topology", "outsideScope", { namespaces: outside.join(", ") }),
-        ].filter((line): line is string => Boolean(line));
-    summaries.set(id, lines.join(" · "));
-    return {
-      id,
-      label: groupLabel(id, t),
-      collapsed: settings.toggled.get(id) ?? settings.collapsedAtFirst,
-      tone: refused
-        ? "unknown"
-        : loudest(
+        : [
+            MAP_KINDS.filter((kind) => counts.has(kind))
+              .map((kind) => `${kind} ${counts.get(kind)}`)
+              .join(" · ") || t("topology", "nothingDrawn"),
             [
-              ...held.map((node) => tones.get(node.id) ?? "mute"),
-              ...(unread.length > 0 || outside.length > 0
-                ? ["unknown" as const]
-                : []),
-            ],
-            "mute"
-          ),
-      summary: lines.join("\n"),
-      refused,
-    };
-  });
+              failing > 0 && t("count", "failingNodes", { n: failing }),
+              warning > 0 && t("count", "warningNodes", { n: warning }),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            unread.length > 0 &&
+              t("topology", "kindsNotRead", { kinds: unread.join(", ") }),
+            outside.length > 0 &&
+              t("topology", "outsideScope", { namespaces: outside.join(", ") }),
+          ].filter((line): line is string => Boolean(line));
+      summaries.set(id, lines.join(" · "));
+      return {
+        id,
+        label: groupLabel(id, t),
+        collapsed: settings.toggled.get(id) ?? settings.collapsedAtFirst,
+        tone: refused
+          ? "unknown"
+          : loudest(
+              [
+                ...held.map((node) => tones.get(node.id) ?? "mute"),
+                ...(unread.length > 0 || outside.length > 0
+                  ? ["unknown" as const]
+                  : []),
+              ],
+              "mute"
+            ),
+        summary: lines.join("\n"),
+        refused,
+      };
+    });
 
   const graphEdges: GraphEdge[] = [];
   for (const edge of edges.values()) {
@@ -471,12 +494,14 @@ const softEdge = (edge: TopologyEdge): boolean =>
     (relation) => relation.verb === "uses" && onlyOptional(relation.usages)
   );
 
-/** How a kind was read, across the scope, for the rail. */
+/** How a kind was read, across the window's scope, for the rail. */
 export function readingOf(
   kind: string,
-  kinds: readonly MapKindState[]
+  kinds: readonly MapKindState[],
+  scope: readonly string[] | null
 ): MapKindState["reading"] | null {
-  return kinds.find((state) => state.kind === kind)?.reading ?? null;
+  const reading = kinds.find((state) => state.kind === kind)?.reading;
+  return reading ? readingIn(reading, scope) : null;
 }
 
 /** A kind's count across the scope: `null` where some namespace did not count it. */
@@ -549,21 +574,29 @@ const EDGE_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 export interface NotLooked {
-  kind: string;
-  /** The kind, how it was read, and the cluster's words. */
+  /** How these kinds were read, then the kinds: one line a state. */
   line: string;
-  /** Whether edges the map would draw from it are absent because of it. */
-  edges: boolean;
+  kinds: string[];
+  /** What the cluster said of them, each sentence once. */
+  said: string[];
+  /** The kinds among them whose absence takes edges with it. */
+  edges: string[];
 }
 
 /**
- * Every kind the map could not read whole, in the cluster's words. A kind
- * still listing is said apart, and a kind the cluster does not serve is not
- * a gap.
+ * Every kind the map could not read whole, one line a state ("refused: …"),
+ * the cluster's sentences each once. A kind read in every namespace the
+ * window is on was read for this window; a kind still listing is said
+ * apart; a kind the cluster does not serve is not a gap.
  */
-export function notLookedAt(kinds: readonly MapKindState[], t: T): NotLooked[] {
-  return kinds.flatMap((state) => {
-    const reading = state.reading;
+export function notLookedAt(
+  kinds: readonly MapKindState[],
+  t: T,
+  scope: readonly string[] | null
+): NotLooked[] {
+  const lines = new Map<string, NotLooked>();
+  for (const state of kinds) {
+    const reading = readingIn(state.reading, scope);
     const words = readingWords(reading, t);
     if (
       !words ||
@@ -572,16 +605,44 @@ export function notLookedAt(kinds: readonly MapKindState[], t: T): NotLooked[] {
       reading.says === "syncing" ||
       reading.says === "queued"
     )
-      return [];
-    const said = "said" in reading && reading.said ? `: ${reading.said}` : "";
-    return [
-      {
-        kind: state.kind,
-        line: `${state.kind} (${words})${said}`,
-        edges:
-          EDGE_KINDS.has(state.kind) &&
-          (reading.says === "refused" || reading.says === "failed"),
-      },
-    ];
-  });
+      continue;
+    const held = lines.get(words) ?? {
+      line: "",
+      kinds: [],
+      said: [],
+      edges: [],
+    };
+    held.kinds.push(state.kind);
+    const said = "said" in reading ? reading.said : "";
+    if (said && !held.said.includes(said)) held.said.push(said);
+    if (
+      EDGE_KINDS.has(state.kind) &&
+      (reading.says === "refused" || reading.says === "failed")
+    )
+      held.edges.push(state.kind);
+    lines.set(words, held);
+  }
+  return [...lines].map(([words, held]) => ({
+    ...held,
+    line: t("topology", "notLookedLine", {
+      state: words.charAt(0).toUpperCase() + words.slice(1),
+      kinds: held.kinds.join(", "),
+    }),
+  }));
+}
+
+/**
+ * A kind's reading as this window sees it: one read only in some namespaces
+ * is read whole for a window on none but those.
+ */
+export function readingIn(
+  reading: MapKindState["reading"],
+  scope: readonly string[] | null
+): MapKindState["reading"] {
+  return reading.says === "namespacesOnly" &&
+    scope !== null &&
+    scope.length > 0 &&
+    scope.every((namespace) => reading.namespaces.includes(namespace))
+    ? { says: "live" }
+    : reading;
 }

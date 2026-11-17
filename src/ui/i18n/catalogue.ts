@@ -1839,6 +1839,7 @@ export const en = {
   topology: {
     title: "Topology",
     canvasLabel: "The cluster map",
+    litEdges: "The lines from {name}",
     layoutFailed:
       "The map could not be laid out, so what is drawn may be missing objects: {said}",
     expandGroup: "Expand {name}",
@@ -1887,15 +1888,16 @@ export const en = {
     exported: "Map saved to {path}",
     exportFailed: "Could not save the map",
     failed: "The map could not be read: {said}",
-    notLookedAt: "Not looked at: {kinds}",
-    edgesAbsent: "{kind} not read: no edges from or to it are drawn here.",
+    edgesAbsent:
+      "No edges from or to {kinds} are drawn here: they were not read.",
+    notLookedLine: "{state}: {kinds}",
+    clusterSaid: "What the cluster said",
     otherEngines:
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",
     stillListing: "Still listing: {kinds}",
     nothingToDraw:
       "Nothing to draw in {scope}: no routes, Services or workloads.",
-    shareNotRead: "Not read, so not on the map: {kinds}",
     outsideScope:
       "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
     shareStillOpening:

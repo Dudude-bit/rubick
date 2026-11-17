@@ -81,6 +81,10 @@ pub(super) fn traffic_into(
             &svc_ref,
             &snapshot.gateway_routes,
             snapshot.gateways.as_deref(),
+            snapshot
+                .gateway_classes
+                .as_ref()
+                .map(|read| read.as_deref().map_err(String::as_str)),
             out,
         );
     }
@@ -124,6 +128,7 @@ pub(super) fn gateway_traffic_into(
     svc_ref: &ObjectRef,
     routes: &[crate::resources::RouteInfo],
     gateways: Option<&[crate::resources::GatewayInfo]>,
+    classes: Option<std::result::Result<&[crate::resources::GatewayClassInfo], &str>>,
     out: &mut Neighbourhood,
 ) {
     for route in routes {
@@ -162,7 +167,7 @@ pub(super) fn gateway_traffic_into(
             );
         }
 
-        route_parents(route, &route_ref, gateways, out);
+        route_parents(route, &route_ref, gateways, classes, out);
     }
 }
 
@@ -172,6 +177,9 @@ pub(super) fn route_parents(
     route: &crate::resources::RouteInfo,
     route_ref: &ObjectRef,
     gateways: Option<&[crate::resources::GatewayInfo]>,
+    // Every GatewayClass, the cluster's words where they could not be read,
+    // or `None` from a caller that does not ask about classes.
+    classes: Option<std::result::Result<&[crate::resources::GatewayClassInfo], &str>>,
     out: &mut Neighbourhood,
 ) {
     use crate::resources::{programmed, verdict_of, Verdict, GATEWAY_API_GROUP};
@@ -239,6 +247,39 @@ pub(super) fn route_parents(
                 route: route_ref.clone(),
                 gateway: gw_ref.clone(),
             });
+        }
+        if let (Some(Some(g)), Some(Err(said))) = (found, classes) {
+            out.stops.push(ChainStop::GatewayClassUnread {
+                route: route_ref.clone(),
+                gateway: gw_ref.clone(),
+                class: g.class_name.clone(),
+                said: said.to_string(),
+            });
+        }
+        if let (Some(Some(g)), Some(Ok(classes))) = (found, classes) {
+            match classes.iter().find(|class| class.name == g.class_name) {
+                None => out.stops.push(ChainStop::GatewayClassMissing {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                    class: g.class_name.clone(),
+                }),
+                Some(class) if class.accepted != Some(true) => {
+                    let refused = class
+                        .conditions
+                        .iter()
+                        .find(|c| c.type_ == "Accepted" && c.status == "False");
+                    out.stops.push(ChainStop::GatewayClassUnclaimed {
+                        route: route_ref.clone(),
+                        gateway: gw_ref.clone(),
+                        class: g.class_name.clone(),
+                        controller: class.controller_name.clone(),
+                        refused: refused.is_some(),
+                        condition_reason: refused.and_then(|c| c.reason.clone()),
+                        message: refused.and_then(|c| c.message.clone()),
+                    });
+                }
+                Some(_) => {}
+            }
         }
         if let Some(said) = found
             .flatten()
@@ -625,6 +666,79 @@ status:
     - { type: ResolvedRefs, status: "True", reason: ResolvedRefs, message: ok }
 "#;
 
+    fn class(name: &str, accepted: Option<&str>) -> crate::resources::GatewayClassInfo {
+        let status = accepted.map_or(String::new(), |status| {
+            format!(
+                "status: {{ conditions: [{{ type: Accepted, status: \"{status}\", reason: InvalidParameters, message: bad params }}] }}"
+            )
+        });
+        crate::resources::GatewayClassInfo::read(
+            &serde_yaml::from_str(&format!(
+                "apiVersion: gateway.networking.k8s.io/v1\nkind: GatewayClass\nmetadata: {{ name: {name} }}\nspec: {{ controllerName: example.net/gw }}\n{status}"
+            ))
+            .expect("class fixture parses"),
+        )
+    }
+
+    /// The Routes page said "nothing claims class envoy" of a route the
+    /// Connections tab drew without a break: the chain never read the
+    /// classes. Fails if a missing or unclaimed class is not a stop, if a
+    /// refusal loses its words, or if a claimed class is one.
+    #[test]
+    fn a_gateway_whose_class_nothing_claims_stops_the_route_as_the_routes_page_says() {
+        let stops =
+            |classes: Option<std::result::Result<&[crate::resources::GatewayClassInfo], &str>>| {
+                let mut out = Neighbourhood::new();
+                gateway_traffic_into(
+                    "shop",
+                    &service("shop", "promo"),
+                    &[route(HEALTHY_ROUTE)],
+                    Some(&[gateway(EDGE_GATEWAY)]),
+                    classes,
+                    &mut out,
+                );
+                out.stops
+            };
+        assert!(matches!(
+            stops(Some(Ok(&[]))).as_slice(),
+            [ChainStop::GatewayClassMissing { class, .. }] if class == "envoy"
+        ));
+        assert!(matches!(
+            stops(Some(Ok(&[class("envoy", None)]))).as_slice(),
+            [ChainStop::GatewayClassUnclaimed { class, controller, refused: false, condition_reason: None, .. }]
+                if class == "envoy" && controller == "example.net/gw"
+        ));
+        assert!(matches!(
+            stops(Some(Ok(&[class("envoy", Some("False"))]))).as_slice(),
+            [ChainStop::GatewayClassUnclaimed { refused: true, condition_reason: Some(reason), message: Some(message), .. }]
+                if reason == "InvalidParameters" && message == "bad params"
+        ));
+        assert!(stops(Some(Ok(&[class("envoy", Some("True"))]))).is_empty());
+        assert!(stops(None).is_empty());
+    }
+
+    /// Classes the token could not list left the chain with no stop at all,
+    /// which reads as "the class is claimed" and drew the route serving.
+    /// Fails if a Gateway whose class was not read is not a blind stop that
+    /// carries the cluster's words.
+    #[test]
+    fn a_gateway_whose_class_could_not_be_read_is_a_blind_stop() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            Some(Err("gatewayclasses is forbidden")),
+            &mut out,
+        );
+        assert!(matches!(
+            out.stops.as_slice(),
+            [ChainStop::GatewayClassUnread { class, said, .. }]
+                if class == "envoy" && said == "gatewayclasses is forbidden"
+        ));
+    }
+
     #[test]
     fn backend_ref_becomes_an_edge_and_the_gateway_sits_above() {
         let mut out = Neighbourhood::new();
@@ -633,6 +747,7 @@ status:
             &service("shop", "promo"),
             &[route(HEALTHY_ROUTE)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             &mut out,
         );
 
@@ -715,6 +830,7 @@ spec:
   - { name: https, protocol: HTTPS, port: 8443, hostname: "*.example.com" }
 "#,
             )]),
+            None,
             &mut out,
         );
 
@@ -778,6 +894,7 @@ spec:
 ",
             )],
             Some(&[edge]),
+            None,
             &mut out,
         );
 
@@ -801,6 +918,7 @@ spec:
             &service("shop", "checkout"),
             &[route(HEALTHY_ROUTE)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             &mut out,
         );
         assert!(out.edges.is_empty());
@@ -826,6 +944,7 @@ spec:
             &service("shop", "promo"),
             &[route(cross)],
             Some(&[]),
+            None,
             &mut out,
         );
         assert!(out.edges.is_empty());
@@ -857,6 +976,7 @@ status:
             &service("shop", "promo"),
             &[route(refused)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             &mut out,
         );
 
@@ -913,6 +1033,7 @@ status:
             &service("shop", "promo"),
             &[route(contested)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             &mut out,
         );
         assert!(out.stops.iter().any(|stop| matches!(
@@ -953,6 +1074,7 @@ status:
             &service("shop", "promo"),
             &[route(unresolved)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             &mut out,
         );
 
@@ -982,6 +1104,7 @@ spec:
             &service("shop", "promo"),
             &[route(orphan)],
             Some(&[]),
+            None,
             &mut out,
         );
 
@@ -1019,6 +1142,7 @@ spec:
                 &service("shop", "promo"),
                 &[route(HEALTHY_ROUTE)],
                 Some(&[gw]),
+                None,
                 &mut out,
             );
             out.stops
@@ -1074,6 +1198,7 @@ spec:
             &service("shop", "promo"),
             &[route(HEALTHY_ROUTE)],
             None,
+            None,
             &mut out,
         );
 
@@ -1108,6 +1233,7 @@ spec:
             &service("shop", "promo"),
             &[route(mesh)],
             Some(&[]),
+            None,
             &mut out,
         );
         // The backend edge is real; the Service parentRef must produce
@@ -1140,6 +1266,7 @@ mod tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_classes: None,
             gateway_unread: Vec::new(),
         }
     }

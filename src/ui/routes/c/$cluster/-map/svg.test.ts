@@ -123,4 +123,75 @@ describe("the map as an image", () => {
     expect(svg).toContain("Refused: nothing in payments could be read");
     expect(shop.getAttribute("stroke-dasharray")).toBe("3 3");
   });
+
+  /** The page names what it could not read above the map; the image left it off and read as the whole cluster. Fails if a caveat is not drawn above it. */
+  it("writes what the page could not read above the map", () => {
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [],
+      edges: [],
+      notes: ["Refused: Ingress, EndpointSlice"],
+    });
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const note = [...doc.querySelectorAll("text")].find(
+      (text) => text.textContent === "Refused: Ingress, EndpointSlice"
+    );
+    expect(note).toBeDefined();
+    const [, top] = doc.documentElement.getAttribute("viewBox")!.split(" ");
+    expect(Number(note!.getAttribute("y"))).toBeGreaterThan(Number(top));
+    expect(Number(note!.getAttribute("y"))).toBeLessThan(0);
+  });
+
+  /**
+   * A long name ran over the next node and off the edge of the image, while
+   * the canvas cuts it with an ellipsis. Fails if a name wider than its box
+   * is drawn whole, a short one is cut, or the whole name is not kept in
+   * the node's title.
+   */
+  it("cuts a name to its box with an ellipsis and keeps it whole in a title", () => {
+    const long = "prometheus-kps-kube-prometheus-stack-prometheus-operator";
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [long, "web"].map((label, at) => ({
+        node: { id: label, group: null, kind: "Service", label, tone: "ok" },
+        at: { x: 0, y: at * 60 },
+        width: 208,
+        height: 46,
+      })),
+      edges: [],
+    });
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const names = [...doc.querySelectorAll("g > text:nth-of-type(1)")].map(
+      (text) => text.textContent ?? ""
+    );
+    expect(names[0].endsWith("…")).toBe(true);
+    expect(names[0].length).toBeLessThan(long.length);
+    expect(names[1]).toBe("web");
+    expect(doc.querySelector("g > title")?.textContent ?? "").toContain(long);
+  });
+
+  /** The image drew every edge as a curve from port to port, through the nodes the canvas routes around. Fails if a routed edge is not drawn along its route. */
+  it("draws a routed edge along its route", () => {
+    const svg = mapSvg({
+      colours,
+      groups: [],
+      nodes: [],
+      edges: [
+        {
+          edge: { id: "lg>gw", from: "lg", to: "gw", tone: "ok" },
+          from: { x: 0, y: 0 },
+          to: { x: 40, y: 20 },
+          route: [
+            { x: 0, y: 0 },
+            { x: 20, y: 0 },
+            { x: 20, y: 20 },
+            { x: 40, y: 20 },
+          ],
+        },
+      ],
+    });
+    expect(svg).toContain('d="M 0 0 L 20 0 L 20 20 L 40 20"');
+  });
 });

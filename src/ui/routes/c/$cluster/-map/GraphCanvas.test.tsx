@@ -1,14 +1,40 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { GraphCanvas } from "./GraphCanvas";
 import type { GraphGroup, GraphNode } from "./types";
 
+// ELK is loaded and run for real: under a loaded machine that alone outlasts
+// the default five seconds the waits below were written around.
+vi.setConfig({ testTimeout: 20_000 });
+
 let placed = 0;
-let handed: { nodes: { id: string }[]; edges: { id: string }[] } = {
+/** What GraphCanvas handed React Flow last. */
+interface Handed {
+  nodes: { id: string; type: string; data: unknown }[];
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    data?: { route?: unknown[] };
+  }[];
+  nodeTypes: Record<string, (props: { id: string; data: unknown }) => unknown>;
+  onMoveStart: (event: unknown) => void;
+}
+let handed: Handed = {
   nodes: [],
   edges: [],
+  nodeTypes: {},
+  onMoveStart: () => {},
 };
+/** The canvas's size as React Flow's store holds it. */
+const view = vi.hoisted(() => ({
+  width: 800,
+  height: 600,
+  transform: [0, 0, 1] as [number, number, number],
+}));
+const setViewport = vi.fn(async () => true);
+const setCenter = vi.fn(async () => true);
 /** How many nodes were placed each time the view was fitted. */
 const fits: number[] = [];
 const fitView = vi.fn(async () => {
@@ -27,17 +53,37 @@ vi.mock("@/lib/map-layout", async (original) => {
   };
 });
 
-vi.mock("@xyflow/react", async (original) => ({
-  ...(await original<typeof import("@xyflow/react")>()),
-  ReactFlow: (props: typeof handed) => {
-    placed = props.nodes.length;
-    handed = props;
-    return null;
-  },
-  Background: () => null,
-  useReactFlow: () => ({ fitView }),
-  useStoreApi: () => ({ getState: () => ({ width: 800, height: 600 }) }),
-}));
+vi.mock("@xyflow/react", async (original) => {
+  const { createElement } = await import("react");
+  return {
+    ...(await original<typeof import("@xyflow/react")>()),
+    // Draws the object nodes it is handed, so a test can click one.
+    ReactFlow: (props: typeof handed) => {
+      placed = props.nodes.length;
+      handed = props;
+      return props.nodes
+        .filter((each) => each.type === "object")
+        .map((each) =>
+          createElement(props.nodeTypes.object as never, {
+            key: each.id,
+            id: each.id,
+            data: each.data,
+          })
+        );
+    },
+    Background: () => null,
+    Handle: () => null,
+    useReactFlow: () => ({
+      fitView,
+      setViewport,
+      setCenter,
+      getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+      getZoom: () => 1,
+    }),
+    useStore: (select: (state: typeof view) => unknown) => select(view),
+    useStoreApi: () => ({ getState: () => view }),
+  };
+});
 
 const group = (id: string): GraphGroup => ({
   id,
@@ -77,28 +123,78 @@ const laidOut = (groups: number) =>
 
 describe("the map's view", () => {
   /**
-   * The map opened zoomed in on the first card the stream drew, and stayed
-   * there while the rest arrived. Fails if the view is fitted before the
-   * layout is laid out, fitted again for a later delta, or not fitted again
-   * when the key changes.
+   * The map opened zoomed in on the first card the stream drew, and in Live
+   * mode on a corner of the first few nodes, because nothing fitted again as
+   * the rest arrived. Fails if the view is fitted before a layout is laid
+   * out, is not fitted again as nodes arrive while the reader has not moved
+   * it, is fitted over a view the reader moved, or is not fitted again for
+   * a new key.
    */
-  it("fits the first layout laid out and again after its key changes, never for a later delta", async () => {
+  it("stays fitted as nodes arrive until the reader moves the view, and again for a new key", async () => {
     fitView.mockClear();
     fits.length = 0;
     const { rerender } = render(canvas(["argo"], "namespace"));
-    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1), SLOW);
+    await waitFor(() => expect(fits).toEqual([2]), SLOW);
 
     rerender(canvas(["argo", "billing"], "namespace"));
-    await laidOut(2);
-    expect(fitView).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(fits).toEqual([2, 4]), SLOW);
+
+    handed.onMoveStart({} as MouseEvent);
+    rerender(canvas(["argo", "billing", "shop"], "namespace"));
+    await laidOut(3);
+    expect(fits).toEqual([2, 4]);
 
     rerender(canvas(["argo", "billing", "shop"], "namespace\u0000whole"));
-    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(2), SLOW);
+    await waitFor(() => expect(fits).toEqual([2, 4, 6]), SLOW);
     rerender(
       canvas(["argo", "billing", "shop", "zoo"], "namespace\u0000whole")
     );
-    await laidOut(4);
-    expect(fits).toEqual([2, 6]);
+    await waitFor(() => expect(fits).toEqual([2, 4, 6, 8]), SLOW);
+  });
+
+  /**
+   * A peek opened from the map narrowed the canvas and left it on empty
+   * space. Fails if a resize does not fit a view the reader has not moved,
+   * does not bring the node they last opened back into a view they moved,
+   * or moves a view they moved other than by keeping its middle.
+   */
+  it("keeps the right view when the canvas changes size", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    fitView.mockClear();
+    setViewport.mockClear();
+    setCenter.mockClear();
+    const opened = vi.fn();
+    const draw = () => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={opened}
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw());
+    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1), SLOW);
+
+    Object.assign(view, { width: 500 });
+    rerender(draw());
+    expect(fitView).toHaveBeenCalledTimes(2);
+
+    handed.onMoveStart({} as MouseEvent);
+    Object.assign(view, { width: 800 });
+    rerender(draw());
+    expect(setViewport).toHaveBeenCalledWith({ x: 150, y: 0, zoom: 1 });
+    expect(fitView).toHaveBeenCalledTimes(2);
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /web/ }));
+    expect(opened).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "web" }),
+      "page"
+    );
+    Object.assign(view, { width: 10 });
+    rerender(draw());
+    expect(setCenter).toHaveBeenCalledTimes(1);
   });
 
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
@@ -151,5 +247,110 @@ describe("the map's view", () => {
       "The map could not be laid out"
     );
     expect(screen.getByRole("alert")).toHaveTextContent("elk gave up");
+  });
+
+  /**
+   * A route's line to its Gateway left the route's right side, turned back
+   * and entered the Gateway from its left, across both cards. Fails if a
+   * reversed edge is handed to React Flow from its `from` rather than from
+   * its `to`, or an ordinary one is turned round.
+   */
+  it("draws a route's edge from its Gateway's side, and every other edge as handed", async () => {
+    const attaches = {
+      id: "web>attachesTo>public",
+      from: "web",
+      to: "public",
+      tone: "ok" as const,
+      reversed: true,
+    };
+    const selects = {
+      id: "svc>web",
+      from: "svc",
+      to: "web",
+      tone: "ok" as const,
+    };
+    render(
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={["web", "public", "svc"].map((id) => node(id, "shop"))}
+        edges={[attaches, selects]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    await waitFor(() => expect(placed).toBe(4), SLOW);
+    const ends = (id: string) =>
+      (handed.edges as { id: string; source: string; target: string }[]).find(
+        (each) => each.id === id
+      );
+    expect(ends(attaches.id)).toMatchObject({
+      source: "public",
+      target: "web",
+    });
+    expect(ends(selects.id)).toMatchObject({ source: "svc", target: "web" });
+  });
+
+  /**
+   * An edge between two cards was a straight run from one port to the other
+   * wherever the cards stood, through whatever lay between. Fails if an
+   * edge the layout routed is not handed to React Flow with its route.
+   */
+  it("hands an edge between groups to React Flow along the layout's route", async () => {
+    render(
+      <GraphCanvas
+        groups={[group("loadgen"), group("istio")]}
+        nodes={[node("lg", "loadgen"), node("gw", "istio")]}
+        edges={[{ id: "lg>gw", from: "lg", to: "gw", tone: "ok" }]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    await waitFor(() => {
+      const edge = (
+        handed.edges as { id: string; data?: { route?: unknown[] } }[]
+      ).find((each) => each.id === "lg>gw");
+      expect(edge?.data?.route?.length).toBeGreaterThanOrEqual(2);
+    }, SLOW);
+  });
+
+  /**
+   * The words of a hovered node's lines were drawn on the lines, over the
+   * neighbouring nodes, and could not be read. Fails if they are not listed
+   * in one place beside the hovered node, or stay once it is left.
+   */
+  it("lists the words of a hovered node's lines beside it", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    render(
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("productpage", "shop"), node("reviews", "shop")]}
+        edges={[
+          {
+            id: "pp>rev",
+            from: "productpage",
+            to: "reviews",
+            tone: "ok",
+            label: "productpage → reviews",
+            sub: "0.731 req/s · 0% errors",
+          },
+        ]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    const target = await screen.findByRole(
+      "button",
+      { name: /productpage/ },
+      SLOW
+    );
+    fireEvent.mouseEnter(target);
+    expect(
+      screen.getByRole("list", { name: "The lines from productpage" })
+    ).toHaveTextContent("productpage → reviews · 0.731 req/s · 0% errors");
+    fireEvent.mouseLeave(target);
+    expect(screen.queryByRole("list")).toBeNull();
   });
 });

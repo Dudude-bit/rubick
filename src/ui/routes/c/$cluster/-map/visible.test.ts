@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cardId, visibleGraph } from "./visible";
+import { cardId, routePath, visibleGraph } from "./visible";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
 
 const group = (id: string, collapsed: boolean): GraphGroup => ({
@@ -57,5 +57,17 @@ describe("what a canvas draws with groups collapsed", () => {
     );
     expect(drawn.nodes.map((n) => n.id)).toEqual(["outside"]);
     expect(drawn.edges[0].from).toBe(cardId("shop"));
+  });
+
+  /** A routed edge's words sat on a node rather than on the edge. Fails if the path skips a bend or the words are not halfway along it. */
+  it("draws a route through every bend and puts its words halfway along it", () => {
+    const { path, middle } = routePath([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 20 },
+      { x: 30, y: 20 },
+    ]);
+    expect(path).toBe("M 0 0 L 10 0 L 10 20 L 30 20");
+    expect(middle).toEqual({ x: 10, y: 15 });
   });
 });

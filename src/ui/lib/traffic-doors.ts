@@ -105,6 +105,10 @@ function brokenWord(stop: ChainStop, t: T): string | null {
       return t("empty", "gwGatewayMissingWord");
     case "gatewayNotProgrammed":
       return t("empty", "gwNotProgrammedWord");
+    case "gatewayClassMissing":
+      return t("empty", "gwClassMissingShort", { name: stop.class });
+    case "gatewayClassUnclaimed":
+      return t("empty", "gwClassUnclaimedShort", { name: stop.class });
     default:
       return null;
   }

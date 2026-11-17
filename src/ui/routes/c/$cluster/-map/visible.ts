@@ -1,4 +1,48 @@
+import type { Point } from "@/lib/map-layout";
 import type { GraphEdge, GraphGroup, GraphNode, MapTone } from "./types";
+
+/**
+ * A routed edge as an SVG path through its points, and the point halfway
+ * along it, where its words go.
+ */
+export function routePath(points: readonly Point[]): {
+  path: string;
+  middle: Point;
+} {
+  const path = points
+    .map(({ x, y }, at) => `${at === 0 ? "M" : "L"} ${x} ${y}`)
+    .join(" ");
+  const lengths = points
+    .slice(1)
+    .map((point, at) =>
+      Math.hypot(point.x - points[at].x, point.y - points[at].y)
+    );
+  let left = lengths.reduce((sum, length) => sum + length, 0) / 2;
+  for (const [at, length] of lengths.entries()) {
+    if (left <= length) {
+      const share = length === 0 ? 0 : left / length;
+      return {
+        path,
+        middle: {
+          x: points[at].x + (points[at + 1].x - points[at].x) * share,
+          y: points[at].y + (points[at + 1].y - points[at].y) * share,
+        },
+      };
+    }
+    left -= length;
+  }
+  return { path, middle: points[0] ?? { x: 0, y: 0 } };
+}
+
+/**
+ * The ends an edge is drawn between, left to right: a reversed one from its
+ * `to`, so a Gateway's line leaves its right side for its route's left, as
+ * the layout put them, instead of running back across both.
+ */
+export const drawnEnds = (edge: GraphEdge) =>
+  edge.reversed
+    ? { source: edge.to, target: edge.from }
+    : { source: edge.from, target: edge.to };
 
 /** The id a collapsed group's card is drawn under. */
 export const cardId = (group: string) => `group:${group}`;

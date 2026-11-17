@@ -23,11 +23,15 @@
  *   backend's own spelling.
  * - `flow: "forward"` moves dashes along the edge; still under reduced
  *   motion and while the canvas is off screen.
- * - `onOpenEdge` makes every edge a button the keyboard reaches; without it
- *   an edge shows its `label` and `sub` while either end is singled out.
- * - The view is fitted once to the first layout laid out whole, and again
- *   to the first after `fitKey` changes; `null` holds the fit back. A later
- *   change moves nothing under the reader.
+ * - `onOpenEdge` makes every edge a button the keyboard reaches. The
+ *   `label` and `sub` of every edge from a node under the pointer are listed
+ *   beside that node, with a ground of their own, not drawn on the lines.
+ * - Until the reader pans or zooms, the view stays fitted: to each layout
+ *   laid out whole as nodes arrive, and as the canvas changes size. Once
+ *   they have, their view is theirs: a resize keeps the node they last
+ *   acted on in view, or else the middle of what they were looking at. A
+ *   new `fitKey` fits again and hands the view back to the map; `null`
+ *   holds every fit back.
  * - Places are worked out in a worker. Only a group whose nodes or shaping
  *   edges changed is laid out again, so a tone or a label never moves
  *   anything, and a node added keeps the others in their order.
@@ -50,6 +54,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   useStoreApi,
   type Edge,
   type Node,
@@ -72,7 +77,7 @@ import type {
   GraphNode,
 } from "./types";
 import { NODE_H, NODE_W, OUTSIDE, useLayout } from "./useLayout";
-import { cardId, visibleGraph } from "./visible";
+import { cardId, drawnEnds, visibleGraph } from "./visible";
 
 export type { GraphCanvasHandle, GraphEdge, GraphGroup, GraphNode };
 
@@ -80,6 +85,13 @@ const NODE_TYPES = { object: ObjectNode, frame: GroupFrame, card: GroupCard };
 const EDGE_TYPES = { map: MapEdge };
 
 const FIT = { padding: 0.08 };
+
+/**
+ * Nothing on the map is selectable or draggable, and React Flow then writes
+ * `pointer-events: none` on every node's wrapper: no click, no double click,
+ * no hover, no fold. A node's own style is spread after it, so this wins.
+ */
+const TAKES_POINTER = { pointerEvents: "all" } as const;
 
 /** Past this many drawn nodes only those in view are mounted. */
 export const MOUNT_ALL_UP_TO = 600;
@@ -100,6 +112,8 @@ export interface GraphCanvasProps {
   ariaLabel: string;
   /** Plain words for a collapsed card's summary, for the image. */
   summaryText?: (group: GraphGroup) => string;
+  /** What the page says above the map about what it could not read, for the image. */
+  caveats?: readonly string[];
 }
 
 export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
@@ -124,6 +138,7 @@ function Canvas({
   fitKey = "",
   ariaLabel,
   summaryText,
+  caveats,
   handle,
 }: GraphCanvasProps & { handle: React.ForwardedRef<GraphCanvasHandle> }) {
   const t = useT();
@@ -195,13 +210,61 @@ function Canvas({
     centre(focus);
   }, [focus, placement, centre]);
 
-  const fitted = useRef<string | null>(null);
+  // Whether the reader moved the view themselves, and what they last opened.
+  const moved = useRef(false);
+  const acted = useRef<string | null>(null);
+  const fitted = useRef<{ key: string; groups: unknown } | null>(null);
   useEffect(() => {
-    if (fitKey === null || fitted.current === fitKey) return;
+    if (fitKey === null) return;
     if (!placement.settled || placement.groups.size === 0) return;
-    fitted.current = fitKey;
+    if (fitted.current?.key !== fitKey) moved.current = false;
+    else if (moved.current || fitted.current.groups === placement.groups)
+      return;
+    fitted.current = { key: fitKey, groups: placement.groups };
     void flow.fitView(FIT);
   }, [fitKey, placement, flow]);
+
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  const size = useRef<{ width: number; height: number } | null>(null);
+  // What the map holds, read by the resize below without the resize
+  // following it: only a change of size moves the view there.
+  const now = useRef({ placement, nodes: drawn.nodes, absolute, fitKey });
+  useEffect(() => {
+    now.current = { placement, nodes: drawn.nodes, absolute, fitKey };
+  });
+  useEffect(() => {
+    const was = size.current;
+    size.current = { width, height };
+    if (!was || width === 0 || height === 0) return;
+    if (was.width === width && was.height === height) return;
+    const { placement, nodes, absolute, fitKey } = now.current;
+    if (!moved.current) {
+      if (fitKey !== null && placement.settled && placement.groups.size > 0)
+        void flow.fitView(FIT);
+      return;
+    }
+    const { x, y, zoom } = flow.getViewport();
+    const node = nodes.find((each) => each.id === acted.current);
+    const at = node && absolute(node);
+    if (at) {
+      const left = at.x * zoom + x;
+      const top = at.y * zoom + y;
+      const inView =
+        left >= 0 &&
+        top >= 0 &&
+        left + NODE_W * zoom <= width &&
+        top + NODE_H * zoom <= height;
+      if (!inView)
+        void flow.setCenter(at.x + NODE_W / 2, at.y + NODE_H / 2, { zoom });
+      return;
+    }
+    void flow.setViewport({
+      x: x + (width - was.width) / 2,
+      y: y + (height - was.height) / 2,
+      zoom,
+    });
+  }, [width, height, flow]);
 
   const reveal = useCallback(
     (id: string) => {
@@ -232,7 +295,10 @@ function Canvas({
   const edgesOpen = onOpenEdge !== undefined;
   const actions = useMemo<MapActions>(
     () => ({
-      open: (node, how) => latest.current.onOpen(node, how),
+      open: (node, how) => {
+        acted.current = node.id;
+        latest.current.onOpen(node, how);
+      },
       openEdge: edgesOpen
         ? (edge) => latest.current.onOpenEdge?.(edge)
         : undefined,
@@ -278,7 +344,7 @@ function Canvas({
         data: { group },
         width: box.width,
         height: box.height,
-        style: { width: box.width, height: box.height },
+        style: { ...TAKES_POINTER, width: box.width, height: box.height },
         draggable: false,
         selectable: false,
         focusable: false,
@@ -308,6 +374,7 @@ function Canvas({
         position,
         parentId: node.group === null ? undefined : cardId(node.group),
         data: was?.data ?? { node },
+        style: TAKES_POINTER,
         width: NODE_W,
         height: NODE_H,
         draggable: false,
@@ -324,14 +391,14 @@ function Canvas({
   const flowEdges = useMemo<Edge[]>(
     () =>
       drawn.edges.map((edge) => {
+        const route = placement.routes.get(edge.id);
         const was = held.edges.get(edge);
-        if (was) return was;
+        if (was && was.data?.route === route) return was;
         const flow: Edge = {
           id: edge.id,
-          source: edge.from,
-          target: edge.to,
+          ...drawnEnds(edge),
           type: "map",
-          data: { edge },
+          data: { edge, route },
           selectable: false,
           focusable: false,
           zIndex: 2,
@@ -339,7 +406,7 @@ function Canvas({
         held.edges.set(edge, flow);
         return flow;
       }),
-    [drawn.edges, held]
+    [drawn.edges, held, placement.routes]
   );
 
   useImperativeHandle(
@@ -350,6 +417,7 @@ function Canvas({
       toSvg: () =>
         mapSvg({
           colours: themeColours(),
+          notes: caveats,
           groups: groups.flatMap((group) => {
             const box = placement.groups.get(group.id);
             return box
@@ -377,13 +445,16 @@ function Canvas({
                   }
                 : null;
             };
-            const from = end(edge.from, "from");
-            const to = end(edge.to, "to");
-            return from && to ? [{ edge, from, to }] : [];
+            const { source, target } = drawnEnds(edge);
+            const from = end(source, "from");
+            const to = end(target, "to");
+            return from && to
+              ? [{ edge, from, to, route: placement.routes.get(edge.id) }]
+              : [];
           }),
         }),
     }),
-    [flow, centre, groups, placement, drawn, absolute, summaryText]
+    [flow, centre, groups, placement, drawn, absolute, summaryText, caveats]
   );
 
   return (
@@ -409,6 +480,11 @@ function Canvas({
             onlyRenderVisibleElements={drawn.nodes.length > MOUNT_ALL_UP_TO}
             minZoom={0.05}
             maxZoom={2}
+            onMoveStart={(event) => {
+              // Only a reader's own pan or zoom carries an event; a fit or a
+              // centring of ours does not.
+              if (event) moved.current = true;
+            }}
             ariaLabelConfig={{
               "node.a11yDescription.default": t("topology", "nodeKeys"),
               "node.a11yDescription.keyboardDisabled": t(
@@ -424,6 +500,12 @@ function Canvas({
               color="hsl(var(--hair))"
             />
           </ReactFlow>
+          <LitWords
+            active={active}
+            nodes={drawn.nodes}
+            edges={drawn.edges}
+            absolute={absolute}
+          />
           {placement.failed !== null && (
             <p
               role="alert"
@@ -437,3 +519,57 @@ function Canvas({
     </MapContext.Provider>
   );
 }
+
+/**
+ * The words of every line from the node under the pointer, in one list with
+ * a ground of its own beside it. Drawn on their lines, each sat on whatever
+ * node the line passed and could not be read against it.
+ */
+function LitWords({
+  active,
+  nodes,
+  edges,
+  absolute,
+}: {
+  active: string | null;
+  nodes: readonly GraphNode[];
+  edges: readonly GraphEdge[];
+  absolute: (node: GraphNode) => { x: number; y: number } | null;
+}) {
+  const t = useT();
+  const [x, y, zoom] = useStore((state) => state.transform);
+  const width = useStore((state) => state.width);
+  const node =
+    active === null ? undefined : nodes.find((each) => each.id === active);
+  const at = node && absolute(node);
+  if (!node || !at) return null;
+  const lines = edges.flatMap((edge) => {
+    if (edge.from !== active && edge.to !== active) return [];
+    const words = [edge.label, edge.sub].filter(Boolean).join(" · ");
+    return words ? [{ id: edge.id, words }] : [];
+  });
+  if (lines.length === 0) return null;
+  const right = (at.x + NODE_W) * zoom + x + 8;
+  // Beside the node, on whichever side has room.
+  const left =
+    right + LIT_WIDTH <= width ? right : at.x * zoom + x - LIT_WIDTH - 8;
+  return (
+    <ul
+      aria-label={t("topology", "litEdges", { name: node.label })}
+      className="pointer-events-none absolute z-10 flex flex-col gap-0.5 rounded-md border border-hair bg-raise px-2 py-1 text-[10.5px] text-fg-mut shadow-sm"
+      style={{
+        left: Math.max(4, left),
+        top: Math.max(4, at.y * zoom + y),
+        width: LIT_WIDTH,
+      }}
+    >
+      {lines.map((line) => (
+        <li key={line.id} className="truncate" title={line.words}>
+          {line.words}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const LIT_WIDTH = 280;

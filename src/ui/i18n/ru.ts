@@ -1884,6 +1884,7 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    litEdges: "Связи {name}",
     layoutFailed:
       "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",
@@ -1933,15 +1934,15 @@ export const ru: Catalogue = {
     exported: "Карта сохранена в {path}",
     exportFailed: "Не удалось сохранить карту",
     failed: "Не удалось прочитать карту: {said}",
-    notLookedAt: "Не прочитано: {kinds}",
-    edgesAbsent: "{kind} не прочитаны: связи с ними здесь не нарисованы.",
+    edgesAbsent: "Связи с {kinds} здесь не нарисованы: они не прочитаны.",
+    notLookedLine: "{state}: {kinds}",
+    clusterSaid: "Что ответил кластер",
     otherEngines:
       "{kinds} здесь действует, но не нарисован: нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
     noMatch: "На карте нет ничего с таким именем",
     stillListing: "Ещё читается: {kinds}",
     nothingToDraw:
       "Рисовать нечего в {scope}: нет ни маршрутов, ни Services, ни нагрузок.",
-    shareNotRead: "Не прочитано, поэтому нет на карте: {kinds}",
     outsideScope:
       "{namespaces}: не прочитано, это пространство имён вне области карты, поэтому здесь только то, на что ссылаются из неё",
     shareStillOpening:

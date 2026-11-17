@@ -45,7 +45,7 @@ export interface GraphEdge {
   sub?: string;
   /** Whether it decides where its ends sit; true unless said otherwise. */
   shapesLayout?: boolean;
-  /** Lays out as `to` before `from`, drawn as handed: a route attaching to its Gateway. */
+  /** Lays out and is drawn as `to` before `from`: a route attaching to its Gateway. */
   reversed?: boolean;
 }
 
