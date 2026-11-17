@@ -464,6 +464,65 @@ describe("the Cost page", () => {
   });
 });
 
+describe("the cost line where Prometheus holds no OpenCost series", () => {
+  /**
+   * No cost source is how most clusters are, not this object's fault: every
+   * workload page wore two amber lines about OpenCost's series. Its line is
+   * one quiet sentence and a way to the Cost page; what failed stays amber.
+   * Fails if the ordinary state is toned as a warning, or a failure is not.
+   */
+  it("is one muted line that leads to the Cost page, and amber only for a failure", async () => {
+    const trouble = {
+      kind: "noSeries" as const,
+      vendor: "Prometheus",
+      endpoint: "localhost:19090",
+    };
+    cost.mockReturnValue({ state: "supplier", trouble });
+    await renderWithRouter(
+      <>
+        <WorkloadCostLine
+          group="apps"
+          kind="Deployment"
+          name="web"
+          namespace="shop"
+        />
+        <NamespaceCostLine namespace="shop" />
+      </>,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    for (const id of ["workload-cost", "namespace-cost"]) {
+      const line = screen.getByTestId(id);
+      expect(line).toHaveTextContent(
+        "No OpenCost series in this Prometheus; more on the Cost page."
+      );
+      expect(line).not.toHaveTextContent("node_total_hourly_cost");
+      expect(line.querySelector(".text-warn")).toBeNull();
+      expect(
+        within(line).getByRole("link", { name: "the Cost page" })
+      ).toHaveAttribute("href", "/c/prod/cost");
+    }
+  });
+
+  it("stays amber where the supplier did not answer", async () => {
+    cost.mockReturnValue({
+      state: "supplier",
+      trouble: {
+        kind: "failed",
+        vendor: "Prometheus",
+        endpoint: "localhost:19090",
+        said: "query timed out",
+      },
+    });
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    const line = screen.getByTestId("namespace-cost");
+    expect(line).toHaveTextContent("query timed out");
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
 describe("a workload minutes old", () => {
   /**
    * Its youngest pod started three minutes ago and Prometheus holds no
