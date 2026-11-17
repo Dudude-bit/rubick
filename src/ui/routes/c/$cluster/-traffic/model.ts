@@ -6,7 +6,7 @@
 import type { FlowEnd, NamespaceRead, TopologyNode } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { MapTone } from "@/integrations";
-import { flowTone, primaryOf, weights, type FlowRow } from "@/lib/traffic";
+import { flowTone, weights, type FlowRow } from "@/lib/traffic";
 import type { GraphEdge, GraphGroup, GraphNode } from "../-map/types";
 import { drawnCrd } from "@/lib/links";
 import { nodeId } from "../-map/ids";
@@ -193,14 +193,15 @@ export function trafficModel(input: {
     if (!from || !to || from === to) continue;
     const id = `flow:${row.id}`;
     rowOf.set(id, row);
-    const primary = primaryOf(row);
     edges.push({
       id,
       from,
       to,
       tone: flowTone(row),
       weight: weightOf.get(row.id) ?? 0,
-      flow: primary && primary.value > 0 ? "forward" : "none",
+      // Still: motion repaints the map every frame it moves. The page sets
+      // the open flow moving; the stylesheet the one under the pointer.
+      flow: "none",
       label: `${endLabel(row.from)} → ${endLabel(row.to)}`,
       sub: edgeSub(row, t),
     });

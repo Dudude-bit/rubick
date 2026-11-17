@@ -28,6 +28,7 @@ import {
   type TrafficReading,
 } from "@/lib/traffic";
 import { cn } from "@/lib/utils";
+import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { AskAgain } from "../-supplier/AskAgain";
@@ -384,6 +385,17 @@ function FlowsView({
     [all, measuredKey]
   );
   const openRow = rows.find((row) => row.id === opened) ?? null;
+  const openEdge = openRow ? `flow:${openRow.id}` : null;
+  const edges = useMemo(
+    () =>
+      openEdge === null
+        ? model.edges
+        : model.edges.map((edge) =>
+            edge.id === openEdge ? { ...edge, flow: "forward" as const } : edge
+          ),
+    [model.edges, openEdge]
+  );
+  const focused = useWindowActivity((state) => state.focused);
 
   return (
     <>
@@ -400,12 +412,16 @@ function FlowsView({
       <div className="flex min-h-0 flex-1 gap-2">
         {rail}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-          <div className="relative min-h-0 flex-[3] overflow-hidden rounded-lg border border-hair">
+          <div
+            className="traffic-map relative min-h-0 flex-[3] overflow-hidden rounded-lg border border-hair"
+            data-unfocused={focused ? undefined : ""}
+            data-testid="traffic-map"
+          >
             <GraphCanvas
               ref={canvas}
               groups={model.groups}
               nodes={model.nodes}
-              edges={model.edges}
+              edges={edges}
               onToggleGroup={onToggleGroup}
               onOpen={onOpen}
               onOpenEdge={onOpenEdge}
