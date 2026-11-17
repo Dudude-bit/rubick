@@ -164,9 +164,8 @@ describe("the other sources' queries", () => {
     const queries = hubbleQueries(
       0,
       [
-        "hubble_flows_processed_total",
-        "hubble_http_requests_total",
-        "source_workload",
+        "hubble_flows_processed_total{source_workload}",
+        "hubble_http_requests_total{source_workload}",
       ],
       ALL
     );
@@ -179,6 +178,46 @@ describe("the other sources' queries", () => {
     const [, client] = of(queries, "errors").split(") or ((");
     expect(client).toMatch(
       /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind\) \(.*reporter!="client"/
+    );
+  });
+});
+
+describe("Hubble's ends, metric by metric", () => {
+  beforeEach(() => {
+    prometheusQuery.mockReset();
+  });
+
+  /**
+   * Cilium sets the labels each metric names its ends by: HTTP by workload
+   * and flows by pod is one cluster, and summing the flows by workload
+   * labels they do not carry leaves every flow with no end.
+   */
+  it("sums each metric by the labels it carries, workload or pod", async () => {
+    prometheusQuery.mockImplementation(async (query) => {
+      const names = (...n: string[]): PromSeries[] =>
+        n.map((name) => ({
+          labels: { __name__: name },
+          points: [{ t: 0, v: 1 }],
+        }));
+      if (!query.includes("hubble")) return [];
+      if (query.includes('destination_workload!=""'))
+        return names("hubble_http_requests_total");
+      if (query.includes('destination_pod!=""'))
+        return names("hubble_flows_processed_total");
+      return names(
+        "hubble_flows_processed_total",
+        "hubble_http_requests_total"
+      );
+    });
+    const hubble = (await flowSources()).find((s) => s.id === "hubble")!;
+    expect(hubble.state).toEqual({ says: "present" });
+    expect(hubble.needsPods).toBe(true);
+    const queries = hubbleQueries(0, hubble.found, ALL);
+    expect(of(queries, "events")).toMatch(
+      /^\(sum by \(source_namespace, source_pod, destination_namespace, destination_pod\)/
+    );
+    expect(of(queries, "requests")).toMatch(
+      /^\(sum by \(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind, protocol\)/
     );
   });
 });
@@ -203,7 +242,7 @@ describe("which sources a Prometheus holds", () => {
     prometheusQuery.mockImplementation(async (query) => {
       if (query.includes("istio_requests_total"))
         return named("istio_requests_total");
-      if (query.includes("hubble") && query.startsWith("count by"))
+      if (query.includes("hubble") && !query.includes("!="))
         return named("hubble_flows_processed_total");
       if (query.includes("hubble")) return [];
       if (query.includes("beyla")) throw new Error("bad_data");
@@ -229,10 +268,10 @@ describe("which sources a Prometheus holds", () => {
       prometheusQuery.mockImplementation(async (query) => {
         if (query.includes("istio_requests_total"))
           return named("istio_requests_total");
-        if (query.includes("hubble") && query.startsWith("count by"))
-          return named("hubble_flows_processed_total");
         if (query.includes(`destination_${label}!=""`))
-          return [{ labels: {}, points: [{ t: 0, v: 3 }] }];
+          return named("hubble_flows_processed_total");
+        if (query.includes("hubble") && !query.includes("!="))
+          return named("hubble_flows_processed_total");
         if (query.includes("beyla"))
           return named("beyla_network_flow_bytes_total");
         if (query.includes("caretta")) return named("caretta_links_observed");

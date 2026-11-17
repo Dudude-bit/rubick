@@ -295,15 +295,27 @@ const hubbleEnd = (side: "source" | "destination") =>
     pod: `${side}_pod`,
   });
 
+/**
+ * The labels one Hubble metric names its ends by, or none where it is not
+ * here: Cilium sets `labelsContext` per metric, so one may name workloads
+ * while another names pods.
+ */
+function hubblePairs(
+  found: readonly string[],
+  metric: string
+): readonly string[] | null {
+  if (found.includes(`${metric}{source_workload}`)) return HUBBLE_WORKLOAD;
+  return found.includes(metric) || found.includes(`${metric}{source_pod}`)
+    ? HUBBLE_POD
+    : null;
+}
+
 export function hubbleQueries(
   source: number,
   found: readonly string[],
   ask: Ask
 ): FlowQuery[] {
   const out: FlowQuery[] = [];
-  const pairs = found.includes("source_workload")
-    ? HUBBLE_WORKLOAD
-    : HUBBLE_POD;
   const pair = (measure: Measure, promql: string, more?: Partial<FlowQuery>) =>
     out.push(
       query(
@@ -315,10 +327,11 @@ export function hubbleQueries(
         more
       )
     );
-  if (found.includes("hubble_flows_processed_total")) {
+  const flowPairs = hubblePairs(found, "hubble_flows_processed_total");
+  if (flowPairs) {
     const forwarded = (direction: string) =>
       sum(
-        pairs,
+        flowPairs,
         scoped(
           "hubble_flows_processed_total",
           ['verdict="FORWARDED"', direction],
@@ -335,18 +348,20 @@ export function hubbleQueries(
       )
     );
   }
-  if (found.includes("hubble_drop_total"))
+  const dropPairs = hubblePairs(found, "hubble_drop_total");
+  if (dropPairs)
     pair(
       "drops",
       sum(
-        [...pairs, "reason"],
+        [...dropPairs, "reason"],
         scoped("hubble_drop_total", [], HUBBLE_SCOPE, ask)
       ),
       {
         reason: "reason",
       }
     );
-  if (found.includes("hubble_http_requests_total")) {
+  const pairs = hubblePairs(found, "hubble_http_requests_total");
+  if (pairs) {
     const reporters = ['reporter!="client"', 'reporter="client"'];
     const requests = reporters.map((r) =>
       sum(
@@ -492,9 +507,6 @@ const namesOf = (series: { labels: Record<string, string> }[]) =>
     .map((one) => one.labels["__name__"])
     .filter((name): name is string => Boolean(name));
 
-const counted = (series: { points: { v: number | null }[] }[]) =>
-  series.some((one) => (one.points[0]?.v ?? 0) > 0);
-
 export const DEFINITIONS: readonly Definition[] = [
   {
     id: "istio",
@@ -536,8 +548,8 @@ export const DEFINITIONS: readonly Definition[] = [
     grpcErrors: false,
     presence: [
       `count by (__name__) ({__name__=~"${HUBBLE_METRICS.join("|")}"})`,
-      `count({__name__=~"${HUBBLE_METRICS.join("|")}", destination_workload!=""})`,
-      `count({__name__=~"${HUBBLE_METRICS.join("|")}", destination_pod!=""})`,
+      `count by (__name__) ({__name__=~"${HUBBLE_METRICS.join("|")}", destination_workload!=""})`,
+      `count by (__name__) ({__name__=~"${HUBBLE_METRICS.join("|")}", destination_pod!=""})`,
     ],
     judge: ([names, byWorkload, byPod]) => {
       const flows = names.includes("hubble_flows_processed_total");
@@ -554,15 +566,15 @@ export const DEFINITIONS: readonly Definition[] = [
           says: names.length === 0 ? "absent" : paired ? "present" : "unpaired",
         },
         measures,
-        found: [
-          ...names,
-          ...(byWorkload.length > 0
-            ? ["source_workload"]
-            : byPod.length > 0
-              ? ["source_pod"]
-              : []),
-        ],
-        needsPods: byWorkload.length === 0,
+        // Each metric with the labels it names its ends by, if any.
+        found: names.map((name) =>
+          byWorkload.includes(name)
+            ? `${name}{source_workload}`
+            : byPod.includes(name)
+              ? `${name}{source_pod}`
+              : name
+        ),
+        needsPods: names.some((name) => !byWorkload.includes(name)),
       };
     },
     queries: hubbleQueries,
@@ -617,11 +629,8 @@ export async function flowSources(): Promise<FlowSource[]> {
         const answers = await Promise.all(
           definition.presence.map((promql) => commands.prometheusQuery(promql))
         );
-        // A bare `count(…)` answers one series whose value is the count; a
-        // `count by (__name__)` one series a name.
-        const found = answers.map((series, i) =>
-          i === 0 ? namesOf(series) : counted(series) ? ["yes"] : []
-        );
+        // A `count by (__name__)` answers one series a name.
+        const found = answers.map(namesOf);
         return { ...base, ...definition.judge(found) };
       } catch (error) {
         return {

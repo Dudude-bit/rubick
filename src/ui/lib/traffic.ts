@@ -65,7 +65,7 @@ export interface FlowSource {
   state: FlowSourceState;
   /** What it can measure: a column it leaves empty says so, never 0. */
   measures: readonly Measure[];
-  /** The metric names it found, for the rail. */
+  /** The metric names it found, for the rail, each with the end label it is read by (`{source_pod}`) where that differs by metric. */
   found: readonly string[];
   /** What it needs to have series here. */
   need: TrafficWord;
