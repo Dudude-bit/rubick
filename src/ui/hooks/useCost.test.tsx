@@ -431,6 +431,8 @@ describe("a read that failed after one that answered", () => {
       wrapper,
     });
     await waitFor(() => expect(usage.result.current.state).toBe("read"));
+    // When it was read travels with it: what it covers is judged then.
+    expect(usage.result.current).toMatchObject({ at: expect.any(Number) });
     capability.mockReturnValue(
       ready(() => answer({ points: [], stepSeconds: 300 }) as never)
     );

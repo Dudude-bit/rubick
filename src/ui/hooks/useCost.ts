@@ -277,9 +277,14 @@ export function useWorkloadUsage(
     // A failed re-read is said, not hidden behind the read before it.
     if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     if (usage.data)
-      return { state: "read", keys: usage.data.keys, fold: usage.data.fold };
+      return {
+        state: "read",
+        keys: usage.data.keys,
+        fold: usage.data.fold,
+        at: usage.dataUpdatedAt || null,
+      };
     return { state: "reading", since };
-  }, [power, usage.data, usage.error, since]);
+  }, [power, usage.data, usage.error, usage.dataUpdatedAt, since]);
 }
 
 export type TrendState =

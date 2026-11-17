@@ -140,6 +140,34 @@ describe("efficiency", () => {
   });
 
   /**
+   * What a reading covers is judged when it was read: counted at render, a
+   * reading of 23 hours of a pod's life grew into a whole day an hour
+   * later, and its low peak was called a request far above use. Fails if
+   * a reading's span is counted to the clock rather than to its own time.
+   */
+  it("judges a reading's span at the time it was read", () => {
+    const since = new Date(Date.now() - 25 * 3_600_000).toISOString();
+    const readAt = Date.parse(since) + 23 * 3_600_000;
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[100, 400, 10, 20]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[1, 1, 1, 1]],
+        since: [since],
+      },
+      at: readAt,
+    };
+    const of = workloadEfficiency(reading, key, { cpu: 1000, memory: 100 });
+    expect(of.cpu).toMatchObject({ state: "measured", whole: false });
+    expect(overRequested(of.cpu)).toBe(false);
+  });
+
+  /**
    * A peak is read per pod, and several pods' peaks summed are no lower
    * than the workload's: a bound. Fails if a sum over several pods reads
    * as the peak, or one pod's as a bound.
