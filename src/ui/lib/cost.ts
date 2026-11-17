@@ -153,7 +153,12 @@ function heldParts(held: {
  */
 function pricedRow(parts: Parts, held: readonly CostPart[]): Priced {
   const unpriced = held.filter((part) => parts[part] === undefined);
-  const any = Object.keys(parts).length > 0;
+  // Priced where something it holds has a price: a part it holds none of,
+  // storage at 0 say, prices nothing of it.
+  const any =
+    held.length === 0
+      ? Object.keys(parts).length > 0
+      : held.some((part) => parts[part] !== undefined);
   return {
     perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
     atLeast: any && unpriced.length > 0,

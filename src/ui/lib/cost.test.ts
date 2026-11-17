@@ -368,8 +368,10 @@ describe("a picture from OpenCost's prices", () => {
       opencost,
       null
     );
+    // Its storage is priced at 0 and it holds none: that prices none of
+    // what it does hold, so it has no total, not a floor of 0.
     const shop = picture.namespaces.find((n) => n.namespace === "shop")!;
-    expect(shop).toMatchObject({ perHour: 0, atLeast: true });
+    expect(shop).toMatchObject({ perHour: null, atLeast: false });
     expect(shop.unpriced).toEqual(["cpu", "memory"]);
     const bank = picture.namespaces.find((n) => n.namespace === "bank")!;
     expect(bank.perHour).toBeNull();
