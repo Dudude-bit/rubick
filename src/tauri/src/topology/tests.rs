@@ -633,3 +633,33 @@ fn a_pod_level_use_through_env_from_survives_the_layer_s_cut() {
             if usages.iter().any(|use_| matches!(use_, crate::resources::Usage::Mount { path, .. } if path == "/etc/db"))
     )));
 }
+
+/// With Namespaces refused, the map drew only namespaces holding a pod, a
+/// Deployment or a Service: a `StatefulSet` scaled to zero, alone in its
+/// namespace, was left off. Fails if any kind read in a namespace does not
+/// put it on the map.
+#[test]
+fn a_namespace_known_only_by_a_stateful_set_is_drawn_when_namespaces_were_refused() {
+    let mut stores = Stores::default();
+    stores.apply(read(
+        Kind::Namespace,
+        None,
+        Reading::Refused {
+            message: SAID.into(),
+        },
+    ));
+    stores.apply(Feed::Applied(Object::StatefulSet(Box::new(
+        serde_json::from_value(json!({
+            "metadata": { "name": "db", "namespace": "data" },
+            "spec": { "replicas": 0, "serviceName": "db",
+                      "selector": { "matchLabels": { "app": "db" } },
+                      "template": { "metadata": { "labels": { "app": "db" } } } },
+        }))
+        .expect("a StatefulSet"),
+    ))));
+    stores.apply(Feed::Applied(deployment("shop", "cart")));
+    assert_eq!(
+        stores.namespaces(None),
+        BTreeSet::from(["data".to_string(), "shop".to_string()])
+    );
+}
