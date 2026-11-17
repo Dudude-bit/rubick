@@ -36,6 +36,7 @@ import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { conditionSaid } from "./condition-health";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
+import { parentWords, stopParent } from "./parent-at";
 import {
   doorDoubt,
   doorDoubtWords,
@@ -660,16 +661,13 @@ export function describeStop(
         ),
         note: t("nav", "stopRefsUnresolvedNote", { said: saidBy(stop) }),
       };
-    case "gatewayMissing":
+    case "gatewayMissing": {
+      const words = parentWords(stopParent(stop), t);
       return {
-        title: t("nav", "stopGatewayMissingTitle"),
-        note: t("nav", "stopGatewayMissingNote", {
-          route: stop.route.name,
-          gateway: stop.gateway.namespace
-            ? `${stop.gateway.namespace}/${stop.gateway.name}`
-            : stop.gateway.name,
-        }),
+        title: words.detail?.title ?? words.say,
+        note: `${words.say}. ${words.detail?.body ?? ""}`.trim(),
       };
+    }
     case "gatewayNotProgrammed":
       return {
         title: t("nav", "stopGatewayNotProgrammedTitle", {

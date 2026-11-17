@@ -4,6 +4,7 @@ import type { GatewayInfo } from "@/generated/types";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { oneLock, useListLocks, type Lock } from "@/hooks/useListAccess";
+import { useListenerSets } from "@/hooks/useListenerSets";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
 import { backingFrom, ROUTING_STALE, useBackingLists } from "@/integrations";
@@ -113,6 +114,7 @@ export function useRoutesBoard(scope: readonly string[], enabled = true) {
     refresh: "overview",
     enabled: installed && served.has("GatewayClass"),
   });
+  const sets = useListenerSets(installed, "overview");
   // The rail's own count follows the window's namespaces, like every other
   // row — read per namespace so a token with rights in some and not the whole
   // cluster still gets a number instead of a blank (the routes page reads the
@@ -203,6 +205,7 @@ export function useRoutesBoard(scope: readonly string[], enabled = true) {
           routes.data,
           gatewaysAll.data,
           classes.data,
+          sets,
           backing.data,
           backing.error,
           topologyKnown,
@@ -220,6 +223,8 @@ export function useRoutesBoard(scope: readonly string[], enabled = true) {
               // empty class list reads "class does not exist", which would
               // put a red dot on a healthy cluster for one render.
               topologyKnown,
+              listenerSets: sets.sets,
+              listenerSetsSaid: sets.said,
               backing: backingFrom(backing.data, backing.error),
               door,
             },
@@ -231,6 +236,7 @@ export function useRoutesBoard(scope: readonly string[], enabled = true) {
       routes.data,
       gatewaysAll.data,
       classes.data,
+      sets,
       backing.data,
       backing.error,
       topologyKnown,

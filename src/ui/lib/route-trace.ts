@@ -20,6 +20,7 @@ import type {
   GatewayClassInfo,
   GatewayInfo,
   ListenerInfo,
+  ListenerSetInfo,
   ParentRefInfo,
   ResolveProbe,
   RouteInfo,
@@ -44,6 +45,7 @@ import {
   type DoorAsk,
 } from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
+import { parentAt, parentWords, type ParentAt } from "@/lib/parent-at";
 
 export interface TraceQuote {
   asks: string;
@@ -145,6 +147,13 @@ export interface TraceSources {
   classes: GatewayClassInfo[];
   /** False while gateways and classes are still being read — or cannot be. */
   topologyKnown: boolean;
+  /**
+   * Every `ListenerSet`: a route naming a set resolves through the set's own
+   * parentRef. `null` while they are read, and where they were refused or
+   * failed, with the cluster's words in {@link listenerSetsSaid}.
+   */
+  listenerSets: ListenerSetInfo[] | null;
+  listenerSetsSaid: string | null;
   backing: BackingSources;
   /** Who each Gateway's controller connects from, judged at the NetworkPolicies over the backends; absent, nobody is. */
   door?: DoorAsk;
@@ -185,7 +194,12 @@ export function routeBackingOf(
     .filter(parentCarriesTraffic)
     .map((parent) =>
       backingAt(
-        gatewayOfParent(sources.gateways, parent, route.namespace),
+        gatewayOfParent(
+          sources.gateways,
+          parent,
+          route.namespace,
+          sources.listenerSets
+        ),
         sources
       )
     );
@@ -294,32 +308,19 @@ export function findGateway(
   );
 }
 
-/** The Gateway a parentRef leads to, directly or through a `ListenerSet`. */
+/**
+ * The Gateway a parentRef leads to, directly or through a `ListenerSet`:
+ * through the Gateway that keeps the set, or the set's own parentRef where
+ * the sets were read.
+ */
 export function gatewayOfParent(
   gateways: GatewayInfo[],
   parent: { kind: string; name: string; namespace: string | null },
-  routeNamespace: string
+  routeNamespace: string,
+  sets: ListenerSetInfo[] | null = null
 ): GatewayInfo | undefined {
-  return gateways.find((candidate) =>
-    parentIsGateway(parent, routeNamespace, candidate)
-  );
-}
-
-/**
- * Whether a failure to resolve this parent is an answer or a gap.
- *
- * A `ListenerSet` parent resolves through `GatewayInfo.listenerSets`, and that
- * list is empty both when a Gateway has no sets and when the sets could not be
- * listed at all — a missing CRD, a refused list, a timeout. Reporting the
- * second as "Gateway X does not exist" would be this app inventing a verdict
- * out of its own blind spot, which is the whole thing it is not supposed to do.
- */
-export function parentResolutionKnown(
-  gateways: GatewayInfo[],
-  parent: { kind: string }
-): boolean {
-  if (parent.kind !== "ListenerSet") return true;
-  return gateways.every((gateway) => gateway.listenerSetsKnown);
+  const at = parentAt(parent, routeNamespace, gateways, sets);
+  return at.state === "found" ? at.gateway : undefined;
 }
 
 /** Whether a parentRef could name a Gateway at all — directly or via a set. */
@@ -537,52 +538,43 @@ export function classStep(
 }
 
 function gatewayStep(
-  gateway: GatewayInfo | undefined,
-  parent: ParentRefInfo,
-  routeNamespace: string,
+  at: ParentAt,
   topologyKnown: boolean,
-  resolutionKnown: boolean,
+  setsSaid: string | null,
   t: T
 ): TraceStep {
-  const at = parent.namespace ?? routeNamespace;
   if (!topologyKnown) {
     return {
       id: "gateway",
       state: "blind",
-      say: t("empty", "gwGatewayBlind", { name: parent.name }),
-      who: "infra",
-    };
-  }
-  if (!gateway && !resolutionKnown) {
-    // The parent names a ListenerSet and the sets could not be listed, so
-    // "no Gateway claims it" is not something this app read anywhere.
-    return {
-      id: "gateway",
-      state: "blind",
-      say: t("empty", "gwSetsUnreadSay", { name: parent.name }),
-      who: "infra",
-      detail: {
-        title: t("empty", "gwSetsUnreadTitle"),
-        body: t("empty", "gwSetsUnreadBody"),
-      },
-    };
-  }
-  if (!gateway) {
-    return {
-      id: "gateway",
-      state: "err",
-      say: t("empty", "gwGatewayMissingSay", {
-        name: parent.name,
-        namespace: at,
+      say: t("empty", "gwGatewayBlind", {
+        name: at.state === "found" ? at.gateway.name : at.name,
       }),
-      who: "yours",
-      short: t("empty", "gwGatewayMissingShort", { name: parent.name }),
-      detail: {
-        title: t("empty", "gwGatewayMissingTitle"),
-        body: t("empty", "gwGatewayMissingBody"),
-      },
+      who: "infra",
     };
   }
+  if (at.state !== "found") {
+    const words = parentWords(at, t, setsSaid);
+    // A list not read names what it could not look for; one read names
+    // what is not there.
+    return at.state === "unread"
+      ? {
+          id: "gateway",
+          state: "blind",
+          say: words.say,
+          who: "infra",
+          detail: words.detail,
+        }
+      : {
+          id: "gateway",
+          state: "err",
+          say: words.say,
+          who: "yours",
+          short: words.short,
+          detail: words.detail,
+        };
+  }
+  const gateway = at.gateway;
   const subject = {
     kind: "Gateway",
     name: gateway.name,
@@ -1376,7 +1368,13 @@ function traceFor(
   const namespace = parent.namespace ?? route.namespace;
   // Resolved rather than looked up by name: the parentRef may name a
   // `ListenerSet`, whose own parentRef says which Gateway carries it.
-  const gateway = gatewayOfParent(sources.gateways, parent, route.namespace);
+  const at = parentAt(
+    parent,
+    route.namespace,
+    sources.gateways,
+    sources.listenerSets
+  );
+  const gateway = at.state === "found" ? at.gateway : undefined;
   const entries = statusesFor(route, parent);
   const [listener, allowed] = acceptanceSteps(
     route,
@@ -1395,14 +1393,7 @@ function traceFor(
 
   const steps: TraceStep[] = [
     classStep(gateway, sources.classes, sources.topologyKnown, t),
-    gatewayStep(
-      gateway,
-      parent,
-      route.namespace,
-      sources.topologyKnown,
-      parentResolutionKnown(sources.gateways, parent),
-      t
-    ),
+    gatewayStep(at, sources.topologyKnown, sources.listenerSetsSaid, t),
     listener,
     allowed,
     refsStep(route, entries, t),
@@ -1446,8 +1437,8 @@ function traceFor(
     // The Gateway, not the ListenerSet that pointed at it: this names what
     // the row's "via" shows, and two sets on one Gateway are one road.
     gateway: {
-      name: gateway?.name ?? parent.name,
-      namespace: gateway?.namespace ?? namespace,
+      name: at.state === "found" ? at.gateway.name : at.name,
+      namespace: at.state === "found" ? at.gateway.namespace : at.namespace,
       sectionName: parent.sectionName,
     },
     via:

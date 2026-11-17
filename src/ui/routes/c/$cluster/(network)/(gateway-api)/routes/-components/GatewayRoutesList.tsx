@@ -42,6 +42,7 @@ import {
 import { gatewayTopology } from "./gateway-topology";
 import { useGatewayRoutes } from "../../../../-object/useGatewayRoutes";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
+import { useListenerSets } from "@/hooks/useListenerSets";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
@@ -351,6 +352,7 @@ export function GatewayRoutesList() {
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
   });
+  const sets = useListenerSets(true);
   const backing = useBackingLists();
   const door = useDoorAsk();
 
@@ -378,6 +380,8 @@ export function GatewayRoutesList() {
           topologyKnown:
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
+          listenerSets: sets.sets,
+          listenerSetsSaid: sets.said,
           backing: backingFrom(backing.data, backing.error),
           door,
         },
@@ -387,6 +391,7 @@ export function GatewayRoutesList() {
       filtered,
       gateways.data,
       classes.data,
+      sets,
       backing.data,
       backing.error,
       served,
@@ -431,9 +436,19 @@ export function GatewayRoutesList() {
         backing.data ? backingFrom(backing.data, null) : undefined,
         t,
         pods.data && { pods: pods.data.rows },
-        { classes: classes.data ?? [], ask: door }
+        { classes: classes.data ?? [], ask: door },
+        sets.sets
       ),
-    [gateways.data, filtered, backing.data, t, pods.data, classes.data, door]
+    [
+      gateways.data,
+      filtered,
+      backing.data,
+      t,
+      pods.data,
+      classes.data,
+      door,
+      sets.sets,
+    ]
   );
 
   if (!isConnected) {

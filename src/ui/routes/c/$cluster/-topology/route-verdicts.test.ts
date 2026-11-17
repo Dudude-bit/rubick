@@ -127,6 +127,8 @@ const board = (topologyKnown: boolean) =>
       gateways: topologyKnown ? [publicGateway] : [],
       classes: topologyKnown ? [unclaimed] : [],
       topologyKnown,
+      listenerSets: null,
+      listenerSetsSaid: null,
       backing: {
         services: [
           {

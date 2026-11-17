@@ -1,0 +1,205 @@
+{
+  "about": "Where a route's parentRef leads, as both halves resolve it: parent_at in src/tauri/src/commands/connections/traffic.rs (the Connections chain and the map) and parentAt in src/ui/lib/route-trace.ts (the Routes trace, its rows, the board and the map's route verdicts). A Gateway parent is found by name and namespace. A ListenerSet parent is found through the Gateway that keeps it, or else through the set itself, whose parentRef names its Gateway: a set that is there leads to that Gateway, and that Gateway is the one missing when it is not in the list; a set that is not there is named itself. Either is missing only where the list that would hold it was read: `null` is a list not read. `via` is the set a route went through where that set is there. Parents are written short: group defaults to gateway.networking.k8s.io, kind to Gateway, namespace to the route's.",
+  "cases": [
+    {
+      "name": "a Gateway that is there",
+      "routeNamespace": "shop",
+      "parent": { "name": "edge", "namespace": "infra" },
+      "gateways": [{ "name": "edge", "namespace": "infra" }],
+      "sets": [],
+      "at": {
+        "state": "found",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": null
+      }
+    },
+    {
+      "name": "a Gateway not in a list that was read",
+      "routeNamespace": "shop",
+      "parent": { "name": "ghost" },
+      "gateways": [{ "name": "edge", "namespace": "infra" }],
+      "sets": [],
+      "at": {
+        "state": "missing",
+        "kind": "Gateway",
+        "name": "ghost",
+        "namespace": "shop",
+        "via": null
+      }
+    },
+    {
+      "name": "a Gateway when the Gateways were not read",
+      "routeNamespace": "shop",
+      "parent": { "name": "edge", "namespace": "infra" },
+      "gateways": null,
+      "sets": [],
+      "at": {
+        "state": "unread",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": null
+      }
+    },
+    {
+      "name": "a ListenerSet its Gateway keeps",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [
+        {
+          "name": "edge",
+          "namespace": "infra",
+          "listenerSets": [{ "name": "team", "namespace": "shop" }]
+        }
+      ],
+      "sets": null,
+      "at": {
+        "state": "found",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "shop" }
+      }
+    },
+    {
+      "name": "a ListenerSet that is there, read before its Gateway kept it",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [{ "name": "edge", "namespace": "infra" }],
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "shop",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "found",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "shop" }
+      }
+    },
+    {
+      "name": "a ListenerSet that is there, whose Gateway is not",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [{ "name": "other", "namespace": "infra" }],
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "shop",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "missing",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "shop" }
+      }
+    },
+    {
+      "name": "a ListenerSet that is there, with no Gateway in the cluster at all",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [],
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "shop",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "missing",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "shop" }
+      }
+    },
+    {
+      "name": "a ListenerSet that is there, when the Gateways were not read",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": null,
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "shop",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "unread",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "shop" }
+      }
+    },
+    {
+      "name": "a ListenerSet that is not there",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [{ "name": "edge", "namespace": "infra" }],
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "other",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "missing",
+        "kind": "ListenerSet",
+        "name": "team",
+        "namespace": "shop",
+        "via": null
+      }
+    },
+    {
+      "name": "a ListenerSet when the sets were not read",
+      "routeNamespace": "shop",
+      "parent": { "kind": "ListenerSet", "name": "team" },
+      "gateways": [{ "name": "edge", "namespace": "infra" }],
+      "sets": null,
+      "at": {
+        "state": "unread",
+        "kind": "ListenerSet",
+        "name": "team",
+        "namespace": "shop",
+        "via": null
+      }
+    },
+    {
+      "name": "a ListenerSet in the namespace its parentRef names",
+      "routeNamespace": "shop",
+      "parent": {
+        "kind": "ListenerSet",
+        "name": "team",
+        "namespace": "edge-sets"
+      },
+      "gateways": [],
+      "sets": [
+        {
+          "name": "team",
+          "namespace": "edge-sets",
+          "gateway": { "name": "edge", "namespace": "infra" }
+        }
+      ],
+      "at": {
+        "state": "missing",
+        "kind": "Gateway",
+        "name": "edge",
+        "namespace": "infra",
+        "via": { "name": "team", "namespace": "edge-sets" }
+      }
+    }
+  ]
+}

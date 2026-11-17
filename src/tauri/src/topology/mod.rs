@@ -520,6 +520,16 @@ impl Stores {
                 Some(Reading::Synced | Reading::Blind { .. })
             ))
         .then(|| merged(Self::everywhere(&o.gateways)));
+        // Every set, or none, by the same rule: a route's set may stand in
+        // a namespace the scope left out. A cluster that serves none has none.
+        let listener_sets = (!self.scoped)
+            .then(|| self.reads.get(&(Kind::ListenerSet, None)))
+            .flatten()
+            .and_then(|reading| match reading {
+                Reading::Synced | Reading::Blind { .. } => Some(Self::everywhere(&o.listener_sets)),
+                Reading::Unserved => Some(Vec::new()),
+                _ => None,
+            });
         let gateways_here = match self.answer(Kind::Gateway, namespace) {
             Answer::Read => Some(merged(
                 o.gateways
@@ -562,6 +572,7 @@ impl Stores {
             gateway_routes: routes,
             gateways,
             gateways_here,
+            listener_sets,
             routes_read,
             gateway_unread,
             taken_at: now,

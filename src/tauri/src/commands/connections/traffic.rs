@@ -81,6 +81,7 @@ pub(super) fn traffic_into(
             &svc_ref,
             &snapshot.gateway_routes,
             snapshot.gateways.as_deref(),
+            snapshot.listener_sets.as_deref(),
             snapshot
                 .gateway_classes
                 .as_ref()
@@ -128,6 +129,7 @@ pub(super) fn gateway_traffic_into(
     svc_ref: &ObjectRef,
     routes: &[crate::resources::RouteInfo],
     gateways: Option<&[crate::resources::GatewayInfo]>,
+    sets: Option<&[crate::resources::ListenerSetInfo]>,
     classes: Option<std::result::Result<&[crate::resources::GatewayClassInfo], &str>>,
     out: &mut Neighbourhood,
 ) {
@@ -167,7 +169,7 @@ pub(super) fn gateway_traffic_into(
             );
         }
 
-        route_parents(route, &route_ref, gateways, classes, out);
+        route_parents(route, &route_ref, gateways, sets, classes, out);
     }
 }
 
@@ -177,6 +179,8 @@ pub(super) fn route_parents(
     route: &crate::resources::RouteInfo,
     route_ref: &ObjectRef,
     gateways: Option<&[crate::resources::GatewayInfo]>,
+    // Every ListenerSet, or `None` where they were not read.
+    sets: Option<&[crate::resources::ListenerSetInfo]>,
     // Every GatewayClass, the cluster's words where they could not be read,
     // or `None` from a caller that does not ask about classes.
     classes: Option<std::result::Result<&[crate::resources::GatewayClassInfo], &str>>,
@@ -198,57 +202,15 @@ pub(super) fn route_parents(
             .namespace
             .clone()
             .unwrap_or_else(|| route.namespace.clone());
-        // Absent list means nobody asked, which is a different answer
-        // from "asked, and it is not there" — and only the second one
-        // may be drawn as a break in the chain.
-        let found = gateways
-            .and_then(|list| {
-                list.iter().find(|g| {
-                    if via_set {
-                        // The set's own namespace resolution, then the
-                        // Gateway it named.
-                        g.listener_sets
-                            .iter()
-                            .any(|set| set.name == parent.name && set.namespace == gw_ns)
-                    } else {
-                        g.name == parent.name && g.namespace == gw_ns
-                    }
-                })
-            })
-            .map(Some);
-        // Only when the sets were actually read: an unlisted ListenerSet
-        // makes every set-parented route look orphaned.
-        let resolvable =
-            !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
-        let gw_ref = match found {
-            Some(Some(g)) => gateway_ref(g),
-            // Unresolved: point at what the route actually named. Calling
-            // a ListenerSet a Gateway would put the set's name under the
-            // wrong kind, and the reader would go looking for a Gateway
-            // that was never supposed to exist.
-            _ => ObjectRef::new(
-                if via_set { "ListenerSet" } else { "Gateway" },
-                &parent.name,
-                Some(gw_ns.clone()),
-                if gateways.is_some() && resolvable {
-                    Existence::Missing
-                } else {
-                    Existence::NotChecked
-                },
-            ),
-        };
-        // Only when the sets were actually read: an unlisted ListenerSet
-        // makes every set-parented route look orphaned, and a break drawn
-        // from that is this app's blind spot, not the cluster's state.
-        let resolvable =
-            !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
-        if found.is_none() && gateways.is_some() && resolvable {
+        let (found, gw_ref, through) = parent_at(parent, &gw_ns, via_set, gateways, sets);
+        if gw_ref.existence == Existence::Missing {
             out.stops.push(ChainStop::GatewayMissing {
                 route: route_ref.clone(),
                 gateway: gw_ref.clone(),
+                listener_set: through,
             });
         }
-        if let (Some(Some(g)), Some(Err(said))) = (found, classes) {
+        if let (Some(g), Some(Err(said))) = (found, classes) {
             out.stops.push(ChainStop::GatewayClassUnread {
                 route: route_ref.clone(),
                 gateway: gw_ref.clone(),
@@ -256,7 +218,7 @@ pub(super) fn route_parents(
                 said: said.to_string(),
             });
         }
-        if let (Some(Some(g)), Some(Ok(classes))) = (found, classes) {
+        if let (Some(g), Some(Ok(classes))) = (found, classes) {
             match classes.iter().find(|class| class.name == g.class_name) {
                 None => out.stops.push(ChainStop::GatewayClassMissing {
                     route: route_ref.clone(),
@@ -282,7 +244,6 @@ pub(super) fn route_parents(
             }
         }
         if let Some(said) = found
-            .flatten()
             .and_then(|g| programmed(&g.conditions))
             .filter(|said| said.status == "False")
         {
@@ -325,6 +286,93 @@ pub(super) fn route_parents(
                 message: said.message.clone(),
             });
         }
+    }
+}
+
+/// Where a parentRef leads, as the Routes trace resolves it too (held to it
+/// by `parent-resolution-conformance.json`): the Gateway it reaches, the ref
+/// the chain draws, and the `ListenerSet` it went through where that set is
+/// there. A set that is there leads to the Gateway it names, and that is the
+/// one missing; a set that is not there is named itself. Either is missing
+/// only where the list that would hold it was read.
+pub(super) fn parent_at<'a>(
+    parent: &crate::resources::ParentRefInfo,
+    namespace: &str,
+    via_set: bool,
+    gateways: Option<&'a [crate::resources::GatewayInfo]>,
+    sets: Option<&[crate::resources::ListenerSetInfo]>,
+) -> (
+    Option<&'a crate::resources::GatewayInfo>,
+    ObjectRef,
+    Option<crate::resources::ObjectName>,
+) {
+    let named = |name: &str, namespace: &str| {
+        gateways.and_then(|list| {
+            list.iter()
+                .find(|g| g.name == name && g.namespace == namespace)
+        })
+    };
+    let ref_to = |kind: &str, name: &str, namespace: &str, read: bool| {
+        ObjectRef::new(
+            kind,
+            name,
+            Some(namespace.to_string()),
+            if read {
+                Existence::Missing
+            } else {
+                Existence::NotChecked
+            },
+        )
+    };
+    if !via_set {
+        return match named(&parent.name, namespace) {
+            Some(g) => (Some(g), gateway_ref(g), None),
+            None => (
+                None,
+                ref_to("Gateway", &parent.name, namespace, gateways.is_some()),
+                None,
+            ),
+        };
+    }
+    let through = crate::resources::ObjectName {
+        name: parent.name.clone(),
+        namespace: namespace.to_string(),
+    };
+    // The Gateways keep the sets that named them; the sets themselves say
+    // which Gateway, there or not, each one names.
+    let kept = gateways.and_then(|list| list.iter().find(|g| g.listener_sets.contains(&through)));
+    if let Some(g) = kept {
+        return (Some(g), gateway_ref(g), Some(through));
+    }
+    let Some(sets) = sets else {
+        return (
+            None,
+            ref_to("ListenerSet", &parent.name, namespace, false),
+            None,
+        );
+    };
+    let Some(set) = sets
+        .iter()
+        .find(|set| set.name == through.name && set.namespace == through.namespace)
+    else {
+        return (
+            None,
+            ref_to("ListenerSet", &parent.name, namespace, true),
+            None,
+        );
+    };
+    match named(&set.gateway_name, &set.gateway_namespace) {
+        Some(g) => (Some(g), gateway_ref(g), Some(through)),
+        None => (
+            None,
+            ref_to(
+                "Gateway",
+                &set.gateway_name,
+                &set.gateway_namespace,
+                gateways.is_some(),
+            ),
+            Some(through),
+        ),
     }
 }
 
@@ -694,6 +742,7 @@ status:
                     &service("shop", "promo"),
                     &[route(HEALTHY_ROUTE)],
                     Some(&[gateway(EDGE_GATEWAY)]),
+                    None,
                     classes,
                     &mut out,
                 );
@@ -729,6 +778,7 @@ status:
             &service("shop", "promo"),
             &[route(HEALTHY_ROUTE)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             Some(Err("gatewayclasses is forbidden")),
             &mut out,
         );
@@ -747,6 +797,7 @@ status:
             &service("shop", "promo"),
             &[route(HEALTHY_ROUTE)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             None,
             &mut out,
         );
@@ -831,6 +882,7 @@ spec:
 "#,
             )]),
             None,
+            None,
             &mut out,
         );
 
@@ -895,6 +947,7 @@ spec:
             )],
             Some(&[edge]),
             None,
+            None,
             &mut out,
         );
 
@@ -910,6 +963,217 @@ spec:
         ));
     }
 
+    /// A route through a `ListenerSet` that exists, whose Gateway is the one
+    /// not there, was told the set did not exist. Fails if the chain does
+    /// not name the set's Gateway as the missing one, does not call a set
+    /// that is not there missing, or calls either missing where the list
+    /// that would hold it was not read.
+    #[test]
+    fn a_route_through_a_listener_set_names_what_is_missing_behind_it() {
+        let team = crate::resources::ListenerSetInfo {
+            name: "team".into(),
+            namespace: "shop".into(),
+            gateway_name: "edge".into(),
+            gateway_namespace: "infra".into(),
+            listeners: Vec::new(),
+            conditions: Vec::new(),
+            created_at: None,
+        };
+        let through = |gateways: Option<&[GatewayInfo]>,
+                       sets: Option<&[crate::resources::ListenerSetInfo]>| {
+            let mut out = Neighbourhood::new();
+            gateway_traffic_into(
+                "shop",
+                &service("shop", "promo"),
+                &[route(
+                    r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { group: gateway.networking.k8s.io, kind: ListenerSet, name: team }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+",
+                )],
+                gateways,
+                sets,
+                None,
+                &mut out,
+            );
+            let up = out
+                .edges
+                .iter()
+                .find(|e| matches!(e.relation, Relation::AttachesTo { .. }))
+                .expect("the route names its parent")
+                .to
+                .clone();
+            let stops: Vec<String> = out
+                .stops
+                .iter()
+                .map(|stop| match stop {
+                    ChainStop::GatewayMissing {
+                        gateway,
+                        listener_set,
+                        ..
+                    } => format!(
+                        "missing {}/{}{}",
+                        gateway.kind,
+                        gateway.name,
+                        listener_set
+                            .as_ref()
+                            .map(|set| format!(" via {}", set.name))
+                            .unwrap_or_default()
+                    ),
+                    other => format!("{other:?}"),
+                })
+                .collect();
+            (
+                format!(
+                    "{} {}/{}",
+                    up.kind,
+                    up.namespace.unwrap_or_default(),
+                    up.name
+                ),
+                up.existence,
+                stops,
+            )
+        };
+        let sets = std::slice::from_ref(&team);
+        assert_eq!(
+            through(Some(&[]), Some(sets)),
+            (
+                "Gateway infra/edge".into(),
+                Existence::Missing,
+                vec!["missing Gateway/edge via team".into()]
+            )
+        );
+        assert_eq!(
+            through(Some(&[]), Some(&[])),
+            (
+                "ListenerSet shop/team".into(),
+                Existence::Missing,
+                vec!["missing ListenerSet/team".into()]
+            )
+        );
+        assert_eq!(
+            through(Some(&[]), None),
+            (
+                "ListenerSet shop/team".into(),
+                Existence::NotChecked,
+                vec![]
+            )
+        );
+        assert_eq!(
+            through(None, Some(sets)),
+            ("Gateway infra/edge".into(), Existence::NotChecked, vec![])
+        );
+        let mut edge = gateway(EDGE_GATEWAY);
+        edge.namespace = "infra".into();
+        assert_eq!(
+            through(Some(&[edge]), Some(sets)),
+            ("Gateway infra/edge".into(), Existence::Present, vec![])
+        );
+    }
+
+    /// The chain and the Routes trace resolve a parentRef by one rule; a case
+    /// one side answers differently is two screens naming different objects
+    /// missing for one route.
+    #[test]
+    fn a_parent_resolves_as_the_shared_corpus_says() {
+        let corpus: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../contracts/parent-resolution-conformance.json"
+        ))
+        .expect("the corpus parses");
+        let text = |value: &serde_json::Value, key: &str| value[key].as_str().map(str::to_string);
+        for case in corpus["cases"].as_array().expect("cases") {
+            let name = case["name"].as_str().expect("a name");
+            let route_ns = text(case, "routeNamespace").expect("a namespace");
+            let short = &case["parent"];
+            let parent = crate::resources::ParentRefInfo {
+                group: text(short, "group")
+                    .unwrap_or_else(|| crate::resources::GATEWAY_API_GROUP.into()),
+                kind: text(short, "kind").unwrap_or_else(|| "Gateway".into()),
+                name: text(short, "name").expect("a parent name"),
+                namespace: text(short, "namespace"),
+                section_name: None,
+                port: None,
+            };
+            let gateways: Option<Vec<GatewayInfo>> = case["gateways"].as_array().map(|list| {
+                list.iter()
+                    .map(|entry| {
+                        let mut g = gateway(&format!(
+                            "apiVersion: gateway.networking.k8s.io/v1\nkind: Gateway\nmetadata: {{ name: {}, namespace: {} }}\nspec: {{ gatewayClassName: envoy }}\n",
+                            entry["name"].as_str().expect("a name"),
+                            entry["namespace"].as_str().expect("a namespace"),
+                        ));
+                        g.listener_sets = entry["listenerSets"]
+                            .as_array()
+                            .map(|sets| {
+                                sets.iter()
+                                    .map(|set| crate::resources::ObjectName {
+                                        name: text(set, "name").expect("a name"),
+                                        namespace: text(set, "namespace").expect("a namespace"),
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        g
+                    })
+                    .collect()
+            });
+            let sets: Option<Vec<crate::resources::ListenerSetInfo>> =
+                case["sets"].as_array().map(|list| {
+                    list.iter()
+                        .map(|set| crate::resources::ListenerSetInfo {
+                            name: text(set, "name").expect("a name"),
+                            namespace: text(set, "namespace").expect("a namespace"),
+                            gateway_name: text(&set["gateway"], "name").expect("a Gateway"),
+                            gateway_namespace: text(&set["gateway"], "namespace")
+                                .expect("a namespace"),
+                            listeners: Vec::new(),
+                            conditions: Vec::new(),
+                            created_at: None,
+                        })
+                        .collect()
+                });
+            let at_ns = parent.namespace.clone().unwrap_or(route_ns);
+            let via_set = parent.kind == "ListenerSet";
+            let (found, drawn, via) = parent_at(
+                &parent,
+                &at_ns,
+                via_set,
+                gateways.as_deref(),
+                sets.as_deref(),
+            );
+            let state = match (found, drawn.existence) {
+                (Some(_), _) => "found",
+                (None, Existence::Missing) => "missing",
+                (None, _) => "unread",
+            };
+            let expected = &case["at"];
+            assert_eq!(
+                (
+                    state,
+                    drawn.kind.as_str(),
+                    drawn.name.as_str(),
+                    drawn.namespace.as_deref(),
+                    via.map(|set| (set.name, set.namespace)),
+                ),
+                (
+                    expected["state"].as_str().expect("a state"),
+                    expected["kind"].as_str().expect("a kind"),
+                    expected["name"].as_str().expect("a name"),
+                    expected["namespace"].as_str(),
+                    text(&expected["via"], "name").zip(text(&expected["via"], "namespace")),
+                ),
+                "{name}"
+            );
+        }
+    }
+
     #[test]
     fn a_route_naming_another_service_draws_nothing() {
         let mut out = Neighbourhood::new();
@@ -918,6 +1182,7 @@ spec:
             &service("shop", "checkout"),
             &[route(HEALTHY_ROUTE)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             None,
             &mut out,
         );
@@ -944,6 +1209,7 @@ spec:
             &service("shop", "promo"),
             &[route(cross)],
             Some(&[]),
+            None,
             None,
             &mut out,
         );
@@ -976,6 +1242,7 @@ status:
             &service("shop", "promo"),
             &[route(refused)],
             Some(&[gateway(EDGE_GATEWAY)]),
+            None,
             None,
             &mut out,
         );
@@ -1034,6 +1301,7 @@ status:
             &[route(contested)],
             Some(&[gateway(EDGE_GATEWAY)]),
             None,
+            None,
             &mut out,
         );
         assert!(out.stops.iter().any(|stop| matches!(
@@ -1075,6 +1343,7 @@ status:
             &[route(unresolved)],
             Some(&[gateway(EDGE_GATEWAY)]),
             None,
+            None,
             &mut out,
         );
 
@@ -1105,12 +1374,13 @@ spec:
             &[route(orphan)],
             Some(&[]),
             None,
+            None,
             &mut out,
         );
 
         let stop = out.stops.first().expect("a stop");
         match stop {
-            ChainStop::GatewayMissing { route, gateway } => {
+            ChainStop::GatewayMissing { route, gateway, .. } => {
                 assert_eq!(route.name, "promo");
                 assert_eq!(gateway.name, "ghost");
             }
@@ -1142,6 +1412,7 @@ spec:
                 &service("shop", "promo"),
                 &[route(HEALTHY_ROUTE)],
                 Some(&[gw]),
+                None,
                 None,
                 &mut out,
             );
@@ -1199,6 +1470,7 @@ spec:
             &[route(HEALTHY_ROUTE)],
             None,
             None,
+            None,
             &mut out,
         );
 
@@ -1234,6 +1506,7 @@ spec:
             &[route(mesh)],
             Some(&[]),
             None,
+            None,
             &mut out,
         );
         // The backend edge is real; the Service parentRef must produce
@@ -1266,6 +1539,7 @@ mod tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            listener_sets: None,
             gateway_classes: None,
             gateway_unread: Vec::new(),
         }

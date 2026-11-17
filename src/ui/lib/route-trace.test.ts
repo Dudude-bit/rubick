@@ -249,6 +249,8 @@ const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({
   gateways: [gateway("edge")],
   classes: [gatewayClass("envoy", true)],
   topologyKnown: true,
+  listenerSets: null,
+  listenerSetsSaid: null,
   backing: {
     services: [service("healthy")],
     published: [published("healthy", 1)],
@@ -1593,12 +1595,60 @@ describe("a route attached through a ListenerSet", () => {
   it("does not attach it to a Gateway that says it never claimed the set", () => {
     const traces = routeTraces(
       viaSet(),
-      sources({ gateways: [gateway("edge", { listenerSetsKnown: true })] }),
+      sources({
+        gateways: [gateway("edge", { listenerSetsKnown: true })],
+        listenerSets: [],
+      }),
       t
     );
 
     expect(traces).toHaveLength(1);
     expect(traces[0].steps[1].state).toBe("err");
+    expect(traces[0].steps[1].say).toBe(
+      "ListenerSet app-tls does not exist in gwtest"
+    );
+  });
+
+  /**
+   * A set that was there, whose Gateway was the one gone, read "Gateway
+   * app-tls does not exist". Fails if the trace does not name the set's
+   * Gateway as the missing one, or calls it missing while the Gateways or
+   * the sets are unread.
+   */
+  it("names the Gateway the set leads to as the missing one, and nothing missing it could not read", () => {
+    const set = {
+      name: "app-tls",
+      namespace: "gwtest",
+      gatewayName: "gone",
+      gatewayNamespace: "infra",
+      listeners: [],
+      conditions: [],
+      createdAt: null,
+    };
+    const step = (over: Parameters<typeof sources>[0]) =>
+      routeTraces(viaSet(), sources(over), t)[0];
+
+    const missing = step({ listenerSets: [set] });
+    expect(missing.steps[1].state).toBe("err");
+    expect(missing.steps[1].say).toBe(
+      "ListenerSet app-tls names Gateway gone, which does not exist in infra"
+    );
+    expect(missing.gateway).toMatchObject({ name: "gone", namespace: "infra" });
+
+    const setsUnread = step({
+      listenerSets: null,
+      listenerSetsSaid: "listenersets is forbidden",
+    });
+    expect(setsUnread.steps[1].state).toBe("blind");
+    expect(setsUnread.steps[1].detail?.body).toContain(
+      "listenersets is forbidden"
+    );
+
+    const gatewaysUnread = step({ listenerSets: [set], topologyKnown: false });
+    expect(gatewaysUnread.steps[1].state).toBe("blind");
+    expect(gatewaysUnread.steps[1].say).toBe(
+      "Gateway gone: cannot be read from here"
+    );
   });
 
   /**

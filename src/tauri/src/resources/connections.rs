@@ -427,7 +427,12 @@ pub enum ChainStop {
     /// nothing else will say it.
     GatewayMissing {
         route: ObjectRef,
+        /// The Gateway, or the `ListenerSet` where the route named a set
+        /// that is not there.
         gateway: ObjectRef,
+        /// The set the route named, there, whose Gateway is the one missing.
+        #[serde(rename = "listenerSet", default)]
+        listener_set: Option<crate::resources::ObjectName>,
     },
     /// The controller wrote `Programmed: False`, or the legacy `Ready:
     /// False`, on the Gateway a route attaches to: nothing through it

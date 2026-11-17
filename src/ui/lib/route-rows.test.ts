@@ -213,6 +213,8 @@ const sources = (over: Partial<Parameters<typeof routesBoard>[1]> = {}) => ({
   gateways: [gateway("edge")],
   classes: [gatewayClass("envoy", true)],
   topologyKnown: true,
+  listenerSets: null,
+  listenerSetsSaid: null,
   backing: {
     services: [service("app")],
     published: [published("app", 1)],
@@ -310,6 +312,33 @@ describe("routesBoard", () => {
       namespace: "gwtest",
     });
     expect(board.notServing[1].viaGhost).toBeNull();
+
+    // Through a ListenerSet that is there, the ghost is the Gateway the set
+    // names; with the sets unread there is no ghost to draw.
+    const viaSet = route("set", {
+      parentRefs: [
+        { ...ghost.parentRefs[0], kind: "ListenerSet", name: "team" },
+      ],
+    });
+    const team = {
+      name: "team",
+      namespace: "gwtest",
+      gatewayName: "gone",
+      gatewayNamespace: "infra",
+      listeners: [],
+      conditions: [],
+      createdAt: null,
+    };
+    const rowOf = (listenerSets: (typeof team)[] | null) =>
+      routesBoard([viaSet], sources({ listenerSets }), t).notServing[0] ??
+      routesBoard([viaSet], sources({ listenerSets }), t).unknown[0];
+    expect(rowOf([team]).viaGhost).toEqual({
+      kind: "Gateway",
+      name: "gone",
+      namespace: "infra",
+    });
+    expect(rowOf([team]).via).toBe("gone");
+    expect(rowOf(null).viaGhost).toBeNull();
     expect(board.notServing[1].stop).toEqual({
       at: "refs",
       short: "needs a ReferenceGrant in gwtest-other",

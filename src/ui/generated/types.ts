@@ -1499,6 +1499,16 @@ export interface GatewayInfo {
   createdAt: string | null;
 }
 
+export interface ListenerSetInfo {
+  name: string;
+  namespace: string;
+  gatewayName: string;
+  gatewayNamespace: string;
+  listeners: ListenerInfo[];
+  conditions: ConditionInfo[];
+  createdAt: string | null;
+}
+
 export interface BackendTlsPolicyInfo {
   name: string;
   namespace: string;
@@ -3422,7 +3432,12 @@ export type ChainStop =
       conditionReason: string | null;
       message: string | null;
     }
-  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
+  | {
+      reason: "gatewayMissing";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      listenerSet: ObjectName | null;
+    }
   | {
       reason: "gatewayNotProgrammed";
       route: ObjectRef;

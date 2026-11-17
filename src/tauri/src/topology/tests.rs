@@ -750,3 +750,58 @@ async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
     let held = map.stores().held("infra", OtherPolicies::none(), now());
     assert_eq!(held.gateways_here.map(|list| list.len()), Some(1));
 }
+
+/// The map drew a route's `ListenerSet` as missing, in red, when the set
+/// was there and the Gateway it names was the one gone. Fails if the map
+/// does not hand its sets to the route's parents, or calls the Gateway
+/// missing while the sets are unread.
+#[test]
+fn the_map_names_the_gateway_a_route_s_listener_set_leads_to() {
+    let mut stores = Stores::default();
+    for kind in [Kind::Gateway, Kind::HttpRoute] {
+        stores.apply(read(kind, None, Reading::Synced));
+    }
+    stores.apply(Feed::Applied(Object::HttpRoute(Box::new(RouteInfo::read(
+        &gateway_api(
+            "HTTPRoute",
+            "shop",
+            "api",
+            &json!({ "parentRefs": [{ "kind": "ListenerSet", "name": "team" }] }),
+        ),
+    )))));
+    stores.apply(Feed::Applied(Object::ListenerSet(Box::new(
+        ListenerSetInfo::read(&gateway_api(
+            "ListenerSet",
+            "shop",
+            "team",
+            &json!({ "parentRef": { "name": "public", "namespace": "infra" }, "listeners": [] }),
+        )),
+    ))));
+    let public = |stores: &Stores| {
+        crate::commands::connections::map::slice_of(
+            stores.held("shop", OtherPolicies::none(), now()),
+            now(),
+        )
+        .nodes
+        .get(PUBLIC)
+        .map(|node| node.object.existence)
+    };
+    assert_eq!(public(&stores), None);
+    let team = |stores: &Stores| {
+        crate::commands::connections::map::slice_of(
+            stores.held("shop", OtherPolicies::none(), now()),
+            now(),
+        )
+        .nodes
+        .values()
+        .find(|node| node.object.kind == "ListenerSet" && node.object.name == "team")
+        .map(|node| node.object.existence)
+    };
+    assert_eq!(team(&stores), Some(Existence::NotChecked));
+    // A cluster that serves no ListenerSet has none: the set is the one
+    // missing.
+    stores.apply(read(Kind::ListenerSet, None, Reading::Unserved));
+    assert_eq!(team(&stores), Some(Existence::Missing));
+    stores.apply(read(Kind::ListenerSet, None, Reading::Synced));
+    assert_eq!(public(&stores), Some(Existence::Missing));
+}

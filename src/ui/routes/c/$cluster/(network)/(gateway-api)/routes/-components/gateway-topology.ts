@@ -35,13 +35,14 @@ import { statusesFor, verdictOf } from "@/lib/route-verdict";
 import type {
   GatewayClassInfo,
   GatewayInfo,
+  ListenerSetInfo,
   ParentRefInfo,
   PodRow,
   RouteInfo,
 } from "@/generated/types";
+import { parentAt } from "@/lib/parent-at";
 import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
 import {
-  gatewayOfParent,
   gatewayProgrammed,
   parentCarriesTraffic,
   routeBackingOf,
@@ -136,7 +137,9 @@ export function gatewayTopology(
   t: T,
   workloads?: WorkloadSources,
   /** The classes naming each Gateway's controller, and who those connect from. */
-  door?: { classes: GatewayClassInfo[]; ask: DoorAsk }
+  door?: { classes: GatewayClassInfo[]; ask: DoorAsk },
+  /** Every `ListenerSet`; `null` where they were not read. */
+  sets: ListenerSetInfo[] | null = null
 ): RoutingMapData {
   const gatewaysKnown = gateways !== undefined;
   const drawn = gateways ?? [];
@@ -201,21 +204,33 @@ export function gatewayTopology(
       // itself — so it draws an edge to that Gateway, not to a node named
       // after the set.
       if (!parentCarriesTraffic(parent)) continue;
-      const resolved = gatewayOfParent(drawn, parent, route.namespace);
-      const ns = resolved?.namespace ?? parent.namespace ?? route.namespace;
-      const gatewayId = `gw/${ns}/${resolved?.name ?? parent.name}`;
+      const at = parentAt(
+        parent,
+        route.namespace,
+        gatewaysKnown ? drawn : null,
+        sets
+      );
+      const ns = at.state === "found" ? at.gateway.namespace : at.namespace;
+      const name = at.state === "found" ? at.gateway.name : at.name;
+      // The node is the Gateway, or the ListenerSet where the set itself is
+      // not there or could not be looked for.
+      const gatewayId =
+        at.state !== "found" && at.kind === "ListenerSet"
+          ? `set/${ns}/${name}`
+          : `gw/${ns}/${name}`;
       if (!gatewayNodes.has(gatewayId)) {
-        // Only a list that was read can say the gateway is not in it. Unread,
+        // Only a list that was read can say the parent is not in it. Unread,
         // the node still gets drawn — the route does name it — but muted and
         // unlabelled, the way an unread backend is.
         gatewayNodes.set(gatewayId, {
           id: gatewayId,
-          label: parent.name,
+          label: name,
           sub: ns,
-          tone: gatewaysKnown ? "err" : "mute",
-          tag: gatewaysKnown
-            ? { text: t("columns", "missingTag"), tone: "err" }
-            : undefined,
+          tone: at.state === "missing" ? "err" : "mute",
+          tag:
+            at.state === "missing"
+              ? { text: t("columns", "missingTag"), tone: "err" }
+              : undefined,
         });
       }
       const verdict: MapTone = refusedBy(route, parent) ? "err" : "mute";
@@ -261,6 +276,8 @@ export function gatewayTopology(
               gateways: drawn,
               classes: door?.classes ?? [],
               topologyKnown: gatewaysKnown,
+              listenerSets: sets,
+              listenerSetsSaid: null,
               backing,
               door: door?.ask,
             })
