@@ -562,6 +562,49 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * Rows kept under the name, a cluster that may not read kube-system: the
+   * Changes page warned they may be another cluster's, while the card named
+   * one as this service's last change. Fails if the card or its Share
+   * claims a row it cannot place.
+   */
+  it("does not name a row it cannot place as this service's last change", () => {
+    const latest = lastChangeOf({
+      read: true,
+      rows: [
+        {
+          id: "1",
+          seq: 1,
+          at: 1,
+          kind: "Deployment",
+          group: "apps",
+          namespace: "shop",
+          name: "payments",
+          what: { says: "created" },
+          atRelist: false,
+        },
+      ],
+      letGo: undefined,
+      unreadable: 0,
+      identity: { says: "unknown", message: "namespaces is forbidden" },
+    });
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 1, total: 1 },
+      { entries: [], known: true },
+      [],
+      latest,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(
+      rows.find((row) => row.label === "Last change")?.values[0].text
+    ).toBe(
+      "not known: the rows kept under this name may be another cluster's (namespaces is forbidden)"
+    );
+  });
+
+  /**
    * Every kept row failed to parse, and the card said "nothing seen while
    * this app was watching". Fails if rows that could not be read leave the
    * last change said to be none.
@@ -572,6 +615,7 @@ describe("the last change a card names", () => {
       rows: [],
       letGo: undefined,
       unreadable: 3,
+      identity: undefined,
     });
     const section = pinShare(
       pin,
@@ -622,7 +666,7 @@ describe("the last change a card names", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/while this app was watching/)).toBeNull();
-    const read = { read: true, rows: [], unreadable: 0 };
+    const read = { read: true, rows: [], unreadable: 0, identity: undefined };
     const words = (letGo: { before: number; cleared: boolean }) => {
       const section = pinShare(
         pin,

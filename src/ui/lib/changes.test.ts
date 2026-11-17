@@ -1482,6 +1482,16 @@ describe("the cluster's events and the recorded changes on one clock", () => {
     expect(quietSince({ from: T0 }, [], -Infinity, "all")).toBe(T0);
   });
 
+  /** A catch-up failed: nothing since the last read is known. Fails if the watch is still called quiet. */
+  it("knows no change row after a read that failed", () => {
+    const known = changesKnownFrom({
+      letGo: undefined,
+      readFrom: null,
+      error: new Error("disk refused"),
+    });
+    expect(quietSince({ from: T0 }, [], known, "all")).toBeNull();
+  });
+
   /** Rows below the first page were not read. Fails if a watch older than them is called quiet. */
   it("knows the change rows only from where they were read", () => {
     const known = (readFrom: number | null) =>

@@ -954,6 +954,27 @@ fn a_wipe_that_failed_is_done_on_the_next_write() {
     );
 }
 
+/// Keeping off on a busy cluster: every flush dropped rows, and each left a
+/// stretch of its own, eighty thousand a day walked on every flush. Fails if
+/// stretches that meet are not one.
+#[test]
+fn stretches_not_kept_that_meet_are_one() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), false);
+    let cluster = timelines.cluster("kind");
+    for n in 0..50 {
+        cluster.change(change(
+            &n.to_string(),
+            ClusterTimeline::now(),
+            "Deployment",
+            Some("shop"),
+            "api",
+        ));
+        timelines.flush();
+    }
+    assert_eq!(cluster.inner.lock().unkept.len(), 1);
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {

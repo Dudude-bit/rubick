@@ -119,7 +119,11 @@ export function Changes() {
     show,
     knownFrom,
   ]);
-  const open = ours.find((span) => span.to === null);
+  const running = ours.find((span) => span.to === null);
+  // Under warnings only, a running span refused the Event watch is not
+  // watching what the page shows: it names the refusal and nothing more.
+  const open =
+    show === "warnings" ? covering.find((span) => span.to === null) : running;
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.
   const watching = open && {
@@ -127,7 +131,7 @@ export function Changes() {
     from: watchedSince(covering, end) ?? open.from,
   };
   const quiet = quietSince(watching, items, knownFrom, show);
-  const refused = watching && unwatchedWords(watching, t);
+  const refused = running && unwatchedWords(running, t);
   const earlier =
     watching && earlierRowsWords(ours, items, watching.from, t, moment);
   const keeping = keepingWords(read, t);
@@ -145,7 +149,7 @@ export function Changes() {
 
   useShareSection("changes", () => [
     changesScreenSection(items, t, windowWords, show, unread),
-    watchedSection(watching, ours, items, t, show, read),
+    watchedSection(watching, ours, items, t, show, read, running),
   ]);
 
   if (!isConnected) {
@@ -157,26 +161,26 @@ export function Changes() {
       <SectionHeader
         title={t("changes", "title")}
         count={
-          watching ? (
+          watching || read.read ? (
             <>
-              {t("changes", "watchingNow", {
-                since: moment(watching.from),
-              })}
-              {refused && (
+              {watching
+                ? t("changes", "watchingNow", {
+                    since: moment(watching.from),
+                  })
+                : t("changes", "notWatchingNow")}
+              {refused && running && (
                 <span
                   className="ml-2 inline-flex items-center gap-1 text-warn"
-                  title={[...refusedWhere(watching)]
+                  title={[...refusedWhere(running)]
                     .filter(([, where]) => where.length > 0)
                     .map(([kind, where]) => `${kind}: ${where.join(", ")}`)
                     .join("\n")}
                 >
                   <Lock className="h-3 w-3" aria-hidden="true" />
-                  <RefusedWords span={watching} />
+                  <RefusedWords span={running} />
                 </span>
               )}
             </>
-          ) : read.read ? (
-            t("changes", "notWatchingNow")
           ) : undefined
         }
         description={
@@ -189,7 +193,7 @@ export function Changes() {
         }
         actions={
           <>
-            <ShowFilter show={show} onShow={setShow} watching={watching} />
+            <ShowFilter show={show} onShow={setShow} watching={running} />
             <div className="flex items-center gap-0.5" role="group">
               {(Object.keys(WINDOWS) as Window[]).map((candidate) => (
                 <button

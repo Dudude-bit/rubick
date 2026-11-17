@@ -348,3 +348,23 @@ it("reads a controller's revisions only for the built-in kind of that name", asy
   await renderWithRouter(<ObjectChanges subject={LEDGER} />, { at: "/c/prod" });
   await waitFor(() => expect(asked).toContain("get_deployment_replicasets"));
 });
+
+/**
+ * Opened from a moment on, a tab whose timeline could not be read said
+ * nothing changed since then. Fails if a failed read is drawn as a quiet
+ * stretch from that moment.
+ */
+it("says nothing of the moment it was opened from when the timeline could not be read", async () => {
+  answering(page(), (command) =>
+    command === "timeline_read"
+      ? Promise.reject(new Error("disk refused"))
+      : undefined
+  );
+  await renderWithRouter(<ObjectChanges subject={LEDGER} />, {
+    at: "/c/prod?since=2026-11-17T10%3A00%3A00.000Z",
+  });
+  expect(
+    await screen.findByText(/^The timeline could not be read: /)
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/^Nothing on this clock since/)).toBeNull();
+});
