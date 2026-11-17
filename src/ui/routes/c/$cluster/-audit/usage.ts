@@ -83,6 +83,10 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
     return { says: "young", since: fresh.since };
   if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
     return { says: "noSamples" };
+  // A peak nobody read judges nothing, though the average was read.
+  const peakless = (one: Efficiency) =>
+    one.state === "measured" && one.peakRatio === null;
+  if (peakless(e.cpu) || peakless(e.memory)) return { says: "noSamples" };
   return { says: "within" };
 }
 
