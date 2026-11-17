@@ -556,7 +556,13 @@ fn unserved_is_not_installed_for_gateway_kinds_and_unread_for_the_others() {
 async fn a_map_ends_when_the_layer_closes_its_channel() {
     let (tx, rx) = tokio::sync::mpsc::channel(8);
     let map = Arc::new(ClusterMap::default());
-    let pumping = tokio::spawn(pump(rx, map.clone(), std::collections::BTreeMap::new()));
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::new(),
+        None,
+    ));
     tx.send(crate::feeds::Update::State {
         slot: slot(Kind::Deployment, None),
         state: Reading::Synced,
@@ -632,4 +638,115 @@ fn a_pod_level_use_through_env_from_survives_the_layer_s_cut() {
         crate::resources::Relation::Uses { usages }
             if usages.iter().any(|use_| matches!(use_, crate::resources::Usage::Mount { path, .. } if path == "/etc/db"))
     )));
+}
+
+/// With Namespaces refused, the map drew only namespaces holding a pod, a
+/// Deployment or a Service: a `StatefulSet` scaled to zero, alone in its
+/// namespace, was left off. Fails if any kind read in a namespace does not
+/// put it on the map.
+#[test]
+fn a_namespace_known_only_by_a_stateful_set_is_drawn_when_namespaces_were_refused() {
+    let mut stores = Stores::default();
+    stores.apply(read(
+        Kind::Namespace,
+        None,
+        Reading::Refused {
+            message: SAID.into(),
+        },
+    ));
+    stores.apply(Feed::Applied(Object::StatefulSet(Box::new(
+        serde_json::from_value(json!({
+            "metadata": { "name": "db", "namespace": "data" },
+            "spec": { "replicas": 0, "serviceName": "db",
+                      "selector": { "matchLabels": { "app": "db" } },
+                      "template": { "metadata": { "labels": { "app": "db" } } } },
+        }))
+        .expect("a StatefulSet"),
+    ))));
+    stores.apply(Feed::Applied(deployment("shop", "cart")));
+    assert_eq!(
+        stores.namespaces(None),
+        BTreeSet::from(["data".to_string(), "shop".to_string()])
+    );
+}
+
+/// A kind refused while the stream lagged behind kept its last reading on
+/// the rail: the lag redrew the map and sent no kinds. Fails if a lag does
+/// not send the kinds again with the map.
+#[tokio::test]
+async fn a_stream_that_lagged_sends_the_kinds_again() {
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    let (events, mut rx) = broadcast::channel(4096);
+    let (open, cancel) = opening(map.clone(), &events);
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+
+    map.feed([read(
+        Kind::Service,
+        None,
+        Reading::Refused {
+            message: SAID.into(),
+        },
+    )]);
+    for at in 0..300 {
+        map.feed([Feed::Applied(deployment("shop", &format!("d{at}")))]);
+    }
+    let mut seen = Vec::new();
+    while !seen.contains(&"apps/Deployment/shop/d299".to_string()) {
+        seen.extend(next(&mut rx).await);
+    }
+    assert!(seen.contains(&"kinds".to_string()), "{seen:?}");
+    cancel.cancel();
+    task.await.expect("ends");
+}
+
+/// Discovery failing for a Gateway API kind as the map opened kept its
+/// objects off the map for as long as it stayed open: each was parsed with
+/// no type and dropped. Fails if a kind discovery could not answer for is
+/// not asked about again when its objects arrive.
+#[tokio::test]
+async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let resolve: Resolve = Arc::new(|kind| {
+        Box::pin(async move {
+            (kind == Kind::Gateway).then(|| {
+                kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )
+            })
+        })
+    });
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Applied {
+        slot: slot(Kind::Gateway, None),
+        object: dynamic(json!({
+            "metadata": { "name": "edge", "namespace": "infra" },
+            "spec": { "gatewayClassName": "envoy", "listeners": [] },
+        })),
+    })
+    .await
+    .expect("sent");
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    let held = map.stores().held("infra", OtherPolicies::none(), now());
+    assert_eq!(held.gateways_here.map(|list| list.len()), Some(1));
 }

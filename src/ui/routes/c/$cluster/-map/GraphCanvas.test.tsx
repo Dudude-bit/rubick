@@ -197,6 +197,34 @@ describe("the map's view", () => {
     expect(setCenter).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * Picking the search result the view was last taken to, after moving the
+   * view away, did nothing: the pick was the same id, so nothing changed.
+   * Fails if a new pick of the same node does not pan to it again, or if
+   * the same pick pans again on a redraw.
+   */
+  it("pans to a node each time it is picked", async () => {
+    setCenter.mockClear();
+    const draw = (focus: { id: string }) => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        focus={focus}
+        ariaLabel="map"
+      />
+    );
+    const pick = { id: "web" };
+    const { rerender } = render(draw(pick));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(1), SLOW);
+    rerender(draw(pick));
+    expect(setCenter).toHaveBeenCalledTimes(1);
+    rerender(draw({ id: "web" }));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(2), SLOW);
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();

@@ -28,7 +28,7 @@ use crate::commands::connections::map::{Held, Named};
 use crate::resources::topology::{MapKindReading, MapKindState};
 use crate::resources::{GatewayInfo, ListenerSetInfo, OtherPolicies, RouteInfo, UnexploredKind};
 
-pub use feed::{ask, pump, types_of};
+pub use feed::{ask, pump, types_of, Resolve};
 pub use stream::{run, Drawn, Opening, Reread, SessionCheck};
 
 /// How one slot of a kind is being read, as the watch layer says it.
@@ -127,6 +127,14 @@ macro_rules! kinds {
             /// names the namespaces it held them in.
             fn clear(&mut self, kind: Kind, namespace: Option<&str>) -> BTreeSet<String> {
                 match kind { $(Kind::$variant => drain(&mut self.$field, namespace)),* }
+            }
+
+            /// Every namespace any object of any kind was read in.
+            fn seen(&self) -> BTreeSet<String> {
+                let mut seen = BTreeSet::new();
+                $(seen.extend(self.$field.keys().map(|(ns, _)| ns.clone()));)*
+                seen.remove("");
+                seen
             }
         }
     };
@@ -579,16 +587,9 @@ impl Stores {
                 .map(|(_, name)| name.clone())
                 .collect();
         }
-        let o = &self.objects;
-        let mut seen = BTreeSet::new();
-        for keys in [
-            o.pods.keys().map(|(ns, _)| ns).collect::<Vec<_>>(),
-            o.deployments.keys().map(|(ns, _)| ns).collect(),
-            o.services.keys().map(|(ns, _)| ns).collect(),
-        ] {
-            seen.extend(keys.into_iter().cloned());
-        }
-        seen
+        // Any kind read in a namespace says it is there: a StatefulSet
+        // scaled to zero, or a lone CronJob or Ingress, as much as a pod.
+        self.objects.seen()
     }
 
     /// Whether any kind is still waiting for its first answer, one the

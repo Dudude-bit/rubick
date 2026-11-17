@@ -105,8 +105,12 @@ export interface GraphCanvasProps {
   onOpenEdge?: (edge: GraphEdge) => void;
   /** The nodes a search found; the rest are dimmed. */
   highlight?: ReadonlySet<string> | null;
-  /** A node to pan to once it is placed: a search's pick in a group just opened. */
-  focus?: string | null;
+  /**
+   * A node to pan to once it is placed: a search's pick in a group just
+   * opened. Each pick is a new object, so picking the same node again pans
+   * to it again.
+   */
+  focus?: { id: string } | null;
   /** A new value fits the view to the next layout laid out whole; `null` waits. */
   fitKey?: string | null;
   ariaLabel: string;
@@ -202,12 +206,12 @@ function Canvas({
     [drawn.nodes, nodes, absolute, placement, flow]
   );
 
-  const centred = useRef<string | null>(null);
+  const centred = useRef<{ id: string } | null>(null);
   useEffect(() => {
     if (!focus || centred.current === focus) return;
-    if (!placement.nodes.has(focus)) return;
+    if (!placement.nodes.has(focus.id)) return;
     centred.current = focus;
-    centre(focus);
+    centre(focus.id);
   }, [focus, placement, centre]);
 
   // Whether the reader moved the view themselves, and what they last opened.

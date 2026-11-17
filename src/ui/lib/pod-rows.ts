@@ -7,7 +7,7 @@ import {
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { currentConnection, noteRefusal, readOf } from "@/lib/refusals";
-import { listenEvent } from "@/lib/events";
+import { listenAll, listenEvent } from "@/lib/events";
 import { stallWatch } from "@/lib/stall-watch";
 import { perf, sizeOf } from "@/lib/perf";
 import type { PodRow, Scoped } from "@/generated/types";
@@ -55,7 +55,7 @@ export async function listPodRows(
     settle.reject(signal?.reason);
   };
 
-  const off = await Promise.all([
+  const off = await listenAll([
     listenEvent("pod-rows-batch", (event) => {
       if (event.payload.stream_id !== id) return;
       for (const row of event.payload.rows) rows.push(row);
@@ -139,6 +139,6 @@ export async function listPodRows(
     return result;
   } finally {
     signal?.removeEventListener("abort", onAbort);
-    for (const unlisten of off) unlisten();
+    off();
   }
 }

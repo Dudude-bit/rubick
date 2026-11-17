@@ -14,10 +14,27 @@ import {
   expiryReason,
   isCredentialsExpired,
 } from "@/lib/credentials";
-import { listenBridgeLag, listenEvent } from "@/lib/events";
+import { listenAll, listenBridgeLag, listenEvent } from "@/lib/events";
+import { errorToShow } from "@/lib/error-utils";
 import { currentConnection } from "@/lib/refusals";
+import type { T } from "@/i18n/useT";
 import { perf } from "@/lib/perf";
 import { useClusterStore } from "@/stores/clusterStore";
+
+/**
+ * What a page drawn from the map says when the map is not kept current: it
+ * could not be opened, or its stream stopped. `null` while it is.
+ */
+export function mapStopped(
+  map: Pick<TopologySnapshot, "error" | "end">,
+  t: T
+): string | null {
+  if (map.error !== null)
+    return t("topology", "failed", { said: errorToShow(map.error) });
+  if (map.end?.says === "failed")
+    return t("topology", "stopped", { said: errorToShow(map.end.said) });
+  return null;
+}
 
 export interface TopologySnapshot {
   /** `opening` until the first batch, `ready` once the scope was drawn whole. */
@@ -204,7 +221,7 @@ export function useTopology(
       if (left || again) return;
       again = setTimeout(() => setAttempt((n) => n + 1), waitMs);
     };
-    const listening = Promise.all([
+    const listening = listenAll([
       listenEvent("topology-batch", ({ payload }) => {
         if (payload.stream_id === id) store.apply(payload.pieces);
       }),
@@ -243,7 +260,10 @@ export function useTopology(
     return () => {
       left = true;
       if (again) clearTimeout(again);
-      void listening.then((offs) => offs.forEach((off) => off()));
+      listening.then(
+        (off) => off(),
+        () => {}
+      );
       if (id) void commands.closeTopology(id).catch(() => {});
     };
   }, [store, enabled, context, scopeKey, attempt]);

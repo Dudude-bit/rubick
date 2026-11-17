@@ -94,6 +94,8 @@ interface Ask {
   request: LayoutRequest;
   /** The signature of every group laid out by this request. */
   signatures: Map<string, string>;
+  /** The groups whose last layout still holds their nodes as they are. */
+  kept: Set<string>;
 }
 
 /** How the groups were packed, and by which edges between them. */
@@ -179,6 +181,7 @@ export function askFor(
   const asks: LayoutGroupAsk[] = [];
   const sizes: [string, number?, number?][] = [];
   const signatures = new Map<string, string>();
+  const kept = new Set<string>();
   let changed = false;
   for (const group of members(groups, nodes)) {
     if (group.collapsed) {
@@ -225,6 +228,7 @@ export function askFor(
           id: group.id,
           size: { width: held.width, height: held.height },
         });
+        kept.add(group.id);
         continue;
       }
     } else {
@@ -244,7 +248,11 @@ export function askFor(
     });
   }
   if (!changed && packingKey(sizes, links) === lastPacked) return null;
-  return { request: { id: ++nextId, groups: asks, links }, signatures };
+  return {
+    request: { id: ++nextId, groups: asks, links },
+    signatures,
+    kept,
+  };
 }
 
 const NONE: Omit<Placement, "settled"> = {
@@ -330,7 +338,12 @@ export function useLayout(
                 positions: group.positions,
                 routes: group.routes,
               });
-            const held = cache.get(group.id);
+            // A collapsed or emptied group's last layout holds nodes that
+            // may since have moved to another group.
+            const held =
+              group.positions || ask.kept.has(group.id)
+                ? cache.get(group.id)
+                : undefined;
             const positions = group.positions ?? held?.positions ?? {};
             for (const [id, point] of Object.entries(positions))
               at.set(id, point);

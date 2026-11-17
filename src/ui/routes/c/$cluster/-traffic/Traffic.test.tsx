@@ -41,7 +41,8 @@ vi.mock("@/integrations", async (importOriginal) => ({
   useCapability: (key: string) =>
     key === "traffic.live" ? liveCapability() : null,
 }));
-vi.mock("../-map/useTopology", () => ({
+vi.mock("../-map/useTopology", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../-map/useTopology")>()),
   useTopology: () => {
     useEffect(() => {
       stream.opened += 1;

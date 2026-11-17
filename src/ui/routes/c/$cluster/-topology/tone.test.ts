@@ -294,6 +294,26 @@ describe("a map node's colour", () => {
     ).toBe(ROLE_TONE[ingressHealthWords(health, t).role]);
   });
 
+  /**
+   * An Ingress whose Services the hook could not read lost its ring once
+   * the hook answered: "not checked" is a neutral role, and neutral was
+   * drawn as quiet grey. Fails if an answer with inputs unread, refused or
+   * still loading, is drawn as anything but unknown.
+   */
+  it("rings an Ingress whose hook answered with inputs it could not read", () => {
+    const row = { name: "web", namespace: "shop" } as never;
+    const tone = (unread: IngressHealth["unread"]) =>
+      toneOf(node(ref("Ingress"), { says: "ingress", row }), {
+        ...inputs,
+        ingress: () => ({ problems: [], unread, backends: 1, addressed: true }),
+      });
+    expect(tone([{ code: "FORBIDDEN", said: "services is forbidden" }])).toBe(
+      "unknown"
+    );
+    expect(tone([null])).toBe("unknown");
+    expect(tone([])).toBe("ok");
+  });
+
   /** What nobody read earns no colour, whatever its verdict says, and a kind whose read broke is not drawn as current. */
   it("rings what was not checked and what a broken read last saw", () => {
     const ready: NodeVerdict = { says: "rollout", rollout: { state: "ready" } };

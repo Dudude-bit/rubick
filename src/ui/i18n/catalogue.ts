@@ -1888,6 +1888,7 @@ export const en = {
     exported: "Map saved to {path}",
     exportFailed: "Could not save the map",
     failed: "The map could not be read: {said}",
+    stopped: "The map stopped updating and shows what it last read: {said}",
     edgesAbsent:
       "No edges from or to {kinds} are drawn here: they were not read.",
     notLookedLine: "{state}: {kinds}",

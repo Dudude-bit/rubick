@@ -1934,6 +1934,8 @@ export const ru: Catalogue = {
     exported: "Карта сохранена в {path}",
     exportFailed: "Не удалось сохранить карту",
     failed: "Не удалось прочитать карту: {said}",
+    stopped:
+      "Карта перестала обновляться и показывает то, что прочитала последним: {said}",
     edgesAbsent: "Связи с {kinds} здесь не нарисованы: они не прочитаны.",
     notLookedLine: "{state}: {kinds}",
     clusterSaid: "Что ответил кластер",

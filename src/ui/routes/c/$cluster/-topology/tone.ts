@@ -109,7 +109,13 @@ const TONE_OF: Toner = {
   },
   ingress: ({ row }, _node, { ingress, t }) => {
     const health = ingress(row);
-    return health ? ROLE_TONE[ingressHealthWords(health, t).role] : "unknown";
+    if (!health) return "unknown";
+    // An input not read yet, or refused, is the page's grey "not checked":
+    // on the map that is the ring, not the quiet grey of nothing to say.
+    const { code, role } = ingressHealthWords(health, t);
+    return code === "unknown" || code === "reading"
+      ? "unknown"
+      : ROLE_TONE[role];
   },
   route: ({ stops, accepted }, node, { verdicts }) => {
     const page = verdicts?.route({

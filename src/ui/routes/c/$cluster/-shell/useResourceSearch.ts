@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
-import { listenEvent } from "@/lib/events";
+import { listenAll, listenEvent } from "@/lib/events";
 import type {
   SearchContextStatus,
   SearchedKind,
@@ -226,7 +226,7 @@ export function useResourceSearch({
           error: null,
         });
 
-        const [offHits, offStatus] = await Promise.all([
+        const off = await listenAll([
           listenEvent("search-hits", (event) => {
             if (event.payload.search_id !== searchId) return;
             setState((prev) => ({
@@ -263,11 +263,10 @@ export function useResourceSearch({
         ]);
 
         if (disposed) {
-          offHits();
-          offStatus();
+          off();
           return;
         }
-        unlisteners.push(offHits, offStatus);
+        unlisteners.push(off);
 
         // Listeners installed — release the backend's gate.
         await commands.resourceSearchSubscribed(handle.searchId);

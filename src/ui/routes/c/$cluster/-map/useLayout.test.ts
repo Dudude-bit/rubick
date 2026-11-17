@@ -234,6 +234,51 @@ describe("laying out a canvas that keeps changing", () => {
   });
 
   /**
+   * A node that moved out of a group that was then collapsed took the place
+   * it last had in that group, over the one its new group gave it. Fails if
+   * a collapsed group's last layout places any node.
+   */
+  it("places a node where its new group put it, not where a collapsed group last had it", async () => {
+    asked.length = 0;
+    const shop = (collapsed: boolean): GraphGroup => ({ ...group, collapsed });
+    const cart: GraphGroup = { ...group, id: "cart", label: "cart" };
+    const moved = { ...node("web"), group: "cart" };
+    const { result, rerender } = renderHook(
+      ({ groups, nodes }) => useLayout(groups, nodes, []),
+      {
+        initialProps: {
+          groups: [cart, shop(false)],
+          nodes: [
+            node("svc"),
+            node("api"),
+            node("web"),
+            { ...node("db"), group: "cart" },
+          ],
+        },
+      }
+    );
+    await waitFor(() => expect(asked).toHaveLength(1), SLOW);
+    await act(async () => asked[0].answer());
+    expect(result.current.nodes.get("web")).toEqual({ x: 0, y: 100 });
+
+    rerender({
+      groups: [cart, shop(true)],
+      nodes: [
+        node("svc"),
+        node("api"),
+        moved,
+        { ...node("db"), group: "cart" },
+      ],
+    });
+    await waitFor(() => expect(asked).toHaveLength(2), SLOW);
+    await act(async () => asked[1].answer());
+    const cartAsk = asked[1].request.groups.find((each) => each.id === "cart");
+    expect(cartAsk?.nodes?.map((each) => each.id)).toEqual(["web", "db"]);
+    expect(result.current.nodes.get("web")).toEqual({ x: 0, y: 0 });
+    expect(result.current.nodes.has("svc")).toBe(false);
+  });
+
+  /**
    * A layout that failed left the canvas blank and was asked again on every
    * render. Fails if the failure is not kept for the canvas to say, if the
    * same request is asked again, or if a change after it is not asked.

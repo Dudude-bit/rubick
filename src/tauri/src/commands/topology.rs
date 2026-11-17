@@ -31,7 +31,26 @@ pub async fn open_topology(
     }
     .other_policies(&here.client, None)
     .await;
-    let types = crate::topology::types_of(&here).await;
+    let (types, unresolved) = crate::topology::types_of(&here).await;
+    let resolve: crate::topology::Resolve = {
+        let manager = state.client_manager.clone();
+        let context = here.context.clone();
+        Arc::new(move |kind| {
+            let manager = manager.clone();
+            let context = context.clone();
+            Box::pin(async move {
+                let client = manager.get_client(&context)?;
+                let key = kind.key();
+                manager
+                    .served()
+                    .resource(&context, &client, &key.group, &key.plural)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|served| served.resource)
+            })
+        })
+    };
     let subscription = state
         .feeds
         .subscribe(&here, crate::topology::ask(scope.clone()))
@@ -45,6 +64,8 @@ pub async fn open_topology(
         subscription.updates,
         map.clone(),
         types,
+        unresolved,
+        Some(resolve),
     ));
     let stream_id = generate_id("map");
     let mut opened = state.topology_streams.open(stream_id.clone());

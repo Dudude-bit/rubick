@@ -143,6 +143,9 @@ export function layersOf({
         });
       }
     }
+    // How many routes each edge stands for: one source may route several
+    // hosts and paths into one Service.
+    const routed = new Map<string, number>();
     for (const service of openServices) {
       const found = routes.of.get(`${service.namespace}/${service.name}`);
       const target = nodeId({ kind: "Service", ...service });
@@ -171,13 +174,16 @@ export function layersOf({
         const edge = `${id}>routes>${target}`;
         const words = `${t("topology", "verbRoutes")} ${route.host}${route.path}`;
         const held = edges.get(edge);
+        const more = routed.get(edge) ?? 0;
+        routed.set(edge, more + 1);
         edges.set(edge, {
           id: edge,
           from: id,
           to: target,
           tone: "ok",
           label: held?.label ?? words,
-          sub: held ? t("topology", "moreRelations", { n: 1 }) : undefined,
+          sub:
+            more > 0 ? t("topology", "moreRelations", { n: more }) : undefined,
         });
       }
     }

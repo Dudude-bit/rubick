@@ -3,7 +3,7 @@
  * listened to before it is let go, and closed with its caller.
  */
 import { commands } from "@/lib/commands";
-import { listenEvent } from "@/lib/events";
+import { listenAll, listenEvent } from "@/lib/events";
 import type { LiveListener } from "@/lib/traffic";
 
 export function openLiveFlows(
@@ -12,7 +12,7 @@ export function openLiveFlows(
 ): () => void {
   let id: string | null = null;
   let left = false;
-  const listening = Promise.all([
+  const listening = listenAll([
     listenEvent("hubble-flows", ({ payload }) => {
       if (payload.stream_id !== id || left) return;
       listener.batch({
@@ -46,7 +46,10 @@ export function openLiveFlows(
   })();
   return () => {
     left = true;
-    void listening.then((offs) => offs.forEach((off) => off()));
+    listening.then(
+      (off) => off(),
+      () => {}
+    );
     if (id) void commands.closeHubbleFlows(id).catch(() => {});
   };
 }
