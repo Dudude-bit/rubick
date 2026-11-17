@@ -314,7 +314,12 @@ export function usedLines(
  * What a money cell says: an amount, an amount that is a floor, no price
  * for what is there, or nothing there to price.
  */
-export type Said = number | { atLeast: number } | "notPriced" | "none";
+export type Said =
+  | number
+  | { atLeast: number }
+  | "notPriced"
+  | "notKnown"
+  | "none";
 
 export function money(
   value: Said | null | undefined,
@@ -324,6 +329,7 @@ export function money(
   if (value === null || value === undefined || value === "notPriced")
     return t("cost", "notPriced");
   if (value === "none") return t("empty", "noneLower");
+  if (value === "notKnown") return t("cost", "notKnown");
   if (typeof value === "number") return formatMoney(value, currency);
   return t("cost", "atLeast", { amount: formatMoney(value.atLeast, currency) });
 }
@@ -341,10 +347,19 @@ export const totalOf = (
 
 /** One part: its price, no price for what is there, or nothing there. */
 export const partOf = (
-  row: { parts: Parts; unpriced: readonly CostPart[] },
+  row: {
+    parts: Parts;
+    unpriced: readonly CostPart[];
+    unknown: readonly CostPart[];
+  },
   part: CostPart
 ): Said =>
-  row.parts[part] ?? (row.unpriced.includes(part) ? "notPriced" : "none");
+  row.parts[part] ??
+  (row.unknown.includes(part)
+    ? "notKnown"
+    : row.unpriced.includes(part)
+      ? "notPriced"
+      : "none");
 
 export const sortable = (said: Said): number =>
   typeof said === "number"

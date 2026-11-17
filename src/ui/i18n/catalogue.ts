@@ -2233,7 +2233,7 @@ export const en = {
       "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
     requestsAboveUsage: "Requests far above what it uses",
     requestsAboveUsageWhy:
-      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler keeps the whole request free for it on a node, so the rest is paid for and used by nothing. Lower the request toward the peak, keeping room for the peaks the day did not see.",
+      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler sets the whole request aside for it on a node, so no other pod can be placed on the rest, though the rest is paid for either way; spare CPU may still be borrowed by another pod's bursts. Lower the request toward the peak, keeping room for the peaks the day did not see.",
     removedApiInHelmRelease:
       "Helm release stores an API version Kubernetes removes",
     removedApiInHelmReleaseWhy:
@@ -2762,6 +2762,7 @@ export const en = {
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
+    effBilledTo: "Of {kind} {name}, every run: {line}",
     lineNotRead: "Not in the cost read yet.",
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",

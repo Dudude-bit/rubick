@@ -169,17 +169,30 @@ export function WorkloadCostLine({
             {t("cost", "efficiency")}
           </span>
           <span className="text-[11px] text-fg-mut">
-            {(["cpu", "memory"] as const).map((resource, i) => (
-              <span
-                key={resource}
-                className={cn(
-                  overRequested(efficiency[resource]) && "text-warn"
-                )}
-              >
-                {i > 0 && " · "}
-                {t("cost", resource)} {efficiencyWords(efficiency[resource], t)}
-              </span>
-            ))}
+            {(() => {
+              const line = (["cpu", "memory"] as const).map((resource, i) => (
+                <span
+                  key={resource}
+                  className={cn(
+                    overRequested(efficiency[resource]) && "text-warn"
+                  )}
+                >
+                  {i > 0 && " · "}
+                  {t("cost", resource)}{" "}
+                  {efficiencyWords(efficiency[resource], t)}
+                </span>
+              ));
+              // The row is the CronJob's, all its runs: said, as the cost is.
+              return billedTo
+                ? parts(
+                    t("cost", "effBilledTo", {
+                      kind: billedTo.kind,
+                      name: billedTo.name,
+                    }),
+                    { line: <>{line}</> }
+                  )
+                : line;
+            })()}
           </span>
         </div>
       )}

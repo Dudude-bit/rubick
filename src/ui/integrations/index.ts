@@ -426,13 +426,17 @@ export function useCapabilityState<K extends CapabilityKey>(
   key: K
 ): CapabilityState<K> {
   const state = useCapabilityStateNow(key);
+  const context = useClusterStore((s) => s.currentContext);
+  const client = useQueryClient();
   // Built afresh on every render; held by what it says, so a reader that
-  // derives a picture from it is not rebuilt on every render with it.
+  // derives a picture from it is not rebuilt on every render with it. And
+  // by whose it is: two clusters can say the same, and each one's "ask
+  // again" asks its own.
   const said = JSON.stringify(state, (_, value: unknown) =>
     typeof value === "function" ? (value.name ?? "fn") : value
   );
   // oxlint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => state, [said]);
+  return useMemo(() => state, [said, context, client]);
 }
 
 function useCapabilityStateNow<K extends CapabilityKey>(

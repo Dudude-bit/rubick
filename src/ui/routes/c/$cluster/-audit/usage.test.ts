@@ -171,6 +171,19 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * The average was read and the CPU peak was not: no ratio to judge, so
+   * Audit called it within its requests. A peak nobody read judges
+   * nothing. Fails if an unread peak reads as within.
+   */
+  it("says a workload whose peak was not read is not sampled, never within", () => {
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const peakless = reading(one, [[200, null, 200 * MI, 300 * MI]]);
+    const read = usageRead(one, null, peakless);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toEqual({ says: "noSamples" });
+  });
+
+  /**
    * Two pods' own peaks summed are a bound on the workload's peak: still
    * under half the request, the finding stands, and says the peak was no
    * more than that. Fails if Audit reports a bound as the peak.

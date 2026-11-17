@@ -16,6 +16,8 @@ import {
   cronJobOf,
   estimatePicture,
   monthOf,
+  noNodePriced,
+  pricesNoNode,
   readingPicture,
   type CostReading,
   type Prices,
@@ -367,8 +369,10 @@ describe("a picture from OpenCost's prices", () => {
       opencost,
       null
     );
+    // Its storage is priced at 0 and it holds none: that prices none of
+    // what it does hold, so it has no total, not a floor of 0.
     const shop = picture.namespaces.find((n) => n.namespace === "shop")!;
-    expect(shop).toMatchObject({ perHour: 0, atLeast: true });
+    expect(shop).toMatchObject({ perHour: null, atLeast: false });
     expect(shop.unpriced).toEqual(["cpu", "memory"]);
     const bank = picture.namespaces.find((n) => n.namespace === "bank")!;
     expect(bank.perHour).toBeNull();
@@ -532,6 +536,93 @@ describe("what the supplier's series cover", () => {
     );
     expect(all.workloads[0]!.atLeast).toBe(false);
     expect(all.namespaces[0]!.atLeast).toBe(false);
+  });
+});
+
+describe("whether no node carries a price", () => {
+  /**
+   * Where allocation by node was not asked the picture has no by-node
+   * table, and "no node priced" read that as "not known", so the page gave
+   * the reason for some nodes priced and offered no prices. It is counted
+   * from the nodes the cluster lists. Fails if it hangs on the table.
+   */
+  it("is told from the cluster's nodes, not from the by-node table", () => {
+    const none = readingPicture(
+      basis(),
+      reading({ nodes: [], allocatedByNode: null }),
+      opencost,
+      null
+    );
+    expect(none.nodes).toBeNull();
+    expect(noNodePriced(none)).toBe(true);
+    const some = readingPicture(
+      basis(),
+      reading({ allocatedByNode: null }),
+      opencost,
+      null
+    );
+    expect(noNodePriced(some)).toBe(false);
+  });
+});
+
+describe("storage nobody could read", () => {
+  /**
+   * A namespace's claims were refused: its storage became 0 bytes, and the
+   * row, priced in CPU and memory, read as whole. It is a floor, its
+   * storage cell says it is not known, and so for its workloads; storage
+   * read as 0 stays whole. Fails if unread storage counts as none.
+   */
+  it("makes a row a floor where its storage could not be read, and only then", () => {
+    const shop = (storageBytes: number | null) =>
+      estimatePicture(
+        basis({
+          namespaces: [
+            {
+              namespace: "shop",
+              workloads: 1,
+              pods: 2,
+              cpu: 500,
+              memory: GIB,
+              gpus: 0,
+              storageBytes,
+            },
+          ],
+        }),
+        prices,
+        null
+      );
+    const unread = shop(null);
+    expect(unread.namespaces[0]).toMatchObject({
+      atLeast: true,
+      unknown: ["storage"],
+    });
+    expect(unread.workloads[0]).toMatchObject({
+      atLeast: true,
+      unknown: ["storage"],
+    });
+    const none = shop(0);
+    expect(none.namespaces[0]).toMatchObject({ atLeast: false, unknown: [] });
+    expect(none.workloads[0]!.atLeast).toBe(false);
+  });
+});
+
+describe("whether OpenCost prices this cluster's nodes", () => {
+  /**
+   * A shared Prometheus priced only staging's node: OpenCost "priced a
+   * node", so entered prices were set aside, and then the staging node was
+   * left out and this cluster's nodes had no price at all. Only this
+   * cluster's nodes count, where they were listed. Fails if another
+   * cluster's priced node keeps entered prices from standing in.
+   */
+  it("counts only the nodes this cluster lists", () => {
+    const staging = reading({
+      nodes: [
+        { name: "staging-1", perHour: 0.5, instanceType: null, spot: null },
+      ],
+    });
+    expect(pricesNoNode(staging, basis())).toBe(true);
+    expect(pricesNoNode(reading(), basis())).toBe(false);
+    expect(pricesNoNode(staging, basis({ nodes: null }))).toBe(false);
   });
 });
 

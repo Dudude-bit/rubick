@@ -18,6 +18,7 @@ const row = (name: string) =>
     atLeast: false,
     parts: {},
     unpriced: ["cpu", "memory"],
+    unknown: [],
     requests: { cpu: 0, memory: 0 },
     id: name,
     crd: undefined,
@@ -121,6 +122,7 @@ describe("the breakdown by workload", () => {
       atLeast: false,
       parts: { cpu: 0.01 },
       unpriced: [],
+      unknown: [],
       currency: "EUR",
       share: 0.5,
     }));
