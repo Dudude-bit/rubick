@@ -252,6 +252,24 @@ describe("which source a cost is read from", () => {
     expect(hook.result.current.cost.state).toBe("loading");
   });
 
+  /**
+   * The cost basis failed and Retry was pressed: it asked the supplier too,
+   * with no rows to ask against, and kept an answer with no basis that the
+   * picture fell over later. Fails if Retry asks the supplier without one.
+   */
+  it("asks the supplier again only with a basis to ask against", async () => {
+    const use = vi.fn(async () => READING);
+    capability.mockReturnValue(ready(use));
+    costBasis.mockRejectedValue(new Error("pods is forbidden"));
+    const hook = render();
+    await waitFor(() =>
+      expect(hook.result.current.cost.state).toBe("basisFailed")
+    );
+    act(() => hook.result.current.retry());
+    await waitFor(() => expect(costBasis).toHaveBeenCalledTimes(2));
+    expect(use).not.toHaveBeenCalled();
+  });
+
   /** No series and no prices is its own sentence, not "nothing set up". */
   it("says the supplier holds no series where no prices are entered", async () => {
     capability.mockReturnValue(ready(async () => null));

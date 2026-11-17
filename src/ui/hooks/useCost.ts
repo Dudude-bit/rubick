@@ -216,10 +216,13 @@ export function useCost(
 
   const refetchBasis = basis.refetch;
   const refetchReading = reading.refetch;
+  // A refetch runs whatever `enabled` says: the supplier is asked again
+  // only with a basis its answer is positional on.
+  const canRead = ready !== null && basis.data !== undefined;
   const retry = useCallback(() => {
     void refetchBasis();
-    void refetchReading();
-  }, [refetchBasis, refetchReading]);
+    if (canRead) void refetchReading();
+  }, [refetchBasis, refetchReading, canRead]);
   return { cost, basis: basis.data, retry };
 }
 
