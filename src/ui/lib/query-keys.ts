@@ -675,14 +675,16 @@ export const queryKeys = {
   ],
   /** Which flow sources a supplier holds series for, asked once per address. */
   trafficSources: (endpoint: string): string[] => ["traffic-sources", endpoint],
-  /** Flows over a scope and a window, or only a subject's: `prometheus_flows`. */
+  /** Flows over a scope and a window, or only a subject's, from one supplier's address: `prometheus_flows`. */
   traffic: (
+    endpoint: string,
     namespaces: readonly string[] | null,
     window: string,
     subject: string | null,
     sources: string
   ): string[] => [
     "traffic",
+    endpoint,
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
     window,
     subject ?? "",
