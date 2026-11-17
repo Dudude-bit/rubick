@@ -260,6 +260,29 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * A catch-up that failed was swallowed: the rows held stayed, and the
+   * page went on calling the stretch since quiet. Fails if a failed
+   * catch-up is not the read's error until one answers again.
+   */
+  it("says a catch-up that failed, until one answers", async () => {
+    answers = [page([row("a", 10)])];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await settled();
+    answers = [new Error("disk refused")];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.error?.message).toContain("disk refused")
+    );
+    expect(result.current.rows).toHaveLength(1);
+    told("prod");
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
+  /**
    * A Changes tab closed and opened again within the cache's life: its rows
    * were held and never read again, so what was recorded while it was closed
    * stayed off screen until the next change. Fails if a surface opened on

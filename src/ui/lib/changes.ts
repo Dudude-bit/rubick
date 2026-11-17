@@ -1043,11 +1043,19 @@ const CLASSES_SHOWN: Record<Show, readonly (keyof LetGoes)[]> = {
 
 /**
  * Since when every change row is in hand: past a let-go line some were not
- * kept, and below the rows read so far some were not read yet.
+ * kept, below the rows read so far some were not read yet, and after a read
+ * that failed nothing since is.
  */
 export function changesKnownFrom(
-  read: { letGo: LetGoes | undefined; readFrom: number | null } | undefined
+  read:
+    | {
+        letGo: LetGoes | undefined;
+        readFrom: number | null;
+        error?: Error | null;
+      }
+    | undefined
 ): number {
+  if (read?.error) return Number.POSITIVE_INFINITY;
   return Math.max(
     read?.letGo?.changes?.before ?? Number.NEGATIVE_INFINITY,
     read?.readFrom ?? Number.NEGATIVE_INFINITY

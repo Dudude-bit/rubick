@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
@@ -14,6 +14,7 @@ import type {
 import { commands } from "@/lib/commands";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { listenEvent } from "@/lib/events";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
 import { builtInGroupOf } from "@/lib/links";
@@ -156,6 +157,12 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
   });
 
   const hasData = query.data !== undefined;
+  // A catch-up that failed leaves the rows held as of the last that did:
+  // said, so nothing calls the stretch since quiet.
+  const [behind, setBehind] = useState<{
+    key: typeof key;
+    error: Error;
+  } | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let reading = false;
@@ -172,6 +179,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         const page = await commands.timelineRead(
           question({ after: held.newest })
         );
+        setBehind(null);
         // The rows started over, for another cluster under the name or a
         // clear: what is held is not this timeline's any more.
         if (page.epoch !== held.epoch) {
@@ -201,8 +209,12 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
               }
             : now
         );
-      } catch {
-        // The next change asks again; a failed catch-up leaves what was read.
+      } catch (error) {
+        // The next change asks again; until it answers, what is held is old.
+        setBehind({
+          key,
+          error: error instanceof Error ? error : new Error(errorToShow(error)),
+        });
       } finally {
         reading = false;
         if (again) {
@@ -263,7 +275,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     readFrom: data?.more ? (data.rows.at(-1)?.at ?? null) : null,
     loadOlder,
     isPending: enabled && query.isPending,
-    error: query.error,
+    error: query.error ?? (behind?.key === key ? behind.error : null),
   };
 }
 
