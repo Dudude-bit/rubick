@@ -535,18 +535,15 @@ fn volumes_from_pvs(pvs: &[PersistentVolume]) -> Volumes {
         *volumes.count.as_mut().expect("set above") += 1;
         let phase = pv.status.as_ref().and_then(|s| s.phase.clone());
         let claim = pv.spec.as_ref().and_then(|s| s.claim_ref.as_ref());
-        match (phase.as_deref(), claim) {
-            (Some("Bound"), Some(claim)) => {
-                let namespace = claim.namespace.clone().unwrap_or_default();
-                let name = claim.name.clone().unwrap_or_default();
-                *volumes.by_namespace.entry(namespace.clone()).or_default() += bytes;
-                volumes.claims.insert((namespace, name), bytes);
-            }
-            _ => {
-                let unclaimed = volumes.unclaimed.as_mut().expect("set above");
-                unclaimed.count += 1;
-                unclaimed.bytes += bytes;
-            }
+        if let (Some("Bound"), Some(claim)) = (phase.as_deref(), claim) {
+            let namespace = claim.namespace.clone().unwrap_or_default();
+            let name = claim.name.clone().unwrap_or_default();
+            *volumes.by_namespace.entry(namespace.clone()).or_default() += bytes;
+            volumes.claims.insert((namespace, name), bytes);
+        } else {
+            let unclaimed = volumes.unclaimed.as_mut().expect("set above");
+            unclaimed.count += 1;
+            unclaimed.bytes += bytes;
         }
     }
     volumes
