@@ -133,6 +133,44 @@ describe("the cluster map's model", () => {
   });
 
   /**
+   * An edge to an object nobody could look at must not read like one to an
+   * object that is there. Fails if an end not checked does not make its edge
+   * unknown, or if two present ends or a missing one lose ok and err.
+   */
+  it("draws an edge to an end not checked as unknown", () => {
+    const web = node("Deployment", "web");
+    const end = (
+      name: string,
+      existence: TopologyNode["ref"]["existence"]
+    ): TopologyNode => ({
+      ...node("ConfigMap", name),
+      ref: { ...node("ConfigMap", name).ref, existence },
+    });
+    const ends = [
+      end("here", "present"),
+      end("unread", "notChecked"),
+      end("gone", "missing"),
+    ];
+    const edges = ends.map((to): TopologyEdge => ({
+      id: `${web.id}>${to.id}`,
+      from: web.id,
+      to: to.id,
+      relations: [
+        {
+          verb: "uses",
+          usages: [{ how: "envFrom", container: "web", optional: false }],
+        },
+      ],
+    }));
+    const model = of([web, ...ends], [read("shop")], edges);
+    expect(model.edges.map((edge) => [edge.to, edge.tone])).toEqual([
+      [ends[0].id, "ok"],
+      [ends[1].id, "unknown"],
+      [ends[2].id, "err"],
+    ]);
+  });
+
+  /**
    * Argo CD's optional Secrets were drawn red, "missing", while the pods ran
    * without them. Fails if a missing Secret every use of which is optional
    * is not a warning that says so, or one a workload needs loses its red.
