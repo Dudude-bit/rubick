@@ -259,6 +259,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
     let meta = object.metadata.clone();
     let version = meta.resource_version.clone().unwrap_or_default();
     let subject = meta_subject(kind, &meta);
+    let mut installers = false;
     let (own, body) = match kind {
         "Deployment" => {
             let it: Deployment = object.try_parse().ok()?;
@@ -364,6 +365,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         }
         "ClusterRoleBinding" => {
             let it: ClusterRoleBinding = object.try_parse().ok()?;
+            installers = objects::an_installers_own(&it);
             (
                 objects::binding(&it.role_ref, it.subjects.as_ref(), None),
                 Body::Plain,
@@ -372,7 +374,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         _ => return None,
     };
     Some(Entry {
-        system: is_system(&subject, meta.labels.as_ref()),
+        system: installers || is_system(&subject, meta.labels.as_ref()),
         subject,
         version,
         own,
