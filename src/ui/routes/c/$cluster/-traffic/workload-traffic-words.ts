@@ -7,6 +7,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import {
   heard,
+  MAX_FLOW_ROWS,
   silenceOf,
   type FlowRow,
   type TrafficReading,
@@ -166,6 +167,13 @@ export function subjectNotes(
         );
     }
   });
+  if (reading.answer.cut > 0)
+    warn(
+      t("traffic", "cut", {
+        kept: t("count", "flows", { n: MAX_FLOW_ROWS }),
+        cut: t("count", "flows", { n: reading.answer.cut }),
+      })
+    );
   if (reading.answer.podsFailed)
     warn(
       t("traffic", "podsFailed", { said: reading.answer.podsFailed.message })

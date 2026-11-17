@@ -279,6 +279,19 @@ describe("a workload's Traffic block", () => {
   });
 
   /**
+   * A workload with more pairs than a reading keeps is drawn with only the
+   * busiest: the block says how many it left out, as the page does.
+   */
+  it("says how many flows it left out where the reading was cut", async () => {
+    await draw(
+      read([ISTIO], [["web", "cart", { requests: 4 }]], null, { cut: 7 })
+    );
+    expect(
+      screen.getByText(/^Showing .*; 7 flows quieter are left out\.$/)
+    ).toBeTruthy();
+  });
+
+  /**
    * A CronJob's pods, and Hubble's names, file a run's flows under the
    * CronJob: a Job asked about as itself is never any flow's end.
    */
