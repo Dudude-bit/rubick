@@ -33,6 +33,18 @@ export function pricesOf(raw: unknown): Prices | null {
   };
 }
 
+/** What a stored state holds that is a cluster's prices; the rest is dropped. */
+function validPrices(persisted: unknown): Record<string, Prices> {
+  const stored = (persisted as { prices?: unknown } | undefined)?.prices;
+  const prices: Record<string, Prices> = {};
+  if (stored && typeof stored === "object")
+    for (const [context, raw] of Object.entries(stored)) {
+      const valid = pricesOf(raw);
+      if (valid) prices[context] = valid;
+    }
+  return prices;
+}
+
 export const useCostPricesStore = create<CostPricesState>()(
   persist(
     (set) => ({
@@ -49,16 +61,15 @@ export const useCostPricesStore = create<CostPricesState>()(
     {
       name: "cost-prices",
       version: 1,
-      migrate: (persisted) => {
-        const stored = (persisted as { prices?: unknown } | undefined)?.prices;
-        const prices: Record<string, Prices> = {};
-        if (stored && typeof stored === "object")
-          for (const [context, raw] of Object.entries(stored)) {
-            const valid = pricesOf(raw);
-            if (valid) prices[context] = valid;
-          }
-        return { prices } as CostPricesState;
-      },
+      // Every restore, not only one from another version: `migrate` runs
+      // only where the stored version differs, and what is stored is read
+      // back as it lies on the disk.
+      merge: (persisted, current) => ({
+        ...current,
+        prices: validPrices(persisted),
+      }),
+      migrate: (persisted) =>
+        ({ prices: validPrices(persisted) }) as CostPricesState,
     }
   )
 );
@@ -76,7 +87,8 @@ persistedByName((context) =>
 export function useCostPrices(
   context: string | null | undefined
 ): Prices | null {
+  // A context name is the reader's: `constructor` must not find a property.
   return useCostPricesStore((s) =>
-    context ? (s.prices[context] ?? null) : null
+    context && Object.hasOwn(s.prices, context) ? s.prices[context]! : null
   );
 }

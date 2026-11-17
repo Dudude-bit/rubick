@@ -2113,6 +2113,8 @@ export const en = {
     wRequestedTodayNone: "no request in the last day",
     wOverRequested:
       "{resource} peaked at {peak} of the {requested} it requests, over the last day",
+    wOverRequestedAtMost:
+      "{resource} peaked at no more than {peak} of the {requested} it requests, over the last day",
     wCpu: "CPU",
     wMemory: "Memory",
     pssHostProcess: "Runs as a Windows HostProcess",
@@ -2584,6 +2586,7 @@ export const en = {
     unclaimed: "Volumes nobody claims",
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
+    atMost: "at most {value}",
     notKnown: "Not known",
     notPriced: "not priced",
     notMeasured: "not measured",
@@ -2673,6 +2676,10 @@ export const en = {
       "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
+    lastFailed:
+      "The latest read from Prometheus at {endpoint} failed ({said}); these figures are from the one before it.",
+    lineLastFailed:
+      "{line}. The latest read failed ({said}); this is the one before it.",
     estimateMeanwhile:
       "The numbers below are an estimate from the prices entered for this cluster.",
     basisQuestion: "What does this cluster hold that costs money?",
@@ -2690,6 +2697,8 @@ export const en = {
       other:
         "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
     },
+    jobsUnread:
+      "The Jobs could not be listed ({said}): a CronJob's runs are each shown as their Job, not under the CronJob.",
     heldUnread:
       "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
@@ -2704,8 +2713,6 @@ export const en = {
       one: "{n} volume has a price and no size: {names}.",
       other: "{n} volumes have a price and no size: {names}.",
     },
-    nodesNotChecked:
-      "Whether every node carries a price was not checked: the nodes could not be listed ({said}).",
     nodesUnread:
       "There is no cluster total: the nodes could not be listed ({said}).",
     missingLabels:
@@ -2756,6 +2763,9 @@ export const en = {
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
+    lineFailed: "Could not read what this costs: {said}",
+    lineJobsUnread:
+      "Not known: the Jobs that run it could not be listed ({said}).",
   },
   hints: {
     mostLikely: "Most likely",

@@ -10,6 +10,7 @@ import type {
 } from "@/generated/types";
 import {
   GIB,
+  HOURS_PER_MONTH,
   MAX_COST_ROWS,
   costOf,
   cronJobOf,
@@ -60,6 +61,7 @@ function basis(extra: Partial<CostBasis> = {}): CostBasis {
     nodes: [node("node-a")],
     nodesUnread: null,
     heldUnread: null,
+    jobsUnread: null,
     namespaces: [
       {
         namespace: "shop",
@@ -77,7 +79,7 @@ function basis(extra: Partial<CostBasis> = {}): CostBasis {
     unread: [],
     volumeBytes: 0,
     volumeCount: 0,
-    unclaimed: [],
+    unclaimed: { count: 0, bytes: 0 },
     volumesUnread: null,
     claimsUnread: [],
     servedFrom: "watch",
@@ -94,6 +96,7 @@ const fold = (
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  covered: [],
   since: values.map(() => null),
 });
 
@@ -291,16 +294,22 @@ describe("a picture from OpenCost's prices", () => {
     ).toBeNull();
   });
 
-  /** Coverage cannot be checked against nodes nobody could list. */
-  it("says the nodes were not checked when they could not be listed", () => {
-    const picture = readingPicture(
-      basis({ nodes: null }),
-      reading(),
-      opencost,
-      null
-    );
+  /**
+   * Without the cluster's node list nothing says which priced nodes are its
+   * own, or that none went unpriced: OpenCost's sum was shown as the
+   * cluster's total, exact. There is no total and no idle, as with entered
+   * prices; a scope's namespaces still add up. Fails if a total is made of
+   * nodes nobody could list.
+   */
+  it("has no cluster total or idle where the nodes could not be listed", () => {
+    const unlisted = basis({ nodes: null });
+    const picture = readingPicture(unlisted, reading(), opencost, null);
     expect(picture.nodesChecked).toBe(false);
-    expect(picture.unpriced.nodes).toEqual([]);
+    expect(picture.cluster).toBeNull();
+    expect(picture.total).toBeNull();
+    expect(picture.idle).toBeNull();
+    const shop = readingPicture(unlisted, reading(), opencost, ["shop"]);
+    expect(shop.total?.perHour).toBeCloseTo(0.05);
   });
 
   /**
@@ -469,10 +478,11 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
 
   /**
    * Without the node list there is nothing to tell another cluster's
-   * nodes by, so none is called foreign. Fails if a refused node list
-   * dropped every priced node from the total.
+   * nodes by: none is called foreign, each priced node keeps its row as
+   * OpenCost states it, and no total is made of them. Fails if a refused
+   * node list drops the priced nodes, or sums them as the cluster's.
    */
-  it("keeps every priced node where the cluster's node list was not read", () => {
+  it("keeps every priced node's row, and makes no total, where the cluster's node list was not read", () => {
     const shared = reading({
       nodes: [
         { name: "node-a", perHour: 0.2, instanceType: "m5.large", spot: false },
@@ -485,8 +495,88 @@ describe("a Prometheus that prices another cluster's nodes too", () => {
       opencost,
       null
     );
-    expect(picture.cluster?.perHour).toBeCloseTo(0.7);
+    expect(picture.nodes?.map((n) => n.name)).toEqual(["node-a", "staging-1"]);
+    expect(picture.cluster).toBeNull();
     expect(picture.foreignNodes).toEqual([]);
+  });
+});
+
+describe("what the supplier's series cover", () => {
+  /**
+   * A workload of two pods with series for one: the row was that pod's
+   * cost, shown as the workload's and its namespace's. Both are floors.
+   * Fails if a sum over some of a workload's pods reads as all of it.
+   */
+  it("makes a row a floor where its series cover fewer pods than run", () => {
+    const partly = fold([[0.03, 0.02, null, null]]);
+    partly.covered = [[1, 1, 0, 0]];
+    const picture = readingPicture(
+      basis(),
+      reading({ workloads: partly }),
+      opencost,
+      null
+    );
+    expect(picture.workloads[0]).toMatchObject({ atLeast: true });
+    expect(picture.namespaces[0]).toMatchObject({
+      namespace: "shop",
+      atLeast: true,
+    });
+
+    const whole = fold([[0.03, 0.02, null, null]]);
+    whole.covered = [[2, 2, 0, 0]];
+    const all = readingPicture(
+      basis(),
+      reading({ workloads: whole }),
+      opencost,
+      null
+    );
+    expect(all.workloads[0]!.atLeast).toBe(false);
+    expect(all.namespaces[0]!.atLeast).toBe(false);
+  });
+});
+
+describe("volumes nobody claims", () => {
+  /** Sent as a count and a sum, priced as one: fails if their cost is lost with the list. */
+  it("prices the sum of the volumes nobody claims", () => {
+    const picture = estimatePicture(
+      basis({ unclaimed: { count: 3, bytes: 30 * GIB } }),
+      prices,
+      null
+    );
+    expect(picture.unclaimed).toBeCloseTo((30 * 0.1) / HOURS_PER_MONTH, 6);
+  });
+});
+
+describe("a namespace the supplier's own read was refused", () => {
+  /**
+   * The cost basis read `shop`, the supplier's read of the same pods was
+   * refused a moment later: Rust kept the refusal in the fold, and the
+   * picture dropped it, so the rows had no price and no reason. Fails if a
+   * refusal in either read is left out of the picture's unread.
+   */
+  it("carries the refusal into what the picture could not read", () => {
+    const refused = fold([[null, null, null, null]]);
+    refused.unread = [
+      {
+        namespace: "shop",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+        values: [null, null, null, null],
+      },
+    ];
+    const picture = readingPicture(
+      basis(),
+      reading({ workloads: refused }),
+      opencost,
+      null
+    );
+    expect(picture.unread).toEqual([
+      {
+        namespace: "shop",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
   });
 });
 

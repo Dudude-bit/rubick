@@ -28,6 +28,7 @@ const basis = (workloads: WorkloadBasis[]): CostBasis => ({
   nodes: null,
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [],
   workloads,
   rest: null,
@@ -54,7 +55,15 @@ const reading = (
 ): UsageReading => ({
   state: "read",
   keys: b.workloads.map((w) => w.key),
-  fold: { values, rest: [], unplaced: [], unread: [], unlabelled: 0, since },
+  fold: {
+    values,
+    rest: [],
+    unplaced: [],
+    unread: [],
+    unlabelled: 0,
+    covered: [],
+    since,
+  },
 });
 
 const shop = basis([
@@ -119,13 +128,13 @@ describe("Audit's reading of requests against use", () => {
     );
     expect(by.web).toEqual({
       says: "over",
-      cpu: { requested: 2000, peak: 300 },
+      cpu: { requested: 2000, peak: 300, atMost: false },
       memory: null,
     });
     expect(by.cache).toEqual({
       says: "over",
       cpu: null,
-      memory: { requested: 4096 * MI, peak: 1500 * MI },
+      memory: { requested: 4096 * MI, peak: 1500 * MI, atMost: false },
     });
     expect(by.api).toEqual({ says: "within" });
     expect(by.fresh).toEqual({ says: "noSamples" });
@@ -158,6 +167,34 @@ describe("Audit's reading of requests against use", () => {
     expect(read.workloads[0]!.verdict).toEqual({
       says: "young",
       since: started,
+    });
+  });
+
+  /**
+   * Two pods' own peaks summed are a bound on the workload's peak: still
+   * under half the request, the finding stands, and says the peak was no
+   * more than that. Fails if Audit reports a bound as the peak.
+   */
+  it("reports a peak summed over several pods as a bound", () => {
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const summed: UsageReading = {
+      state: "read",
+      keys: one.workloads.map((w) => w.key),
+      fold: {
+        values: [[200, 300, 200 * MI, 300 * MI]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 2, 2]],
+        since: [LONG_AGO],
+      },
+    };
+    const read = usageRead(one, null, summed);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toMatchObject({
+      says: "over",
+      cpu: { requested: 2000, peak: 300, atMost: true },
     });
   });
 

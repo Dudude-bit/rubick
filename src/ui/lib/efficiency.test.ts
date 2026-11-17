@@ -105,6 +105,69 @@ describe("efficiency", () => {
     );
   });
 
+  /**
+   * The usage read was refused this namespace's pods after the rows were
+   * listed: its rows carry no values, which read as "no samples". They say
+   * the refusal. Fails if a refused namespace reads as unsampled.
+   */
+  it("says a refused namespace was refused, not unsampled", () => {
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[null, null, null, null]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [
+          {
+            namespace: "shop",
+            code: "PERMISSION_DENIED",
+            message: "pods is forbidden",
+            values: [null, null, null, null],
+          },
+        ],
+        unlabelled: 0,
+        covered: [],
+        since: [null],
+      },
+    };
+    expect(
+      workloadEfficiency(reading, key, { cpu: 1, memory: 1 }, NOW)
+    ).toEqual({
+      cpu: { state: "failed", said: "pods is forbidden" },
+      memory: { state: "failed", said: "pods is forbidden" },
+    });
+  });
+
+  /**
+   * A peak is read per pod, and several pods' peaks summed are no lower
+   * than the workload's: a bound. Fails if a sum over several pods reads
+   * as the peak, or one pod's as a bound.
+   */
+  it("marks a peak summed over several pods as a bound", () => {
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[100, 400, 10, 20]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 1, 1]],
+        since: [DAY_OLD],
+      },
+    };
+    const of = workloadEfficiency(
+      reading,
+      key,
+      { cpu: 1000, memory: 100 },
+      NOW
+    );
+    expect(of.cpu).toMatchObject({ state: "measured", peakAtMost: true });
+    expect(of.memory).toMatchObject({ state: "measured", peakAtMost: false });
+  });
+
   /** Where the reading itself is missing, both resources say why. */
   it("carries the reading's own state to both resources", () => {
     const failed: UsageReading = { state: "failed", said: "timed out" };
@@ -132,6 +195,7 @@ describe("efficiency", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [DAY_OLD, TWO_HOURS_OLD],
       },
     };

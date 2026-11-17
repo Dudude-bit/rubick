@@ -24,7 +24,8 @@ vi.mock("@/lib/commands", () => ({
   commands: { costBasis: () => costBasis() },
 }));
 
-const { useCost } = await import("./useCost");
+const { useCost, useCostTrend, useWorkloadUsage, rowsKey } =
+  await import("./useCost");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useCostPricesStore } = await import("@/stores/costPricesStore");
 
@@ -32,6 +33,7 @@ const BASIS: CostBasis = {
   nodes: [],
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [],
   workloads: [],
   rest: null,
@@ -39,7 +41,7 @@ const BASIS: CostBasis = {
   unread: [],
   volumeBytes: 0,
   volumeCount: 0,
-  unclaimed: [],
+  unclaimed: { count: 0, bytes: 0 },
   volumesUnread: null,
   claimsUnread: [],
   servedFrom: "watch",
@@ -55,6 +57,7 @@ const READING: CostReading = {
     unplaced: [],
     unread: [],
     unlabelled: 0,
+    covered: [],
     since: [],
   },
   storage: {
@@ -195,6 +198,81 @@ describe("which source a cost is read from", () => {
     expect(hook.result.current.cost).toBe(first);
   });
 
+  /**
+   * The Prometheus behind a cluster changed: its answer sat under the old
+   * one's key, and the page showed the old supplier's cost as the new one's
+   * until the next read. Fails if one supplier's answer stands in for
+   * another's, even while the other is read.
+   */
+  it("shows no supplier's answer as another's while the other is read", async () => {
+    capability.mockReturnValue(
+      ready(async () => ({
+        ...READING,
+        nodes: [
+          { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+        ],
+      }))
+    );
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    capability.mockReturnValue({
+      ...ready(() => new Promise(() => {})),
+      endpoint: "other.example.com",
+    });
+    hook.rerender();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("loading"));
+  });
+
+  /**
+   * From namespace `a` to `b`: while `b`'s read was out the page kept `a`'s
+   * answer, and the table under `b` listed `a`'s workloads. An answer is
+   * kept only within its own scope. Fails if one scope's answer stands in
+   * for another's.
+   */
+  it("shows no scope's answer as another's while the other is read", async () => {
+    capability.mockReturnValue(
+      ready(async () => ({
+        ...READING,
+        nodes: [
+          { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+        ],
+      }))
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(
+      ({ scope }: { scope: string[] }) => useCost(scope),
+      { wrapper, initialProps: { scope: ["a"] } }
+    );
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    capability.mockReturnValue(ready(() => new Promise(() => {})));
+    hook.rerender({ scope: ["b"] });
+    await waitFor(() => expect(hook.result.current.basis).toBeDefined());
+    expect(hook.result.current.cost.state).toBe("loading");
+  });
+
+  /**
+   * The cost basis failed and Retry was pressed: it asked the supplier too,
+   * with no rows to ask against, and kept an answer with no basis that the
+   * picture fell over later. Fails if Retry asks the supplier without one.
+   */
+  it("asks the supplier again only with a basis to ask against", async () => {
+    const use = vi.fn(async () => READING);
+    capability.mockReturnValue(ready(use));
+    costBasis.mockRejectedValue(new Error("pods is forbidden"));
+    const hook = render();
+    await waitFor(() =>
+      expect(hook.result.current.cost.state).toBe("basisFailed")
+    );
+    act(() => hook.result.current.retry());
+    await waitFor(() => expect(costBasis).toHaveBeenCalledTimes(2));
+    expect(use).not.toHaveBeenCalled();
+  });
+
   /** No series and no prices is its own sentence, not "nothing set up". */
   it("says the supplier holds no series where no prices are entered", async () => {
     capability.mockReturnValue(ready(async () => null));
@@ -251,5 +329,104 @@ describe("which source a cost is read from", () => {
       expect(hook.result.current.cost.state).toBe("basisFailed")
     );
     await act(async () => {});
+  });
+});
+
+describe("the rows a reading is keyed on", () => {
+  /**
+   * Two custom kinds of one name in two API groups are two workloads: the
+   * key that says the rows changed told them apart only by namespace, kind
+   * and name, so the page kept the first one's cost for the second.
+   */
+  it("tells workloads apart by their API group", () => {
+    const of = (group: string) => [
+      { namespace: "prod", group, kind: "Worker", name: "api" },
+    ];
+    expect(rowsKey(of("first.example"))).not.toBe(
+      rowsKey(of("second.example"))
+    );
+  });
+});
+
+describe("a read that failed after one that answered", () => {
+  /**
+   * React Query keeps the last answer when a re-read fails, and each hook
+   * looked at the answer before the error: a 403 or a timeout left the page
+   * showing the old figures as current. The cost keeps them and says the
+   * latest read failed; use and the trend say they failed. Fails if a
+   * failed re-read is hidden behind the read before it.
+   */
+  it("says the latest read failed, beside the figures it kept", async () => {
+    let answers = true;
+    capability.mockReturnValue(
+      ready(async () => {
+        if (!answers) throw new Error("query timed out");
+        return {
+          ...READING,
+          nodes: [
+            { name: "node-a", perHour: 0.2, instanceType: null, spot: null },
+          ],
+        };
+      })
+    );
+    const hook = render();
+    await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
+    answers = false;
+    act(() => hook.result.current.retry());
+    await waitFor(() => {
+      const cost = hook.result.current.cost;
+      expect(cost.state === "picture" && cost.trouble).toMatchObject({
+        kind: "lastFailed",
+        said: "query timed out",
+      });
+    });
+  });
+
+  it("says use and the trend failed rather than showing the read before", async () => {
+    let answers = true;
+    const answer = async (value: unknown) => {
+      if (!answers) throw new Error("query timed out");
+      return value;
+    };
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const key = {
+      namespace: "shop",
+      group: "apps",
+      kind: "Deployment",
+      name: "web",
+    };
+    capability.mockReturnValue(
+      ready(
+        () =>
+          answer({
+            ...READING.workloads,
+            values: [[1, 2, 3, 4]],
+            since: [null],
+          }) as never
+      )
+    );
+    const usage = renderHook(() => useWorkloadUsage(["shop"], [key]), {
+      wrapper,
+    });
+    await waitFor(() => expect(usage.result.current.state).toBe("read"));
+    capability.mockReturnValue(
+      ready(() => answer({ points: [], stepSeconds: 300 }) as never)
+    );
+    const trend = renderHook(() => useCostTrend(null, "24h", null), {
+      wrapper,
+    });
+    await waitFor(() => expect(trend.result.current.state).toBe("read"));
+
+    answers = false;
+    await act(() => client.refetchQueries());
+    await waitFor(() => expect(trend.result.current.state).toBe("failed"));
+    capability.mockReturnValue(ready(() => answer(null) as never));
+    usage.rerender();
+    await waitFor(() => expect(usage.result.current.state).toBe("failed"));
   });
 });

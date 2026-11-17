@@ -37,7 +37,9 @@ export type SupplierTrouble =
       /** The supplier's probe, to ask again from the sentence. */
       power: Extract<CapabilityState<"cost.now">, { state: "unreachable" }>;
     }
-  | { kind: "failed"; vendor: string; endpoint: string; said: string };
+  | { kind: "failed"; vendor: string; endpoint: string; said: string }
+  /** The latest read failed; the picture is the read before it. */
+  | { kind: "lastFailed"; vendor: string; endpoint: string; said: string };
 
 export type CostState =
   | { state: "loading" }
@@ -52,11 +54,28 @@ export type CostState =
       trouble: SupplierTrouble | null;
     };
 
+/** Which supplier answered: another Prometheus is another answer. */
+const supplierOf = (
+  power: CapabilityState<"cost.now" | "cost.history" | "usage.workloads">
+) => (power.state === "ready" ? `${power.vendor} ${power.endpoint}` : "");
+
+/**
+ * The answer on screen while the next is read, kept only where the next
+ * asks the same question of the same parts of the key: another supplier's
+ * answer is not this one's, even for a moment.
+ */
+const keptWhere =
+  (key: readonly unknown[], same: readonly number[]) =>
+  <T>(previous: T | undefined, query?: { queryKey: readonly unknown[] }) =>
+    query && same.every((at) => query.queryKey[at] === key[at])
+      ? previous
+      : undefined;
+
 /** A short stand-in for a set of rows, so a query re-reads when they change. */
 export function rowsKey(keys: readonly WorkloadKey[]): string {
   let hash = 2166136261;
   for (const key of keys) {
-    const text = `${key.namespace}/${key.kind}/${key.name};`;
+    const text = `${key.namespace}/${key.group}/${key.kind}/${key.name};`;
     for (let i = 0; i < text.length; i++)
       hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
   }
@@ -100,8 +119,14 @@ export function useCost(
   // basis's rows, and a newer basis beside an older answer would put one
   // workload's cost on another's row.
   const asked = basis.data;
+  const readingKey = queryKeys.costReading(
+    namespaces,
+    !detail,
+    supplierOf(power),
+    rowsKey(keys)
+  );
   const reading = useLiveQuery({
-    queryKey: queryKeys.costReading(namespaces, !detail, rowsKey(keys)),
+    queryKey: readingKey,
     queryFn: async () => ({
       basis: asked!,
       reading: await ready!.use({ namespaces, keys, nodes: !detail }),
@@ -109,7 +134,9 @@ export function useCost(
     enabled: ready !== null && basis.data !== undefined,
     refresh: "steady",
     retry: false,
-    placeholderData: (previous) => previous,
+    // Within the same scope and the same supplier only: another scope's
+    // answer drew its workloads under this one's name until the read came.
+    placeholderData: keptWhere(readingKey, [1, 2, 3]),
   });
 
   const cost = useMemo((): CostState => {
@@ -154,7 +181,15 @@ export function useCost(
             },
             namespaces
           ),
-          trouble: null,
+          // A refresh that failed keeps the last answer on screen, and says so.
+          trouble: reading.error
+            ? {
+                kind: "lastFailed",
+                vendor: power.vendor,
+                endpoint: power.endpoint,
+                said: errorToShow(reading.error),
+              }
+            : null,
         };
       if (reading.error)
         trouble = {
@@ -191,10 +226,13 @@ export function useCost(
 
   const refetchBasis = basis.refetch;
   const refetchReading = reading.refetch;
+  // A refetch runs whatever `enabled` says: the supplier is asked again
+  // only with a basis its answer is positional on.
+  const canRead = ready !== null && basis.data !== undefined;
   const retry = useCallback(() => {
     void refetchBasis();
-    void refetchReading();
-  }, [refetchBasis, refetchReading]);
+    if (canRead) void refetchReading();
+  }, [refetchBasis, refetchReading, canRead]);
   return { cost, basis: basis.data, retry };
 }
 
@@ -209,8 +247,9 @@ export function useWorkloadUsage(
   const power = useCapabilityState("usage.workloads");
   const ready = power.state === "ready" ? power : null;
   const rows = keys ? rowsKey(keys) : "";
+  const usageKey = queryKeys.workloadUsage(namespaces, supplierOf(power), rows);
   const usage = useLiveQuery({
-    queryKey: queryKeys.workloadUsage(namespaces, rows),
+    queryKey: usageKey,
     queryFn: async () => {
       const asked = [...(keys ?? [])];
       return {
@@ -223,7 +262,7 @@ export function useWorkloadUsage(
     refresh: "steady",
     staleTime: 5 * 60_000,
     retry: false,
-    placeholderData: (previous) => previous,
+    placeholderData: keptWhere(usageKey, [1, 2]),
   });
   const since = usage.freshness.waitingSince;
   return useMemo(() => {
@@ -231,9 +270,10 @@ export function useWorkloadUsage(
     if (power.state === "reading") return { state: "reading", since: null };
     if (power.state === "unreachable")
       return { state: "failed", said: power.reason };
+    // A failed re-read is said, not hidden behind the read before it.
+    if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     if (usage.data)
       return { state: "read", keys: usage.data.keys, fold: usage.data.fold };
-    if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     return { state: "reading", since };
   }, [power, usage.data, usage.error, since]);
 }
@@ -257,7 +297,12 @@ export function useCostTrend(
   const power = useCapabilityState("cost.history");
   const ready = power.state === "ready" ? power : null;
   const trend = useLiveQuery({
-    queryKey: queryKeys.costTrend(namespaces, range, JSON.stringify(prices)),
+    queryKey: queryKeys.costTrend(
+      namespaces,
+      range,
+      JSON.stringify(prices),
+      supplierOf(power)
+    ),
     queryFn: () => ready!.use({ namespaces, range, prices }),
     enabled: ready !== null,
     refresh: "steady",
@@ -269,14 +314,14 @@ export function useCostTrend(
     if (power.state === "reading") return { state: "reading" };
     if (power.state === "unreachable")
       return { state: "failed", endpoint: power.endpoint, said: power.reason };
-    if (trend.data)
-      return { state: "read", trend: trend.data, endpoint: power.endpoint };
     if (trend.error)
       return {
         state: "failed",
         endpoint: power.endpoint,
         said: errorToShow(trend.error),
       };
+    if (trend.data)
+      return { state: "read", trend: trend.data, endpoint: power.endpoint };
     return { state: "reading" };
   }, [power, trend.data, trend.error]);
 }

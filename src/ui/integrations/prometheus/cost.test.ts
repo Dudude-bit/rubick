@@ -39,6 +39,7 @@ const FOLD: WorkloadFold = {
   unplaced: [],
   unread: [],
   unlabelled: 0,
+  covered: [],
   since: [],
 };
 
@@ -101,11 +102,24 @@ describe("the cost PromQL", () => {
     const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = usageQueries(null);
     const summed = "avg_over_time((sum by (namespace, pod) (";
     expect(cpuAvg.startsWith(summed)).toBe(true);
-    expect(cpuAvg).toContain("[5m])))[24h:5m])");
+    expect(cpuAvg).toContain("[5m]))))[24h:5m])");
     expect(memoryAvg.startsWith(summed)).toBe(true);
-    expect(memoryAvg).toContain("))[24h:5m])");
+    expect(memoryAvg).toContain(")))[24h:5m])");
     expect(cpuPeak).toContain("[24h:5m]");
     expect(memoryPeak).toContain("max_over_time");
+  });
+
+  /**
+   * A cAdvisor scraped by two jobs answers twice for each container: 300m
+   * read as 600m, and a request far above use looked met. Each container is
+   * taken once at each step before the pod's are summed. Fails if any of
+   * the four sums every series it finds.
+   */
+  it("takes each container once before summing a pod's use", () => {
+    for (const query of usageQueries(["shop"]))
+      expect(query).toContain(
+        "sum by (namespace, pod) (max by (namespace, pod, container) ("
+      );
   });
 
   /** An unentered price leaves its resource out of the trend rather than at zero. */
@@ -153,6 +167,25 @@ describe("what the cluster costs now", () => {
     await expect(
       costNow({ namespaces: null, keys: [], nodes: true })
     ).rejects.toThrow("connection refused");
+  });
+
+  /**
+   * `constructor` is a namespace a cluster can have, and a node name too.
+   * Kept in a plain object, its cost was written onto an inherited function
+   * and the namespace vanished; a node with no allocation read as one.
+   * Fails if a name the cluster chose can collide with a property.
+   */
+  it("keeps a namespace or a node called constructor as any other", async () => {
+    prometheusQuery.mockImplementation(async (query) => {
+      if (query === NODES_QUERY) return [one({ node: "node-a" }, 0.2)];
+      if (query.startsWith("sum by (namespace, part)"))
+        return [one({ namespace: "constructor", part: "cpu" }, 0.03)];
+      return [];
+    });
+    const answer = await costNow({ namespaces: null, keys: [], nodes: true });
+    expect(Object.keys(answer!.namespaces)).toEqual(["constructor"]);
+    expect(answer!.namespaces["constructor"]).toEqual({ cpu: 0.03 });
+    expect(answer!.allocatedByNode!["constructor"]).toBeUndefined();
   });
 
   /** A price series with no node label prices nothing nameable, and the page says which label. */

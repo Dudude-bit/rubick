@@ -16,7 +16,7 @@ use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use super::{configured, get_json, parse_result, unreachable, PromSeries};
+use super::{configured_in, get_json, parse_result, unreachable, PromSeries};
 use crate::commands::cost::{cost_key, scoped_pods, ReadFailure, ScopedPods, WorkloadKey};
 use crate::commands::helpers::{scope_of, UnreadNamespace};
 use crate::error::{Error, Result};
@@ -284,7 +284,9 @@ async fn flows(
     if let Some(subject) = &subject {
         crate::validation::validate_namespace(&subject.namespace)?;
     }
-    let entry = configured(state)?;
+    // One read of which cluster this is, for the series and the pods alike.
+    let here = state.here()?;
+    let entry = configured_in(state, &here.context)?;
     let answers = join_all(queries.iter().map(|asked| {
         let entry = entry.clone();
         let query = asked.query.clone();
@@ -297,7 +299,7 @@ async fn flows(
     }))
     .await;
     let reach = namespaces_to_read(&queries, &answers, scope.as_deref(), subject.as_ref());
-    let (read, failed) = match scoped_pods(state, reach.as_deref()).await {
+    let (read, failed) = match scoped_pods(state, &here, reach.as_deref()).await {
         Ok(read) => (Some(read), None),
         Err(error @ Error::CredentialsExpired(_)) => return Err(error),
         Err(error) => (
