@@ -107,6 +107,31 @@ describe("what the integrations add to the map", () => {
     );
   });
 
+  /**
+   * One IngressRoute sending three paths into one Service read "+1 more".
+   * Fails if the edge does not count every route past the first.
+   */
+  it("counts every route a source sends into one Service", () => {
+    const sub = (paths: number) =>
+      layers({
+        routes: {
+          of: new Map([
+            [
+              "shop/web",
+              Array.from({ length: paths }, (_, at) => ({
+                ...route,
+                path: `/${at}`,
+              })),
+            ],
+          ]),
+          error: null,
+        },
+      }).edges.find((edge) => edge.to === "/Service/shop/web")?.sub;
+    expect(sub(1)).toBeUndefined();
+    expect(sub(2)).toBe(t("topology", "moreRelations", { n: 1 }));
+    expect(sub(3)).toBe(t("topology", "moreRelations", { n: 2 }));
+  });
+
   /** An installed vendor that did not answer is said to be unread: silence here reads as "nothing delivered this". */
   it("says when an installed vendor did not answer", () => {
     const { unread, nodes } = layers({
