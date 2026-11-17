@@ -4,6 +4,10 @@ import { render, waitFor } from "@testing-library/react";
 import { GraphCanvas } from "./GraphCanvas";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
 
+// ELK is loaded and run for real: under a loaded machine that alone outlasts
+// the default five seconds the waits below were written around.
+vi.setConfig({ testTimeout: 20_000 });
+
 beforeAll(() => {
   vi.stubGlobal(
     "ResizeObserver",

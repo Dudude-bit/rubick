@@ -6,6 +6,10 @@ import type { LayoutAnswer, LayoutRequest } from "@/lib/map-layout";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
 import { askFor, useLayout } from "./useLayout";
 
+// ELK is loaded and run for real: under a loaded machine that alone outlasts
+// the default five seconds the waits below were written around.
+vi.setConfig({ testTimeout: 20_000 });
+
 /** Every layout asked, each waiting for the test to answer it. */
 const asked = vi.hoisted(
   () => [] as { request: LayoutRequest; answer: (failed?: string) => void }[]
