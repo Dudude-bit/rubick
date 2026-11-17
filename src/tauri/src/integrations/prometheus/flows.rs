@@ -9,7 +9,7 @@
 
 #![allow(clippy::needless_pass_by_value)]
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use futures::future::join_all;
 use k8s_openapi::api::core::v1::Pod;
@@ -604,6 +604,7 @@ pub(crate) fn fold(
     };
 
     let mut reads = Vec::with_capacity(asked.len());
+    let mut valueless: HashSet<(u8, usize, FlowEnd, FlowEnd)> = HashSet::new();
     let mut joined: BTreeMap<(u8, FlowEnd, FlowEnd), Joined> = BTreeMap::new();
     for (query, answer) in asked.iter().zip(answers.iter()) {
         let series = match answer {
@@ -632,9 +633,7 @@ pub(crate) fn fold(
             },
         });
         for one in series {
-            let Some(value) = one.points.last().and_then(|p| p.v) else {
-                continue;
-            };
+            let value = one.points.last().and_then(|p| p.v);
             let from = pods.end(one, &query.from);
             let to = pods.end(one, &query.to);
             if !(in_scope(&from) || in_scope(&to)) {
@@ -643,6 +642,12 @@ pub(crate) fn fold(
             if subject.is_some() && !(is_subject(&from) || is_subject(&to)) {
                 continue;
             }
+            // A series with no number (NaN) answered for its pair: unknown,
+            // not the zero a pair with no series of a counted subset is.
+            let Some(value) = value else {
+                valueless.insert((query.source, query.measure.at(), from, to));
+                continue;
+            };
             let pair = joined.entry((query.source, from, to)).or_default();
             if let Some(reason) = value_of(one, query.reason.as_ref()) {
                 *pair.reasons.entry(reason.to_string()).or_default() += value;
@@ -666,9 +671,13 @@ pub(crate) fn fold(
         if !query.zero_when_absent || answer.is_err() {
             continue;
         }
-        for ((source, _, _), pair) in &mut joined {
-            let slot = &mut pair.values[query.measure.at()];
-            if *source == query.source && slot.is_none() {
+        let at = query.measure.at();
+        for ((source, from, to), pair) in &mut joined {
+            let slot = &mut pair.values[at];
+            if *source == query.source
+                && slot.is_none()
+                && !valueless.contains(&(*source, at, from.clone(), to.clone()))
+            {
                 *slot = Some(0.0);
             }
         }
@@ -1127,6 +1136,35 @@ mod tests {
                 marked: 0
             }])
         );
+    }
+
+    /// A pair whose errors came back with no number is unknown; one with no
+    /// series of them is at zero, as a counted subset with none in it is.
+    #[test]
+    fn a_number_less_series_leaves_its_pair_unknown_where_a_missing_one_is_zero() {
+        let read = read_of(vec![]);
+        let nan = series(
+            &[("sns", "shop"), ("sw", "a"), ("dns", "shop"), ("dw", "b")],
+            None,
+        );
+        let answer = fold_one(
+            &[by_name(0, Measure::Requests), by_name(0, Measure::Errors)],
+            vec![
+                Ok(vec![pair("a", "b", 4.0), pair("a", "c", 2.0)]),
+                Ok(vec![nan]),
+            ],
+            &read,
+        );
+        let errors = |to: &str| {
+            answer
+                .flows
+                .iter()
+                .find(|f| matches!(end_of(&answer, f.to), FlowEnd::NotListed { name, .. } if name == to))
+                .expect("a flow")
+                .values[Measure::Errors.at()]
+        };
+        assert_eq!(errors("b"), None);
+        assert_eq!(errors("c"), Some(0.0));
     }
 
     /// Where the namespace's pods could not be read, a bare name is not
