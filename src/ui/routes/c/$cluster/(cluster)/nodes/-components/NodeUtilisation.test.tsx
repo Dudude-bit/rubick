@@ -355,6 +355,29 @@ describe("what the view offers Share", () => {
     expect(collect!().map((s) => s.id)).toContain("utilisation-basis");
   });
 
+  /**
+   * The configured Prometheus still being probed: the view says Reading,
+   * and the file said this cluster needs a Prometheus connected. Fails if
+   * a supplier being asked is exported as none.
+   */
+  it("exports a supplier still being asked as reading, not as none", async () => {
+    capability.mockReturnValue({ state: "reading" });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await wrap(
+      <ScreenShareProvider>
+        <NodeUtilisation nodes={[node("hot")]} range="6h" onRange={() => {}} />
+        <Probe />
+      </ScreenShareProvider>
+    );
+    const section = collect!().find((s) => s.id === "utilisation")!;
+    expect(JSON.stringify(section)).not.toContain("needs a Prometheus");
+    expect(section.unread).toBe("Still being read when the report was made.");
+  });
+
   /** A node list this token could not read must not leave the utilisation
    *  table looking like a cluster with no nodes. */
   it("marks the section unread when the node list did not answer", async () => {
