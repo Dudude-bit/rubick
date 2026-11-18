@@ -588,7 +588,7 @@ async fn run(
                     .as_ref()
                     .is_some_and(|reach| reach.iter().any(|ns| !asked.contains(ns)));
                 if !asking
-                    && !fold.owners.missing.is_empty()
+                    && fold.owners.read_again()
                     && (new_namespace || now.saturating_sub(asked_at) >= OWNERS_AGAIN)
                 {
                     asked.extend(reach.iter().flatten().cloned());
@@ -798,6 +798,12 @@ impl Owners {
             all: true,
             ..Self::default()
         }
+    }
+
+    /// Whether the pods are worth reading again: a pod a flow named and the
+    /// read did not hold, or a read that failed, which may answer next time.
+    fn read_again(&self) -> bool {
+        !self.missing.is_empty() || self.all || !self.unread.is_empty()
     }
 
     /// A bare pod as its workload; one whose pods could not be read as not
@@ -1511,6 +1517,25 @@ mod tests {
             &read.tick(101).0[0].from,
             FlowEnd::Workload { key } if key.kind == "Pod" && key.name == "debug"
         ));
+    }
+
+    /// A read that failed, whole or for a namespace, is asked again as a pod
+    /// missing from it is: the API may answer the next time. A whole read
+    /// that held every pod a flow named is not.
+    #[test]
+    fn the_pods_are_read_again_after_a_failed_read_and_not_after_a_whole_one() {
+        assert!(Owners::unread().read_again());
+        assert!(Owners {
+            unread: BTreeSet::from(["shop".to_string()]),
+            ..Owners::default()
+        }
+        .read_again());
+        assert!(Owners {
+            missing: BTreeSet::from([("shop".to_string(), "web-0".to_string())]),
+            ..Owners::default()
+        }
+        .read_again());
+        assert!(!Owners::default().read_again());
     }
 
     /// A pod's pairs held as not listed while its namespace's pods could not
