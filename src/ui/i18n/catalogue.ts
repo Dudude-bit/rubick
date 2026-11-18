@@ -1857,6 +1857,7 @@ export const en = {
     notRead: "not read",
     missing: "missing",
     noPolicyBadge: "no policy",
+    policyPartlyBadge: "no policy for {n} of {total}",
     policyUnknownBadge: "policies unknown",
     noAppLabel: "{namespace} · no app label",
     refusedWhole: "Refused: nothing in {namespace} could be read. {said}",

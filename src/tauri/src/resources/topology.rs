@@ -130,6 +130,13 @@ pub enum PolicyCover {
     Unread {
         said: String,
     },
+    /// Pods drawn as one whose covers differ: `uncovered` of `total` are
+    /// selected by no policy here, the rest by `policies`.
+    Partly {
+        policies: Vec<String>,
+        uncovered: usize,
+        total: usize,
+    },
 }
 
 /// One edge: every relation stated between the same two objects in the same verb.

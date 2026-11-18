@@ -1903,6 +1903,7 @@ export const ru: Catalogue = {
     notRead: "не прочитано",
     missing: "отсутствует",
     noPolicyBadge: "без политик",
+    policyPartlyBadge: "без политик: {n} из {total}",
     policyUnknownBadge: "политики неизвестны",
     noAppLabel: "{namespace} · без метки приложения",
     refusedWhole: "Отказано: в {namespace} ничего не удалось прочитать. {said}",
