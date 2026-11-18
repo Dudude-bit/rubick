@@ -246,6 +246,22 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
     );
   });
 
+  /**
+   * Hubble observes the drop and drops nothing: with no NetworkPolicy over
+   * either end, the sentence names what the app does not read, never Hubble
+   * as the cause, in either language.
+   */
+  it("never names Hubble as what dropped a flow no NetworkPolicy restricts", () => {
+    for (const locale of ["en", "ru"] as const) {
+      const said = translate(locale, "traffic", "readingNotSelected", {
+        to: "db",
+        from: "intruder",
+      });
+      expect(said).toContain("Cilium");
+      expect(said).not.toMatch(/Hubble/);
+    }
+  });
+
   /** Said as the app's reading, with the other engines it does not read. */
   it("says the reading as the app's, and the engines it does not read", () => {
     const db = {
