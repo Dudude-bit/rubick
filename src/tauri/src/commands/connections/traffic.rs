@@ -237,7 +237,7 @@ pub(super) fn route_parents(
                         controller: class.controller_name.clone(),
                         refused: refused.is_some(),
                         condition_reason: refused.and_then(|c| c.reason.clone()),
-                        message: refused.and_then(|c| c.message.clone()),
+                        message: refused.and_then(|c| shown(c.message.as_ref())),
                     });
                 }
                 Some(_) => {}
@@ -252,7 +252,7 @@ pub(super) fn route_parents(
                 gateway: gw_ref.clone(),
                 condition_type: said.type_.clone(),
                 condition_reason: said.reason.clone(),
-                message: said.message.clone(),
+                message: shown(said.message.as_ref()),
             });
         }
         out.edge(
@@ -276,14 +276,14 @@ pub(super) fn route_parents(
                 route: route_ref.clone(),
                 gateway: gw_ref.clone(),
                 condition_reason: said.reason.clone(),
-                message: said.message.clone(),
+                message: shown(said.message.as_ref()),
             });
         }
         if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
             out.stops.push(ChainStop::RouteRefsUnresolved {
                 route: route_ref.clone(),
                 condition_reason: said.reason.clone(),
-                message: said.message.clone(),
+                message: shown(said.message.as_ref()),
             });
         }
     }
@@ -374,6 +374,12 @@ pub(super) fn parent_at<'a>(
             Some(through),
         ),
     }
+}
+
+/// A controller's own words as a stop carries them to the screen: through
+/// the one door, which never lets a private key out.
+fn shown(message: Option<&String>) -> Option<String> {
+    message.map(|text| crate::resources::shown_text(text))
 }
 
 /// A Gateway as the chain draws it.
@@ -764,6 +770,64 @@ status:
         ));
         assert!(stops(Some(Ok(&[class("envoy", Some("True"))]))).is_empty());
         assert!(stops(None).is_empty());
+
+        // A controller that wrote a private key into its message: the stop
+        // carries the placeholder, never the key.
+        let mut keyed = class("envoy", Some("False"));
+        keyed.conditions[0].message = Some(
+            "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n".into(),
+        );
+        assert!(matches!(
+            stops(Some(Ok(&[keyed]))).as_slice(),
+            [ChainStop::GatewayClassUnclaimed { message: Some(message), .. }]
+                if message == crate::resources::WITHHELD_MARKER
+        ));
+    }
+
+    /// A route's refusal carried its controller's message to the screen as
+    /// written. Fails if a stop the route's own status names carries a
+    /// private key rather than the placeholder.
+    #[test]
+    fn a_route_stop_carries_its_controller_s_words_only_through_the_door() {
+        let key = "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n";
+        let mut refused = route(HEALTHY_ROUTE);
+        for condition in &mut refused.parents[0].conditions {
+            condition.status = "False".into();
+            condition.message = Some(key.into());
+        }
+        let mut edge = gateway(EDGE_GATEWAY);
+        edge.conditions = vec![crate::resources::ConditionInfo {
+            type_: "Programmed".into(),
+            status: "False".into(),
+            reason: Some("Invalid".into()),
+            message: Some(key.into()),
+            last_transition_time: None,
+            observed_generation: None,
+        }];
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[refused],
+            Some(&[edge]),
+            None,
+            None,
+            &mut out,
+        );
+        let messages: Vec<&Option<String>> = out
+            .stops
+            .iter()
+            .filter_map(|stop| match stop {
+                ChainStop::RouteNotAccepted { message, .. }
+                | ChainStop::RouteRefsUnresolved { message, .. }
+                | ChainStop::GatewayNotProgrammed { message, .. } => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(messages.len(), 3, "{:?}", out.stops);
+        for message in messages {
+            assert_eq!(message.as_deref(), Some(crate::resources::WITHHELD_MARKER));
+        }
     }
 
     /// Classes the token could not list left the chain with no stop at all,
