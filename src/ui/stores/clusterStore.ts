@@ -588,19 +588,21 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const held = before.live.filter(
       (name) => moved.has(name) && name !== before.currentContext
     );
-    const dropped: string[] = [];
+    // Out of `live` before the first wait: a switch to one of them meanwhile
+    // connects it afresh, where `live` would focus the old entry's client.
+    set({
+      live: before.live.filter((name) => !held.includes(name)),
+      wayBack:
+        before.wayBack !== null && moved.has(before.wayBack)
+          ? null
+          : before.wayBack,
+    });
     for (const name of held) {
       // One the reader went to meanwhile is theirs now, not a held one.
       if (get().currentContext === name) continue;
       await commands.disconnectCluster(name).catch(() => null);
-      dropped.push(name);
     }
     const now = get();
-    set({
-      live: now.live.filter((name) => !dropped.includes(name)),
-      wayBack:
-        now.wayBack !== null && moved.has(now.wayBack) ? null : now.wayBack,
-    });
     // The reader connected elsewhere while those were let go: the window
     // follows them, not the cluster it showed when the file changed.
     if (

@@ -78,7 +78,27 @@ describe("the fix Audit offers to copy", () => {
         root({ list: "ephemeralContainers", container: "debugger" }),
         { kind: "Pod", namespace: "shop", name: "web-x" }
       )
-    ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
+    ).toBe(
+      "KUBECONFIG=FILES kubectl --context CONTEXT delete pod web-x --namespace shop"
+    );
+    // Named after an ordinary container, as the backend names them: the
+    // ephemeral one still cannot take a change, so the pod goes.
+    const both = root({ list: "containers", container: "app" });
+    both.what.push({
+      says: "set",
+      at: { list: "ephemeralContainers", container: "debugger" },
+      field: "securityContext.runAsUser",
+      value: "0",
+    });
+    expect(
+      fixYaml("pss-run-as-user-root", "Pod", both, {
+        kind: "Pod",
+        namespace: "shop",
+        name: "web-x",
+      })
+    ).toBe(
+      "KUBECONFIG=FILES kubectl --context CONTEXT delete pod web-x --namespace shop"
+    );
     const single = (
       autoscaler: string | null,
       ceiling: number | null = null
@@ -136,7 +156,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(gone.rule, release.kind, gone, release)).toBe(
-      "helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis web --namespace shop --kube-context CONTEXT\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
+      "helm plugin install https://github.com/helm/helm-mapkubeapis\nKUBECONFIG=FILES helm mapkubeapis web --namespace shop --kube-context CONTEXT\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
     );
     const due: AuditFinding = {
       ...gone,
@@ -206,7 +226,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | kubectl --context CONTEXT replace -f -\nkubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -256,7 +276,9 @@ describe("the fix Audit offers to copy", () => {
         namespace: null,
         name: "example.com/v1beta1 widgets/status",
       })
-    ).toBe("kubectl --context CONTEXT api-resources --api-group=example.com");
+    ).toBe(
+      "KUBECONFIG=FILES kubectl --context CONTEXT api-resources --api-group=example.com"
+    );
   });
 
   /** Fails if a rule has no fix, or one with a word of prose in it. */
@@ -334,9 +356,10 @@ describe("the fix Audit offers to copy", () => {
   });
 
   /**
-   * kubectl and helm act on their kubeconfig's current context unless told:
-   * a pod deleted by name in the terminal's cluster may be another one's.
-   * Fails if any command the fix offers leaves out the cluster on screen.
+   * kubectl and helm act on their kubeconfig's current context unless told,
+   * and on the terminal's own file: a pod deleted by name there may be
+   * another cluster's. Fails if any command the fix offers leaves out the
+   * cluster on screen or the files the app read it from.
    */
   it("names the cluster on screen in every command it offers", () => {
     const ephemeral: AuditFinding = {
@@ -352,26 +375,38 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     const pod = { kind: "Pod", namespace: "shop", name: "web-x" };
-    expect(fixYaml("pss-privileged", "Pod", ephemeral, pod, "kind-prod")).toBe(
-      "kubectl --context kind-prod delete pod web-x --namespace shop"
+    // Two files can call two clusters `default`: the files the app read the
+    // context from go with its name.
+    const files = "/home/me/.kube/k3s.yaml:/home/me/.kube/config";
+    expect(
+      fixYaml("pss-privileged", "Pod", ephemeral, pod, "default", files)
+    ).toBe(
+      `KUBECONFIG=${files} kubectl --context default delete pod web-x --namespace shop`
     );
     expect(
-      fixYaml("pss-privileged", "Pod", ephemeral, pod, "my cluster's prod")
+      fixYaml(
+        "pss-privileged",
+        "Pod",
+        ephemeral,
+        pod,
+        "my cluster's prod",
+        "/Users/me/My Files/config"
+      )
     ).toBe(
-      "kubectl --context 'my cluster'\\''s prod' delete pod web-x --namespace shop"
+      "KUBECONFIG='/Users/me/My Files/config' kubectl --context 'my cluster'\\''s prod' delete pod web-x --namespace shop"
     );
     const commands = (RULE_IDS as readonly RuleId[])
       .map((rule) =>
-        fixYaml(rule, "Deployment", undefined, undefined, "kind-prod")
+        fixYaml(rule, "Deployment", undefined, undefined, "default", files)
       )
       .flatMap((text) => text.split("\n"))
-      .filter(
-        (line) =>
-          /^(kubectl|helm) /.test(line) && !line.startsWith("helm plugin")
-      );
+      .filter((line) => /\b(kubectl|helm) /.test(line))
+      .filter((line) => !line.startsWith("helm plugin"));
     expect(commands.length).toBeGreaterThan(0);
-    for (const line of commands)
-      expect(line).toMatch(/--(kube-)?context kind-prod/);
+    for (const line of commands) {
+      expect(line).toMatch(/--(kube-)?context default/);
+      expect(line.startsWith(`KUBECONFIG=${files} `)).toBe(true);
+    }
   });
 
   it("offers a fix for every rule, written in the API's fields only", () => {

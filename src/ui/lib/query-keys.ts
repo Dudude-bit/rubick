@@ -349,6 +349,12 @@ export const queryKeys = {
   kubeconfigPath: (): string[] => ["kubeconfig-path"],
   kubeconfigPaths: (): string[] => ["kubeconfig-paths"],
   kubeconfigSource: (): string[] => ["kubeconfig-source"],
+  // Under the source, so a change on disk reads it again.
+  cliKubeconfig: (context: string | null): (string | null)[] => [
+    "kubeconfig-source",
+    "cli",
+    context,
+  ],
   contextBindings: (): string[] => ["context-bindings"],
   contextBinding: (context: string | null): (string | null)[] => [
     "context-bindings",

@@ -341,6 +341,41 @@ describe("a changed kubeconfig entry while the reader moves", () => {
     expect(state().currentContext).toBe("stage");
     vi.mocked(commands.releaseClusters).mockResolvedValue([]);
   });
+
+  /**
+   * Every held entry changed, and the reader picks the second held one
+   * while the first is still being let go. Fails if that switch focuses the
+   * client the old entry built, which then is skipped as the reader's own
+   * and kept: the window goes on reading the cluster that is gone.
+   */
+  it("connects afresh a changed held cluster the reader goes to meanwhile", async () => {
+    const connect = vi.mocked(commands.connectCluster);
+    const focus = vi.mocked(commands.focusCluster);
+    const disconnect = vi.mocked(commands.disconnectCluster);
+    vi.mocked(commands.releaseClusters).mockResolvedValue([
+      "prod",
+      "dev",
+      "stage",
+    ]);
+    await state().connect("prod");
+    await vi.waitFor(() =>
+      expect(state().live).toEqual(["prod", "dev", "stage"])
+    );
+    connect.mockClear();
+    focus.mockClear();
+    disconnect.mockClear();
+    disconnect.mockImplementationOnce(async () => {
+      await state().connect("stage");
+      return undefined;
+    });
+
+    await state().entriesChanged(["prod", "dev", "stage"]);
+    expect(focus).not.toHaveBeenCalledWith("stage");
+    expect(connect.mock.calls.map(([name]) => name)).toEqual(["stage"]);
+    expect(disconnect.mock.calls.map(([name]) => name)).toEqual(["dev"]);
+    expect(state().currentContext).toBe("stage");
+    vi.mocked(commands.releaseClusters).mockResolvedValue([]);
+  });
 });
 
 describe("a connect that failed", () => {
