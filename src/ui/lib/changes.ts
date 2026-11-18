@@ -20,6 +20,7 @@ import type {
   LetGoes,
   ObservedSpan,
   ReplicaSetInfo,
+  SeqStretch,
   Show,
   TimelineRow,
 } from "@/generated/types";
@@ -465,6 +466,32 @@ export function spansFor<S extends SpanLike & { kinds?: string[] }>(
 /** Whether a row is a change rather than one of the cluster's events. */
 export const isChange = (row: TimelineRow): row is ChangeRow =>
   row.what.says !== "event";
+
+/** Whether the connection held now recorded `row`: it is this cluster's, whatever the name was before. */
+export function recordedNow(
+  row: Pick<TimelineRow, "seq">,
+  vouched: readonly SeqStretch[] | undefined
+): boolean {
+  return (vouched ?? []).some(
+    (stretch) => stretch.last === null && row.seq >= stretch.first
+  );
+}
+
+/**
+ * Whether a connection read to be this cluster, or the one held now,
+ * recorded `row`. One no read placed may be another cluster's that had the
+ * name; with no word of what was vouched for, none is.
+ */
+export function placedBy(
+  row: Pick<TimelineRow, "seq">,
+  vouched: readonly SeqStretch[] | undefined
+): boolean {
+  return (vouched ?? []).some(
+    (stretch) =>
+      row.seq >= stretch.first &&
+      (stretch.last === null || row.seq <= stretch.last)
+  );
+}
 
 /** A stretch this app was watching a cluster. `to` is null while it still is. */
 export type { ObservedSpan };
@@ -988,10 +1015,16 @@ export type ChangeItem =
     }
   | { kind: "delivery"; at: number | null; revision: DeliveryRevision }
   | { kind: "helm"; at: number | null; revision: HelmRevision }
-  /** A change this app recorded. */
-  | { kind: "journal"; at: number; row: ChangeRow }
+  /** A change this app recorded; `unplaced` where no read placed it, see {@link placedBy}. */
+  | { kind: "journal"; at: number; row: ChangeRow; unplaced: boolean }
   /** A series of the cluster's events, at its last occurrence. */
-  | { kind: "event"; at: number; row: TimelineRow; event: EventInfo }
+  | {
+      kind: "event";
+      at: number;
+      row: TimelineRow;
+      event: EventInfo;
+      unplaced: boolean;
+    }
   /** Rows of one class older than this were let go, to a bound or by the reader: what was there is not known. */
   | { kind: "letGo"; at: number; letGo: LetGo; of: keyof LetGoes }
   | { kind: "gap"; at: number; gap: Gap }
@@ -1018,6 +1051,8 @@ export interface TimelineInput {
   helm: HelmRevision[];
   /** What the timeline recorded, newest first, as it reads it. */
   journal: readonly TimelineRow[];
+  /** Which of those rows a read placed; absent, none was. */
+  vouched: readonly SeqStretch[] | undefined;
   spans: readonly SpanLike[];
   /** Every span that watched these kinds in any namespace; see {@link gapsOf}. */
   watching?: readonly SpanLike[];
@@ -1144,9 +1179,20 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
     if (row.what.says === "event") {
       if (show === "changes") continue;
       if (show === "warnings" && row.what.event.type !== "Warning") continue;
-      rows.push({ kind: "event", at: row.at, row, event: row.what.event });
+      rows.push({
+        kind: "event",
+        at: row.at,
+        row,
+        event: row.what.event,
+        unplaced: !placedBy(row, input.vouched),
+      });
     } else if (changes)
-      rows.push({ kind: "journal", at: row.at, row: row as ChangeRow });
+      rows.push({
+        kind: "journal",
+        at: row.at,
+        row: row as ChangeRow,
+        unplaced: !placedBy(row, input.vouched),
+      });
   }
   if (born !== null && born >= from && changes) {
     const watchedBirth = input.journal.some(

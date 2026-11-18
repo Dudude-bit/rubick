@@ -36,6 +36,7 @@ function page(over: Partial<TimelinePage> = {}): TimelinePage {
     unreadable: 0,
     epoch: 0,
     identity: { says: "known" },
+    vouched: [{ first: 0, last: null }],
     ...over,
   };
 }
@@ -228,6 +229,40 @@ it("draws a Service's recorded change in its own field paths", async () => {
   expect(
     screen.getByText("metadata.annotations[x] changed (values are not kept)")
   ).toBeInTheDocument();
+});
+
+/**
+ * The object's own tab drew a row a refused connection recorded as its
+ * history. Fails if the tab does not say of a row outside every vouched
+ * stretch that it may be another cluster's, or says it of one inside.
+ */
+it("says of a row no read placed that it may be another cluster's", async () => {
+  answering(
+    page({
+      rows: [
+        change({ id: "2", seq: 2 }),
+        change({ id: "1", seq: 1, at: Date.now() - 120_000 }),
+      ],
+      spans: { followed: [span({ from: Date.now() - 3_600_000 })], meta: [] },
+      vouched: [{ first: 2, last: null }],
+    })
+  );
+  await renderWithRouter(
+    <ObjectChanges
+      subject={{
+        kind: "Service",
+        name: "web",
+        namespace: "shop",
+        createdAt: null,
+      }}
+    />,
+    { at: "/c/prod" }
+  );
+  expect(
+    await screen.findAllByText(
+      /^Recorded under this name while which cluster this is could not be checked/
+    )
+  ).toHaveLength(1);
 });
 
 /**

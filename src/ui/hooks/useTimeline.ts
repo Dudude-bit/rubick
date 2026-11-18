@@ -10,6 +10,7 @@ import type {
   Identity,
   Keeping,
   LetGoes,
+  SeqStretch,
   Show,
   SpanSets,
   TimelineSubject,
@@ -56,8 +57,10 @@ export interface TimelineRead {
   spans: SpanSets | undefined;
   letGo: LetGoes | undefined;
   keeping: Keeping | undefined;
-  /** Whether the rows kept from an earlier run are this cluster's. */
+  /** Whether this name was checked through the connection held now. */
   identity: Identity | undefined;
+  /** The rows a connection read to be this cluster recorded; see `placedBy`. */
+  vouched: readonly SeqStretch[] | undefined;
   unreadable: number;
   /** Where the rows read end while older ones remain unread; `null` when all are read. */
   readFrom: number | null;
@@ -284,6 +287,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     letGo: data?.letGo,
     keeping: data?.keeping,
     identity: data?.identity,
+    vouched: data?.vouched,
     unreadable: data?.unreadable ?? 0,
     readFrom: data?.more ? (data.rows.at(-1)?.at ?? null) : null,
     loadOlder,

@@ -55,7 +55,12 @@ interface Entry {
   to: string;
 }
 
-let held: { entries: Entry[]; spans: SpanLike[]; meta?: SpanLike[] } = {
+let held: {
+  entries: Entry[];
+  spans: SpanLike[];
+  meta?: SpanLike[];
+  vouched?: TimelinePage["vouched"];
+} = {
   entries: [],
   spans: [],
 };
@@ -146,6 +151,7 @@ function answer(query: TimelineQuery): TimelinePage {
     unreadable: 0,
     epoch: 0,
     identity: { says: "known" },
+    vouched: held.vouched ?? [{ first: 0, last: null }],
   };
 }
 
@@ -440,6 +446,54 @@ describe("a stretch that watched part of the scope", () => {
       screen.getByText(new RegExp(`^Not observed .+ to ${moment(60)}$`))
     ).toBeInTheDocument();
     expect(screen.queryByText(/other namespaces/)).toBeNull();
+  });
+});
+
+describe("rows no read placed", () => {
+  /**
+   * A reconnect to a cluster whose kube-system was refused, and a restart:
+   * the rows it recorded read as the cluster's own history, on the page and
+   * in Share. Fails if a row outside every vouched stretch is drawn or
+   * shared without saying so, or one inside is said to be unplaced.
+   */
+  it("says of each row no read placed that it may be another cluster's, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const entry = (id: string, at: number, name: string): Entry => ({
+      id,
+      context: "prod",
+      kind: "Deployment",
+      namespace: "shop",
+      name,
+      at,
+      field: "replicas",
+      key: null,
+      from: "1",
+      to: "2",
+    });
+    held.vouched = [{ first: 2, last: null }];
+    recorded({
+      entries: [
+        entry("1", NOW - 120_000, "unplaced"),
+        entry("2", NOW - 60_000, "placed"),
+      ],
+      spans: { prod: [{ from: NOW - 3_600_000, seenAt: NOW, to: null }] },
+    });
+    const collect = await mount();
+    const aside =
+      /^Recorded under this name while which cluster this is could not be checked/;
+    expect(await screen.findAllByText(aside)).toHaveLength(1);
+    const section = collect().find((section) => section.id === "changes");
+    const shared =
+      section?.body.type === "changes"
+        ? section.body.changes.filter((row) =>
+            row.parts.some((part) => aside.test(part.text))
+          )
+        : [];
+    expect(shared.map((row) => row.ref?.stem)).toEqual(["unplaced"]);
   });
 });
 

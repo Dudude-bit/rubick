@@ -52,6 +52,30 @@ pub(super) struct State {
     pub identity: Option<String>,
     pub spans: SpanSets,
     pub let_go: LetGoes,
+    /// Read leniently: a list that does not parse vouches for nothing.
+    #[serde(default, deserialize_with = "lenient")]
+    pub lineages: Vec<Lineage>,
+}
+
+/// One stretch of recording through one connection, from a start or a
+/// reconnect to the next. The cluster read through it vouches for its rows
+/// and its watching; one never read vouches for nothing, in any later run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct Lineage {
+    /// The `kube-system` uid read through this connection.
+    #[serde(default)]
+    pub uid: Option<String>,
+    /// Its first and last row, by `seq`.
+    pub first: u64,
+    pub last: u64,
+    pub from: i64,
+    pub to: i64,
+}
+
+fn lenient<'de, D: serde::Deserializer<'de>>(read: D) -> Result<Vec<Lineage>, D::Error> {
+    let value = serde_json::Value::deserialize(read)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
 }
 
 /// What was read back from one cluster's folder.
@@ -61,6 +85,7 @@ pub(super) struct Loaded {
     pub spans: SpanSets,
     pub let_go: LetGoes,
     pub identity: Option<String>,
+    pub lineages: Vec<Lineage>,
     pub unreadable: usize,
 }
 
@@ -121,6 +146,7 @@ pub(super) fn load(dir: &Path, now: i64) -> Loaded {
                 loaded.spans = state.spans;
                 loaded.let_go = state.let_go;
                 loaded.identity = state.identity;
+                loaded.lineages = state.lineages;
             }
             Err(_) => loaded.unreadable += 1,
         }

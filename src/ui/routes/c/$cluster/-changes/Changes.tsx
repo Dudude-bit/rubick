@@ -87,6 +87,7 @@ export function Changes() {
       deliveries: [],
       helm: [],
       journal: read.rows,
+      vouched: read.vouched,
       spans: covering,
       watching: spansWatching(ours, events),
       scope: scope.scope,
@@ -107,6 +108,7 @@ export function Changes() {
     return merged(timeline, stretches.sort(newestFirst));
   }, [
     read.rows,
+    read.vouched,
     read.letGo,
     read.readFrom,
     ours,
