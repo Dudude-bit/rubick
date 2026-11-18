@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, EyeOff, ShieldCheck } from "lucide-react";
 
 import type {
@@ -385,14 +385,15 @@ function Filter<V extends string>({
  * and a click that changes nothing in sight reads as a dead one.
  */
 function useBroughtIntoView(opened: string | undefined) {
-  const ref = useRef<HTMLDivElement>(null);
+  // A callback ref: the panel can mount again under the same opened row,
+  // after a first read that failed and was asked again.
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!opened) return;
-    const node = ref.current;
-    node?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-    node?.focus({ preventScroll: true });
-  }, [opened]);
-  return ref;
+    if (!opened || !node) return;
+    node.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    node.focus({ preventScroll: true });
+  }, [opened, node]);
+  return setNode;
 }
 
 /** What is deployed in a way that will hurt later, across the window's namespaces. */

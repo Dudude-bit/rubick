@@ -8,6 +8,7 @@ import { renderWithRouter } from "@/test/render";
 
 const asked: AuditQuery[] = [];
 const moreRules: AuditPage["rows"] = [];
+let failing = false;
 let paged: { total: number; next: number } | null = null;
 const summary: AuditPage["summary"] = {
   findings: 1,
@@ -28,11 +29,14 @@ const summary: AuditPage["summary"] = {
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: () => Promise.resolve(),
     getAudit: (
       _scope: string[] | null,
       query: AuditQuery
     ): Promise<AuditPage> => {
       asked.push(query);
+      if (failing && query.rule === undefined)
+        return Promise.reject(new Error("the API server did not answer"));
       if (query.by === "object")
         return Promise.resolve({
           revision: 1,
@@ -111,6 +115,7 @@ const { Audit } = await import("./Audit");
 beforeEach(() => {
   asked.length = 0;
   moreRules.length = 0;
+  failing = false;
   paged = null;
   useClusterStore.setState({
     currentContext: "prod",
@@ -234,6 +239,37 @@ describe("the Audit page", () => {
     const name = await screen.findByText("api");
     const row = name.closest("tr") as HTMLElement;
     expect(within(row).getByLabelText("Not checked here")).toBeInTheDocument();
+  });
+
+  /**
+   * Opened from a link whose first read failed, the rule's panel mounts only
+   * once the read asked again answers. Fails if it then stays out of view
+   * and without the focus, as nothing in the opened row changed.
+   */
+  it("brings an opened rule into view when its panel mounts after a failed read", async () => {
+    const scrolled: Element[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    failing = true;
+    try {
+      await renderWithRouter(<Audit />, {
+        at: "/c/prod/audit?rule=no-disruption-budget",
+        route: "/c/$cluster/audit",
+      });
+      const again = await screen.findByRole("button", {
+        name: /try the read again/i,
+      });
+      expect(screen.queryByTestId("audit-opened-rule")).toBeNull();
+      failing = false;
+      await userEvent.setup().click(again);
+      const opened = await screen.findByTestId("audit-opened-rule");
+      await waitFor(() => expect(scrolled).toContain(opened));
+      expect(document.activeElement).toBe(opened);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
   });
 
   it("counts the table's rows as rules", async () => {
