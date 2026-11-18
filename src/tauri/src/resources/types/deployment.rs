@@ -253,13 +253,15 @@ impl From<&Deployment> for DeploymentInfo {
             .map(|conds| {
                 conds
                     .iter()
-                    .map(|c| ConditionInfo {
-                        type_: c.type_.clone(),
-                        status: c.status.clone(),
-                        reason: c.reason.clone(),
-                        message: c.message.clone(),
-                        last_transition_time: c.last_transition_time.as_ref().map(Moment::moment),
-                        observed_generation: None,
+                    .map(|c| {
+                        ConditionInfo::new(
+                            c.type_.clone(),
+                            c.status.clone(),
+                            c.reason.clone(),
+                            c.message.clone(),
+                            c.last_transition_time.as_ref().map(Moment::moment),
+                            None,
+                        )
                     })
                     .collect()
             })

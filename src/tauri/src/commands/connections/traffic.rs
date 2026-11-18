@@ -237,7 +237,7 @@ pub(super) fn route_parents(
                         controller: class.controller_name.clone(),
                         refused: refused.is_some(),
                         condition_reason: refused.and_then(|c| c.reason.clone()),
-                        message: refused.and_then(|c| shown(c.message.as_ref())),
+                        message: refused.and_then(|c| c.message.clone()),
                     });
                 }
                 Some(_) => {}
@@ -252,7 +252,7 @@ pub(super) fn route_parents(
                 gateway: gw_ref.clone(),
                 condition_type: said.type_.clone(),
                 condition_reason: said.reason.clone(),
-                message: shown(said.message.as_ref()),
+                message: said.message.clone(),
             });
         }
         out.edge(
@@ -276,14 +276,14 @@ pub(super) fn route_parents(
                 route: route_ref.clone(),
                 gateway: gw_ref.clone(),
                 condition_reason: said.reason.clone(),
-                message: shown(said.message.as_ref()),
+                message: said.message.clone(),
             });
         }
         if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
             out.stops.push(ChainStop::RouteRefsUnresolved {
                 route: route_ref.clone(),
                 condition_reason: said.reason.clone(),
-                message: shown(said.message.as_ref()),
+                message: said.message.clone(),
             });
         }
     }
@@ -374,12 +374,6 @@ pub(super) fn parent_at<'a>(
             Some(through),
         ),
     }
-}
-
-/// A controller's own words as a stop carries them to the screen: through
-/// the one door, which never lets a private key out.
-fn shown(message: Option<&String>) -> Option<String> {
-    message.map(|text| crate::resources::shown_text(text))
 }
 
 /// A Gateway as the chain draws it.
@@ -693,6 +687,9 @@ mod gateway_traffic_tests {
         ObjectRef::new("Service", name, Some(ns.to_string()), Existence::Present)
     }
 
+    /// A private key as a controller might write one into a message.
+    const KEY: &str = "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n";
+
     const EDGE_GATEWAY: &str = r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -772,10 +769,15 @@ status:
         assert!(stops(None).is_empty());
 
         // A controller that wrote a private key into its message: the stop
-        // carries the placeholder, never the key.
-        let mut keyed = class("envoy", Some("False"));
-        keyed.conditions[0].message = Some(
-            "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n".into(),
+        // carries the placeholder the condition was read as, never the key.
+        let mut written: serde_json::Value =
+            serde_yaml::from_str("apiVersion: gateway.networking.k8s.io/v1\nkind: GatewayClass\nmetadata: { name: envoy }\nspec: { controllerName: example.net/gw }\n")
+            .expect("class fixture parses");
+        written["status"] = serde_json::json!({ "conditions": [{
+            "type": "Accepted", "status": "False", "reason": "InvalidParameters", "message": KEY,
+        }] });
+        let keyed = crate::resources::GatewayClassInfo::read(
+            &serde_json::from_value(written).expect("a class"),
         );
         assert!(matches!(
             stops(Some(Ok(&[keyed]))).as_slice(),
@@ -789,21 +791,25 @@ status:
     /// private key rather than the placeholder.
     #[test]
     fn a_route_stop_carries_its_controller_s_words_only_through_the_door() {
-        let key = "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n";
-        let mut refused = route(HEALTHY_ROUTE);
-        for condition in &mut refused.parents[0].conditions {
-            condition.status = "False".into();
-            condition.message = Some(key.into());
+        let mut written: serde_json::Value =
+            serde_yaml::from_str(HEALTHY_ROUTE).expect("route fixture parses");
+        for condition in written["status"]["parents"][0]["conditions"]
+            .as_array_mut()
+            .expect("conditions")
+        {
+            condition["status"] = "False".into();
+            condition["message"] = KEY.into();
         }
+        let refused = RouteInfo::read(&serde_json::from_value(written).expect("a route"));
         let mut edge = gateway(EDGE_GATEWAY);
-        edge.conditions = vec![crate::resources::ConditionInfo {
-            type_: "Programmed".into(),
-            status: "False".into(),
-            reason: Some("Invalid".into()),
-            message: Some(key.into()),
-            last_transition_time: None,
-            observed_generation: None,
-        }];
+        edge.conditions = vec![crate::resources::ConditionInfo::new(
+            "Programmed".into(),
+            "False".into(),
+            Some("Invalid".into()),
+            Some(KEY.into()),
+            None,
+            None,
+        )];
         let mut out = Neighbourhood::new();
         gateway_traffic_into(
             "shop",
