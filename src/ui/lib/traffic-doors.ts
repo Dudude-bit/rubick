@@ -14,7 +14,12 @@ import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import { parentWords, stopParent } from "@/lib/parent-at";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
-import { doorReading, isPolicyStop, type DoorAsk } from "@/lib/policy-door";
+import {
+  doorPortOf,
+  doorReading,
+  isPolicyStop,
+  type DoorAsk,
+} from "@/lib/policy-door";
 import { publishedFor } from "@/lib/published";
 import { stopMood } from "@/lib/stop-mood";
 import type {
@@ -194,7 +199,19 @@ export function trafficDoors(
     // Refused to every client, as the Service's own stop says: the verdict
     // below leaves a stop already said to its sayer.
     const stop = published?.stop;
-    if (isPolicyStop(stop)) return { shut: stop, doubt: null, unsure: false };
+    if (isPolicyStop(stop)) {
+      const guard = published?.door;
+      const ports =
+        guard?.state === "overlaid"
+          ? guard.alone.ports
+          : guard?.state === "guarded"
+            ? guard.ports
+            : null;
+      // A port the Service does not publish is not one its policies refuse.
+      if (port !== null && ports && !doorPortOf(ports, port))
+        return { shut: null, doubt: null, unsure: true };
+      return { shut: stop, doubt: null, unsure: false };
+    }
     // Its slices, Endpoints and pods all unread: the policies over the
     // pods were never put to the door.
     if (!published) return { shut: null, doubt: null, unsure: true };

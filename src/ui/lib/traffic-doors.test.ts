@@ -1049,6 +1049,48 @@ describe("trafficDoors", () => {
         ["Ingress", "shut by NetworkPolicy"],
       ]);
     });
+
+    /**
+     * The Service's stop is about the ports it publishes, and an Ingress
+     * naming one it does not was told the policies shut it. Fails if a
+     * door to a port the Service does not publish is said shut by them.
+     */
+    it("does not shut a door to a port the Service does not publish on its policy stop", () => {
+      const refused: ServicePublished = {
+        ...published,
+        stop: {
+          reason: "policyRefuses",
+          service,
+          policies: ["deny-all"],
+          ports: [8080],
+          noRules: true,
+          client: null,
+        },
+      };
+      const door = trafficDoors(
+        conns({
+          published: [refused],
+          edges: [
+            edge(ref("Ingress", "front"), service, {
+              verb: "routes",
+              host: "shop.example.com",
+              path: "/",
+              pathType: "Prefix",
+              port: "4000",
+              tls: false,
+            }),
+          ],
+        }),
+        [],
+        t,
+        undefined,
+        {
+          controllerOf: () => "traefik.io/ingress-controller",
+          ask: () => traefik,
+        }
+      ).entries[0].doors[0];
+      expect(door).toMatchObject({ broken: null, checked: false });
+    });
   });
 
   it("caps the doors and counts the rest", () => {
