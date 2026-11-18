@@ -79,6 +79,22 @@ describe("the fix Audit offers to copy", () => {
         { kind: "Pod", namespace: "shop", name: "web-x" }
       )
     ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
+    // Named after an ordinary container, as the backend names them: the
+    // ephemeral one still cannot take a change, so the pod goes.
+    const both = root({ list: "containers", container: "app" });
+    both.what.push({
+      says: "set",
+      at: { list: "ephemeralContainers", container: "debugger" },
+      field: "securityContext.runAsUser",
+      value: "0",
+    });
+    expect(
+      fixYaml("pss-run-as-user-root", "Pod", both, {
+        kind: "Pod",
+        namespace: "shop",
+        name: "web-x",
+      })
+    ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
     const single = (
       autoscaler: string | null,
       ceiling: number | null = null

@@ -172,10 +172,11 @@ export function fixYaml(
     first(finding, "socket")?.volume ??
     "data";
   // An ephemeral container cannot be changed or removed once added
-  // (concepts/workloads/pods/ephemeral-containers): it goes with its pod.
+  // (concepts/workloads/pods/ephemeral-containers): it goes with its pod,
+  // whichever of the containers a finding names it is.
   if (
     atContainer(finding) &&
-    containerOf(finding).list === "ephemeralContainers"
+    containersOf(finding).some((seat) => seat.list === "ephemeralContainers")
   )
     return `${kubectl} delete pod ${subject?.name ?? "POD"} --namespace ${subject?.namespace ?? "NAMESPACE"}`;
   switch (rule) {
