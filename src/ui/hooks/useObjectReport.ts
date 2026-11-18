@@ -171,6 +171,16 @@ export function useObjectReport(
   const readFroms = readings.flatMap((reading) =>
     reading.readFrom === null ? [] : [reading.readFrom]
   );
+  // One timeline, so the later word of the two reads on it is every row's:
+  // an answer from before a reconnect places rows it no longer does.
+  const placingRead =
+    (ownerChanges.attribution ?? -1) > (ownChanges.attribution ?? -1)
+      ? ownerChanges
+      : ownChanges;
+  const placing = useMemo(
+    () => ({ vouched: placingRead.vouched, identity: placingRead.identity }),
+    [placingRead.vouched, placingRead.identity]
+  );
   const changesReadFrom = readFroms.length > 0 ? Math.max(...readFroms) : null;
   const silent = useSilentNodes(capturing);
 
@@ -252,15 +262,9 @@ export function useObjectReport(
           ? t("empty", "eventsReadShort")
           : null,
     });
-    const placing =
-      (ownerChanges.attribution ?? -1) > (ownChanges.attribution ?? -1)
-        ? ownerChanges
-        : ownChanges;
     const changes = changesSection(
       {
         rows: withNewer(ownChanges.rows, ownerChanges.rows),
-        // One timeline, so the later word of the two reads on it is every
-        // row's: an answer from before a reconnect places rows it no longer does.
         vouched: placing.vouched,
         identity: placing.identity,
         spans: ownChanges.spans,
@@ -366,15 +370,10 @@ export function useObjectReport(
     resource,
     targets,
     ownChanges.rows,
-    ownChanges.vouched,
-    ownChanges.identity,
-    ownChanges.attribution,
+    placing,
     ownChanges.spans,
     ownChanges.letGo,
     ownerChanges.rows,
-    ownerChanges.vouched,
-    ownerChanges.identity,
-    ownerChanges.attribution,
     changesFailed,
     changesPending,
     changesReadFrom,
