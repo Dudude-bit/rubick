@@ -774,6 +774,8 @@ struct Owners {
     all: bool,
     /// Pods named by a flow and not in the last read: a reason to read again.
     missing: BTreeSet<(String, String)>,
+    /// No read has answered yet: a pod's owner is not known either way.
+    pending: bool,
 }
 
 impl Owners {
@@ -790,6 +792,7 @@ impl Owners {
             unread: read.unread.iter().map(|u| u.namespace.clone()).collect(),
             all: false,
             missing: BTreeSet::new(),
+            pending: false,
         }
     }
 
@@ -800,15 +803,24 @@ impl Owners {
         }
     }
 
+    fn pending() -> Self {
+        Self {
+            pending: true,
+            ..Self::default()
+        }
+    }
+
     /// Whether the pods are worth reading again: a pod a flow named and the
     /// read did not hold, or a read that failed, which may answer next time.
     fn read_again(&self) -> bool {
         !self.missing.is_empty() || self.all || !self.unread.is_empty()
     }
 
-    /// A bare pod as its workload; one whose pods could not be read as not
-    /// listed for that reason; one nothing owns as itself. A pod held as not
-    /// listed is a pod still, resolved again by the next read.
+    /// A bare pod as its workload, or as itself where the read says nothing
+    /// owns it; one whose pods could not be read as not listed for that
+    /// reason; one the read did not hold, or before any read, as not listed:
+    /// its owner is not known, which drawn as itself would say "none". A pod
+    /// held as not listed is a pod still, resolved again by the next read.
     fn resolve(&mut self, end: FlowEnd) -> FlowEnd {
         let at = match &end {
             FlowEnd::Workload { key } if key.kind == "Pod" && key.group.is_empty() => {
@@ -833,8 +845,13 @@ impl Owners {
                 why: NotListedWhy::PodsUnread,
             };
         }
-        self.missing.insert(at);
-        end
+        self.missing.insert(at.clone());
+        FlowEnd::NotListed {
+            namespace: at.0,
+            name: at.1,
+            kind: Some("Pod".into()),
+            why: NotListedWhy::NoSuch,
+        }
     }
 }
 
@@ -886,7 +903,7 @@ impl Fold {
             untracked: 0,
             unreached: BTreeMap::new(),
             nodes_changed: false,
-            owners: Owners::default(),
+            owners: Owners::pending(),
             sent: HashMap::new(),
             sent_counts: (0, 0),
         }
@@ -1076,6 +1093,14 @@ impl Fold {
         let mut pairs = Vec::new();
         let mut gone = Vec::new();
         for key in changed {
+            // Before the first read a pod's pair waits: "not listed" would be
+            // said of a list not yet made.
+            if self.owners.pending && (unlisted_pod(&key.0) || unlisted_pod(&key.1)) {
+                if self.pairs.contains_key(&key) {
+                    self.touched.insert(key);
+                }
+                continue;
+            }
             match self.pairs.get(&key) {
                 Some(seconds) if !seconds.is_empty() => {
                     let pair = shown(summary(&key, seconds, span));
@@ -1086,16 +1111,22 @@ impl Fold {
                 }
                 _ => {
                     self.pairs.remove(&key);
-                    self.sent.remove(&key);
-                    gone.push(LiveKey {
-                        from: key.0,
-                        to: key.1,
-                    });
+                    // Only a pair the page was sent is taken back from it.
+                    if self.sent.remove(&key).is_some() {
+                        gone.push(LiveKey {
+                            from: key.0,
+                            to: key.1,
+                        });
+                    }
                 }
             }
         }
         (pairs, gone)
     }
+}
+
+fn unlisted_pod(end: &FlowEnd) -> bool {
+    matches!(end, FlowEnd::NotListed { kind: Some(kind), .. } if kind == "Pod")
 }
 
 /// A rate as the page draws it: three significant figures, whole from 100.
@@ -1472,18 +1503,22 @@ mod tests {
         assert_eq!(pairs[0].forwarded, 0.0333);
     }
 
-    /// Flows held under a pod before the pods were read move to its workload
-    /// when they are, merged with that pair, and the pod's row goes.
+    /// Before the first read a pod's owner is not known: its pair is held,
+    /// not drawn as a pod nothing owns, and moves to its workload when the
+    /// pods are read, merged with that pair. The page never had it to lose.
     #[test]
     fn pairs_held_under_a_pod_move_to_its_workload_once_the_pods_are_read() {
         let mut fold = Fold::new(0);
         fold.add(100, &from_pod("caller-649d545b48-c74f8"));
         fold.add(100, &event(Verdict::Forwarded, "caller", "web"));
-        assert!(fold
-            .owners
-            .missing
-            .contains(&("shop".into(), "caller-649d545b48-c74f8".into())));
-        fold.tick(101);
+        let (before, _) = fold.tick(101);
+        assert_eq!(before.len(), 1);
+        assert_eq!(
+            before[0].from,
+            FlowEnd::Workload {
+                key: deployment("caller")
+            }
+        );
         fold.owners_read(Owners {
             of: HashMap::from([(
                 ("shop".into(), "caller-649d545b48-c74f8".into()),
@@ -1494,13 +1529,12 @@ mod tests {
         let (pairs, gone) = fold.tick(102);
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].forwarded, 0.0333);
-        assert!(
-            matches!(&gone[..], [LiveKey { from: FlowEnd::Workload { key }, .. }] if key.kind == "Pod")
-        );
+        assert!(gone.is_empty());
     }
 
-    /// A pod whose namespace's pods could not be read is not called a pod
-    /// nothing owns; one the read holds no owner for stays a pod.
+    /// A pod whose namespace's pods could not be read, or that the read did
+    /// not hold, is not called a pod nothing owns; one the read says nothing
+    /// owns stays a pod.
     #[test]
     fn a_pod_is_not_listed_where_pods_were_unread_and_itself_where_nothing_owns_it() {
         let mut unread = Fold::new(0);
@@ -1511,12 +1545,25 @@ mod tests {
             FlowEnd::NotListed { why: NotListedWhy::PodsUnread, kind: Some(kind), .. } if kind == "Pod"
         ));
         let mut read = Fold::new(0);
-        read.owners_read(Owners::default());
+        let debug = WorkloadKey {
+            namespace: "shop".into(),
+            group: String::new(),
+            kind: "Pod".into(),
+            name: "debug".into(),
+        };
+        read.owners_read(Owners {
+            of: HashMap::from([(("shop".into(), "debug".into()), debug.clone())]),
+            ..Owners::default()
+        });
         read.add(100, &from_pod("debug"));
-        assert!(matches!(
-            &read.tick(101).0[0].from,
-            FlowEnd::Workload { key } if key.kind == "Pod" && key.name == "debug"
-        ));
+        read.add(100, &from_pod("web-7d9f-new"));
+        let (pairs, _) = read.tick(101);
+        let from: BTreeSet<_> = pairs.iter().map(|pair| pair.from.clone()).collect();
+        assert!(from.contains(&FlowEnd::Workload { key: debug }));
+        assert!(from.iter().any(|end| matches!(
+            end,
+            FlowEnd::NotListed { why: NotListedWhy::NoSuch, name, .. } if name == "web-7d9f-new"
+        )));
     }
 
     /// A read that failed, whole or for a namespace, is asked again as a pod
