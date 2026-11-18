@@ -661,6 +661,38 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * The first read was refused, and the card and its Share said "not read
+   * yet" of a read that had answered. Fails if a first read that failed is
+   * said not to have answered, or one still out is said to have failed.
+   */
+  it("says the first read failed rather than that it has not answered", () => {
+    const words = (error: Error | null) => {
+      const section = pinShare(
+        pin,
+        { state: "ready", ready: 1, total: 1 },
+        { entries: [], known: true },
+        [],
+        lastChangeOf({
+          read: false,
+          rows: [],
+          letGo: undefined,
+          unreadable: 0,
+          identity: undefined,
+          error,
+        }),
+        [],
+        t
+      );
+      const rows = section.body.type === "facts" ? section.body.rows : [];
+      return rows.find((row) => row.label === "Last change")?.values[0].text;
+    };
+    expect(words(new Error("disk refused"))).toMatch(
+      /^The timeline could not be read: .*disk refused/
+    );
+    expect(words(null)).toBe("not read yet");
+  });
+
+  /**
    * Every kept row failed to parse, and the card said "nothing seen while
    * this app was watching". Fails if rows that could not be read leave the
    * last change said to be none.
