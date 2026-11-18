@@ -203,7 +203,7 @@ pub struct LoadedKubeconfig {
 
 /// What one merged file names: the merge keeps the first of each name and
 /// nothing of where the others stood.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileNames {
     contexts: Vec<String>,
     clusters: Vec<String>,
