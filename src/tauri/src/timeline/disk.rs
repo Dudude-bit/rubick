@@ -67,13 +67,13 @@ fn drop_rows(dir: &Path, drop: &[(u64, u64)]) -> std::io::Result<()> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error),
         };
-        let kept: String = text
-            .lines()
-            .filter(|line| {
-                serde_json::from_str::<Numbered>(line).map_or(true, |row| !dropped(drop, row.seq))
-            })
-            .map(|line| format!("{line}\n"))
-            .collect();
+        let mut kept = String::with_capacity(text.len());
+        for line in text.lines().filter(|line| {
+            serde_json::from_str::<Numbered>(line).map_or(true, |row| !dropped(drop, row.seq))
+        }) {
+            kept.push_str(line);
+            kept.push('\n');
+        }
         if kept != text {
             private_file::write(&path, kept.as_bytes())?;
         }
