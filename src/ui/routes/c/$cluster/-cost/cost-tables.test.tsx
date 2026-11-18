@@ -35,6 +35,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
     })),
     nodesUnread: null,
     heldUnread: null,
+    jobsUnread: null,
     namespaces: Array.from({ length: namespaces }, (_, i) => ({
       namespace: `ns-${i}`,
       workloads: Math.ceil(workloads / namespaces),
@@ -57,7 +58,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
     unread: [],
     volumeBytes: 0,
     volumeCount: 0,
-    unclaimed: [],
+    unclaimed: { count: 0, bytes: 0 },
     volumesUnread: null,
     claimsUnread: [],
     servedFrom: "watch",
@@ -89,6 +90,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
       unplaced: [],
       unread: [],
       unlabelled: 0,
+      covered: [],
       since: keys.map(() => null),
     },
     storage: {
@@ -122,6 +124,7 @@ function cluster(namespaces: number, workloads: number, nodes: number) {
       unplaced: [],
       unread: [],
       unlabelled: 0,
+      covered: [],
       since: keys.map(() => "2020-01-01T00:00:00Z"),
     },
   };

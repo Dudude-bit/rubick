@@ -22,14 +22,23 @@ const getDeploymentReplicasets = vi.fn<
 >(async () => []);
 /** What the timeline recorded, answered for the subject each read asks about. */
 let recorded: TimelineRow[] = [];
-const timelineRead = async (query: TimelineQuery) => ({
+/** Every question the timeline was asked, and what each read does instead of answering. */
+const timelineAsked: TimelineQuery[] = [];
+let timelineFails: Error | null = null;
+let timelineMore = false;
+const timelineRead = async (query: TimelineQuery) => {
+  timelineAsked.push(query);
+  if (timelineFails) throw timelineFails;
+  return timelineAnswer(query);
+};
+const timelineAnswer = (query: TimelineQuery) => ({
   rows: recorded.filter(
     (row) =>
       row.kind === query.subject?.kind &&
       row.name === query.subject.name &&
       row.namespace === query.subject.namespace
   ),
-  more: false,
+  more: timelineMore,
   newest: recorded.length,
   spans: { followed: [], meta: [] },
   letGo: { changes: null, warnings: null, normal: null },
@@ -226,6 +235,63 @@ describe("the report of any object", () => {
         "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown: replicasets.apps is forbidden"
       )
     );
+  });
+
+  /**
+   * The timeline did not answer: the shared file's Changes section said
+   * nothing changed, with no word that it was not read. And a Deployment's
+   * history read without a group took in a custom namesake's. Fails if a
+   * failed read reads as an empty history, or a built-in is asked for in
+   * any group.
+   */
+  it("says the timeline could not be read, and asks for a built-in in its own group", async () => {
+    timelineFails = new Error("disk refused");
+    timelineAsked.length = 0;
+    const deployment = { kind: "Deployment", name: "api", namespace: "web" };
+    const { result } = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        result.current.report?.sections.find((s) => s.id === "changes")?.unread
+      ).toContain("disk refused")
+    );
+    expect(timelineAsked[0].subject?.group).toBe("apps");
+    timelineFails = null;
+  });
+
+  /**
+   * More rows than one page holds: the file drew the stretch below them as
+   * watched and quiet. Fails if rows not read are not said to be.
+   */
+  it("says the changes before the rows read were not read", async () => {
+    timelineMore = true;
+    recorded = [
+      {
+        id: "c1",
+        seq: 1,
+        at: Date.parse("2026-11-10T10:00:00Z"),
+        kind: "Deployment",
+        group: "apps",
+        namespace: "web",
+        name: "api",
+        what: { says: "created" },
+        atRelist: false,
+      },
+    ];
+    const deployment = { kind: "Deployment", name: "api", namespace: "web" };
+    const { result } = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        result.current.report?.sections.find((s) => s.id === "changes")?.partial
+      ).toMatch(/^Changes before .+ were not read for this file\.$/)
+    );
+    timelineMore = false;
+    recorded = [];
   });
 
   /**

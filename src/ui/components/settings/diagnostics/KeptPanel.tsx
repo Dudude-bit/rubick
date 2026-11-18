@@ -22,6 +22,7 @@ export function KeptPanel() {
   const { toast } = useToast();
   const client = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [keepFailed, setKeepFailed] = useState<string | null>(null);
   const kept = useQuery({
     queryKey: queryKeys.timelineKept(),
     queryFn: () => commands.timelineKept(),
@@ -35,9 +36,16 @@ export function KeptPanel() {
       client.invalidateQueries({ queryKey: ["timeline"] }),
     ]);
 
+  // A switch that did not take says why beside it: read again, it simply
+  // springs back with no word.
   const setKeep = async (next: boolean) => {
     try {
       await commands.timelineSetKeep(next);
+      setKeepFailed(null);
+    } catch (error) {
+      setKeepFailed(
+        t("settings", "keepNotChanged", { reason: errorToShow(error) })
+      );
     } finally {
       await told();
     }
@@ -58,22 +66,33 @@ export function KeptPanel() {
     }
   };
 
-  const size = kept.data
-    ? kept.data.bytes > 0
-      ? t("settings", "keptSize", {
-          size: formatBytes(kept.data.bytes),
-          clusters: t("count", "keptClusters", { n: kept.data.clusters }),
-        })
-      : t("settings", "keptNothing")
-    : kept.error
-      ? t("settings", "keptUnread", { reason: errorToShow(kept.error) })
+  // A read that failed is said even over an earlier answer, which is no
+  // longer what is kept.
+  const size = kept.error
+    ? t("settings", "keptUnread", { reason: errorToShow(kept.error) })
+    : kept.data
+      ? kept.data.bytes > 0
+        ? t("settings", "keptSize", {
+            size: formatBytes(kept.data.bytes),
+            clusters: t("count", "keptClusters", { n: kept.data.clusters }),
+          })
+        : t("settings", "keptNothing")
       : null;
 
   return (
     <SettingsGroup title={t("settings", "keptTitle")} className="mt-6">
       <SettingRow
         label={t("settings", "keepTimeline")}
-        hint={t("settings", "keepTimelineHint")}
+        hint={
+          <>
+            {t("settings", "keepTimelineHint")}
+            {keepFailed && (
+              <span className="block text-err" data-testid="keep-failed">
+                {keepFailed}
+              </span>
+            )}
+          </>
+        }
         control={
           <Switch
             aria-label={t("settings", "keepTimeline")}

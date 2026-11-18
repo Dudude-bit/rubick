@@ -58,7 +58,11 @@ export function usageRead(
 function overBy(e: Efficiency): OverBy | null {
   if (!overRequested(e) || e.state !== "measured" || e.peak === null)
     return null;
-  return { requested: Math.round(e.requested), peak: Math.round(e.peak) };
+  return {
+    requested: Math.round(e.requested),
+    peak: Math.round(e.peak),
+    atMost: e.peakAtMost,
+  };
 }
 
 /** Not a whole day of its pods: measured over less, or none yet where when they started is known. */

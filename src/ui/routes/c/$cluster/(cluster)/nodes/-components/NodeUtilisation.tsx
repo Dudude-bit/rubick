@@ -104,7 +104,8 @@ export function NodeUtilisation({
         fromPods,
         silent,
         vendor: "vendor" in power ? power.vendor : null,
-        capable: power.state === "ready" || power.state === "unreachable",
+        // Still probing is a supplier we are waiting on, not none to connect.
+        capable: power.state !== "absent",
         unread: !nodesKnown
           ? nodesReason
             ? t("empty", "nodesDidNotList", { reason: nodesReason })

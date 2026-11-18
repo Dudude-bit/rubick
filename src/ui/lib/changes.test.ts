@@ -1541,8 +1541,30 @@ describe("which spans speak for a kind", () => {
 
   /** Fails if a kind read by name only is drawn against the followed kinds' watch, which never read it. */
   it("gives a followed kind the followed spans and every other kind the name-only ones", () => {
-    expect(spansFor({ followed, meta }, "Deployment")).toBe(followed);
+    expect(spansFor({ followed, meta }, "Deployment")).toEqual(followed);
     expect(spansFor({ followed, meta }, "Job")).toBe(meta);
     expect(spansFor(undefined, "Job")).toEqual([]);
+  });
+
+  /**
+   * Gateway API installed mid-week: the spans before it followed no route.
+   * Fails if an earlier span that did not name the kind is drawn as having
+   * watched it, which hides the gap before the kind was served.
+   */
+  it("takes only the followed spans that name the kind", () => {
+    const before = {
+      from: T0,
+      seenAt: T0 + HOUR,
+      to: T0 + HOUR,
+      kinds: ["Deployment"],
+    };
+    const after = {
+      from: T0 + HOUR,
+      seenAt: T0 + HOUR,
+      to: null,
+      kinds: ["Deployment", "HTTPRoute"],
+    };
+    const followed: ObservedSpan[] = [before, after];
+    expect(spansFor({ followed, meta }, "HTTPRoute")).toEqual([after]);
   });
 });

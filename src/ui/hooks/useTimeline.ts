@@ -16,6 +16,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { listenEvent } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
+import { builtInGroupOf } from "@/lib/links";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -79,8 +80,14 @@ export function withNewer(
   tail: Placed | null = null
 ): TimelineRow[] {
   if (arrived.length === 0) return [...held];
-  const ids = new Set(arrived.map((row) => row.id));
-  const fresh = arrived
+  // A series held in a later version than one arriving late keeps it: two
+  // readers of one key may have their answers laid in out of order.
+  const heldSeq = new Map<string, number>();
+  const wanted = new Set(arrived.map((row) => row.id));
+  for (const row of held) if (wanted.has(row.id)) heldSeq.set(row.id, row.seq);
+  const later = arrived.filter((row) => (heldSeq.get(row.id) ?? -1) < row.seq);
+  const ids = new Set(later.map((row) => row.id));
+  const fresh = later
     .filter((row) => tail === null || newer(row, tail) <= 0)
     .sort(newer);
   const out: TimelineRow[] = [];
@@ -113,7 +120,10 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
   const scope = ask.scope ?? NO_SCOPE;
   // By its fields: a page that builds the subject inline asks the same question.
   const kind = ask.subject?.kind;
-  const group = ask.subject?.group ?? null;
+  // A page that names no group is a built-in kind's: a namesake in another
+  // group is not this object, and its rows are not its history.
+  const group =
+    ask.subject?.group ?? (kind === undefined ? null : builtInGroupOf(kind));
   const namespace = ask.subject?.namespace ?? null;
   const name = ask.subject?.name ?? "";
   const subject = useMemo<TimelineSubject | null>(
@@ -145,6 +155,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     staleTime: Number.POSITIVE_INFINITY,
   });
 
+  const hasData = query.data !== undefined;
   useEffect(() => {
     if (!enabled) return;
     let reading = false;
@@ -171,6 +182,9 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           await client.invalidateQueries({ queryKey: key, exact: true });
           return;
         }
+        // Rows that left the window go: kept, a page left open for days
+        // held every row it was ever told of.
+        const from = Date.now() - ask.windowMs;
         client.setQueryData<TimelinePage>(key, (now) =>
           now
             ? {
@@ -179,7 +193,8 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
                   now.rows,
                   page.rows,
                   now.more ? (now.rows.at(-1) ?? null) : null
-                ),
+                ).filter((row) => row.at >= from),
+                newest: Math.max(now.newest, page.newest),
                 more: now.more,
               }
             : now
@@ -197,8 +212,14 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     const off = listenEvent("timeline-changed", ({ payload }) => {
       if (payload.context === context) void catchUp();
     });
+    // Rows held from before this surface listened, kept by the cache while
+    // it was closed or read before a news it missed, are caught up once
+    // the listener is in place.
+    void off.then(() => {
+      if (hasData) void catchUp();
+    });
     return () => void off.then((unlisten) => unlisten());
-  }, [enabled, client, key, question, context]);
+  }, [enabled, client, key, question, context, hasData, ask.windowMs]);
 
   const data = query.data;
   const loadOlder = useCallback(() => {
@@ -212,11 +233,14 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           void client.resetQueries({ queryKey: key, exact: true });
           return;
         }
-        client.setQueryData<TimelinePage>(key, (now) =>
-          now && now.rows.at(-1)?.seq === last.seq
-            ? { ...now, rows: [...now.rows, ...page.rows], more: page.more }
-            : now
-        );
+        client.setQueryData<TimelinePage>(key, (now) => {
+          if (!now || now.rows.at(-1)?.seq !== last.seq) return now;
+          // A series a catch-up moved up while this page was read is held
+          // already, in its later place.
+          const held = new Set(now.rows.map((row) => row.id));
+          const older = page.rows.filter((row) => !held.has(row.id));
+          return { ...now, rows: [...now.rows, ...older], more: page.more };
+        });
       })
       .catch(() => {});
   }, [client, key, question]);

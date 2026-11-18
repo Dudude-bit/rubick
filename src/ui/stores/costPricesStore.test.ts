@@ -1,7 +1,10 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vite-plus/test";
 
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
-import { pricesOf, useCostPricesStore } from "./costPricesStore";
+import { renderHook } from "@testing-library/react";
+
+import { pricesOf, useCostPrices, useCostPricesStore } from "./costPricesStore";
 
 const prices = {
   cpu: 0.04,
@@ -28,5 +31,33 @@ describe("entered prices", () => {
     useCostPricesStore.getState().setPrices("dev", prices);
     nameIsAnotherCluster("prod");
     expect(useCostPricesStore.getState().prices).toEqual({ dev: prices });
+  });
+
+  /**
+   * `migrate` runs only where the stored version differs, so a stored
+   * entry of this version came back unchecked: a negative CPU price stood
+   * in the dialog and the estimate. Fails if a restore of the same version
+   * trusts what it reads.
+   */
+  it("checks every entry when it restores, at its own version too", async () => {
+    localStorage.setItem(
+      "cost-prices",
+      JSON.stringify({
+        state: { prices: { prod: { ...prices, cpu: -1 }, dev: prices } },
+        version: 1,
+      })
+    );
+    await useCostPricesStore.persist.rehydrate();
+    expect(useCostPricesStore.getState().prices).toEqual({ dev: prices });
+  });
+
+  /**
+   * A context name is the reader's to choose, and `constructor` read an
+   * inherited function as its prices. Fails if a name finds a property.
+   */
+  it("has no prices for a context nobody priced, whatever its name", () => {
+    useCostPricesStore.setState({ prices: {} });
+    const { result } = renderHook(() => useCostPrices("constructor"));
+    expect(result.current).toBeNull();
   });
 });

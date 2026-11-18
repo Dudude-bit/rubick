@@ -2113,6 +2113,8 @@ export const en = {
     wRequestedTodayNone: "no request in the last day",
     wOverRequested:
       "{resource} peaked at {peak} of the {requested} it requests, over the last day",
+    wOverRequestedAtMost:
+      "{resource} peaked at no more than {peak} of the {requested} it requests, over the last day",
     wCpu: "CPU",
     wMemory: "Memory",
     pssHostProcess: "Runs as a Windows HostProcess",
@@ -2362,6 +2364,8 @@ export const en = {
     letGoNormal:
       "Older Normal events were let go to stay under the limit; kept from {at}",
     letGoCleared: "Rows before {at} were cleared in Settings",
+    keptNowhere:
+      "Kept for this session only: this machine has no data folder to keep it in.",
     keptSessionOnly:
       "Kept for this session only: keeping between restarts is off in Settings.",
     keptFailed:
@@ -2376,6 +2380,7 @@ export const en = {
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",
     readingKept: "Reading what was kept…",
+    olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
     identityUnknown:
       "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
@@ -2475,6 +2480,9 @@ export const en = {
     railAbsent: "no series",
     railUnpaired: "series without source or destination",
     railFailed: "could not look: {said}",
+    railConnecting: "connecting",
+    railOff: "not enabled",
+    railStopped: "stopped",
     measureFailed: "Its {measure} could not be read: {said}",
     coverage: "In {source}'s mesh, {of} here: {parts}.",
     coverageWhole: "{n} with every pod",
@@ -2581,6 +2589,7 @@ export const en = {
     unclaimed: "Volumes nobody claims",
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
+    atMost: "at most {value}",
     notKnown: "Not known",
     notPriced: "not priced",
     notMeasured: "not measured",
@@ -2670,6 +2679,10 @@ export const en = {
       "OpenCost found no price list for them. Give OpenCost custom pricing for them.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
+    lastFailed:
+      "The latest read from Prometheus at {endpoint} failed ({said}); these figures are from the one before it.",
+    lineLastFailed:
+      "{line}. The latest read failed ({said}); this is the one before it.",
     estimateMeanwhile:
       "The numbers below are an estimate from the prices entered for this cluster.",
     basisQuestion: "What does this cluster hold that costs money?",
@@ -2687,6 +2700,8 @@ export const en = {
       other:
         "Prometheus at {endpoint} also prices {n} nodes this cluster does not list: {names}. They are left out of the totals; the figures by namespace and for storage may still hold another cluster's.",
     },
+    jobsUnread:
+      "The Jobs could not be listed ({said}): a CronJob's runs are each shown as their Job, not under the CronJob.",
     heldUnread:
       "What each node holds could not be counted ({said}), so idle is not known.",
     gpusUnpriced: "GPUs on {names} have no price entered.",
@@ -2701,8 +2716,6 @@ export const en = {
       one: "{n} volume has a price and no size: {names}.",
       other: "{n} volumes have a price and no size: {names}.",
     },
-    nodesNotChecked:
-      "Whether every node carries a price was not checked: the nodes could not be listed ({said}).",
     nodesUnread:
       "There is no cluster total: the nodes could not be listed ({said}).",
     missingLabels:
@@ -2753,6 +2766,9 @@ export const en = {
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
+    lineFailed: "Could not read what this costs: {said}",
+    lineJobsUnread:
+      "Not known: the Jobs that run it could not be listed ({said}).",
   },
   hints: {
     mostLikely: "Most likely",
@@ -5969,6 +5985,7 @@ export const en = {
     keptNothing: "Nothing kept yet.",
     keptOff:
       "Off: nothing more is written; what is kept stays until you clear it.",
+    keepNotChanged: "Keeping was not changed: {reason}",
     keptUnread: "Could not read what is kept: {reason}",
     clearTimeline: "Clear the timeline",
     clearTimelineConfirm:

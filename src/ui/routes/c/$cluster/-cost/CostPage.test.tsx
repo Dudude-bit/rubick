@@ -21,6 +21,10 @@ import type { UsageReading } from "@/lib/efficiency";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { vendorLink } from "@/lib/links";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import userEvent from "@testing-library/user-event";
 
 const cost = vi.fn<() => CostState>();
@@ -53,6 +57,7 @@ const BASIS: CostBasis = {
   nodes: [node("node-a"), node("worker-7")],
   nodesUnread: null,
   heldUnread: null,
+  jobsUnread: null,
   namespaces: [
     {
       namespace: "shop",
@@ -84,7 +89,7 @@ const BASIS: CostBasis = {
   unread: [],
   volumeBytes: 0,
   volumeCount: 0,
-  unclaimed: [],
+  unclaimed: { count: 0, bytes: 0 },
   volumesUnread: null,
   claimsUnread: [],
   servedFrom: "watch",
@@ -102,6 +107,7 @@ const READING: CostReading = {
     unplaced: [],
     unread: [],
     unlabelled: 0,
+    covered: [],
     since: [null],
   },
   storage: {
@@ -448,6 +454,7 @@ describe("the Cost page", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [started],
       },
     });
@@ -547,6 +554,7 @@ describe("a workload minutes old", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
+        covered: [],
         since: [started],
       },
     });
@@ -637,6 +645,121 @@ describe("the breakdown by workload's names", () => {
     ])
       expect(screen.getByRole("link", { name })).toBeInTheDocument();
     expect(screen.queryAllByTestId("resource-ref-label")).toEqual([]);
+  });
+});
+
+describe("the latest read failed after one that answered", () => {
+  /**
+   * The page kept the last figures with nothing saying they were not the
+   * latest. The page says the latest read failed and that these are the
+   * figures before it, without calling them an estimate, and a workload's
+   * own line says it in amber. Fails if kept figures read as current.
+   */
+  it("says so on the page and on a workload's line", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: {
+        kind: "lastFailed",
+        vendor: "Prometheus",
+        endpoint: "prom.example.com",
+        said: "query timed out",
+      },
+    });
+    await open();
+    const trouble = screen.getByTestId("cost-trouble");
+    expect(trouble).toHaveTextContent(
+      "The latest read from Prometheus at prom.example.com failed (query timed out); these figures are from the one before it."
+    );
+    expect(trouble).not.toHaveTextContent(/estimate/);
+
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent(
+      "The latest read failed (query timed out); this is the one before it."
+    );
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
+describe("a namespace's line where a part of it has no price", () => {
+  /**
+   * `shop` holds volumes and no storage price is entered: its amount leaves
+   * them out, so its line says "at least" as its row on the Cost page does.
+   * Fails if the line prints a floor as the whole of it.
+   */
+  it("says at least, as the Cost page's row does", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: estimatePicture(
+        {
+          ...BASIS,
+          namespaces: [{ ...BASIS.namespaces[0]!, storageBytes: 10 * GIB }],
+        },
+        { cpu: 0.04, memory: 0.005, storage: null, gpu: null, currency: "" },
+        ["shop"]
+      ),
+      trouble: null,
+    });
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
+      /^Costat least .+ per hour · at least .+ per month projected/
+    );
+  });
+});
+
+describe("the summary Share writes for one namespace", () => {
+  /**
+   * The tiles of a namespace's page leave out what only the cluster pays
+   * (volumes nobody claims, the management fee) and call idle the
+   * cluster's; the shared summary listed both as the namespace's and said
+   * "Idle". Fails if the file says what the page does not.
+   */
+  it("says what the tiles say, and none of the cluster's own charges", async () => {
+    const shop = readingPicture(
+      BASIS,
+      {
+        ...READING,
+        storage: { ...READING.storage, total: 0.5, unclaimed: 0.3 },
+        fee: 0.1,
+      },
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      ["shop"]
+    );
+    cost.mockReturnValue({ state: "picture", picture: shop, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <CostPage />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/cost", route: "/c/$cluster/cost" }
+    );
+    const summary = collect!().find((s) => s.id === "cost-summary")!;
+    const labels =
+      summary.body.type === "facts"
+        ? summary.body.rows.map((r) => r.label)
+        : [];
+    expect(labels).toContain("Idle in the cluster");
+    expect(labels).not.toContain("Idle");
+    expect(labels).not.toContain("Volumes nobody claims");
+    expect(labels).not.toContain("Cluster management fee");
   });
 });
 

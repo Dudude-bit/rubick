@@ -1235,18 +1235,18 @@ export interface CostBasis {
   rest: RestBasis | null;
   waiting: number;
   unread: UnreadNamespace[];
+  jobsUnread: ReadFailure | null;
   volumeBytes: number | null;
   volumeCount: number | null;
-  unclaimed: UnclaimedVolume[] | null;
+  unclaimed: UnclaimedVolumes | null;
   volumesUnread: ReadFailure | null;
   claimsUnread: UnreadNamespace[];
   servedFrom: OverviewSource;
 }
 
-export interface UnclaimedVolume {
-  name: string;
+export interface UnclaimedVolumes {
+  count: number;
   bytes: number;
-  phase: string | null;
 }
 
 export interface RestBasis {
@@ -2121,6 +2121,7 @@ export interface WorkloadUse {
 export interface OverBy {
   requested: number;
   peak: number;
+  atMost: boolean;
 }
 
 export interface UnreadPods {
@@ -2882,6 +2883,7 @@ export interface WorkloadFold {
   unplaced: Unplaced[];
   unread: UnreadSums[];
   unlabelled: number;
+  covered: number[][];
   since: (string | null)[];
 }
 
@@ -3976,6 +3978,7 @@ export type Identity =
 export type Keeping =
   | { says: "kept" }
   | { says: "off" }
+  | { says: "nowhere" }
   | { says: "failed"; message: string };
 
 export type RowSays =
@@ -4123,6 +4126,7 @@ export type What =
       resource: string;
       requested: number;
       peak: number;
+      at_most: boolean;
     };
 
 export type TrafficBy =

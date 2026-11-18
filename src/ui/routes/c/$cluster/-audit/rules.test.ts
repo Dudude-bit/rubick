@@ -163,12 +163,19 @@ const EVERY_WHAT: What[] = [
   { says: "requestedToday", requests: 14 },
   { says: "requestedToday", requests: 1 },
   { says: "requestedToday", requests: 0 },
-  { says: "overRequested", resource: "cpu", requested: 2000, peak: 300 },
+  {
+    says: "overRequested",
+    resource: "cpu",
+    requested: 2000,
+    peak: 300,
+    at_most: false,
+  },
   {
     says: "overRequested",
     resource: "memory",
     requested: 4294967296,
     peak: 536870912,
+    at_most: false,
   },
 ];
 
@@ -247,6 +254,29 @@ describe("the words Audit draws its rules and findings with", () => {
     );
     expect(whatWords(unserved, t)).toBe(
       "Certificate web is stored as cert-manager.io/v1alpha2, which this cluster does not serve"
+    );
+  });
+
+  /**
+   * A workload's peak is read per pod and summed: for several pods it is a
+   * bound, and the finding says "no more than" rather than a peak it never
+   * measured. Fails if a bound reads as the peak.
+   */
+  it("says a summed peak as a bound", () => {
+    const t = tIn("en");
+    expect(
+      whatWords(
+        {
+          says: "overRequested",
+          resource: "cpu",
+          requested: 2000,
+          peak: 300,
+          at_most: true,
+        },
+        t
+      )
+    ).toBe(
+      "CPU peaked at no more than 300m of the 2.0 it requests, over the last day"
     );
   });
 

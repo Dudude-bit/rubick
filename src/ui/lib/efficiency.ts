@@ -69,6 +69,11 @@ export type Efficiency =
       /** Average used ÷ requested; `null` where only the peak was read. */
       ratio: number | null;
       peakRatio: number | null;
+      /**
+       * Each pod's own peak, summed: the workload's was no higher, and may
+       * have been lower where they peaked apart.
+       */
+      peakAtMost: boolean;
     } & Span);
 
 /**
@@ -93,7 +98,8 @@ export function efficiencyOf(
   avg: number | null,
   peak: number | null,
   since: string | null,
-  now: number = Date.now()
+  now: number = Date.now(),
+  peakAtMost = false
 ): Efficiency {
   const started = since === null ? NaN : Date.parse(since);
   const span = { since, whole: now - started >= WINDOW_MS };
@@ -106,6 +112,7 @@ export function efficiencyOf(
     peak,
     ratio: avg === null ? null : avg / requested,
     peakRatio: peak === null ? null : peak / requested,
+    peakAtMost,
     ...span,
   };
 }
@@ -137,6 +144,14 @@ export function workloadEfficiency(
   now: number = Date.now()
 ): WorkloadEfficiency {
   if (reading.state !== "read") return { cpu: reading, memory: reading };
+  // Its namespace's pods were refused to the read: no sample is not "none".
+  const refused = reading.fold.unread.find(
+    (u) => u.namespace === key.namespace
+  );
+  if (refused) {
+    const failed: Efficiency = { state: "failed", said: refused.message };
+    return { cpu: failed, memory: failed };
+  }
   const at = positionOf(reading.keys, key);
   const values = at === -1 ? undefined : reading.fold.values[at];
   if (!values) {
@@ -145,20 +160,25 @@ export function workloadEfficiency(
   }
   const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = values;
   const since = reading.fold.since[at] ?? null;
+  // A peak is read per pod: summed over more than one it is a bound.
+  const summed = (query: number) =>
+    (reading.fold.covered[at]?.[query] ?? 0) > 1;
   return {
     cpu: efficiencyOf(
       requests.cpu,
       cpuAvg ?? null,
       cpuPeak ?? null,
       since,
-      now
+      now,
+      summed(USAGE_QUERIES.indexOf("cpuPeak"))
     ),
     memory: efficiencyOf(
       requests.memory,
       memoryAvg ?? null,
       memoryPeak ?? null,
       since,
-      now
+      now,
+      summed(USAGE_QUERIES.indexOf("memoryPeak"))
     ),
   };
 }

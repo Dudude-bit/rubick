@@ -72,6 +72,10 @@ These were in 5.0 too.
   Gateway names a class no controller has accepted, which the Routes page
   did.
 
+- A route attached through a ListenerSet whose Gateway is missing was told
+  "Gateway <the set's name> does not exist"; it now names the set as found
+  and its Gateway as the one missing.
+
 - Changes dropped rows past its limit without saying so.
 
 ## [5.0.0] - 2026-11-12

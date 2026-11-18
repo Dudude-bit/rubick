@@ -2197,6 +2197,8 @@ export const ru: Catalogue = {
     wRequestedTodayNone: "за последние сутки запросов не было",
     wOverRequested:
       "{resource}: пик {peak} при запросе {requested}, за последние сутки",
+    wOverRequestedAtMost:
+      "{resource}: пик не больше {peak} при запросе {requested}, за последние сутки",
     wCpu: "CPU",
     wMemory: "Память",
     pssHostProcess: "Запускается как HostProcess Windows",
@@ -2486,6 +2488,8 @@ export const ru: Catalogue = {
     letGoNormal:
       "Более старые события Normal удалены, чтобы не превысить лимит; хранятся с {at}",
     letGoCleared: "Записи до {at} удалены в настройках",
+    keptNowhere:
+      "Хранится только до закрытия приложения: на этом компьютере нет папки для данных.",
     keptSessionOnly:
       "Хранится только до закрытия приложения: сохранение между запусками выключено в настройках.",
     keptFailed:
@@ -2503,6 +2507,7 @@ export const ru: Catalogue = {
     noWarningsInWindow: "За это время предупреждений не записано.",
     openTimeline: "Его изменения с этого момента",
     readingKept: "Читаем сохранённое…",
+    olderNotRead: "Изменения до {at} для этого файла не прочитаны.",
     readFailed: "Не удалось прочитать историю изменений: {reason}",
     identityUnknown:
       "Записи, сохранённые до этого запуска, могут быть от другого кластера с тем же именем: проверить, какой это кластер, не удалось ({reason}).",
@@ -2608,6 +2613,9 @@ export const ru: Catalogue = {
     railAbsent: "рядов нет",
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
+    railConnecting: "подключаемся",
+    railOff: "не включён",
+    railStopped: "остановлен",
     measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
     coverage: "В меше {source} {of} здесь: {parts}.",
     coverageWhole: "{n} всеми подами",
@@ -2714,6 +2722,7 @@ export const ru: Catalogue = {
     unclaimed: "Тома, которые никто не занял",
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
+    atMost: "не больше {value}",
     notKnown: "Неизвестно",
     notPriced: "без цены",
     notMeasured: "не измерено",
@@ -2807,6 +2816,10 @@ export const ru: Catalogue = {
     unreachable: "Prometheus по адресу {endpoint} не ответил: {said}",
     failed:
       "Не удалось прочитать стоимость из Prometheus по адресу {endpoint}: {said}",
+    lastFailed:
+      "Последнее чтение из Prometheus по адресу {endpoint} не удалось ({said}); цифры взяты из предыдущего.",
+    lineLastFailed:
+      "{line}. Последнее чтение не удалось ({said}); это цифры предыдущего.",
     estimateMeanwhile:
       "Цифры ниже оценены по ценам, введённым для этого кластера.",
     basisQuestion: "Что в этом кластере стоит денег?",
@@ -2830,6 +2843,8 @@ export const ru: Catalogue = {
       other:
         "Prometheus по адресу {endpoint} оценивает ещё {n} узла, которых этот кластер не перечисляет: {names}. В итоги они не входят, но цифры по пространствам имён и хранилищу могут включать чужой кластер.",
     },
+    jobsUnread:
+      "Не удалось получить список Job ({said}): запуски CronJob показаны каждый как свой Job, а не под CronJob.",
     heldUnread:
       "Не удалось сосчитать, что занято на каждом узле ({said}), поэтому неизвестно, сколько простаивает.",
     gpusUnpriced: "У GPU на {names} нет введённой цены.",
@@ -2848,8 +2863,6 @@ export const ru: Catalogue = {
       many: "У {n} томов есть цена, но нет размера: {names}.",
       other: "У {n} тома есть цена, но нет размера: {names}.",
     },
-    nodesNotChecked:
-      "Есть ли цена у каждого узла, не проверено: список узлов не прочитан ({said}).",
     nodesUnread: "Итога по кластеру нет: список узлов не прочитан ({said}).",
     missingLabels:
       "У части рядов OpenCost нет меток, по которым страница их связывает: {labels}.",
@@ -2903,6 +2916,9 @@ export const ru: Catalogue = {
     lineNoSeries: "В этом Prometheus нет рядов OpenCost; подробнее на {page}.",
     lineCostPage: "странице «Стоимость»",
     lineUnread: "Не удалось прочитать, сколько это стоит.",
+    lineFailed: "Не удалось прочитать, сколько это стоит: {said}",
+    lineJobsUnread:
+      "Неизвестно: не удалось получить список Job, которые её запускают ({said}).",
   },
   hints: {
     mostLikely: "Скорее всего",
@@ -6649,6 +6665,7 @@ export const ru: Catalogue = {
     keptNothing: "Пока ничего не сохранено.",
     keptOff:
       "Выключено: больше ничего не записывается; сохранённое остаётся, пока вы его не очистите.",
+    keepNotChanged: "Сохранение не переключилось: {reason}",
     keptUnread: "Не удалось прочитать, что сохранено: {reason}",
     clearTimeline: "Очистить историю изменений",
     clearTimelineConfirm:

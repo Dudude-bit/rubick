@@ -9,14 +9,14 @@
 
 #![allow(clippy::needless_pass_by_value)]
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use futures::future::join_all;
 use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use super::{configured, get_json, parse_result, unreachable, PromSeries};
+use super::{configured_in, get_json, parse_result, unreachable, PromSeries};
 use crate::commands::cost::{cost_key, scoped_pods, ReadFailure, ScopedPods, WorkloadKey};
 use crate::commands::helpers::{scope_of, UnreadNamespace};
 use crate::error::{Error, Result};
@@ -284,7 +284,9 @@ async fn flows(
     if let Some(subject) = &subject {
         crate::validation::validate_namespace(&subject.namespace)?;
     }
-    let entry = configured(state)?;
+    // One read of which cluster this is, for the series and the pods alike.
+    let here = state.here()?;
+    let entry = configured_in(state, &here.context)?;
     let answers = join_all(queries.iter().map(|asked| {
         let entry = entry.clone();
         let query = asked.query.clone();
@@ -297,7 +299,7 @@ async fn flows(
     }))
     .await;
     let reach = namespaces_to_read(&queries, &answers, scope.as_deref(), subject.as_ref());
-    let (read, failed) = match scoped_pods(state, reach.as_deref()).await {
+    let (read, failed) = match scoped_pods(state, &here, reach.as_deref()).await {
         Ok(read) => (Some(read), None),
         Err(error @ Error::CredentialsExpired(_)) => return Err(error),
         Err(error) => (
@@ -604,6 +606,7 @@ pub(crate) fn fold(
     };
 
     let mut reads = Vec::with_capacity(asked.len());
+    let mut valueless: HashSet<(u8, usize, FlowEnd, FlowEnd)> = HashSet::new();
     let mut joined: BTreeMap<(u8, FlowEnd, FlowEnd), Joined> = BTreeMap::new();
     for (query, answer) in asked.iter().zip(answers.iter()) {
         let series = match answer {
@@ -632,9 +635,7 @@ pub(crate) fn fold(
             },
         });
         for one in series {
-            let Some(value) = one.points.last().and_then(|p| p.v) else {
-                continue;
-            };
+            let value = one.points.last().and_then(|p| p.v);
             let from = pods.end(one, &query.from);
             let to = pods.end(one, &query.to);
             if !(in_scope(&from) || in_scope(&to)) {
@@ -643,6 +644,12 @@ pub(crate) fn fold(
             if subject.is_some() && !(is_subject(&from) || is_subject(&to)) {
                 continue;
             }
+            // A series with no number (NaN) answered for its pair: unknown,
+            // not the zero a pair with no series of a counted subset is.
+            let Some(value) = value else {
+                valueless.insert((query.source, query.measure.at(), from, to));
+                continue;
+            };
             let pair = joined.entry((query.source, from, to)).or_default();
             if let Some(reason) = value_of(one, query.reason.as_ref()) {
                 *pair.reasons.entry(reason.to_string()).or_default() += value;
@@ -666,9 +673,13 @@ pub(crate) fn fold(
         if !query.zero_when_absent || answer.is_err() {
             continue;
         }
-        for ((source, _, _), pair) in &mut joined {
-            let slot = &mut pair.values[query.measure.at()];
-            if *source == query.source && slot.is_none() {
+        let at = query.measure.at();
+        for ((source, from, to), pair) in &mut joined {
+            let slot = &mut pair.values[at];
+            if *source == query.source
+                && slot.is_none()
+                && !valueless.contains(&(*source, at, from.clone(), to.clone()))
+            {
                 *slot = Some(0.0);
             }
         }
@@ -731,26 +742,29 @@ pub(crate) fn fold(
         .collect();
 
     let in_scope_pod = |key: &WorkloadKey| scope.is_none_or(|s| s.contains(&key.namespace));
-    let observed = subject.filter(|_| pods.read).map(|subject| {
-        markers
-            .iter()
-            .map(|marker| {
-                let mine: Vec<_> = pods
-                    .listed
-                    .iter()
-                    .filter(|(_, key)| key == subject)
-                    .collect();
-                Observed {
-                    source: marker.source,
-                    pods: u32::try_from(mine.len()).unwrap_or(u32::MAX),
-                    marked: u32::try_from(
-                        mine.iter().filter(|(pod, _)| marks(pod, marker)).count(),
-                    )
-                    .unwrap_or(u32::MAX),
-                }
-            })
-            .collect()
-    });
+    // A subject whose namespace's pods were refused has no count to give.
+    let observed = subject
+        .filter(|subject| pods.read && !pods.unread.contains(subject.namespace.as_str()))
+        .map(|subject| {
+            markers
+                .iter()
+                .map(|marker| {
+                    let mine: Vec<_> = pods
+                        .listed
+                        .iter()
+                        .filter(|(_, key)| key == subject)
+                        .collect();
+                    Observed {
+                        source: marker.source,
+                        pods: u32::try_from(mine.len()).unwrap_or(u32::MAX),
+                        marked: u32::try_from(
+                            mine.iter().filter(|(pod, _)| marks(pod, marker)).count(),
+                        )
+                        .unwrap_or(u32::MAX),
+                    }
+                })
+                .collect()
+        });
     let coverage = if pods.read {
         markers
             .iter()
@@ -1078,6 +1092,81 @@ mod tests {
             kind: None,
             why: NotListedWhy::NoSuch,
         }));
+    }
+
+    /// A subject whose namespace's pods were refused is observed on nothing
+    /// known, while another namespace's subject still has its count.
+    #[test]
+    fn a_subject_whose_namespace_was_not_read_has_no_count_of_its_pods() {
+        let mut read = read_of(vec![pod(
+            "bank",
+            "c-0",
+            Some(("StatefulSet", "c")),
+            json!({}),
+        )]);
+        read.unread.push(UnreadNamespace::of(
+            "shop".into(),
+            &Error::PermissionDenied("pods is forbidden".into()),
+        ));
+        let marker = PodMarker {
+            source: 0,
+            containers: vec!["istio-proxy".into()],
+            annotated: vec![],
+        };
+        let observed = |subject: WorkloadKey| {
+            fold(
+                &[by_name(0, Measure::Requests)],
+                vec![Ok(vec![])],
+                Some(&read),
+                None,
+                None,
+                Some(&subject),
+                std::slice::from_ref(&marker),
+            )
+            .observed
+        };
+        assert_eq!(observed(key("StatefulSet", "a")), None);
+        let bank = WorkloadKey {
+            namespace: "bank".into(),
+            ..key("StatefulSet", "c")
+        };
+        assert_eq!(
+            observed(bank),
+            Some(vec![Observed {
+                source: 0,
+                pods: 1,
+                marked: 0
+            }])
+        );
+    }
+
+    /// A pair whose errors came back with no number is unknown; one with no
+    /// series of them is at zero, as a counted subset with none in it is.
+    #[test]
+    fn a_number_less_series_leaves_its_pair_unknown_where_a_missing_one_is_zero() {
+        let read = read_of(vec![]);
+        let nan = series(
+            &[("sns", "shop"), ("sw", "a"), ("dns", "shop"), ("dw", "b")],
+            None,
+        );
+        let answer = fold_one(
+            &[by_name(0, Measure::Requests), by_name(0, Measure::Errors)],
+            vec![
+                Ok(vec![pair("a", "b", 4.0), pair("a", "c", 2.0)]),
+                Ok(vec![nan]),
+            ],
+            &read,
+        );
+        let errors = |to: &str| {
+            answer
+                .flows
+                .iter()
+                .find(|f| matches!(end_of(&answer, f.to), FlowEnd::NotListed { name, .. } if name == to))
+                .expect("a flow")
+                .values[Measure::Errors.at()]
+        };
+        assert_eq!(errors("b"), None);
+        assert_eq!(errors("c"), Some(0.0));
     }
 
     /// Where the namespace's pods could not be read, a bare name is not

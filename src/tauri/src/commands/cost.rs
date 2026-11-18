@@ -125,13 +125,11 @@ pub struct NodeBasis {
     pub gpus_requested: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UnclaimedVolume {
-    pub name: String,
+pub struct UnclaimedVolumes {
+    pub count: u32,
     pub bytes: f64,
-    /// `Available`, `Released` or `Failed`, as the cluster writes it.
-    pub phase: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,11 +153,16 @@ pub struct CostBasis {
     pub waiting: u32,
     /// Namespaces whose pods could not be read.
     pub unread: Vec<UnreadNamespace>,
+    /// Why the Jobs could not be listed where the pods were: a `CronJob`'s
+    /// runs are then each under its Job, whose maker is not known.
+    pub jobs_unread: Option<ReadFailure>,
     /// Every volume in the cluster, claimed or not; `None` where volumes
     /// could not be listed.
     pub volume_bytes: Option<f64>,
     pub volume_count: Option<u32>,
-    pub unclaimed: Option<Vec<UnclaimedVolume>>,
+    /// Volumes bound to no claim, counted and summed: their names were
+    /// never shown, and twenty thousand of them were a megabyte of IPC.
+    pub unclaimed: Option<UnclaimedVolumes>,
     pub volumes_unread: Option<ReadFailure>,
     /// Namespaces whose claims could not be read, where volumes were not.
     pub claims_unread: Vec<UnreadNamespace>,
@@ -188,9 +191,11 @@ async fn basis(
     held_on_nodes: bool,
 ) -> Result<CostBasis> {
     let scope = scope_of(scope)?;
-    let client = (*state.here()?.client).clone();
+    // One read of which cluster this is: pods, nodes and volumes all of it.
+    let here = state.here()?;
+    let client = (*here.client).clone();
     let (read, volumes) = tokio::join!(
-        scoped_pods(state, scope.as_deref()),
+        scoped_pods(state, &here, scope.as_deref()),
         volumes_in(&client, scope.as_deref())
     );
     let read = read?;
@@ -207,6 +212,9 @@ pub(crate) struct ScopedPods {
     /// `(namespace, Job)` to the `CronJob` that made it.
     pub cron_of: HashMap<(String, String), String>,
     pub unread: Vec<UnreadNamespace>,
+    /// Why the Jobs could not be listed where the pods were: whose runs
+    /// those pods are is then not known.
+    pub jobs_unread: Option<ReadFailure>,
     pub served_from: OverviewSource,
     /// Nodes and every pod of the cluster, where the stores served.
     pub(crate) stored: Option<Stored>,
@@ -255,9 +263,14 @@ fn cron_of(jobs: &[Arc<Job>]) -> HashMap<(String, String), String> {
 }
 
 /// From the overview's stores while they serve (holding them, never
-/// starting a second set), by listing each reach otherwise.
-pub(crate) async fn scoped_pods(state: &AppState, scope: Option<&[String]>) -> Result<ScopedPods> {
-    let here = state.here()?;
+/// starting a second set), by listing each reach otherwise. Of the cluster
+/// `here` names, read once by the caller with whatever else it reads of it:
+/// a second `state.here()` could land after a switch of cluster.
+pub(crate) async fn scoped_pods(
+    state: &AppState,
+    here: &crate::state::Here<'_>,
+    scope: Option<&[String]>,
+) -> Result<ScopedPods> {
     scoped_pods_on(
         &state.overview_cache,
         (*here.client).clone(),
@@ -281,6 +294,7 @@ pub(crate) async fn scoped_pods_on(
             pods,
             cron_of: cron_of(&jobs),
             unread: Vec::new(),
+            jobs_unread: None,
             served_from: OverviewSource::Watch,
             stored: Some((snapshot.nodes, snapshot.pods)),
             kept: Some(snapshot.claims),
@@ -296,14 +310,29 @@ pub(crate) async fn scoped_pods_on(
             let (pods, jobs) = tokio::join!(pods.list(&params), jobs.list(&params));
             (
                 pods.map(|l| l.items).map_err(Error::from),
-                jobs.map(|l| l.items).ok(),
+                jobs.map(|l| l.items).map_err(Error::from),
             )
         }
     }))
     .await;
+    gathered(&reaches, lists, scope.is_none())
+}
+
+/// One reach's pods and Jobs, each as it answered.
+type Listed = (Result<Vec<Pod>>, Result<Vec<Job>>);
+
+/// Each reach's pods and Jobs, put together. A refused Job list is said,
+/// not dropped: without it a `CronJob`'s runs fall under each Job, and the
+/// answer could not tell that from a Job nothing made.
+fn gathered(
+    reaches: &[Option<&str>],
+    lists: Vec<Listed>,
+    whole_cluster: bool,
+) -> Result<ScopedPods> {
     let mut pods = Vec::new();
     let mut jobs = Vec::new();
     let mut unread = Vec::new();
+    let mut jobs_unread = None;
     let mut first = None;
     for (reach, (listed, listed_jobs)) in reaches.iter().zip(lists) {
         match listed {
@@ -314,13 +343,18 @@ pub(crate) async fn scoped_pods_on(
                     unread.push(UnreadNamespace::of((*namespace).to_string(), &error));
                 }
                 first.get_or_insert(error);
+                continue;
             }
         }
-        // ponytail: a refused Job list leaves its CronJobs' pods under their Job.
-        jobs.extend(listed_jobs.into_iter().flatten().map(Arc::new));
+        match listed_jobs {
+            Ok(items) => jobs.extend(items.into_iter().map(Arc::new)),
+            Err(error) => {
+                jobs_unread.get_or_insert(ReadFailure::of(&error));
+            }
+        }
     }
     if let Some(error) = first {
-        if unread.len() == reaches.len() || scope.is_none() {
+        if unread.len() == reaches.len() || whole_cluster {
             return Err(error);
         }
     }
@@ -328,6 +362,7 @@ pub(crate) async fn scoped_pods_on(
         pods,
         cron_of: cron_of(&jobs),
         unread,
+        jobs_unread,
         served_from: OverviewSource::List,
         stored: None,
         kept: None,
@@ -461,7 +496,7 @@ struct Volumes {
     claims_known: bool,
     total: Option<f64>,
     count: Option<u32>,
-    unclaimed: Option<Vec<UnclaimedVolume>>,
+    unclaimed: Option<UnclaimedVolumes>,
     unread: Option<ReadFailure>,
 }
 
@@ -485,7 +520,7 @@ fn volumes_from_pvs(pvs: &[PersistentVolume]) -> Volumes {
         claims_known: true,
         total: Some(0.0),
         count: Some(0),
-        unclaimed: Some(Vec::new()),
+        unclaimed: Some(UnclaimedVolumes::default()),
         ..Volumes::default()
     };
     for pv in pvs {
@@ -500,22 +535,15 @@ fn volumes_from_pvs(pvs: &[PersistentVolume]) -> Volumes {
         *volumes.count.as_mut().expect("set above") += 1;
         let phase = pv.status.as_ref().and_then(|s| s.phase.clone());
         let claim = pv.spec.as_ref().and_then(|s| s.claim_ref.as_ref());
-        match (phase.as_deref(), claim) {
-            (Some("Bound"), Some(claim)) => {
-                let namespace = claim.namespace.clone().unwrap_or_default();
-                let name = claim.name.clone().unwrap_or_default();
-                *volumes.by_namespace.entry(namespace.clone()).or_default() += bytes;
-                volumes.claims.insert((namespace, name), bytes);
-            }
-            _ => volumes
-                .unclaimed
-                .as_mut()
-                .expect("set above")
-                .push(UnclaimedVolume {
-                    name: pv.metadata.name.clone().unwrap_or_default(),
-                    bytes,
-                    phase,
-                }),
+        if let (Some("Bound"), Some(claim)) = (phase.as_deref(), claim) {
+            let namespace = claim.namespace.clone().unwrap_or_default();
+            let name = claim.name.clone().unwrap_or_default();
+            *volumes.by_namespace.entry(namespace.clone()).or_default() += bytes;
+            volumes.claims.insert((namespace, name), bytes);
+        } else {
+            let unclaimed = volumes.unclaimed.as_mut().expect("set above");
+            unclaimed.count += 1;
+            unclaimed.bytes += bytes;
         }
     }
     volumes
@@ -771,6 +799,7 @@ fn assemble(
         rest,
         waiting,
         unread: read.unread.clone(),
+        jobs_unread: read.jobs_unread.clone(),
         volume_bytes: volumes.total,
         volume_count: volumes.count,
         unclaimed: volumes.unclaimed.clone(),
@@ -844,6 +873,7 @@ pub(crate) mod tests {
             pods,
             cron_of: HashMap::new(),
             unread: Vec::new(),
+            jobs_unread: None,
             served_from: OverviewSource::Watch,
             stored: None,
             kept: None,
@@ -1229,15 +1259,85 @@ pub(crate) mod tests {
             rest: Some(RestBasis::default()),
             waiting: 0,
             unread: Vec::new(),
+            jobs_unread: None,
             volume_bytes: Some(1.0),
             volume_count: Some(1),
-            unclaimed: Some(Vec::new()),
+            unclaimed: Some(UnclaimedVolumes::default()),
             volumes_unread: None,
             claims_unread: Vec::new(),
             served_from: OverviewSource::Watch,
         };
         let bytes = serde_json::to_vec(&basis).unwrap().len();
         assert!(bytes < 262_144, "a full answer is {bytes} bytes");
+    }
+
+    /// Twenty thousand Released volumes with 63-character names were a list
+    /// of over a megabyte in one answer, though only their sum was ever
+    /// shown. Counted and summed, the answer stays small and whole. Fails if
+    /// unclaimed volumes travel one by one again.
+    #[test]
+    fn twenty_thousand_unclaimed_volumes_are_counted_and_summed_not_listed() {
+        let pvs: Vec<PersistentVolume> = (0..20_000)
+            .map(|i| {
+                serde_json::from_value(json!({
+                    "metadata": {"name": format!("{:0>63}", i)},
+                    "spec": {"capacity": {"storage": "1Gi"}},
+                    "status": {"phase": "Released"},
+                }))
+                .expect("a volume")
+            })
+            .collect();
+        let volumes = volumes_from_pvs(&pvs);
+        let basis = assemble(
+            &read_of(vec![]),
+            Ok((vec![], Ok(Some(vec![])))),
+            &volumes,
+            None,
+        );
+        assert_eq!(
+            basis.unclaimed,
+            Some(UnclaimedVolumes {
+                count: 20_000,
+                bytes: 20_000.0 * 1024.0 * 1024.0 * 1024.0,
+            })
+        );
+        let bytes = serde_json::to_vec(&basis).unwrap().len();
+        assert!(bytes < 262_144, "the answer is {bytes} bytes");
+    }
+
+    /// A token that lists pods and not Jobs: the refusal was dropped, so a
+    /// `CronJob`'s runs sat under each Job with nothing saying whose they
+    /// are. The refusal travels with the answer. Fails if a refused Job
+    /// list reads as one with no Jobs in it.
+    #[test]
+    fn a_refused_job_list_is_said_and_not_read_as_no_jobs() {
+        let run = pod(&Spec {
+            owner: Some(("Job", "nightly-29112400")),
+            ..running(
+                "shop",
+                "nightly-29112400-abcde",
+                ("Job", "nightly-29112400"),
+            )
+        });
+        let refused = Err(refused());
+        let read = gathered(
+            &[Some("shop")],
+            vec![(Ok(vec![(*run).clone()]), refused)],
+            false,
+        )
+        .expect("the pods were read");
+        assert_eq!(
+            read.jobs_unread.as_ref().map(|f| f.code.as_str()),
+            Some("PERMISSION_DENIED")
+        );
+        let basis = assemble(
+            &read,
+            Ok((vec![], Ok(Some(vec![])))),
+            &Volumes::default(),
+            None,
+        );
+        assert!(basis.jobs_unread.is_some());
+        assert_eq!(basis.workloads[0].key.kind, "Job");
     }
 
     /// The perf rig is 10 000 pods Pending in ten namespaces on a node

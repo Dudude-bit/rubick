@@ -207,6 +207,22 @@ describe("the rows the page and the block draw", () => {
   });
 
   /**
+   * A source that comes to measure HTTP, its pair's flow events unchanged,
+   * turns the pair's requests from "not measured" to "below HTTP": the row
+   * kept from before would go on saying the source cannot measure them.
+   */
+  it("draws a row again when a source measures more though its flows did not change", () => {
+    const memo = new RowMemo();
+    const flows = [flow(0, { events: 3 })];
+    const [before] = memo.rows(reading([source("Hubble", ["events"])], flows));
+    const [after] = memo.rows(
+      reading([source("Hubble", ["events", "requests", "errors"])], flows)
+    );
+    expect(before.requests.state).toBe("notMeasured");
+    expect(after.requests.state).toBe("belowHttp");
+  });
+
+  /**
    * Hubble's errors are HTTP 5xx: a pair that may carry gRPC has only a floor
    * from it, while Istio counts gRPC statuses and vouches for its share.
    */

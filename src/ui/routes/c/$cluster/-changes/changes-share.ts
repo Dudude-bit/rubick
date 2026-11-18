@@ -1,6 +1,6 @@
 import { Eye, History } from "lucide-react";
 
-import type { Show } from "@/generated/types";
+import type { Keeping, Show } from "@/generated/types";
 import type { ChangeItem, SpanCover, SpanLike } from "@/lib/changes";
 import {
   changesKnownFrom,
@@ -37,6 +37,20 @@ const clock = (ms: number) =>
     timeZone: "UTC",
   }).format(ms)} UTC`;
 
+/** Every way of keeping, in words where it is not kept between restarts; a new way does not compile until it is said. */
+function keepingLine(keeping: Keeping, t: T): string | null {
+  switch (keeping.says) {
+    case "kept":
+      return null;
+    case "off":
+      return t("changes", "keptSessionOnly");
+    case "nowhere":
+      return t("changes", "keptNowhere");
+    case "failed":
+      return t("changes", "keptFailed", { error: keeping.message });
+  }
+}
+
 /** What keeps the timeline from being whole, as the page says it above its rows. */
 export function keepingWords(
   read: Pick<TimelineRead, "keeping" | "identity" | "unreadable" | "error">,
@@ -49,9 +63,8 @@ export function keepingWords(
     lines.push(
       t("changes", "identityUnknown", { reason: read.identity.message })
     );
-  if (read.keeping?.says === "off") lines.push(t("changes", "keptSessionOnly"));
-  if (read.keeping?.says === "failed")
-    lines.push(t("changes", "keptFailed", { error: read.keeping.message }));
+  const keeping = read.keeping && keepingLine(read.keeping, t);
+  if (keeping) lines.push(keeping);
   if (read.unreadable > 0)
     lines.push(t("changes", "keptUnreadable", { n: read.unreadable }));
   return lines;

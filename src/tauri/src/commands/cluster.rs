@@ -878,6 +878,23 @@ mod lifecycle_tests {
         state.get_current_context()
     }
 
+    /// The timeline read `kube-system` through a client, and the context was
+    /// reconnected to another cluster under the name before the answer came:
+    /// written down, the old cluster's uid wiped the new one's history.
+    /// Fails if a client the context no longer holds still counts as its own.
+    #[tokio::test]
+    async fn a_client_replaced_by_a_reconnect_is_no_longer_the_contexts() {
+        let state = AppState::new().expect("state");
+        hold(&state, "prod").await;
+        let taken = state.client_of("prod").expect("client");
+        assert!(state.still_holds("prod", &taken));
+        hold(&state, "prod").await;
+        assert!(!state.still_holds("prod", &taken));
+        assert!(!state.still_holds("staging", &taken));
+        let now = state.client_of("prod").expect("client");
+        assert!(state.still_holds("prod", &now));
+    }
+
     /// A reader that subscribed with a client taken before a reconnect began
     /// builds the context's feeds in the gap; the landed client takes them
     /// over. Fails if those feeds keep the old client, or another cluster

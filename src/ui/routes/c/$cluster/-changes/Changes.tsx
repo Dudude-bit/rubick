@@ -106,7 +106,9 @@ export function Changes() {
     );
     return merged(timeline, stretches.sort(newestFirst));
   }, [
-    read,
+    read.rows,
+    read.letGo,
+    read.readFrom,
     ours,
     covering,
     events,

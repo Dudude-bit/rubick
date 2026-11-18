@@ -199,6 +199,35 @@ describe("flows on the map", () => {
     expect(drawn.edges[0]).toMatchObject({ from: there?.id, to: web.id });
   });
 
+  /**
+   * Two pods nothing owns are one node of the namespace's ownerless pods;
+   * opening it opened whichever pod came last. It stands for none of them.
+   */
+  it("opens no single pod from the node several ownerless pods share", () => {
+    const cart = mapped("Deployment", "cart", "apps");
+    const loose = mapped("Pod", OWNERLESS);
+    const shared = model(
+      [
+        workload("Deployment", "cart"),
+        workload("Pod", "debug-a"),
+        workload("Pod", "debug-b"),
+      ],
+      [
+        [1, 0],
+        [2, 0],
+      ],
+      [cart, loose]
+    );
+    expect(shared.endOf.has(loose.id)).toBe(false);
+    expect(shared.endOf.get(cart.id)).toBeDefined();
+    const one = model(
+      [workload("Deployment", "cart"), workload("Pod", "debug-a")],
+      [[1, 0]],
+      [cart, loose]
+    );
+    expect(one.endOf.get(loose.id)).toEqual(workload("Pod", "debug-a"));
+  });
+
   /** A workload calling itself is a row, and no line from a node to itself. */
   it("draws no line from a node to itself", () => {
     const drawn = model(

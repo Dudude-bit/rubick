@@ -174,6 +174,25 @@ describe("what the shared Changes report says beyond the changes", () => {
     expect(section.count).toBe(1);
   });
 
+  /** A machine with no data folder keeps nothing: fails if the file reads as kept, or does not warn. */
+  it("says the timeline is not kept where there is nowhere to keep it, as a warning", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
+      keeping: { says: "nowhere" },
+      identity: undefined,
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom: null,
+    });
+    if (section.body.type !== "text") throw new Error("expected text");
+    expect(section.body.text).toContain(
+      "Kept for this session only: this machine has no data folder to keep it in."
+    );
+    expect(section.body.role).toBe("warn");
+  });
+
   /** A session-only timeline is not one that was kept: fails if the file says nothing of it, or does not warn. */
   it("says the timeline was kept for this session only, as a warning", () => {
     const span = { from, seenAt: to, to: null };

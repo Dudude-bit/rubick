@@ -205,9 +205,14 @@ export function changesLink(
   const link = objectLink(ref, { tab: "changes", cluster });
   if (!link) return null;
   if (since === null) return link;
+  // Beside what the object's own address carries: an attached kind's
+  // `view`, dropped, opened its parent's tab instead.
   return {
     ...link,
-    search: { tab: "changes", since: new Date(since).toISOString() },
+    search: {
+      ...(link as { search?: Record<string, string> }).search,
+      since: new Date(since).toISOString(),
+    },
   } as AppLink;
 }
 

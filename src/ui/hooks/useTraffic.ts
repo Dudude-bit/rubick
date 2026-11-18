@@ -100,6 +100,7 @@ export function useTraffic(input: {
   );
   const flows = useLiveQuery({
     queryKey: queryKeys.traffic(
+      endpoint,
       scope,
       window,
       subjectKey(subject),

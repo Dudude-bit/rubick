@@ -6,6 +6,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { routeTree } from "@/generated/routeTree.gen";
 import {
   builtInKindOf,
+  changesLink,
   clusterOf,
   crdFor,
   crdInGroup,
@@ -80,6 +81,31 @@ describe("an object's address", () => {
     expect(hrefOf(slice!)).toMatch(/\?view=own$/);
     const pod = objectLink({ kind: "Pod", name: "a", namespace: "b" });
     expect(hrefOf(pod!)).toBe("/c/prod/pods/b/a");
+  });
+
+  /**
+   * A Changes row for an HPA linked to its own tab from a moment on, and the
+   * link opened the parent Deployment's HPA tab: the moment replaced the
+   * address's own marks. Fails if a Changes link from a moment loses them.
+   */
+  it("keeps an attached kind's own mark on a Changes link from a moment", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const since = Date.parse("2026-11-17T10:00:00Z");
+    const link = changesLink(
+      {
+        kind: "HorizontalPodAutoscaler",
+        name: "hello-web",
+        namespace: "lena-sandbox",
+      },
+      since
+    );
+    const href = hrefOf(link!);
+    expect(href).toContain("view=own");
+    expect(href).toContain("tab=changes");
+    expect(href).toContain(
+      `since=${encodeURIComponent(new Date(since).toISOString())}`
+    );
   });
 
   /** A namespaced kind with no namespace would be a dead link the reader finds by clicking. */

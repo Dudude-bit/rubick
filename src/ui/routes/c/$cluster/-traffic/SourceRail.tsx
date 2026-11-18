@@ -16,6 +16,9 @@ const STATE_TONE = {
   absent: "text-fg-fnt",
   unpaired: "text-warn",
   failed: "text-err",
+  connecting: "text-fg-fnt",
+  off: "text-fg-fnt",
+  stopped: "text-err",
 } as const satisfies Record<FlowSource["state"]["says"], string>;
 
 export function SourceRail({

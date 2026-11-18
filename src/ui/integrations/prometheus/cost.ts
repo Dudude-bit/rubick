@@ -291,7 +291,9 @@ export async function costNow(input: {
     });
   }
 
-  const perNamespace: Record<string, Parts> = {};
+  // Keyed by names the cluster chose: a namespace called `constructor` is
+  // one, and an inherited property must not stand in for its entry.
+  const perNamespace: Record<string, Parts> = Object.create(null);
   for (const series of namespaces) {
     const namespace = series.labels["namespace"] ?? "";
     const part = series.labels["part"] ?? "";
@@ -320,8 +322,11 @@ export async function costNow(input: {
   return {
     nodes: priced.sort((a, b) => a.name.localeCompare(b.name)),
     allocatedByNode: byNode
-      ? Object.fromEntries(
-          [...byLabel(byNode, "node")].filter(([name]) => name !== "")
+      ? Object.assign(
+          Object.create(null) as Record<string, number>,
+          Object.fromEntries(
+            [...byLabel(byNode, "node")].filter(([name]) => name !== "")
+          )
         )
       : null,
     namespaces: perNamespace,
@@ -476,20 +481,25 @@ export async function costHistory(input: {
 /**
  * Per pod, in {@link USAGE_QUERIES} order, over the efficiency window. The
  * averages run over each pod's own samples, so a pod two hours old is not
- * divided by a day; containers are summed at each step first, so a restart's
- * new series is not added to the old one's average.
+ * divided by a day; each container is taken once at each step (a cAdvisor
+ * scraped by two jobs answers twice) and the pod's containers are summed
+ * then, so neither a second scrape nor a restart's new series adds to it.
  */
 export function usageQueries(namespaces: readonly string[] | null): string[] {
   const scope =
     namespaces === null ? "" : `,namespace=~${namesPattern(namespaces)}`;
   const containers = `container!="",container!="POD"${scope}`;
-  const cpu = `container_cpu_usage_seconds_total{${containers}}`;
-  const memory = `container_memory_working_set_bytes{${containers}}`;
+  const perPod = (series: string) =>
+    `sum by (namespace, pod) (max by (namespace, pod, container) (${series}))`;
+  const cpu = perPod(
+    `rate(container_cpu_usage_seconds_total{${containers}}[5m])`
+  );
+  const memory = perPod(`container_memory_working_set_bytes{${containers}}`);
   const queries: Record<(typeof USAGE_QUERIES)[number], string> = {
-    cpuAvg: `avg_over_time((sum by (namespace, pod) (rate(${cpu}[5m])))[24h:5m]) * 1000`,
-    cpuPeak: `max_over_time((sum by (namespace, pod) (rate(${cpu}[5m])))[24h:5m]) * 1000`,
-    memoryAvg: `avg_over_time((sum by (namespace, pod) (${memory}))[24h:5m])`,
-    memoryPeak: `max_over_time((sum by (namespace, pod) (${memory}))[24h:5m])`,
+    cpuAvg: `avg_over_time((${cpu})[24h:5m]) * 1000`,
+    cpuPeak: `max_over_time((${cpu})[24h:5m]) * 1000`,
+    memoryAvg: `avg_over_time((${memory})[24h:5m])`,
+    memoryPeak: `max_over_time((${memory})[24h:5m])`,
   };
   return USAGE_QUERIES.map((name) => queries[name]);
 }
