@@ -38,12 +38,11 @@ export function usageRead(
   }
   if (basis.workloads.length > 0 && reading.state !== "read")
     return { state: "reading" };
+  // A refusal of the read of use is said through the rows it took a verdict
+  // from. A namespace the requests list read and found no pod placed in has
+  // nothing to weigh, refused or not: named, every workload there would be
+  // "not checked" by a rule that could never judge it.
   const unread = new Map(basis.unread.map((u) => [u.namespace, u.message]));
-  // A namespace refused to the read of use is unread whether or not the
-  // requests list has a row in it; the list's own words come first.
-  if (reading.state === "read")
-    for (const u of reading.fold.unread)
-      if (!unread.has(u.namespace)) unread.set(u.namespace, u.message);
   const workloads: WorkloadUse[] = [];
   for (const w of basis.workloads) {
     const e = workloadEfficiency(reading, w.key, {
@@ -52,7 +51,12 @@ export function usageRead(
     });
     // Its pods were refused to the read of use: no verdict, and the
     // backend names the refusal where it finds no row.
-    if (e.cpu.state === "failed" || e.memory.state === "failed") continue;
+    const failed = [e.cpu, e.memory].find((one) => one.state === "failed");
+    if (failed?.state === "failed") {
+      if (!unread.has(w.key.namespace))
+        unread.set(w.key.namespace, failed.said);
+      continue;
+    }
     workloads.push({
       namespace: w.key.namespace,
       kind: w.key.kind,
