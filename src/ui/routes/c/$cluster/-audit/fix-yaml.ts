@@ -346,11 +346,15 @@ export function fixYaml(
       if (held) {
         const crd = subject?.name ?? "CRD";
         // A YAML patch has no double quotes, which Windows PowerShell 5.1
-        // strips from an argument it hands to a program.
+        // strips from an argument it hands to a program. The patch is handed
+        // out commented, in either shell: a replace that fails on one object
+        // leaves it stored at the old version, and kubectl replace exits 0
+        // on the nothing a failed get pipes it, so no exit code can hold the
+        // patch back until every object was written back.
         return `${cliPipe(cli, [
           ["kubectl", `get ${crd} --all-namespaces -o json`],
           ["kubectl", "replace -f -"],
-        ])}\n${kubectl(`patch customresourcedefinitions ${crd} --subresource=status --type=merge -p 'status: {storedVersions: [${storage}]}'`)}`;
+        ])}\n# ${kubectl(`patch customresourcedefinitions ${crd} --subresource=status --type=merge -p 'status: {storedVersions: [${storage}]}'`)}`;
       }
       const current =
         at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;

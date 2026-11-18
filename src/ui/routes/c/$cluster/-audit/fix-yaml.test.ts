@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { AuditFinding, RuleId } from "@/generated/types";
+import { setHostOs } from "@/lib/platform";
+
 import { fixYaml } from "./fix-yaml";
 import { RULE_IDS } from "./rules";
 
@@ -226,7 +228,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\n# KUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -286,7 +288,9 @@ describe("the fix Audit offers to copy", () => {
         name: "crontabs.example.com",
       },
       { context: "default", files }
-    ).split(/\n| \| /);
+    )
+      .split(/\n| \| /)
+      .map((command) => command.replace(/^# /, ""));
     expect(commands.map((command) => command.split(" ")[4])).toEqual([
       "get",
       "replace",
@@ -296,6 +300,62 @@ describe("the fix Audit offers to copy", () => {
       expect(command).toMatch(
         new RegExp(`^KUBECONFIG=${files} kubectl --context default \\w`)
       );
+  });
+
+  /**
+   * The rewrite and the patch that drops the old version from
+   * storedVersions were pasted as one block: a replace that hit a conflict
+   * on one object, or a get that answered nothing (replace exits 0 on no
+   * input), still let the patch run, and that object stayed stored at a
+   * version the CRD no longer records. Fails if the patch runs with the
+   * rewrite in either shell: it stays a comment, run by hand once every
+   * object was written back.
+   */
+  it("hands out the storedVersions patch as a step of its own, in either shell", () => {
+    const finding: AuditFinding = {
+      rule: "crd-version-deprecated",
+      severity: "medium",
+      what: [
+        {
+          says: "deprecated",
+          version: "v1alpha1",
+          warning: null,
+          stored: true,
+          storage: false,
+        },
+        {
+          says: "storedAs",
+          group: "example.com",
+          kind: "CronTab",
+          storage: "v1",
+          stored: ["v1alpha1", "v1"],
+          current: ["v1"],
+        },
+      ],
+    };
+    const crd = {
+      kind: "CustomResourceDefinition",
+      namespace: null,
+      name: "crontabs.example.com",
+    };
+    const lines = (os: string) => {
+      setHostOs(os);
+      try {
+        return fixYaml(finding.rule, crd.kind, finding, crd, {
+          context: "default",
+          files: "/home/me/.kube/config",
+        }).split("\n");
+      } finally {
+        setHostOs("linux");
+      }
+    };
+    for (const os of ["linux", "windows"]) {
+      const [rewrite, patch, ...rest] = lines(os);
+      expect(rest).toEqual([]);
+      expect(rewrite).toContain("replace -f -");
+      expect(rewrite).not.toContain("storedVersions");
+      expect(patch).toMatch(/^# .*patch customresourcedefinitions/);
+    }
   });
 
   /** A client asking for a deprecated API moves to its replacement where the guide names one. */
