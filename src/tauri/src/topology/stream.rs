@@ -23,7 +23,7 @@ const REDRAW_EVERY: Duration = Duration::from_secs(1);
 
 /// How often an open stream tells the watch layer it is still on screen:
 /// well inside the three minutes it lets an untouched page go after.
-const TOUCH_EVERY: Duration = Duration::from_mins(1);
+pub const TOUCH_EVERY: Duration = Duration::from_mins(1);
 
 /// How long one touch's asks may wait together: well inside the page's
 /// lease, which the layer lets go while the stream is still waiting.
@@ -236,6 +236,8 @@ pub struct Opening {
     pub lease: Option<crate::feeds::Lease>,
     /// [`ASK_AT_MOST`]; a test waits out a shorter one.
     pub ask_at_most: Duration,
+    /// [`TOUCH_EVERY`]; a test waits out a shorter one.
+    pub touch_every: Duration,
 }
 
 impl Opening {
@@ -306,7 +308,11 @@ pub async fn run(opening: Opening) -> TopologyEnd {
     });
 
     let mut last = tokio::time::Instant::now();
-    let mut touch = tokio::time::interval(TOUCH_EVERY);
+    let mut touch = tokio::time::interval(opening.touch_every);
+    // A touch whose asks outlived the next one is not made up at once: the
+    // changes waiting behind it are drawn first, or a slow reread would hold
+    // the map still for as long as it stays slow.
+    touch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         let mut touched = Touched::default();
         tokio::select! {
