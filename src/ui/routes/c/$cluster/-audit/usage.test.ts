@@ -187,6 +187,41 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * The requests list has no row in `vault` and the read of use was refused
+   * there: the refusal reached no row, so the backend passed every
+   * workload in it as one requesting nothing. Fails if a refusal is carried
+   * only through a row, or the list's own words are replaced.
+   */
+  it("names every namespace the read of use was refused, with or without a row", () => {
+    const one = basis([workload("api", 500, 256 * MI)]);
+    const read = reading(one, [[300, 450, 150 * MI, 240 * MI]]);
+    if (read.state !== "read") throw new Error(read.state);
+    read.fold.unread = [
+      {
+        namespace: "vault",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden in vault",
+        values: [null, null, null, null],
+      },
+      {
+        namespace: "bank",
+        code: "PERMISSION_DENIED",
+        message: "the read of use was refused in bank",
+        values: [null, null, null, null],
+      },
+    ];
+    const audit = usageRead(one, null, read);
+    if (audit.state !== "read") throw new Error(audit.state);
+    expect(audit.workloads.map((w) => [w.name, w.verdict.says])).toEqual([
+      ["api", "within"],
+    ]);
+    expect(audit.unread).toEqual([
+      { namespace: "bank", message: "pods is forbidden" },
+      { namespace: "vault", message: "pods is forbidden in vault" },
+    ]);
+  });
+
+  /**
    * A workload rolled out two hours ago has a peak of two hours, which has
    * not met the day's busiest hour: neither page calls its request far
    * above use, and Audit says why it did not judge rather than passing it.
