@@ -15,6 +15,7 @@
 
 import { commands } from "@/lib/commands";
 import { objectLink, vendorLink } from "@/lib/links";
+import { inFlightOnce } from "@/lib/in-flight";
 import type { ProxyBehind, ServiceRoute } from "../registry";
 import { fetchController, fetchRouteSources } from "./data";
 import {
@@ -26,10 +27,7 @@ import {
 } from "./model";
 import { BACKING_NOT_READ, frontingQuestions } from "../ingress";
 
-export async function serviceRoutes(input: {
-  namespace: string;
-  name: string;
-}): Promise<ServiceRoute[]> {
+async function readRouteInputs() {
   // The controller's flags and the Service list are the softer reads:
   // without them every answer below is still a real host, only with
   // `tls: null` on it. So a failure there costs the scheme, not the answer.
@@ -45,9 +43,25 @@ export async function serviceRoutes(input: {
     services: services ?? [],
     entryPoints,
   };
+  return {
+    services,
+    entryPoints,
+    withServices,
+    routes: allRoutes(withServices),
+    proxies: proxyServices(withServices),
+    fronting: frontingIngresses(withServices),
+  };
+}
 
-  const proxies = proxyServices(withServices);
-  const fronting = frontingIngresses(withServices);
+/** The cluster-wide reads every Service's answer is drawn from. */
+const routeInputs = inFlightOnce(readRouteInputs);
+
+export async function serviceRoutes(input: {
+  namespace: string;
+  name: string;
+}): Promise<ServiceRoute[]> {
+  const { services, entryPoints, withServices, routes, proxies, fronting } =
+    await routeInputs();
   // What the consumer asks about a host this file cannot settle: the
   // certificate in front may be an annotation only another vendor reads.
   const frontOf = (host: string): ServiceRoute["front"] =>
@@ -61,7 +75,7 @@ export async function serviceRoutes(input: {
         };
 
   const found = new Map<string, ServiceRoute>();
-  for (const route of allRoutes(withServices)) {
+  for (const route of routes) {
     const service = route.service;
     if (!service?.kubernetes) continue;
     if (service.name !== input.name || service.namespace !== input.namespace) {

@@ -21,6 +21,7 @@ export function openLiveFlows(
         relay: payload.relay,
         lost: payload.lost,
         untracked: payload.untracked,
+        unreached: payload.unreached,
       });
     }),
     listenEvent("hubble-flows-ended", ({ payload }) => {

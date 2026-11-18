@@ -9,7 +9,7 @@ const answers = vi.hoisted(() => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listIngresses: () => Promise.resolve(answers.ingresses ?? [shop]),
+    listIngresses: vi.fn(() => Promise.resolve(answers.ingresses ?? [shop])),
     listCustomResources: () => answers.crds(),
   },
 }));
@@ -64,6 +64,22 @@ beforeEach(() => {
 });
 
 describe("whether GKE terminates TLS in front of a Service", () => {
+  /**
+   * The map asked about every Service at once, and each answer listed every
+   * Ingress and three kinds of custom resource again. Fails if Services
+   * asked about together list the Ingresses more than once.
+   */
+  it("lists the Ingresses once for Services asked about together", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.listIngresses).mockClear();
+    await Promise.all(
+      ["web", "api", "admin"].map((name) =>
+        serviceRoutes({ namespace: "web", name })
+      )
+    );
+    expect(commands.listIngresses).toHaveBeenCalledTimes(1);
+  });
+
   /**
    * A classless Ingress is GKE's by default; skipped, the proxy behind it
    * was told nothing in front of it holds the certificate. Fails if the

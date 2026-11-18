@@ -80,4 +80,47 @@ describe("the map as an image", () => {
         .querySelector("parsererror")
     ).toBeNull();
   });
+
+  /**
+   * A namespace that refused every read was saved as a hairline frame with
+   * its name, which reads as one that exists and holds nothing. Fails if the
+   * image drops its hatch or its words, or draws an unchecked card solid.
+   */
+  it("draws a refused namespace hatched with its words, and an unchecked card dashed", () => {
+    const svg = mapSvg({
+      colours,
+      groups: [
+        {
+          group: {
+            id: "payments",
+            label: "payments",
+            collapsed: false,
+            tone: "unknown",
+            summary: null,
+            refused: true,
+          },
+          box: { x: 0, y: 0, width: 300, height: 100 },
+          summary: "Refused: nothing in payments could be read",
+        },
+        {
+          group: {
+            id: "shop",
+            label: "shop",
+            collapsed: true,
+            tone: "unknown",
+            summary: null,
+          },
+          box: { x: 0, y: 120, width: 248, height: 116 },
+          summary: "Deployment 1",
+        },
+      ],
+      nodes: [],
+      edges: [],
+    });
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const [payments, shop] = [...doc.querySelectorAll("svg > rect[rx='8']")];
+    expect(payments.getAttribute("fill")).toBe("url(#refused)");
+    expect(svg).toContain("Refused: nothing in payments could be read");
+    expect(shop.getAttribute("stroke-dasharray")).toBe("3 3");
+  });
 });

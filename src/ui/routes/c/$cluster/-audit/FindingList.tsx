@@ -115,10 +115,13 @@ export function RuleExplained({
 export function RuleHeading({
   rule,
   severity,
+  showTitle = true,
   children,
 }: {
   rule: RuleId;
   severity: AuditSeverity;
+  /** Off under a heading that already names the rule. */
+  showTitle?: boolean;
   children?: ReactNode;
 }) {
   const t = useT();
@@ -126,7 +129,9 @@ export function RuleHeading({
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
       <SeverityBadge severity={severity} />
-      <span className="font-medium text-fg">{ruleTitle(rule, t)}</span>
+      {showTitle && (
+        <span className="font-medium text-fg">{ruleTitle(rule, t)}</span>
+      )}
       <span className="text-[11px] text-fg-fnt">
         {t("audit", CATEGORY_WORDS[meta.category])}
         {meta.standard && ` · ${standardWords(rule, t)}`}

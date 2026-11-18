@@ -41,20 +41,26 @@ function deliveredBy(delivery: Delivery) {
   return null;
 }
 
+const NO_SERVICES: readonly { namespace: string; name: string }[] = [];
+
 /**
  * The delivery owners of every object the map holds, asked once for all of
  * them, and the vendor routes into the Services of the groups drawn open.
+ * Nothing is asked until the map is drawn `whole`: each batch before it
+ * would have asked the vendors about the whole cluster again.
  */
 export function useVendorLayers(
   nodes: ReadonlyMap<string, TopologyNode>,
   openServices: readonly { namespace: string; name: string }[],
   /** The group a namespace's objects are drawn in, `null` where none is. */
   groupOf: (namespace: string) => string | null,
-  t: T
+  t: T,
+  whole: boolean
 ): VendorLayers {
+  const asked = whole ? openServices : NO_SERVICES;
   const queries = useMemo<DeliveryQuery[]>(
     () =>
-      [...nodes.values()]
+      [...(whole ? nodes : new Map<string, TopologyNode>()).values()]
         .filter(
           (node) =>
             Object.keys(node.labels).length > 0 ||
@@ -68,18 +74,18 @@ export function useVendorLayers(
           labels: node.labels,
           annotations: node.annotations,
         })),
-    [nodes]
+    [nodes, whole]
   );
   const deliveries = useDeliveries(queries);
   const routes = useServicesRoutes(
-    openServices as { namespace: string; name: string }[]
+    asked as { namespace: string; name: string }[]
   );
   // Built every render: `useDeliveries` answers with a new reader each time,
   // and this is one pass over objects already in memory.
   return layersOf({
     queries,
     deliveries: { of: deliveries.of, error: deliveries.error },
-    services: openServices,
+    services: asked,
     routes: { of: routes.routes, error: routes.error },
     groupOf,
     t,

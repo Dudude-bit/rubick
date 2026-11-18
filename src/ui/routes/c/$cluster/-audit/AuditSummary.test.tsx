@@ -1,8 +1,23 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import type { AuditPage, AuditSummary } from "@/generated/types";
-import { AuditSummaryBlock } from "./AuditSummary";
+import { renderWithRouter } from "@/test/render";
+
+const power: { current: Record<string, unknown> } = {
+  current: { state: "absent" },
+};
+const readAgain = vi.fn(() => Promise.resolve());
+
+vi.mock("@/integrations", () => ({
+  useCapabilityState: () => power.current,
+}));
+vi.mock("@/lib/commands", () => ({
+  commands: { readAuditAgain: () => readAgain() },
+}));
+
+const { AuditSummaryBlock } = await import("./AuditSummary");
 
 const summary = (over: Partial<AuditSummary> = {}): AuditSummary => ({
   findings: 0,
@@ -158,6 +173,56 @@ describe("Audit's summary of a scope", () => {
     expect(screen.getByTestId("audit-usage-read")).toHaveTextContent(
       /weighed over the last 24h/
     );
+  });
+
+  /**
+   * A Prometheus that did not answer its probe is asked again from the line
+   * that says so, its own probe re-run, beside a link to its connection;
+   * the API server's count, which Audit reads itself, is read again at
+   * once. Fails if either line leaves the reader to find a Test button
+   * somewhere else.
+   */
+  it("offers to ask again where Prometheus did not answer", async () => {
+    const askAgain = vi.fn();
+    power.current = {
+      state: "unreachable",
+      vendor: "Prometheus",
+      endpoint: "http://localhost:9090",
+      reason: "Connection refused",
+      askAgain,
+      asking: false,
+      settings: {
+        to: "/c/$cluster/integrations/$vendor",
+        params: { cluster: "prod", vendor: "prometheus" },
+      },
+    };
+    try {
+      await renderWithRouter(
+        <AuditSummaryBlock
+          page={page({
+            usage: { says: "failed", said: "Connection refused" },
+            notChecked: [
+              {
+                kind: "apiserver_requested_deprecated_apis",
+                namespace: null,
+                why: { says: "failed", message: "Connection refused" },
+                rules: ["deprecated-api-requested"],
+              },
+            ],
+          })}
+          scope="shop"
+          system={false}
+        />,
+        { at: "/c/prod/audit", route: "/c/$cluster/audit" }
+      );
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("ask-supplier-again"));
+      expect(askAgain).toHaveBeenCalledOnce();
+      await user.click(screen.getByTestId("audit-read-again"));
+      expect(readAgain).toHaveBeenCalledOnce();
+    } finally {
+      power.current = { state: "absent" };
+    }
   });
 
   /** A refusal across the whole cluster points at the namespace picker. */

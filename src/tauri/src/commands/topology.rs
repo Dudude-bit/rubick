@@ -24,8 +24,7 @@ pub async fn open_topology(
     let scope = scope_of(scope)?;
     let here = state.here()?;
     // The other engines' policies, without which "no NetworkPolicy selects
-    // it" is a claim about one engine. Read once per map: they are kinds a
-    // cluster installs, not objects it churns.
+    // it" is a claim about one engine. Read again while the map is open.
     let others = Discovery {
         served: state.client_manager.served(),
         context: &here.context,
@@ -37,7 +36,11 @@ pub async fn open_topology(
         .feeds
         .subscribe(&here, crate::topology::ask(scope.clone()))
         .await?;
-    let map = Arc::new(ClusterMap::default());
+    let map = Arc::new(if scope.is_some() {
+        ClusterMap::scoped()
+    } else {
+        ClusterMap::default()
+    });
     tokio::spawn(crate::topology::pump(
         subscription.updates,
         map.clone(),
@@ -48,6 +51,43 @@ pub async fn open_topology(
     let events = state.event_tx.clone();
     let id = stream_id.clone();
     let lease = subscription.lease;
+    let session: crate::topology::SessionCheck = {
+        let manager = state.client_manager.clone();
+        let context = here.context.clone();
+        Arc::new(move || {
+            let client = manager.get_client(&context);
+            Box::pin(async move {
+                match client?.apiserver_version().await {
+                    Err(error) => match crate::error::Error::from(error) {
+                        expired @ crate::error::Error::CredentialsExpired(_) => {
+                            Some(expired.to_string())
+                        }
+                        _ => None,
+                    },
+                    Ok(_) => None,
+                }
+            })
+        })
+    };
+    let reread: crate::topology::Reread = {
+        let manager = state.client_manager.clone();
+        let context = here.context.clone();
+        Arc::new(move || {
+            let manager = manager.clone();
+            let context = context.clone();
+            Box::pin(async move {
+                let client = manager.get_client(&context)?;
+                Some(
+                    Discovery {
+                        served: manager.served(),
+                        context: &context,
+                    }
+                    .other_policies(&client, None)
+                    .await,
+                )
+            })
+        })
+    };
     tokio::spawn(async move {
         let end = if opened.wait_for_subscriber(SUBSCRIBE_TIMEOUT).await {
             let (cancel, _held) = opened.split();
@@ -55,6 +95,8 @@ pub async fn open_topology(
                 stream_id: id.clone(),
                 scope,
                 others,
+                reread: Some(reread),
+                session: Some(session),
                 map,
                 events: events.clone(),
                 cancel,

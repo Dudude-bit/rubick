@@ -1,7 +1,10 @@
 import { Clock, EyeOff, Info, ShieldAlert } from "lucide-react";
 
-import type { AuditPage } from "@/generated/types";
+import type { AuditPage, NotChecked } from "@/generated/types";
+import { useCapabilityState } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { commands } from "@/lib/commands";
+import { AskAgain } from "../-supplier/AskAgain";
 import { formatWhen } from "@/lib/utils";
 import { CATEGORY_WORDS, RULE_IDS, ruleTitle } from "./rules";
 import {
@@ -11,6 +14,30 @@ import {
   upgradeWords,
   usageWords,
 } from "./summary-words";
+
+/**
+ * Asks Audit's own reading of the API server's count again now, rather
+ * than at its next pass minutes on: what follows that line where the
+ * Prometheus it is read from did not answer.
+ */
+function ReadAgain() {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="ml-2 text-info hover:underline"
+      onClick={() => void commands.readAuditAgain()}
+      data-testid="audit-read-again"
+    >
+      {t("action", "askAgain")}
+    </button>
+  );
+}
+
+/** A line read from Prometheus that went wrong in a way asking again can mend. */
+const askable = (each: NotChecked) =>
+  each.rules.includes("deprecated-api-requested") &&
+  (each.why.says === "failed" || each.why.says === "notScraped");
 
 /**
  * The scope's answer in a few lines: counts by severity and category, what
@@ -30,6 +57,7 @@ export function AuditSummaryBlock({
 }) {
   const t = useT();
   const { summary } = page;
+  const power = useCapabilityState("usage.workloads");
   const unread = anythingUnread(page);
   const refusedAcross = summary.notChecked.some(
     (each) => each.namespace === null && each.why.says === "refused"
@@ -67,6 +95,12 @@ export function AuditSummaryBlock({
           data-testid="audit-usage-read"
         >
           {usageWords(page, t)}
+          {summary.usage.says === "failed" && power.state === "unreachable" && (
+            <>
+              {" "}
+              <AskAgain power={power} />
+            </>
+          )}
         </p>
       )}
       {summary.notChecked.length > 0 && (
@@ -86,6 +120,7 @@ export function AuditSummaryBlock({
                 })}
               >
                 {notCheckedWords(each, t)}
+                {askable(each) && <ReadAgain />}
               </li>
             ))}
           </ul>

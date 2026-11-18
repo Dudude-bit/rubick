@@ -66,4 +66,23 @@ describe("what a map stream has sent", () => {
       end: { says: "replaced" },
     });
   });
+
+  /**
+   * Every group the reader had not toggled folded when a CronJob's Job took
+   * the count past the line, and again on every reopen, when a reset set the
+   * map back to opening. Fails if what the map held when first drawn whole
+   * moves with a later count or is lost by a reset.
+   */
+  it("keeps what it held when first drawn whole through later batches and a reset", () => {
+    const store = new TopologyStore();
+    store.apply([{ is: "node", node: node("data", "Bound") }]);
+    expect(store.snapshot().firstWhole).toBeNull();
+    store.ready();
+    expect(store.snapshot().firstWhole).toBe(1);
+    store.apply([{ is: "node", node: node("logs", "Bound") }]);
+    store.ready();
+    expect(store.snapshot().firstWhole).toBe(1);
+    store.reset();
+    expect(store.snapshot()).toMatchObject({ phase: "opening", firstWhole: 1 });
+  });
 });

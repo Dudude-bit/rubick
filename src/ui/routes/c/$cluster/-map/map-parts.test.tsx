@@ -53,6 +53,19 @@ describe("a node on the map", () => {
     ]);
   });
 
+  /**
+   * Every node and rail row wore the same dashed circle, the mark of a kind
+   * the app does not know, and no node said its kind. Fails if a built-in
+   * node loses its own glyph or its kind word.
+   */
+  it("wears its kind's own glyph and says its kind", () => {
+    const { target } = draw();
+    const glyph = target.querySelector("svg");
+    expect(glyph).not.toHaveClass("lucide-circle-dashed");
+    expect(glyph).toHaveClass("lucide");
+    expect(target).toHaveTextContent("Deployment");
+  });
+
   /** A node the keyboard reaches off screen is brought into view, or Tab walks the reader somewhere they cannot see. */
   it("asks to be brought into view when the keyboard reaches it", () => {
     const { actions, target } = draw();

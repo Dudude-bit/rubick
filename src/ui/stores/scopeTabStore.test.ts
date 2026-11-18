@@ -663,6 +663,27 @@ describe("titles", () => {
     expect(tabRouteLabel("/c/prod/pods", ru)).toBe("Pods");
   });
 
+  /**
+   * Topology, Traffic and Cost opened as "topology", "traffic" and "cost",
+   * the route's own segment, beside Changes and Audit named properly. Fails
+   * if any page under a cluster has no name but its segment.
+   */
+  it("names every page under a cluster by a word, not by its segment", () => {
+    const router = createRouter({
+      routeTree,
+      context: { queryClient: new QueryClient() },
+      history: createMemoryHistory(),
+    });
+    const pages = Object.keys(router.routesByPath)
+      .map((path) => /^\/c\/\$cluster\/([^/$]+)\/?$/.exec(path)?.[1])
+      .filter((page): page is string => page !== undefined);
+    expect(pages).toEqual(expect.arrayContaining(["topology", "cost", "helm"]));
+    const unnamed = pages.filter(
+      (page) => tabRouteLabel(`/c/prod/${page}`, t) === page
+    );
+    expect(unnamed).toEqual([]);
+  });
+
   /** The registry's word stands; discovery names only what it does not hold, and the segment is the last resort. */
   it("asks discovery only for a list the registry cannot name", () => {
     const named = (segment: string) =>

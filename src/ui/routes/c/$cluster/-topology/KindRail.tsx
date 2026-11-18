@@ -9,6 +9,8 @@ import { readingWords } from "./model";
 
 export interface RailRow {
   kind: string;
+  /** The CRD a vendor's kind is served by, `null` where none is known; absent for the map's own built-in kinds. */
+  crd?: string | null;
   /** Across the scope; `null` where a namespace did not count it. */
   count: number | null;
   /** How many of them the map uses, for the kinds drawn only where used. */
@@ -63,7 +65,7 @@ export function KindRail({
               ) : (
                 <span className="h-3.5 w-3.5 flex-none" />
               )}
-              <KindIcon kind={row.kind} crd={null} className="h-3 w-3" />
+              <KindIcon kind={row.kind} crd={row.crd} className="h-3 w-3" />
               <label
                 htmlFor={id}
                 className="min-w-0 flex-1 truncate text-fg-mid"

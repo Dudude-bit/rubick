@@ -130,17 +130,54 @@ const TONE_OF: Toner = {
     selected === null ? "unknown" : selected === 0 ? "warn" : "mute",
   exists: () => "mute",
   owner: () => "unknown",
+  // As the Pods list paints each, and a running pod that is not ready is not
+  // the green its status alone would earn.
+  ownerless: ({ statuses }) =>
+    loudest(
+      statuses.map(({ status, total, ready }) =>
+        status === "Running" && ready < total
+          ? "warn"
+          : ROLE_TONE[statusRole(status)]
+      )
+    ),
+};
+
+/**
+ * The kinds besides its own each verdict is worked out from: a Service's
+ * serving from its slices and pods, a workload's rollout from its pods. A
+ * read of one gone stale leaves the verdict as of then.
+ */
+const READ_FROM: Record<Says, readonly string[]> = {
+  rollout: ["Pod"],
+  job: [],
+  cronJob: [],
+  replicas: [],
+  service: ["EndpointSlice", "Pod"],
+  ingress: [],
+  route: ["Gateway", "ListenerSet"],
+  gateway: ["ListenerSet"],
+  claim: [],
+  autoscaler: [],
+  budget: [],
+  policy: ["Pod"],
+  exists: [],
+  owner: [],
+  ownerless: ["Pod"],
 };
 
 /**
  * The node's tone. What was not read is unknown before anything else: a
  * green node for an object nobody could look at is the lie the words would
- * have been.
+ * have been, and so is one coloured from a read that went stale.
  */
 export function toneOf(node: TopologyNode, inputs: ToneInputs): MapTone {
   if (node.ref.existence === "notChecked") return "unknown";
   if (node.ref.existence === "missing") return "err";
-  if (inputs.stale.has(node.ref.kind)) return "unknown";
+  if (
+    inputs.stale.has(node.ref.kind) ||
+    READ_FROM[node.verdict.says].some((kind) => inputs.stale.has(kind))
+  )
+    return "unknown";
   const toner = TONE_OF[node.verdict.says] as (
     verdict: NodeVerdict,
     node: TopologyNode,

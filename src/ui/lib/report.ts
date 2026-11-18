@@ -92,6 +92,8 @@ export interface ReportLink {
   /** `not checked` or `does not exist`, where existence bears on the group's claim. */
   existence: string | null;
   missing: boolean;
+  /** Missing, and every use says the pod starts without it. */
+  optional?: boolean;
 }
 
 /** A group of the Connections tab, in its own words. */
@@ -382,6 +384,7 @@ h3 span { color:var(--fnt); font-weight:400; }
 .kv dd { margin:0; min-width:0; }
 .tag { white-space:nowrap; font-size:11.5px; color:var(--fnt); border:1px dashed var(--hair); border-radius:4px; padding:0 4px; }
 .tag.err { color:var(--err); border-color:color-mix(in srgb,var(--err) 45%,transparent); border-style:solid; }
+.tag.warn { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 45%,transparent); border-style:solid; }
 .cap { display:flex; flex-wrap:wrap; gap:4px 8px; color:var(--fnt); font-size:12px; margin:0 0 8px; }
 .log { margin:0; padding:10px 0; border-radius:8px; background:var(--code); border:1px solid var(--hair);
   font-size:12px; line-height:1.6; }
@@ -687,7 +690,7 @@ function connectionsHtml(groups: ReportGroup[], ctx: Ctx): string {
                     : "",
                 row.detail ? `<span class="q">${e(row.detail)}</span>` : "",
                 row.existence
-                  ? `<span class="tag ${row.missing ? "err" : ""}">${e(row.existence)}</span>`
+                  ? `<span class="tag ${row.missing ? (row.optional ? "warn" : "err") : ""}">${e(row.existence)}</span>`
                   : "",
               ]
                 .filter(Boolean)

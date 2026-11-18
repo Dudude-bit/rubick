@@ -1,5 +1,6 @@
 use super::*;
 use crate::resources::topology::{MapKindReading, TopologyEnd, TopologyPiece};
+use crate::resources::Existence;
 use serde_json::json;
 
 const SAID: &str =
@@ -85,20 +86,182 @@ fn a_kind_still_listing_is_unread_rather_than_empty() {
     assert_eq!(pods.reading, MapKindReading::Syncing);
 }
 
-/// A cluster that serves no Gateway API is not a cluster whose routes were
-/// refused: nothing is named unread for it.
+/// A Gateway API kind the layer has said nothing of yet is waiting for its
+/// watch: the layer says `Unserved` of every kind a cluster does not serve,
+/// so silence was never "not installed". Fails if a kind waiting its turn
+/// reads as not installed, is drawn as having no routes, or does not hold
+/// the first drawing back.
 #[test]
-fn a_gateway_kind_nobody_watches_is_not_served_rather_than_unread() {
+fn a_gateway_kind_the_layer_has_not_answered_is_waiting_not_missing() {
     let stores = Stores::default();
     let held = stores.held("shop", OtherPolicies::none(), now());
-    assert!(held.gateway_unread.is_empty());
+    assert!(held
+        .gateway_unread
+        .iter()
+        .any(|unread| unread.kind == "HTTPRoute"));
     assert!(held.gateways.is_none());
     let routes = stores
         .kinds()
         .into_iter()
         .find(|k| k.kind == "HTTPRoute")
         .expect("listed");
-    assert_eq!(routes.reading, MapKindReading::NotServed);
+    assert_eq!(routes.reading, MapKindReading::Queued);
+    assert!(stores.syncing());
+}
+
+fn gateway_api(
+    kind: &str,
+    ns: &str,
+    name: &str,
+    spec: &serde_json::Value,
+) -> kube::api::DynamicObject {
+    serde_json::from_value(json!({
+        "apiVersion": "gateway.networking.k8s.io/v1", "kind": kind,
+        "metadata": { "name": name, "namespace": ns, "uid": format!("{ns}-{name}") },
+        "spec": spec,
+    }))
+    .expect("a Gateway API object")
+}
+
+/// `shop/api` attaches to `infra/public`, the usual way Gateway API is set
+/// up, and `shop/local` is a Gateway the route does not name.
+fn routed(stores: &mut Stores) {
+    for kind in [Kind::Gateway, Kind::HttpRoute] {
+        stores.apply(read(kind, None, Reading::Synced));
+    }
+    stores.apply(Feed::Applied(Object::HttpRoute(Box::new(RouteInfo::read(
+        &gateway_api(
+            "HTTPRoute",
+            "shop",
+            "api",
+            &json!({ "parentRefs": [{ "name": "public", "namespace": "infra" }] }),
+        ),
+    )))));
+    stores.apply(Feed::Applied(Object::Gateway(Box::new(GatewayInfo::read(
+        &gateway_api(
+            "Gateway",
+            "shop",
+            "local",
+            &json!({ "gatewayClassName": "x", "listeners": [] }),
+        ),
+    )))));
+}
+
+const PUBLIC: &str = "gateway.networking.k8s.io/Gateway/infra/public";
+
+/// A person picks `shop` and opens the map: the watch layer hands over only
+/// `shop`'s Gateways, and `infra/public` was drawn as missing, in red, on a
+/// healthy cluster. Fails if a Gateway outside what was read is called
+/// missing, or if the namespace's own Gateway stops being drawn.
+#[test]
+fn a_gateway_outside_the_scope_is_not_checked_rather_than_missing() {
+    let mut scoped = Stores {
+        scoped: true,
+        ..Stores::default()
+    };
+    routed(&mut scoped);
+    let slice = crate::commands::connections::map::slice_of(
+        scoped.held("shop", OtherPolicies::none(), now()),
+        now(),
+    );
+    assert_eq!(slice.nodes[PUBLIC].object.existence, Existence::NotChecked);
+    assert!(matches!(
+        &slice.nodes["gateway.networking.k8s.io/HTTPRoute/shop/api"].verdict,
+        crate::resources::topology::NodeVerdict::Route { stops, .. } if stops.is_empty()
+    ));
+    assert!(matches!(
+        slice.nodes["gateway.networking.k8s.io/Gateway/shop/local"].verdict,
+        crate::resources::topology::NodeVerdict::Gateway { .. }
+    ));
+
+    // The whole cluster read is the one list that may call it missing.
+    let mut whole = Stores::default();
+    routed(&mut whole);
+    let slice = crate::commands::connections::map::slice_of(
+        whole.held("shop", OtherPolicies::none(), now()),
+        now(),
+    );
+    assert_eq!(slice.nodes[PUBLIC].object.existence, Existence::Missing);
+}
+
+/// The cluster refused Gateways everywhere and another page's scope had the
+/// layer read `shop` alone: what `shop` holds is not every Gateway.
+#[test]
+fn gateways_read_in_one_namespace_never_call_another_s_missing() {
+    let mut stores = Stores::default();
+    routed(&mut stores);
+    stores.apply(read(
+        Kind::Gateway,
+        None,
+        Reading::Refused {
+            message: "gateways is forbidden".into(),
+        },
+    ));
+    stores.apply(read(Kind::Gateway, Some("shop"), Reading::Synced));
+    let slice = crate::commands::connections::map::slice_of(
+        stores.held("shop", OtherPolicies::none(), now()),
+        now(),
+    );
+    assert_eq!(slice.nodes[PUBLIC].object.existence, Existence::NotChecked);
+}
+
+/// A token that cannot list `HTTPRoutes` in `shop` counted "0" of them beside
+/// the lock, so a namespace where nothing could be read never read as
+/// refused. Fails if a route kind not read here counts anything.
+#[test]
+fn a_route_kind_not_read_counts_nothing() {
+    let mut stores = Stores::default();
+    routed(&mut stores);
+    stores.apply(read(
+        Kind::GrpcRoute,
+        None,
+        Reading::Refused {
+            message: "grpcroutes is forbidden".into(),
+        },
+    ));
+    let slice = crate::commands::connections::map::slice_of(
+        stores.held("shop", OtherPolicies::none(), now()),
+        now(),
+    );
+    let count = |kind: &str| {
+        slice
+            .read
+            .counts
+            .iter()
+            .find(|count| count.kind == kind)
+            .and_then(|count| count.count)
+    };
+    assert_eq!(count("HTTPRoute"), Some(1));
+    assert_eq!(count("GRPCRoute"), None);
+    assert_eq!(count("UDPRoute"), None);
+}
+
+/// A Gateway going unprogrammed, a route changing, or a Namespace coming or
+/// going changes what other namespaces draw, and only the Gateway's own
+/// namespace was drawn again: the route in `shop` kept its old verdict, and a
+/// new Namespace never appeared. Fails if any of them touches less than
+/// every namespace, or a Deployment touches more than its own.
+#[test]
+fn a_kind_one_namespace_names_from_another_touches_every_namespace() {
+    let mut stores = Stores::default();
+    routed(&mut stores);
+    let gateway = Object::Gateway(Box::new(GatewayInfo::read(&gateway_api(
+        "Gateway",
+        "infra",
+        "public",
+        &json!({ "gatewayClassName": "x", "listeners": [] }),
+    ))));
+    assert!(stores.apply(Feed::Applied(gateway.clone())).all);
+    assert!(stores.apply(Feed::Deleted(gateway)).all);
+    let namespace = Object::Namespace(Box::new(Named {
+        namespace: String::new(),
+        name: "fresh".into(),
+        labels: BTreeMap::new(),
+    }));
+    assert!(stores.apply(Feed::Applied(namespace)).all);
+    let touched = stores.apply(Feed::Applied(deployment("shop", "cart")));
+    assert!(!touched.all);
+    assert_eq!(touched.namespaces, BTreeSet::from(["shop".to_string()]));
 }
 
 /// A marked relist replaces what one slot held, and names the namespace an
@@ -152,6 +315,8 @@ fn opening(
             stream_id: "map-1".into(),
             scope: Some(vec!["shop".into()]),
             others: OtherPolicies::none(),
+            reread: None,
+            session: None,
             map,
             events: events.clone(),
             cancel: cancel.clone(),
@@ -191,10 +356,8 @@ async fn next(rx: &mut broadcast::Receiver<crate::state::AppEvent>) -> Vec<Strin
 #[tokio::test]
 async fn a_stream_draws_its_scope_then_only_what_a_feed_changed() {
     let map = Arc::new(ClusterMap::default());
-    map.feed([
-        read(Kind::Deployment, None, Reading::Synced),
-        Feed::Applied(deployment("shop", "cart")),
-    ]);
+    map.feed(every_kind_read());
+    map.feed([Feed::Applied(deployment("shop", "cart"))]);
     let (events, mut rx) = broadcast::channel(64);
     let (open, cancel) = opening(map.clone(), &events);
     let task = tokio::spawn(stream::run(open));
@@ -218,6 +381,77 @@ async fn a_stream_draws_its_scope_then_only_what_a_feed_changed() {
     while next(&mut rx).await != vec!["ready"] {}
     map.end();
     assert_eq!(task.await.expect("ends"), TopologyEnd::Replaced);
+}
+
+/// Every kind answered, so a stream draws at once rather than waiting for
+/// the kinds the layer has said nothing of.
+fn every_kind_read() -> Vec<Feed> {
+    Kind::ALL
+        .iter()
+        .map(|&kind| read(kind, None, Reading::Synced))
+        .collect()
+}
+
+/// A Cilium policy applied to `shop` while the map was open left every
+/// workload there saying no policy selects it, for as long as the page
+/// stayed open. Fails if the stream does not read the other engines again
+/// and draw what that changes.
+#[tokio::test]
+async fn a_policy_of_another_engine_applied_while_the_map_is_open_is_drawn() {
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    map.feed([Feed::Applied(deployment("shop", "cart"))]);
+    let (events, mut rx) = broadcast::channel(64);
+    let (mut open, cancel) = opening(map.clone(), &events);
+    open.reread = Some(Arc::new(|| {
+        Box::pin(async {
+            let mut others = OtherPolicies::none();
+            others.within("shop", "CiliumNetworkPolicy");
+            Some(others)
+        })
+    }));
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+    let again = next(&mut rx).await;
+    assert!(
+        again.contains(&"apps/Deployment/shop/cart".to_string()),
+        "{again:?}"
+    );
+    cancel.cancel();
+    assert_eq!(task.await.expect("ends"), TopologyEnd::Closed);
+}
+
+/// The token expired and could not be renewed: every watch failed with
+/// words and no `CREDENTIALS_EXPIRED:` prefix, and the map sat stale with no
+/// sign-in prompt. Fails if a failing read does not ask whether the session
+/// is over, or the answer does not end the map with the words the frontend
+/// asks for a sign-in on.
+#[tokio::test]
+async fn a_map_whose_session_expired_ends_saying_so() {
+    let said = "CREDENTIALS_EXPIRED: the cluster rejected this session's credentials: Unauthorized";
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    map.feed([read(
+        Kind::Pod,
+        None,
+        Reading::Failed {
+            message: "watch stream failed: Unauthorized".into(),
+        },
+    )]);
+    let (events, mut rx) = broadcast::channel(64);
+    let (mut open, _cancel) = opening(map.clone(), &events);
+    open.session = Some(Arc::new(move || {
+        Box::pin(async move { Some(said.to_string()) })
+    }));
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(30), task)
+            .await
+            .expect("ends in time")
+            .expect("ends"),
+        TopologyEnd::Failed { said: said.into() }
+    );
 }
 
 fn dynamic(value: serde_json::Value) -> Arc<kube::api::DynamicObject> {
@@ -308,7 +542,10 @@ fn unserved_is_not_installed_for_gateway_kinds_and_unread_for_the_others() {
     assert_eq!(reading("HTTPRoute"), Some(MapKindReading::NotServed));
     assert_eq!(reading("EndpointSlice"), Some(MapKindReading::Unserved));
     let held = stores.held("shop", OtherPolicies::none(), now());
-    assert!(held.gateway_unread.is_empty());
+    assert!(!held
+        .gateway_unread
+        .iter()
+        .any(|unread| unread.kind == "HTTPRoute"));
     assert!(held.slices.is_err());
 }
 

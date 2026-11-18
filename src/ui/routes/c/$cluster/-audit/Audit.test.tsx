@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AuditPage, AuditQuery } from "@/generated/types";
@@ -113,6 +113,67 @@ describe("the Audit page", () => {
     expect(screen.getByText("keeps 3 replicas")).toBeInTheDocument();
     expect(asked.some((query) => query.rule === "no-disruption-budget")).toBe(
       true
+    );
+  });
+
+  /**
+   * A rule opened from a table of forty is drawn under the table, below the
+   * fold: it is brought into view and takes the focus, by click and by
+   * Enter alike. Fails if opening a rule changes nothing in sight, which
+   * reads as a dead click.
+   */
+  it("brings an opened rule into view and gives it the focus", async () => {
+    const scrolled: Element[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    try {
+      await renderWithRouter(<Audit />, {
+        at: "/c/prod/audit",
+        route: "/c/$cluster/audit",
+      });
+      const row = await screen.findByText("No PodDisruptionBudget");
+      await userEvent.setup().click(row);
+      const opened = screen.getByTestId("audit-opened-rule");
+      await waitFor(() => expect(scrolled).toContain(opened));
+      expect(document.activeElement).toBe(opened);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
+  /**
+   * The table's footer counts rules in its own words, not the row label
+   * glued to a count that already has its noun. Fails if it reads "1
+   * object Findings".
+   */
+  it("counts the table's rows as rules", async () => {
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    expect(await screen.findByText("1 rule")).toBeInTheDocument();
+  });
+
+  /**
+   * The opened rule is named once, in its heading, with the badge and the
+   * category beside it. Fails if the title is printed twice.
+   */
+  it("names an opened rule once", async () => {
+    await renderWithRouter(<Audit />, {
+      at: "/c/prod/audit",
+      route: "/c/$cluster/audit",
+    });
+    await userEvent
+      .setup()
+      .click(await screen.findByText("No PodDisruptionBudget"));
+    const opened = screen.getByTestId("audit-opened-rule");
+    await waitFor(() =>
+      expect(within(opened).getByText("keeps 3 replicas")).toBeInTheDocument()
+    );
+    expect(within(opened).getAllByText("No PodDisruptionBudget")).toHaveLength(
+      1
     );
   });
 

@@ -247,6 +247,7 @@ export function JobDetail() {
                   kind={ResourceType.Job}
                   namespace={namespace}
                   name={name}
+                  owners={job?.ownerReferences}
                 />
               }
               declared={

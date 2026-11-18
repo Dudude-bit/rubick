@@ -148,6 +148,24 @@ function ingressRoute(spec: Record<string, unknown>): CustomResourceInfo {
 
 describe("which hosts reach a Service", () => {
   /**
+   * Opening the map asked about forty Services at once, and each answer read
+   * the whole cluster's routing again: four hundred lists in two seconds.
+   * Fails if Services asked about together read the cluster more than once.
+   */
+  it("reads the cluster once for Services asked about together", async () => {
+    vi.mocked(commands.listIngresses).mockClear();
+    vi.mocked(commands.listServices).mockClear();
+    const names = ["argocd-server", "argocd-repo", "argocd-dex"];
+    await Promise.all(
+      names.map((name) => serviceRoutes({ namespace: "argocd", name }))
+    );
+    expect(commands.listIngresses).toHaveBeenCalledTimes(1);
+    expect(commands.listServices).toHaveBeenCalledTimes(1);
+    await serviceRoutes({ namespace: "argocd", name: "argocd-server" });
+    expect(commands.listIngresses).toHaveBeenCalledTimes(2);
+  });
+
+  /**
    * The reported bug, in one case: a cluster whose edge is an IngressRoute,
    * a page that read Ingresses, and a reader told nothing served the Service
    * they had been opening by name for months.

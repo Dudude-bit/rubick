@@ -1839,6 +1839,8 @@ export const en = {
   topology: {
     title: "Topology",
     canvasLabel: "The cluster map",
+    layoutFailed:
+      "The map could not be laid out, so what is drawn may be missing objects: {said}",
     expandGroup: "Expand {name}",
     collapseGroup: "Collapse {name}",
     nodeKeys: "Enter opens its page, Space its peek",
@@ -1891,8 +1893,13 @@ export const en = {
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",
     stillListing: "Still listing: {kinds}",
-    nothingToDraw: "Nothing to draw {scope}: no routes, Services or workloads.",
+    nothingToDraw:
+      "Nothing to draw in {scope}: no routes, Services or workloads.",
     shareNotRead: "Not read, so not on the map: {kinds}",
+    outsideScope:
+      "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
+    shareStillOpening:
+      "The map was still being opened: nothing in it had been read yet.",
     shareGroup: "Group",
     shareHolds: "What it holds",
   },
@@ -1994,6 +2001,14 @@ export const en = {
     objectsOf: {
       one: "{n} object",
       other: "{n} objects",
+    },
+    rulesCounted: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
+    findingsOf: {
+      one: "{n} finding",
+      other: "{n} findings",
     },
     uncheckedOf: {
       one: "{n} not checked",
@@ -2131,7 +2146,7 @@ export const en = {
       "Unless allowPrivilegeEscalation is false, a process can gain more privileges than its parent through a setuid binary. The Restricted profile requires false.",
     pssRunAsNonRoot: "Does not require a non-root user",
     pssRunAsNonRootWhy:
-      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, it runs as root on purpose, which costs more. The Restricted profile requires true.",
+      "Without runAsNonRoot: true the container may run as root, and an escape lands as root on the node. Stated false, nothing checks it at all. The Restricted profile requires true; a container set to run as user 0 is its own finding.",
     pssRunAsUserRoot: "Runs as user 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 is root, stated on purpose. The Restricted profile forbids it.",
@@ -2404,7 +2419,12 @@ export const en = {
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
+    liveUnreached:
+      "Hubble Relay cannot reach {nodes}: flows seen there do not arrive.",
+    nothingOnReached:
+      "{sources} saw no flows in {scope} on the nodes it reaches, in the {window}.",
     panelDenied: "denied by {policies}",
+    panelL7Denied: "HTTP requests an L7 rule denied: {v}/s",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
     window1h: "last hour",
@@ -2426,12 +2446,15 @@ export const en = {
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
-    cut: "Showing the busiest {kept}; the quietest {cut} are left out.",
+    notReadInWindow:
+      "{sources}: flows could not be read, so whether there were any is not known.",
+    cut: "Showing {kept}: the busiest by requests, bytes, flow events and drops in turn; {cut} quieter are left out.",
     podsFailed:
       "Pods could not be read ({said}), so names the sources wrote are not matched to workloads.",
     podsLabel: "pods",
     sourceFailed: "{source} could not be looked for: {said}",
-    sourcePartly: "Some of {source}'s numbers could not be read.",
+    sourcePartly: "Some of {source}'s numbers could not be read: {said}",
+    sourceUnread: "{source}'s flows could not be read: {said}",
     groupNotOnMap: "Not on the map: only named by a flow",
     endAmbiguous: "a name shared by {kinds}",
     endNotListed: "named by a flow; not listed in {namespace}",
@@ -2441,12 +2464,15 @@ export const en = {
     endNode: "a node",
     endAddress: "an address no workload has",
     endUnidentified: "not identified by its source",
+    endRemote: "{namespace} in cluster {cluster} of the mesh",
     milliseconds: "{v} ms",
     cellNotRead: "not read",
     cellNone: "none",
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellFloor:
+      "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
     panelClose: "Close",
     panelSeenBy:
@@ -2455,11 +2481,18 @@ export const en = {
     panelNothing: "nothing in this window",
     panelRequests: "{v} requests/s",
     panelErrors: "{share} of them errors (5xx, or gRPC other than OK)",
+    panelErrorsHttp:
+      "{share} of them HTTP 5xx (a failed gRPC call is answered with a 200 and is not counted)",
     panelBytes: "{v}",
     panelEvents: "{v} flow events/s",
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelSideServer: "From the server's proxy.",
+    panelSideCaller:
+      "From the caller's proxy: the server's reported none of it.",
+    panelSideBoth:
+      "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
     subRequests: "{v} req/s",
     subEvents: "{v} flow events/s",
     subErrors: "{share} errors",
@@ -2479,6 +2512,12 @@ export const en = {
     quiet: "{source} saw no flows to or from it in the {window}.",
     quietNodeAgent:
       "{source} saw no flows to or from it in the {window}; it sees only the nodes its agent runs on.",
+    ofCronJob:
+      "Flows are counted for CronJob {name}, which made this Job: the sources file every run under it.",
+    quietNotRead:
+      "Whether {source} saw flows to or from it is not known: they could not be read ({said}).",
+    quietUnmatched:
+      "{source} names workloads through their pods, and the pods in {namespace} could not be read, so its flows to or from it could not be found.",
     shareWay: "Way",
     sharePeer: "Workload",
     shareNumbers: "Numbers",
@@ -4132,6 +4171,9 @@ export const en = {
       one: "{n} row, from the namespaces that answered",
       other: "{n} rows, from the namespaces that answered",
     },
+    countedSoFar: "{counted}, from the part of the list read so far",
+    countedWhereAnswered: "{counted}, from the namespaces that answered",
+    countedOfTotal: "{counted}, {shown} shown",
     longListTrim: {
       one: "{n} row. To trim the list, narrow the scope or search",
       other: "{n} rows. To trim the list, narrow the scope or search",

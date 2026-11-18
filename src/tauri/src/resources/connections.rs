@@ -14,7 +14,7 @@
 //! spelled out.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::PodSpec;
+use k8s_openapi::api::core::v1::{PodSpec, Volume};
 use serde::{Deserialize, Serialize};
 
 use super::gateway::{ListenerInfo, ObjectName};
@@ -272,10 +272,16 @@ pub enum Usage {
         volume: String,
         /// Reached through a `projected` volume rather than named directly.
         projected: bool,
+        /// `optional: true` on the source: the pod starts without the object.
+        optional: bool,
     },
     /// A volume declared from this object that no container mounts. A real
     /// state, and the silent mistake the YAML does not point at.
-    Unmounted { volume: String, projected: bool },
+    Unmounted {
+        volume: String,
+        projected: bool,
+        optional: bool,
+    },
     /// One environment variable reading one key.
     Env {
         container: String,
@@ -288,7 +294,11 @@ pub enum Usage {
         key_present: Option<bool>,
     },
     /// Every key becomes an environment variable.
-    EnvFrom { container: String },
+    EnvFrom {
+        container: String,
+        /// `optional: true`: the pod starts without the object.
+        optional: bool,
+    },
     /// `spec.imagePullSecrets`.
     ImagePullSecret,
     /// `spec.serviceAccountName` — the identity the containers hold.
@@ -785,6 +795,44 @@ impl UnexploredKind {
     }
 }
 
+/// Whether the volume names `kind`/`name` with `optional: true`.
+fn optional_in(volume: &Volume, kind: &str, name: &str) -> bool {
+    let named = |optional: Option<bool>| optional.unwrap_or(false);
+    match kind {
+        "ConfigMap" => {
+            volume
+                .config_map
+                .as_ref()
+                .is_some_and(|source| source.name == name && named(source.optional))
+                || volume
+                    .projected
+                    .iter()
+                    .flat_map(|p| p.sources.iter().flatten())
+                    .any(|source| {
+                        source
+                            .config_map
+                            .as_ref()
+                            .is_some_and(|source| source.name == name && named(source.optional))
+                    })
+        }
+        "Secret" => {
+            volume.secret.as_ref().is_some_and(|source| {
+                source.secret_name.as_deref() == Some(name) && named(source.optional)
+            }) || volume
+                .projected
+                .iter()
+                .flat_map(|p| p.sources.iter().flatten())
+                .any(|source| {
+                    source
+                        .secret
+                        .as_ref()
+                        .is_some_and(|source| source.name == name && named(source.optional))
+                })
+        }
+        _ => false,
+    }
+}
+
 /// Every way a pod spec draws on one named object.
 ///
 /// `target_kind` is `ConfigMap`, `Secret`, `PersistentVolumeClaim` or
@@ -805,11 +853,13 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
             continue;
         }
         let projected = source == "projected";
+        let optional = optional_in(volume, target_kind, target_name);
         let mounts = mounts_of(spec, &volume.name);
         if mounts.is_empty() {
             usages.push(Usage::Unmounted {
                 volume: volume.name.clone(),
                 projected,
+                optional,
             });
             continue;
         }
@@ -820,6 +870,7 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
             sub_path: mount.sub_path,
             volume: volume.name.clone(),
             projected,
+            optional,
         }));
     }
 
@@ -858,20 +909,23 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
         }
 
         for env_from in container.env_from.iter().flatten() {
-            let matches = match target_kind {
+            let optional = match target_kind {
                 "ConfigMap" => env_from
                     .config_map_ref
                     .as_ref()
-                    .is_some_and(|r| r.name == target_name),
+                    .filter(|r| r.name == target_name)
+                    .map(|r| r.optional),
                 "Secret" => env_from
                     .secret_ref
                     .as_ref()
-                    .is_some_and(|r| r.name == target_name),
-                _ => false,
+                    .filter(|r| r.name == target_name)
+                    .map(|r| r.optional),
+                _ => None,
             };
-            if matches {
+            if let Some(optional) = optional {
                 usages.push(Usage::EnvFrom {
                     container: container.name.clone(),
+                    optional: optional.unwrap_or(false),
                 });
             }
         }
@@ -938,8 +992,49 @@ mod tests {
                 sub_path: None,
                 volume: "data".to_string(),
                 projected: false,
+                optional: false,
             }]
         );
+    }
+
+    /// Argo CD's optional Secrets were drawn red, "missing", on the map and
+    /// on the workload's Connections tab, while the pod ran without them.
+    /// Fails if a volume, a projected source or an env source that says
+    /// `optional: true` stops saying so, or one that does not claims to.
+    #[test]
+    fn an_optional_volume_or_env_source_says_it_is_optional() {
+        let spec: PodSpec = serde_json::from_value(serde_json::json!({
+            "volumes": [
+                { "name": "tls", "secret": { "secretName": "dex-tls", "optional": true } },
+                { "name": "mtls", "projected": { "sources": [
+                    { "secret": { "name": "repo-mtls", "optional": true } },
+                    { "secret": { "name": "repo-ca" } }
+                ] } }
+            ],
+            "containers": [{
+                "name": "dex",
+                "envFrom": [{ "secretRef": { "name": "dex-tls", "optional": true } }],
+                "volumeMounts": [
+                    { "name": "tls", "mountPath": "/tls" },
+                    { "name": "mtls", "mountPath": "/mtls" }
+                ]
+            }]
+        }))
+        .expect("spec");
+        let optional = |name: &str| -> Vec<bool> {
+            usages_in_pod_spec(&spec, "Secret", name)
+                .into_iter()
+                .map(|use_| match use_ {
+                    Usage::Mount { optional, .. }
+                    | Usage::Unmounted { optional, .. }
+                    | Usage::EnvFrom { optional, .. } => optional,
+                    other => panic!("{other:?}"),
+                })
+                .collect()
+        };
+        assert_eq!(optional("dex-tls"), vec![true, true]);
+        assert_eq!(optional("repo-mtls"), vec![true]);
+        assert_eq!(optional("repo-ca"), vec![false]);
     }
 
     #[test]
@@ -952,6 +1047,7 @@ mod tests {
             vec![Usage::Unmounted {
                 volume: "data".to_string(),
                 projected: false,
+                optional: false,
             }]
         );
     }
@@ -1003,6 +1099,7 @@ mod tests {
                     sub_path: None,
                     volume: "app-config".to_string(),
                     projected: false,
+                    optional: false,
                 },
                 Usage::Env {
                     container: "app".to_string(),
@@ -1083,6 +1180,7 @@ mod tests {
             sub_path: Some("app.conf".to_string()),
             volume: "app-config".to_string(),
             projected: false,
+            optional: false,
         })
         .expect("serialize");
         assert_eq!(json["how"], "mount");

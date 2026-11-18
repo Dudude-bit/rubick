@@ -16,6 +16,7 @@ import type {
   PolicyRef,
   RelayAt,
   TrafficAnswer,
+  UnreachedNode,
   WorkloadKey,
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
@@ -68,6 +69,10 @@ export interface FlowSource {
   marks: boolean;
   /** It sees only the nodes its agent runs on, which nothing here can tell. */
   nodeAgent: boolean;
+  /** Some ends it writes are names only the pods resolve: unread pods hide its flows. */
+  needsPods: boolean;
+  /** Its errors include a failed gRPC call; else HTTP 5xx only. */
+  grpcErrors: boolean;
 }
 
 /** One read: the present sources, positionally as each flow's `source`. */
@@ -84,13 +89,24 @@ export interface Cell {
   value: number | null;
   source: string | null;
   state: CellState;
+  /** A share of errors that is only a floor: its source cannot see a failed gRPC call. */
+  floor?: true;
 }
+
+/**
+ * gRPC answers a failed call with HTTP 200 and the status in a trailer, so
+ * a source counting HTTP 5xx misses it on anything but HTTP/1.
+ */
+export const mayCarryGrpc = (protocols: readonly string[]) =>
+  !(protocols.length > 0 && protocols.every((p) => p.startsWith("HTTP/1")));
 
 /** Why flows were dropped, and the policies that denied them where the source says. */
 export interface Reason {
   reason: string;
   rate: number;
   policies?: readonly PolicyRef[];
+  /** An L7 rule denied the request at the proxy; `reason` is then Hubble's "unknown". */
+  l7?: boolean;
 }
 
 /** One source's own numbers on a pair, for the panel. */
@@ -99,6 +115,8 @@ export interface SourceLine {
   values: readonly (number | null)[];
   reasons: readonly Reason[];
   protocols: readonly string[];
+  /** The proxies of the pair its numbers came from: `server`, `caller`. */
+  sides: readonly string[];
 }
 
 export interface FlowRow {
@@ -140,6 +158,8 @@ export function endId(end: FlowEnd): string {
       return `address:${end.address}`;
     case "unidentified":
       return `unidentified:${end.namespace ?? ""}/${end.word}`;
+    case "remote":
+      return `remote:${end.cluster}/${end.kind}/${end.namespace}/${end.name}`;
   }
 }
 
@@ -158,14 +178,18 @@ function readsOf(reading: TrafficReading) {
   for (const read of reading.answer.reads)
     if (read.state.says === "failed")
       failed.add(`${read.source}:${read.measure}`);
-  return (source: number, measure: Measure) =>
-    failed.has(`${source}:${measure}`);
+  return {
+    failed: (source: number, measure: Measure) =>
+      failed.has(`${source}:${measure}`),
+    // A cell can turn "not read" with its pair's flows unchanged.
+    key: JSON.stringify([reading.sources.map((s) => s.name), [...failed]]),
+  };
 }
 
 /**
  * A cell from the first source, in the reading's order, that has the number;
- * where none has it, "not read" if a source that saw the pair failed to read
- * it, "not measured" if none of them measures it at all.
+ * where none has it, "not read" if any source that measures it failed to
+ * read it, "not measured" if none of the pair's sources measures it at all.
  */
 function cellOf(
   flows: readonly Flow[],
@@ -188,16 +212,21 @@ function cellOf(
   const measuring = flows.filter((flow) =>
     reading.sources[flow.source]?.measures.includes(measure)
   );
-  const unread = measuring.find((flow) => failed(flow.source, measure));
+  // A failed query leaves its source no flow on any pair to be found by.
+  const unread = reading.sources.findIndex(
+    (source, index) =>
+      source.measures.includes(measure) && failed(index, measure)
+  );
   return {
     cell: {
       value: null,
-      source: unread ? (reading.sources[unread.source]?.name ?? null) : null,
-      state: unread
-        ? "notRead"
-        : measuring.length > 0
-          ? "measured"
-          : "notMeasured",
+      source: unread >= 0 ? (reading.sources[unread]?.name ?? null) : null,
+      state:
+        unread >= 0
+          ? "notRead"
+          : measuring.length > 0
+            ? "measured"
+            : "notMeasured",
     },
     flow: null,
   };
@@ -210,18 +239,23 @@ function errorShareOf(
 ): Cell {
   const flow = requests.flow;
   if (!flow) return { ...requests.cell, value: null };
-  const source = reading.sources[flow.source]?.name ?? null;
+  const from = reading.sources[flow.source];
+  const source = from?.name ?? null;
   if (failed(flow.source, "errors"))
     return { value: null, source, state: "notRead" };
   const errors = flow.values[at("errors")];
   const total = requests.cell.value ?? 0;
+  const value =
+    errors === null || errors === undefined || total <= 0
+      ? null
+      : errors / total;
   return {
-    value:
-      errors === null || errors === undefined || total <= 0
-        ? null
-        : errors / total,
+    value,
     source,
     state: "measured",
+    ...(value !== null && !from?.grpcErrors && mayCarryGrpc(flow.protocols)
+      ? { floor: true as const }
+      : {}),
   };
 }
 
@@ -232,6 +266,7 @@ const signature = (flows: readonly Flow[]) =>
       flow.values,
       flow.reasons,
       flow.protocols,
+      flow.sides,
     ])
   );
 
@@ -244,7 +279,7 @@ export function pairRows(
   previous: ReadonlyMap<string, { sig: string; row: FlowRow }> = new Map()
 ): { rows: FlowRow[]; kept: Map<string, { sig: string; row: FlowRow }> } {
   const { answer } = reading;
-  const failed = readsOf(reading);
+  const { failed, key } = readsOf(reading);
   const pairs = new Map<string, Flow[]>();
   for (const flow of answer.flows) {
     const from = answer.ends[flow.from];
@@ -261,7 +296,7 @@ export function pairRows(
     // The reading's own order is the preference order: the first source
     // that has a number is the one whose number is shown.
     flows.sort((a, b) => a.source - b.source);
-    const sig = signature(flows);
+    const sig = key + signature(flows);
     const was = previous.get(id);
     if (was?.sig === sig) {
       kept.set(id, was);
@@ -297,6 +332,7 @@ export function pairRows(
                 values: flow.values,
                 reasons: flow.reasons,
                 protocols: flow.protocols,
+                sides: flow.sides,
               },
             ]
           : [];
@@ -319,6 +355,48 @@ export class RowMemo {
   }
 }
 
+/** What a source's reading allows saying where it has no flow. */
+export type Silence =
+  | { says: "quiet" }
+  /** `all`: not one of its queries answered. */
+  | { says: "notRead"; said: string; all: boolean }
+  /** Pods in the subject's namespace were not read, so its names were not matched. */
+  | { says: "unmatched" };
+
+/**
+ * The one place that decides a source saw nothing: only where every query
+ * of it answered and, about a subject in `namespace`, the names it writes
+ * could be matched to workloads there. Anything else is "could not look".
+ */
+export function silenceOf(
+  reading: TrafficReading,
+  source: number,
+  namespace: string | null
+): Silence {
+  const reads = reading.answer.reads.filter((read) => read.source === source);
+  const failed = reads.find((read) => read.state.says === "failed");
+  if (failed?.state.says === "failed")
+    return {
+      says: "notRead",
+      said: failed.state.message,
+      all: reads.every((read) => read.state.says === "failed"),
+    };
+  if (
+    namespace !== null &&
+    reading.sources[source]?.needsPods &&
+    (reading.answer.podsFailed !== null ||
+      reading.answer.podsUnread.some(
+        (unread) => unread.namespace === namespace
+      ))
+  )
+    return { says: "unmatched" };
+  return { says: "quiet" };
+}
+
+/** Whether a source has any flow in this reading. */
+export const heard = (reading: TrafficReading, source: number) =>
+  reading.answer.flows.some((flow) => flow.source === source);
+
 /** At or above this share of errors an edge is a warning, and at `ERROR_AT` an error. */
 export const WARN_AT = 0.01;
 export const ERROR_AT = 0.05;
@@ -339,7 +417,9 @@ export function flowTone(row: FlowRow): MapTone {
           ? "err"
           : share.value >= WARN_AT
             ? "warn"
-            : "ok";
+            : share.floor
+              ? "mute"
+              : "ok";
   if ((row.drops.value ?? 0) > 0 && shareTone !== "err") return "warn";
   return shareTone;
 }
@@ -387,6 +467,8 @@ export interface LiveBatch {
   relay: RelayAt | null;
   lost: number;
   untracked: number;
+  /** Nodes the relay cannot read, every one each batch. */
+  unreached: readonly UnreachedNode[];
 }
 
 export interface LiveListener {
@@ -405,6 +487,8 @@ export const LIVE_SOURCE: FlowSource = {
   need: "needRelay",
   marks: false,
   nodeAgent: false,
+  needsPods: false,
+  grpcErrors: false,
 };
 
 export const livePairId = (pair: { from: FlowEnd; to: FlowEnd }) =>
@@ -419,6 +503,16 @@ const measured = (value: number | null, source: string): Cell =>
  * A live pair as a row. Hubble sees HTTP only where L7 visibility is on, so
  * a pair with none is "not measured" there, never 0 requests.
  */
+function liveShare(pair: LivePair): Cell {
+  const cell = measured(
+    pair.requests && pair.errors !== null ? pair.errors / pair.requests : null,
+    LIVE_SOURCE.name
+  );
+  return cell.value !== null && mayCarryGrpc(pair.protocols)
+    ? { ...cell, floor: true }
+    : cell;
+}
+
 export function liveRow(pair: LivePair): FlowRow {
   const name = LIVE_SOURCE.name;
   const http = pair.requests !== null;
@@ -447,6 +541,7 @@ export function liveRow(pair: LivePair): FlowRow {
     reason: drop.reason,
     rate: drop.rate,
     policies: drop.policies,
+    l7: drop.l7,
   }));
   return {
     id: livePairId(pair),
@@ -455,14 +550,7 @@ export function liveRow(pair: LivePair): FlowRow {
     from: pair.from,
     to: pair.to,
     requests: http ? measured(pair.requests, name) : unmeasured,
-    errorShare: http
-      ? measured(
-          pair.requests && pair.errors !== null
-            ? pair.errors / pair.requests
-            : null,
-          name
-        )
-      : unmeasured,
+    errorShare: http ? liveShare(pair) : unmeasured,
     p50: http ? measured(pair.p50, name) : unmeasured,
     p95: http ? measured(pair.p95, name) : unmeasured,
     p99: http ? measured(pair.p99, name) : unmeasured,
@@ -471,7 +559,15 @@ export function liveRow(pair: LivePair): FlowRow {
     drops: measured(pair.dropped, name),
     reasons,
     seenBy: [name],
-    by: [{ source: LIVE_SOURCE, values, reasons, protocols: pair.protocols }],
+    by: [
+      {
+        source: LIVE_SOURCE,
+        values,
+        reasons,
+        protocols: pair.protocols,
+        sides: [],
+      },
+    ],
   };
 }
 

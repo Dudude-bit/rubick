@@ -1884,6 +1884,8 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    layoutFailed:
+      "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",
     collapseGroup: "Свернуть {name}",
     nodeKeys:
@@ -1934,12 +1936,16 @@ export const ru: Catalogue = {
     notLookedAt: "Не прочитано: {kinds}",
     edgesAbsent: "{kind} не прочитаны: связи с ними здесь не нарисованы.",
     otherEngines:
-      "{kinds} здесь действует, но не нарисован: рабочую нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
+      "{kinds} здесь действует, но не нарисован: нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
     noMatch: "На карте нет ничего с таким именем",
     stillListing: "Ещё читается: {kinds}",
     nothingToDraw:
-      "Рисовать нечего {scope}: нет ни маршрутов, ни Services, ни рабочих нагрузок.",
+      "Рисовать нечего в {scope}: нет ни маршрутов, ни Services, ни нагрузок.",
     shareNotRead: "Не прочитано, поэтому нет на карте: {kinds}",
+    outsideScope:
+      "{namespaces}: не прочитано, это пространство имён вне области карты, поэтому здесь только то, на что ссылаются из неё",
+    shareStillOpening:
+      "Карта ещё открывалась: в ней ещё ничего не было прочитано.",
     shareGroup: "Группа",
     shareHolds: "Что в ней",
   },
@@ -2055,6 +2061,18 @@ export const ru: Catalogue = {
       few: "{n} объекта",
       many: "{n} объектов",
       other: "{n} объекта",
+    },
+    rulesCounted: {
+      one: "{n} правило",
+      few: "{n} правила",
+      many: "{n} правил",
+      other: "{n} правила",
+    },
+    findingsOf: {
+      one: "{n} находка",
+      few: "{n} находки",
+      many: "{n} находок",
+      other: "{n} находки",
     },
     uncheckedOf: {
       one: "{n} не проверен",
@@ -2206,7 +2224,7 @@ export const ru: Catalogue = {
       "Пока allowPrivilegeEscalation не false, процесс может получить больше прав, чем у родителя, через setuid-файл. Профиль Restricted требует false.",
     pssRunAsNonRoot: "Не требует запуска не от root",
     pssRunAsNonRootWhy:
-      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. Явное false означает root нарочно и обходится дороже. Профиль Restricted требует true.",
+      "Без runAsNonRoot: true контейнер может работать от root, и побег оказывается root на узле. С явным false эту проверку не делает никто. Профиль Restricted требует true; если контейнеру задан пользователь 0, это отдельная находка.",
     pssRunAsUserRoot: "Запускается от пользователя 0",
     pssRunAsUserRootWhy:
       "runAsUser: 0 означает root, заданный нарочно. Профиль Restricted это запрещает.",
@@ -2467,10 +2485,10 @@ export const ru: Catalogue = {
   },
   traffic: {
     title: "Трафик",
-    canvasLabel: "Потоки между рабочими нагрузками",
+    canvasLabel: "Потоки между нагрузками",
     sources: "Источники",
     fit: "Вписать карту",
-    searchPlaceholder: "Найти рабочую нагрузку…",
+    searchPlaceholder: "Найти нагрузку…",
     integrationsLink: "Интеграции › Prometheus",
     absent:
       "Трафик читается из рядов Istio, Hubble, Beyla или Caretta в Prometheus, подключённом к этому кластеру; Rubick ничего из этого не устанавливает. Подключите его в разделе {integrations}. Что нужно каждому источнику:",
@@ -2517,7 +2535,12 @@ export const ru: Catalogue = {
     liveLost: "Hubble сообщает: {lost} потеряно, не дойдя до relay.",
     liveUntracked:
       "{untracked} не уместились в число пар, которые держатся одновременно, и не показаны.",
+    liveUnreached:
+      "Hubble Relay не достаёт до узлов {nodes}: потоки оттуда не приходят.",
+    nothingOnReached:
+      "{sources}: на узлах, до которых он достаёт, потоков в {scope} нет ({window}).",
     panelDenied: "запрещено: {policies}",
+    panelL7Denied: "HTTP-запросы, отклонённые правилом L7: {v}/с",
     window5m: "последние 5 минут",
     window15m: "последние 15 минут",
     window1h: "последний час",
@@ -2533,33 +2556,39 @@ export const ru: Catalogue = {
     railAbsent: "рядов нет",
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
-    measureFailed: "Не удалось прочитать {measure}: {said}",
+    measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
     coverage:
       "Меш {source}: все поды у {marked}, часть подов у {partly}, {of} здесь.",
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
-    nothingInWindow: "{sources}: потоков в {scope} за {window} нет.",
-    cut: "Показаны {kept} с наибольшим трафиком; ещё {cut} потише не показаны.",
+    nothingInWindow: "{sources}: потоков в {scope} нет ({window}).",
+    notReadInWindow:
+      "{sources}: потоки прочитать не удалось, поэтому неизвестно, были ли они.",
+    cut: "Показаны {kept}: по очереди самые нагруженные по запросам, байтам, событиям потоков и отброшенным; ещё {cut} потише не показаны.",
     podsFailed:
-      "Не удалось прочитать поды ({said}), поэтому имена, которые написали источники, не сопоставлены с рабочими нагрузками.",
+      "Не удалось прочитать поды ({said}), поэтому имена, которые написали источники, не сопоставлены с нагрузками.",
     podsLabel: "поды",
     sourceFailed: "Не удалось проверить {source}: {said}",
-    sourcePartly: "Часть чисел {source} прочитать не удалось.",
+    sourcePartly: "Часть чисел {source} прочитать не удалось: {said}",
+    sourceUnread: "Потоки {source} прочитать не удалось: {said}",
     groupNotOnMap: "Нет на карте: только названо потоком",
     endAmbiguous: "это имя носят {kinds}",
     endNotListed: "названо потоком; в {namespace} такого нет",
     endPodsUnread: "названо потоком; поды в {namespace} прочитать не удалось",
-    endService: "Service в {namespace}, а не рабочая нагрузка",
-    endServiceNowhere: "сервис, названный источником, вне неймспейсов",
+    endService: "Service в {namespace}, а не нагрузка",
+    endServiceNowhere: "сервис, названный источником, вне пространств имён",
     endNode: "узел",
-    endAddress: "адрес, которого нет ни у одной рабочей нагрузки",
+    endAddress: "адрес, которого нет ни у одной нагрузки",
     endUnidentified: "источник не опознал",
+    endRemote: "{namespace} в кластере {cluster} из того же меша",
     milliseconds: "{v} мс",
     cellNotRead: "не прочитано",
     cellNone: "нет",
     cellFrom: "по данным {source}",
     cellNotMeasured: "Не измеряется: {sources}",
     cellNotReadBy: "{source} не смог это прочитать",
+    cellFloor:
+      "Не меньше этой доли: {source} считает только HTTP 5xx, а неудачный вызов gRPC отвечает кодом 200.",
     panelLabel: "Один поток",
     panelClose: "Закрыть",
     panelSeenBy: "Видят {sources}; линия и таблица показывают числа {source}.",
@@ -2567,11 +2596,18 @@ export const ru: Catalogue = {
     panelNothing: "в этом окне ничего",
     panelRequests: "{v} запросов/с",
     panelErrors: "из них ошибки: {share} (5xx или gRPC, отличный от OK)",
+    panelErrorsHttp:
+      "из них HTTP 5xx: {share} (неудачный вызов gRPC отвечает кодом 200 и не учитывается)",
     panelBytes: "{v}",
     panelEvents: "{v} событий потоков/с",
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
+    panelSideServer: "По данным прокси сервера.",
+    panelSideCaller:
+      "По данным прокси вызывающей стороны: прокси сервера ничего из этого не сообщил.",
+    panelSideBoth:
+      "По данным прокси сервера и вызовы, которые видел только прокси вызывающей стороны: они не дошли до сервера.",
     subRequests: "{v} запр./с",
     subEvents: "{v} событий/с",
     subErrors: "{share} ошибок",
@@ -2591,8 +2627,14 @@ export const ru: Catalogue = {
     quiet: "{source} не видит потоков к этой нагрузке или от неё за {window}.",
     quietNodeAgent:
       "{source} не видит потоков к этой нагрузке или от неё за {window}; видны только узлы, где работает его агент.",
+    ofCronJob:
+      "Потоки считаются для CronJob {name}, который создал этот Job: источники записывают все его запуски на него.",
+    quietNotRead:
+      "Видит ли {source} потоки к этой нагрузке или от неё, неизвестно: их не удалось прочитать ({said}).",
+    quietUnmatched:
+      "{source} называет нагрузки по их подам, а поды в пространстве имён {namespace} прочитать не удалось, поэтому потоки этой нагрузки в {source} не найдены.",
     shareWay: "Направление",
-    sharePeer: "Рабочая нагрузка",
+    sharePeer: "Нагрузка",
     shareNumbers: "Числа",
   },
   cost: {
@@ -4487,6 +4529,9 @@ export const ru: Catalogue = {
       many: "{n} строк, из ответивших пространств имён",
       other: "{n} строки, из ответивших пространств имён",
     },
+    countedSoFar: "{counted}, из прочитанной части списка",
+    countedWhereAnswered: "{counted}, из ответивших пространств имён",
+    countedOfTotal: "{counted}, показано {shown}",
     longListTrim: {
       one: "{n} строка. Чтобы сократить список, сузьте область или поиск",
       few: "{n} строки. Чтобы сократить список, сузьте область или поиск",
