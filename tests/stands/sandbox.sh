@@ -4,14 +4,35 @@
 # refused: by a link, a linked directory, a hard link, or a link to a file not
 # yet made. Run directly, it checks itself against a scratch home.
 
+# A directory as the file system names it: the part that exists followed
+# through its links, the part not yet made with its `.` and `..` worked out.
+canonical_dir() (
+  set -f
+  dir=$1 rest=""
+  while [ ! -d "$dir" ]; do
+    rest="$(basename "$dir")${rest:+/$rest}"
+    dir=$(dirname "$dir")
+  done
+  out=$(cd "$dir" && pwd -P)
+  IFS=/
+  for part in $rest; do
+    case $part in
+      "" | .) ;;
+      ..) out=$(dirname "$out") ;;
+      *) out="${out%/}/$part" ;;
+    esac
+  done
+  echo "$out"
+)
+
 refuse_home_kubeconfig() {
   local path=$1 to dir home
   while [ -L "$path" ]; do
     to=$(readlink "$path")
     case $to in /*) path=$to ;; *) path="$(dirname "$path")/$to" ;; esac
   done
-  dir=$(cd "$(dirname "$path")" 2>/dev/null && pwd -P) || dir=$(dirname "$path")
-  home=$(cd "$HOME/.kube" 2>/dev/null && pwd -P) || home="$HOME/.kube"
+  dir=$(canonical_dir "$(dirname "$path")")
+  home=$(canonical_dir "$HOME/.kube")
   if [ "$dir/$(basename "$path")" = "$home/config" ] || [ "$path" -ef "$HOME/.kube/config" ]; then
     echo "refusing to write $HOME/.kube/config" >&2
     exit 1
@@ -45,6 +66,12 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   ln -s "$HOME/.kube/config" "$scratch/dangling-home"
   expect refused "$scratch/dangling-home"
   expect allowed "$scratch/dangling"
+  rm -rf "$HOME/.kube"
+  expect refused "$HOME/./.kube/config"
+  expect refused "$HOME/gone/../.kube/config"
+  expect refused "$HOME/.kube/./config"
+  expect allowed "$scratch/sandbox/new/config"
+  expect allowed "$HOME/.kube-sandbox/config"
   [ "$failed" = 0 ] && echo "sandbox guard: ok"
   exit "$failed"
 fi
