@@ -1,6 +1,12 @@
 import { Pin } from "lucide-react";
 
-import { isChange, rowWords, type ChangeRow } from "@/lib/changes";
+import {
+  isChange,
+  placedBy,
+  recordedNow,
+  rowWords,
+  type ChangeRow,
+} from "@/lib/changes";
 import type { TimelineRead } from "@/hooks/useTimeline";
 import type { LetGo } from "@/generated/types";
 import { errorToShow } from "@/lib/error-utils";
@@ -41,23 +47,29 @@ export type LastChange =
   | { failed: string }
   /** Rows kept under the name, and which cluster this is could not be checked. */
   | { unchecked: string | null }
+  /** The newest change, and no read placed it: it may be another cluster's. */
+  | { unplaced: ChangeRow }
   | null
   | undefined;
 
 export function lastChangeOf(
   read: Pick<
     TimelineRead,
-    "read" | "rows" | "letGo" | "unreadable" | "identity" | "error"
+    "read" | "rows" | "letGo" | "unreadable" | "identity" | "error" | "vouched"
   >
 ): LastChange {
   if (!read.read)
     return read.error ? { failed: errorToShow(read.error) } : undefined;
-  // The Changes page warns of it; the card does not name another cluster's
-  // row as this service's last change.
+  // Said of the row as the Changes page says it: one no read placed with
+  // its doubt, one the connection held now recorded as it is.
+  const latest = read.rows.find(isChange);
+  if (latest && !placedBy(latest, read.vouched)) return { unplaced: latest };
+  if (latest && recordedNow(latest, read.vouched)) return latest;
+  // The Changes page warns of the rest; the card does not name another
+  // cluster's row as this service's last change.
   if (read.identity?.says === "unknown")
     return { unchecked: read.identity.message };
   if (read.identity?.says === "unsettled") return { unchecked: null };
-  const latest = read.rows.find(isChange);
   if (latest) return latest;
   if (read.error) return { failed: errorToShow(read.error) };
   if (read.unreadable > 0) return { unreadable: read.unreadable };
@@ -76,6 +88,10 @@ export function lastChangeWords(
     return latest.unchecked === null
       ? t("services", "lastChangeUnsettled")
       : t("services", "lastChangeUnchecked", { reason: latest.unchecked });
+  if ("unplaced" in latest)
+    return t("services", "lastChangeUnplaced", {
+      change: rowWords(latest.unplaced, t),
+    });
   if ("failed" in latest)
     return t("changes", "readFailed", { reason: latest.failed });
   if ("unreadable" in latest)

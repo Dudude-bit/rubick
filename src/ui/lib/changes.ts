@@ -467,6 +467,16 @@ export function spansFor<S extends SpanLike & { kinds?: string[] }>(
 export const isChange = (row: TimelineRow): row is ChangeRow =>
   row.what.says !== "event";
 
+/** Whether the connection held now recorded `row`: it is this cluster's, whatever the name was before. */
+export function recordedNow(
+  row: Pick<TimelineRow, "seq">,
+  vouched: readonly SeqStretch[] | undefined
+): boolean {
+  return (vouched ?? []).some(
+    (stretch) => stretch.last === null && row.seq >= stretch.first
+  );
+}
+
 /**
  * Whether a connection read to be this cluster, or the one held now,
  * recorded `row`. One no read placed may be another cluster's that had the

@@ -2986,6 +2986,8 @@ export const en = {
       "not known: the rows kept under this name may be another cluster's",
     lastChangeUnchecked:
       "not known: the rows kept under this name may be another cluster's ({reason})",
+    lastChangeUnplaced:
+      "{change}; recorded while which cluster this is could not be checked, so it may be another cluster's",
     nothingSeen: "nothing seen while this app was watching",
     nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
     nothingSeenSinceCleared:
