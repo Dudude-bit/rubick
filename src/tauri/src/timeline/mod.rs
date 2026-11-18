@@ -386,10 +386,11 @@ impl ClusterTimeline {
     /// Which cluster this name is could not be settled: the client kept
     /// changing while it was read. What is held is said to be perhaps
     /// another's until a read through the client held settles it; nothing
-    /// is dropped.
+    /// is dropped. A check that already did stands: a reconnect since would
+    /// have unchecked it.
     pub fn unsettled(&self) {
         let mut inner = self.inner.lock();
-        if inner.holds_any() {
+        if inner.holds_any() && inner.checked != Identity::Known {
             inner.checked = Identity::Unsettled;
             inner.told.spans = true;
         }

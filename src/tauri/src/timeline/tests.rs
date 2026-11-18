@@ -985,12 +985,27 @@ fn rows_held_when_the_cluster_could_not_be_settled_are_said_to_be() {
     let cluster = timelines.cluster("kind");
     cluster.seen_cluster("uid-a".into());
     cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+    timelines.client_replaced("kind");
     cluster.unsettled();
     assert_eq!(
         cluster.page(&query(Show::All)).identity,
         Identity::Unsettled
     );
     assert!(!cluster.seen_cluster("uid-a".into()));
+    assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
+}
+
+/// Two follows met: one settled the cluster through the client held, the
+/// other's three reads each went through a client already replaced. Fails
+/// if the second call's failure turns that check into "perhaps another".
+#[test]
+fn a_check_through_the_client_held_outlasts_another_call_that_could_not_settle() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+    timelines.client_replaced("kind");
+    cluster.seen_cluster("uid-a".into());
+    cluster.unsettled();
     assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
 }
 
