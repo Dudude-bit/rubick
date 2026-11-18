@@ -905,6 +905,19 @@ describe("trafficDoors", () => {
         checked: false,
         note: "NetworkPolicy not checked",
       });
+      // One verdict per door: the clients and their policies are walked
+      // once, not once for the refusal, again for the doubt and again for
+      // whether it is unsure.
+      let walked = 0;
+      const counted = {
+        ...traefik,
+        get clients() {
+          walked += 1;
+          return traefik.clients;
+        },
+      };
+      doorWith(counted);
+      expect(walked).toBeLessThanOrEqual(2);
       // No policy over the pods, and the controller's pods still listing:
       // unsure with no policy or words to name, and still not judged fine.
       expect(

@@ -26,9 +26,8 @@ import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
 import {
-  doorDoubt,
+  doorReading,
   isPolicyStop,
-  refusedStop,
   type DoorClaim,
   type DoorDoubt,
   type DoorRead,
@@ -323,16 +322,17 @@ export function backingOf(
   );
   const port = backend.port ?? null;
   const door = sources.door;
-  const stop =
-    published?.stop ?? (door ? refusedStop(published, port, door.read) : null);
+  const reading = door
+    ? doorReading(published, port, door.read, door.client)
+    : null;
+  const stop = published?.stop ?? reading?.shut ?? null;
   return {
     service,
     ready: published?.ready ?? 0,
     draining: published?.draining ?? 0,
     notReady: published?.notReady ?? 0,
     stop: stop && "service" in stop ? stop : null,
-    doubt:
-      door && !stop ? doorDoubt(published, port, door.read, door.client) : null,
+    doubt: stop ? null : (reading?.doubt ?? null),
     known,
     error,
   };
