@@ -2347,6 +2347,8 @@ export const en = {
     journalDeleted: "{kind} gone",
     journalSeenAtRelist:
       "Noticed when the list was read again: it changed some time before this moment, not at it.",
+    journalUnplaced:
+      "Recorded under this name while which cluster this is could not be checked: it may be another cluster's that had the name.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:

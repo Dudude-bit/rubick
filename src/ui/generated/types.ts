@@ -1932,6 +1932,12 @@ export interface TimelinePage {
   unreadable: number;
   epoch: number;
   identity: Identity;
+  vouched: SeqStretch[];
+}
+
+export interface SeqStretch {
+  first: number;
+  last: number | null;
 }
 
 export interface LetGoes {

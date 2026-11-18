@@ -21,6 +21,9 @@ import {
 import { graphSections } from "./report-graph";
 import { connectionCount } from "./connections";
 
+/** Every row placed by a read, for tests that are not about placing. */
+const PLACED = [{ first: 0, last: null }];
+
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
   values
     ? `${section}.${key}(${Object.entries(values)
@@ -595,6 +598,7 @@ describe("changesSection", () => {
     meta = followed.map((span) => ({ ...span, kinds: [] }))
   ) => ({
     rows,
+    vouched: PLACED,
     spans: { followed, meta },
     letGo: undefined,
   });
@@ -616,6 +620,7 @@ describe("changesSection", () => {
     const section = changesSection(
       {
         rows: [],
+        vouched: PLACED,
         spans: { followed: [], meta: [] },
         letGo: {
           changes: { before, cleared: true },
@@ -661,6 +666,7 @@ describe("changesSection", () => {
     const ownerOnly = changesSection(
       {
         rows: [row()],
+        vouched: PLACED,
         spans: undefined,
         letGo: undefined,
         unread: "changes.readFailed",
@@ -678,6 +684,7 @@ describe("changesSection", () => {
     const noneOfIt = changesSection(
       {
         rows: [row({ name: "other" })],
+        vouched: PLACED,
         spans: undefined,
         letGo: undefined,
         unread: "changes.readFailed",
@@ -687,6 +694,32 @@ describe("changesSection", () => {
       t
     );
     expect(texts(noneOfIt)).not.toContain("share.journalEmpty");
+  });
+
+  /**
+   * A row a refused connection recorded went into the file as the object's
+   * history. Fails if a row no read placed is shared without saying so, or
+   * one a read placed is said to be unplaced.
+   */
+  it("says of each row no read placed that it may be another cluster's", () => {
+    const placed = row();
+    const unplaced = row({ at: at - 60_000 });
+    const section = changesSection(
+      {
+        ...read([placed, unplaced]),
+        vouched: [{ first: placed.seq, last: placed.seq }],
+      },
+      payments,
+      AT,
+      t
+    );
+    const rows = section?.body.type === "changes" ? section.body.changes : [];
+    const marked = rows.filter((change) =>
+      change.parts.some((part) => part.text === "changes.journalUnplaced")
+    );
+    expect(marked.map((change) => change.at)).toEqual([
+      new Date(at - 60_000).toISOString(),
+    ]);
   });
 
   /** Nothing recorded and no span over the object is not "nothing changed". */
@@ -838,6 +871,7 @@ describe("changesSection", () => {
     ];
     const section = changesSection(read(rows), payments, AT, t);
     const tab = timelineOf({
+      vouched: PLACED,
       revisions: [],
       deliveries: [],
       helm: [],

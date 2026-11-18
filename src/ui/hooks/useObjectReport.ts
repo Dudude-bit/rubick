@@ -255,6 +255,9 @@ export function useObjectReport(
     const changes = changesSection(
       {
         rows: withNewer(ownChanges.rows, ownerChanges.rows),
+        // One timeline, so either read's word on it; the owner's where the
+        // object's own has not answered.
+        vouched: ownChanges.vouched ?? ownerChanges.vouched,
         spans: ownChanges.spans,
         letGo: ownChanges.letGo,
         readFrom: changesReadFrom,
@@ -358,9 +361,11 @@ export function useObjectReport(
     resource,
     targets,
     ownChanges.rows,
+    ownChanges.vouched,
     ownChanges.spans,
     ownChanges.letGo,
     ownerChanges.rows,
+    ownerChanges.vouched,
     changesFailed,
     changesPending,
     changesReadFrom,

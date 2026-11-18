@@ -62,6 +62,7 @@ function page(
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
     identity: { says: "known" },
+    vouched: [{ first: 0, last: null }],
     epoch: 0,
     unreadable: 0,
     ...over,

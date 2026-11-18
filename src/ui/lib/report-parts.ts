@@ -16,6 +16,7 @@ import type {
   EventInfo,
   FieldMove,
   LetGoes,
+  SeqStretch,
   SpanSets,
   TimelineRow,
 } from "@/generated/types";
@@ -26,6 +27,7 @@ import {
   gapWords,
   isChange,
   letGoWords,
+  placedBy,
   REVISED_KINDS,
   rowWords,
   type Gap,
@@ -373,9 +375,15 @@ export function changesTargets(
  * rows it let go as rows of their own. `null` for an object nothing is asked
  * of: an empty list would read as "nothing changed".
  */
+/** What a row no read placed says beside it, as the screen does. */
+export const unplacedPart = (unplaced: boolean, t: T) =>
+  unplaced ? [{ text: t("changes", "journalUnplaced"), quiet: false }] : [];
+
 export function changesSection(
   read: {
     rows: readonly TimelineRow[];
+    /** Which rows a read placed; see `placedBy`. */
+    vouched: readonly SeqStretch[] | undefined;
     spans: SpanSets | undefined;
     letGo: LetGoes | undefined;
     /** Older rows than this were not read; `null` where every one was. */
@@ -435,6 +443,7 @@ export function changesSection(
       ...(row.atRelist
         ? [{ text: t("changes", "journalSeenAtRelist"), quiet: true }]
         : []),
+      ...unplacedPart(!placedBy(row, read.vouched), t),
     ];
     const last = out.at(-1);
     if (last && last.key === key) last.parts.push(...parts);

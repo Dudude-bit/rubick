@@ -19,6 +19,7 @@ import {
   ORDER,
   gapChange,
   refOf,
+  unplacedPart,
   utcMoment,
   type PlacedSection,
 } from "@/lib/report-parts";
@@ -118,6 +119,7 @@ export function changesScreenSection(
             ...(row.atRelist
               ? [{ text: t("changes", "journalSeenAtRelist"), quiet: true }]
               : []),
+            ...unplacedPart(item.unplaced, t),
           ],
         },
       ];
@@ -138,6 +140,7 @@ export function changesScreenSection(
           }),
           parts: [
             { text: count > 1 ? `${said} ×${count}` : said, quiet: false },
+            ...unplacedPart(item.unplaced, t),
           ],
         },
       ];
