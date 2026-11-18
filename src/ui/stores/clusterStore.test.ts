@@ -287,6 +287,33 @@ describe("a kubeconfig entry that changed on disk", () => {
   });
 });
 
+describe("a changed kubeconfig entry while the reader moves", () => {
+  /**
+   * The held cluster's disconnect takes a moment, and the reader connects
+   * to another meanwhile. Fails if the window is then sent back to the
+   * cluster it showed when the file changed, or the one the reader went to
+   * is disconnected as a held one.
+   */
+  it("follows the reader to the cluster it went to", async () => {
+    const connect = vi.mocked(commands.connectCluster);
+    const disconnect = vi.mocked(commands.disconnectCluster);
+    vi.mocked(commands.releaseClusters).mockResolvedValue(["prod", "dev"]);
+    await state().connect("prod");
+    await vi.waitFor(() => expect(state().live).toEqual(["prod", "dev"]));
+    connect.mockClear();
+    disconnect.mockClear();
+    disconnect.mockImplementationOnce(async () => {
+      await state().connect("stage");
+      return undefined;
+    });
+
+    await state().entriesChanged(["prod", "dev"]);
+    expect(connect.mock.calls.map(([name]) => name)).toEqual(["stage"]);
+    expect(state().currentContext).toBe("stage");
+    vi.mocked(commands.releaseClusters).mockResolvedValue([]);
+  });
+});
+
 describe("a connect that failed", () => {
   /**
    * The field is read by the cluster door, its toast and the alert panel.
