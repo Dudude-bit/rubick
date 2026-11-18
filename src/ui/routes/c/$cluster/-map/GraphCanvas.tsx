@@ -206,17 +206,19 @@ function Canvas({
     [drawn.nodes, nodes, absolute, placement, flow]
   );
 
+  // Whether the reader moved the view themselves, and what they last opened.
+  const moved = useRef(false);
+  const acted = useRef<string | null>(null);
+
   const centred = useRef<{ id: string } | null>(null);
   useEffect(() => {
     if (!focus || centred.current === focus) return;
     if (!placement.nodes.has(focus.id)) return;
     centred.current = focus;
+    // A pick is the reader's view: the group it opened is not fitted over it.
+    moved.current = true;
     centre(focus.id);
   }, [focus, placement, centre]);
-
-  // Whether the reader moved the view themselves, and what they last opened.
-  const moved = useRef(false);
-  const acted = useRef<string | null>(null);
   const fitted = useRef<{ key: string; groups: unknown } | null>(null);
   useEffect(() => {
     if (fitKey === null) return;

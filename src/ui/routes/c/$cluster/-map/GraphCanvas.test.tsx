@@ -240,6 +240,33 @@ describe("the map's view", () => {
     await waitFor(() => expect(fits.at(-1)).toBe(4), SLOW);
   });
 
+  /**
+   * A search pick in a closed group opened it, centred the node, and the
+   * new layout of the opened group fitted the whole map over it. Fails if
+   * a layout after a pick is fitted over the node the pick centred.
+   */
+  it("keeps the node a pick centred rather than fitting the layout it opened", async () => {
+    fits.length = 0;
+    setCenter.mockClear();
+    const draw = (shown: string[], focus: { id: string } | null) => (
+      <GraphCanvas
+        groups={shown.map(group)}
+        nodes={shown.map((id) => node(`${id}/web`, id))}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        focus={focus}
+        fitKey="namespace"
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw(["argo"], null));
+    await waitFor(() => expect(fits).toEqual([2]), SLOW);
+    rerender(draw(["argo", "billing"], { id: "billing/web" }));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(1), SLOW);
+    expect(fits).toEqual([2]);
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();
