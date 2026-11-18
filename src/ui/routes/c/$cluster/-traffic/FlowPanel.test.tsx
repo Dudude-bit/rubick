@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { FlowEnd } from "@/generated/types";
+import { translate } from "@/i18n";
 import {
   flowTone,
   liveRow,
@@ -129,9 +130,11 @@ describe("a flow opened from its edge", () => {
   });
 
   /**
-   * Calls that failed before reaching the server are in the caller's proxy's
+   * Calls the server's proxy did not report are in the caller's proxy's
    * report only: the row holds them and is not green, and the panel says
-   * which proxy each number came from, the server's alone where it alone spoke.
+   * which proxy each number came from, the server's alone where it alone
+   * spoke. Why the server's proxy is silent on them is not in the series, so
+   * neither language says they never reached it.
    */
   it("says which proxy the numbers came from, and keeps the caller's failures in the share", async () => {
     const istio: FlowSource = {
@@ -182,9 +185,13 @@ describe("a flow opened from its edge", () => {
     expect(screen.getByText(/of them errors/).className).toContain("text-err");
     expect(
       screen.getByText(
-        "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server."
+        "From the server's proxy, and the calls only the caller's proxy saw: the server's proxy did not report them."
       )
     ).toBeTruthy();
+    for (const locale of ["en", "ru"] as const)
+      expect(translate(locale, "traffic", "panelSideBoth")).not.toMatch(
+        /before reaching|не дошли/
+      );
     page.unmount();
     await renderWithRouter(
       <FlowPanel

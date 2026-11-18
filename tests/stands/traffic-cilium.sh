@@ -18,9 +18,8 @@
 set -euo pipefail
 
 : "${RUBICK_KUBECONFIG:?set RUBICK_KUBECONFIG to the sandbox kubeconfig path}"
-case "$(cd "$(dirname "$RUBICK_KUBECONFIG")" 2>/dev/null && pwd)/$(basename "$RUBICK_KUBECONFIG")" in
-  "$HOME/.kube/config") echo "refusing to write $HOME/.kube/config" >&2; exit 1 ;;
-esac
+. "$(dirname "$0")/sandbox.sh"
+refuse_home_kubeconfig "$RUBICK_KUBECONFIG"
 
 CLUSTER=rubick-gui
 CONTEXT="kind-$CLUSTER"

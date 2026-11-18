@@ -36,7 +36,7 @@ use crate::commands::cost::{cost_key, scoped_pods_on, ScopedPods};
 use crate::commands::helpers::scope_of;
 use crate::error::{Error, Result};
 use crate::integrations::prometheus::flows::{FlowEnd, NotListedWhy};
-use crate::resources::facts_of;
+use crate::resources::{facts_of, shown_text};
 use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
 use proto::flow::{self, DropReason, L7FlowType, Verdict};
@@ -610,9 +610,16 @@ async fn run(
                     None => {}
                 },
                 Ok(None) => return LiveEnd::RelayEnded,
-                Err(status) => return LiveEnd::Failed { said: status.message().to_string() },
+                Err(status) => return relay_failed(&status),
             },
         }
+    }
+}
+
+/// The relay's own words on why the stream ended, through the one door.
+fn relay_failed(status: &tonic::Status) -> LiveEnd {
+    LiveEnd::Failed {
+        said: shown_text(status.message()),
     }
 }
 
@@ -921,7 +928,7 @@ impl Fold {
                         UnreachedNode {
                             name: name.clone(),
                             state: state.as_str_name().to_string(),
-                            message: status.message.clone(),
+                            message: shown_text(&status.message),
                         },
                     );
                 }
@@ -1172,6 +1179,7 @@ fn summary(key: &Key, seconds: &VecDeque<(u64, Second)>, span: u64) -> LivePair 
 mod tests {
     use super::*;
     use crate::client::served::test_server::{answering, failure};
+    use crate::resources::WITHHELD_MARKER;
     use serde_json::json;
 
     fn endpoint(namespace: &str, workload: Option<(&str, &str)>, pod: &str) -> flow::Endpoint {
@@ -1595,6 +1603,37 @@ mod tests {
         }
         assert_eq!(fold.pairs.len(), MAX_LIVE_PAIRS);
         assert_eq!(fold.untracked, 1);
+    }
+
+    /// Relay's words on a node and on the stream are its own text, carried to
+    /// the screen: a private key in them is withheld like any other.
+    #[test]
+    fn a_private_key_in_relay_words_is_withheld() {
+        let key = [
+            "-----BEGIN ",
+            "PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASC\n-----END ",
+            "PRIVATE KEY-----",
+        ]
+        .concat();
+        let mut fold = Fold::new(0);
+        fold.node_status(&NodeStatusEvent {
+            state_change: NodeState::NodeError as i32,
+            node_names: vec!["kind/worker".into()],
+            message: key.clone(),
+        });
+        assert_eq!(fold.unreached["kind/worker"].message, WITHHELD_MARKER);
+        assert_eq!(
+            relay_failed(&tonic::Status::unavailable(key)),
+            LiveEnd::Failed {
+                said: WITHHELD_MARKER.into()
+            }
+        );
+        assert_eq!(
+            relay_failed(&tonic::Status::unavailable("connection refused")),
+            LiveEnd::Failed {
+                said: "connection refused".into()
+            }
+        );
     }
 
     /// A node relay cannot reach is held until it connects again, and a tick

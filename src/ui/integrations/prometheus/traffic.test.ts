@@ -177,7 +177,7 @@ describe("the other sources' queries", () => {
     expect(events).toContain("source_workload_kind");
     const [, client] = of(queries, "errors").split(") or ((");
     expect(client).toMatch(
-      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind\) \(.*reporter!="client"/
+      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind, protocol\) \(.*reporter!="client"/
     );
   });
 });
@@ -223,6 +223,22 @@ describe("Hubble's ends, metric by metric", () => {
 });
 
 describe("Hubble's HTTP metrics, v1 and v2", () => {
+  /**
+   * The server reporting HTTP/1.1 and the client alone HTTP/2 with two 5xx:
+   * requests count the client's HTTP/2, so its errors must count too. Keyed
+   * on the pair alone, the server's HTTP/1.1 hid them and the share read 0%.
+   */
+  it("keeps a client's errors on a protocol the server did not report", () => {
+    const queries = hubbleQueries(
+      0,
+      ["hubble_http_requests_total{source_workload}"],
+      ALL
+    );
+    const errors = of(queries, "errors");
+    expect(errors).toMatch(/^\(sum by \([^)]*, protocol\)/);
+    expect(errors).toMatch(/unless on\([^)]*, protocol\)/);
+  });
+
   /**
    * HTTP v1 writes `status` only on its responses: a 5xx share read from
    * its requests finds none and reads 0% where half the calls failed.
@@ -287,11 +303,12 @@ describe("which sources a Prometheus holds", () => {
   });
 
   /**
-   * A source whose ends only the pods resolve must say so, or a subject in a
+   * A source whose ends the pods resolve must say so, or a subject in a
    * namespace whose pods were not read is called quiet: Istio always (a pod
-   * label), Hubble by pod, never one that writes the workload's kind.
+   * label), Hubble by pod, Beyla and Caretta for an end they name as a bare
+   * pod; only Hubble writing every metric's workload kind needs none.
    */
-  it("says which sources name workloads only through their pods", async () => {
+  it("says which sources need the pods to name some of their ends", async () => {
     const hubbleBy = async (label: "workload" | "pod") => {
       prometheusQuery.mockImplementation(async (query) => {
         if (query.includes("istio_requests_total"))
@@ -311,8 +328,8 @@ describe("which sources a Prometheus holds", () => {
     expect(await hubbleBy("workload")).toEqual({
       istio: true,
       hubble: false,
-      beyla: false,
-      caretta: false,
+      beyla: true,
+      caretta: true,
     });
     expect((await hubbleBy("pod")).hubble).toBe(true);
   });
