@@ -168,13 +168,28 @@ function pricedRow(
       : held.length === 0 || (value ?? 0) > 0
   );
   return {
-    perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
+    // Nothing priced and something not priced or not read: no total, never 0.
+    perHour:
+      !any && unpriced.length + unknown.length > 0 ? null : partsTotal(parts),
     atLeast: any && (unpriced.length > 0 || unknown.length > 0),
     parts,
     unpriced,
     unknown: [...unknown],
   };
 }
+
+/**
+ * No total, for want of a read rather than a price: nothing of it is
+ * priced and how much it holds of some part was not read.
+ */
+export const totalUnknown = (row: {
+  perHour: number | null;
+  unpriced?: readonly CostPart[];
+  unknown?: readonly CostPart[];
+}): boolean =>
+  row.perHour === null &&
+  (row.unpriced?.length ?? 0) === 0 &&
+  (row.unknown?.length ?? 0) > 0;
 
 /** Storage nobody could read: claims refused, or no volume read at all. */
 const storageUnread = (
@@ -729,6 +744,8 @@ export interface CostOf {
   /** Of the whole cluster, where both are known. */
   share: number | null;
   atLeast: boolean;
+  /** No total because what it holds was not read: {@link totalUnknown}. */
+  unknown: boolean;
 }
 
 /** One workload: a custom kind may share a built-in's name, so the group counts too. */
@@ -763,6 +780,7 @@ export function costOf(
         ? null
         : row.perHour / cluster.perHour,
     atLeast: cluster?.atLeast ?? true,
+    unknown: totalUnknown(row),
   };
 }
 

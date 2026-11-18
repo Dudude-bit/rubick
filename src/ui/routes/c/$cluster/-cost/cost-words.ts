@@ -5,6 +5,7 @@
 import type { T } from "@/i18n/useT";
 import {
   costOf,
+  totalUnknown,
   type CostPart,
   type Parts,
   currencyOf,
@@ -198,6 +199,8 @@ export function costLineWords(
     return unread(
       t("cost", "lineJobsUnread", { said: picture.jobsUnread.message })
     );
+  // Nothing of it priced, and how much it holds was not read.
+  if (of?.unknown) return unread(t("cost", "lineUnread"));
   return { words: readLineWords(picture, target, of, t), unread: false };
 }
 
@@ -380,11 +383,13 @@ export function money(
 
 /** A row's total: a floor where some of what it holds carries no price. */
 export const totalOf = (
-  row: { perHour: number | null; atLeast: boolean },
+  row: Parameters<typeof totalUnknown>[0] & { atLeast: boolean },
   scale = 1
 ): Said =>
   row.perHour === null
-    ? "notPriced"
+    ? totalUnknown(row)
+      ? "notKnown"
+      : "notPriced"
     : row.atLeast
       ? { atLeast: row.perHour * scale }
       : row.perHour * scale;
@@ -414,6 +419,11 @@ export const sortable = (said: Said): number =>
         ? 0
         : -1;
 
-export function share(value: number | null, t: T): string {
-  return value === null ? t("cost", "notPriced") : formatShare(value);
+/** A row's share of the whole: not priced only where the row is not. */
+export function share(
+  row: Parameters<typeof totalUnknown>[0] & { share: number | null },
+  t: T
+): string {
+  if (row.share !== null) return formatShare(row.share);
+  return t("cost", totalUnknown(row) ? "notKnown" : "notPriced");
 }

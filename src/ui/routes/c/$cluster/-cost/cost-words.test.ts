@@ -11,6 +11,8 @@ import {
   money,
   partOf,
   pictureNotes,
+  share,
+  totalOf,
   troubleWords,
   usedLines,
   usedWords,
@@ -206,6 +208,39 @@ describe("figures read from some of a workload's pods", () => {
       "200m average",
       "800m peak, from 2 of its 3 pods",
     ]);
+  });
+});
+
+describe("a namespace with no total for want of a read", () => {
+  /**
+   * Nothing of it priced and its storage not read: its total, share and
+   * line said "not priced" or 0. Fails if any of the three says other than
+   * that it is not known.
+   */
+  it("says not known in its total and its share, and on its line in amber", () => {
+    const row = {
+      namespace: "vault",
+      perHour: null,
+      atLeast: false,
+      parts: {},
+      unpriced: [],
+      unknown: ["storage" as const],
+      share: null,
+    };
+    expect(money(totalOf(row), "", t)).toBe("Not known");
+    expect(share(row, t)).toBe("Not known");
+    expect(share({ ...row, unknown: [], unpriced: ["cpu" as const] }, t)).toBe(
+      "not priced"
+    );
+    const picture = {
+      ...estimatePicture(refused, prices, null),
+      unread: [],
+      namespaces: [row],
+    };
+    expect(costLineWords(picture, { namespace: "vault" }, t)).toEqual({
+      words: "Could not read what this costs.",
+      unread: true,
+    });
   });
 });
 

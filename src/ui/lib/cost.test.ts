@@ -19,6 +19,7 @@ import {
   noNodePriced,
   pricesNoNode,
   readingPicture,
+  totalUnknown,
   type CostReading,
   type Prices,
 } from "./cost";
@@ -653,6 +654,45 @@ describe("storage nobody could read", () => {
     const none = shop(0);
     expect(none.namespaces[0]).toMatchObject({ atLeast: false, unknown: [] });
     expect(none.workloads[0]!.atLeast).toBe(false);
+  });
+
+  /**
+   * A namespace that runs nothing, whose claims were refused, with no part
+   * priced: its row read as exactly 0. Fails if storage nobody read prices
+   * as none, or storage read as 0 bytes does not.
+   */
+  it("has no total for a namespace that holds nothing else, where its storage was not read", () => {
+    const empty = (storageBytes: number | null) =>
+      readingPicture(
+        basis({
+          namespaces: [
+            {
+              namespace: "vault",
+              workloads: 0,
+              pods: 0,
+              cpu: 0,
+              memory: 0,
+              gpus: 0,
+              storageBytes,
+            },
+          ],
+          workloads: [],
+        }),
+        reading({ namespaces: {}, workloads: fold([]) }),
+        opencost,
+        ["vault"]
+      );
+    const unread = empty(null);
+    expect(unread.namespaces[0]).toMatchObject({
+      perHour: null,
+      unknown: ["storage"],
+    });
+    expect(totalUnknown(unread.namespaces[0]!)).toBe(true);
+    expect(unread.total?.atLeast).toBe(true);
+    expect(empty(0).namespaces[0]).toMatchObject({
+      perHour: 0,
+      atLeast: false,
+    });
   });
 });
 
