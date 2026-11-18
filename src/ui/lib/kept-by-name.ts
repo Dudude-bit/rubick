@@ -1,3 +1,5 @@
+import { logError } from "@/lib/logger";
+
 /**
  * What the window keeps under a context name and nothing else: the last
  * counts, the owners a read named, a baseline, a manifest being edited.
@@ -8,6 +10,18 @@
  */
 const holders = new Set<() => void>();
 
+/** One holder let go: a throw from it, a store whose write failed, is logged and the rest are still told. */
+function tell<T extends unknown[]>(forget: (...args: T) => void, ...args: T) {
+  try {
+    forget(...args);
+  } catch (error) {
+    logError("A holder kept by a context name could not let go", {
+      context: "kept-by-name",
+      data: { error },
+    });
+  }
+}
+
 /** Names a holder, and returns how to take it off again. */
 export function keptByName(forget: () => void): () => void {
   holders.add(forget);
@@ -16,7 +30,7 @@ export function keptByName(forget: () => void): () => void {
 
 /** The kubeconfig files changed: no name is known to be the cluster it was. */
 export function namesRebound(): void {
-  for (const forget of [...holders]) forget();
+  for (const forget of [...holders]) tell(forget);
 }
 
 const persisted = new Set<(context: string) => void>();
@@ -32,12 +46,12 @@ const turned = new Set<string>();
  */
 export function persistedByName(forget: (context: string) => void): () => void {
   persisted.add(forget);
-  for (const context of turned) forget(context);
+  for (const context of turned) tell(forget, context);
   return () => void persisted.delete(forget);
 }
 
 /** `context` is another cluster than the one last seen under the name. */
 export function nameIsAnotherCluster(context: string): void {
   turned.add(context);
-  for (const forget of [...persisted]) forget(context);
+  for (const forget of [...persisted]) tell(forget, context);
 }

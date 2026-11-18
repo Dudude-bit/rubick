@@ -42,3 +42,31 @@ it("tells a persisted holder named later every name that turned this session", (
   offEarly();
   offLate();
 });
+
+/**
+ * A persisted store whose write threw, a full localStorage, stopped the
+ * walk: every holder named after it went on answering for the cluster
+ * before. Fails if one holder's throw keeps the next from being told, on a
+ * turn, on a rebind, or when it is named after a turn.
+ */
+it("tells every holder though one before it throws", () => {
+  const throws = () => {
+    throw new Error("QuotaExceededError");
+  };
+  const persistedAfter = vi.fn();
+  const keptAfter = vi.fn();
+  const offs = [
+    persistedByName(throws),
+    persistedByName(persistedAfter),
+    keptByName(throws),
+    keptByName(keptAfter),
+  ];
+  nameIsAnotherCluster("prod-after-a-throw");
+  namesRebound();
+  const namedLater = vi.fn();
+  offs.push(persistedByName(throws), persistedByName(namedLater));
+  for (const off of offs) off();
+  expect(persistedAfter).toHaveBeenCalledWith("prod-after-a-throw");
+  expect(keptAfter).toHaveBeenCalled();
+  expect(namedLater).toHaveBeenCalledWith("prod-after-a-throw");
+});
