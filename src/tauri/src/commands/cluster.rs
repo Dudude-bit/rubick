@@ -895,6 +895,34 @@ mod lifecycle_tests {
         assert!(state.still_holds("prod", &now));
     }
 
+    /// The timeline read `kube-system` through a client; a reconnect put
+    /// another cluster behind the name and its own follow recorded it; then
+    /// the first answer was applied and wiped the new cluster's history.
+    /// Fails if an answer read through a replaced client names the cluster.
+    #[tokio::test]
+    async fn an_identity_read_through_a_replaced_client_names_nothing() {
+        let state = AppState::new().expect("state");
+        let context = "rubick-test-identify-after-a-reconnect";
+        hold(&state, context).await;
+        let old = state.client_of(context).expect("client");
+        let cluster = state.timeline.cluster(context);
+        cluster.seen_cluster("uid-b".into());
+        hold(&state, context).await;
+        let read = Ok(k8s_openapi::api::core::v1::Namespace {
+            metadata: kube::api::ObjectMeta {
+                uid: Some("uid-a".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let applied = crate::commands::timeline::identify(&state, context, &old, &cluster, read);
+        assert_eq!(applied, None);
+        assert!(
+            !cluster.seen_cluster("uid-b".into()),
+            "the new cluster's history was wiped"
+        );
+    }
+
     /// A reader that subscribed with a client taken before a reconnect began
     /// builds the context's feeds in the gap; the landed client takes them
     /// over. Fails if those feeds keep the old client, or another cluster
