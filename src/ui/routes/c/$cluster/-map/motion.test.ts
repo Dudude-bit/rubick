@@ -13,12 +13,16 @@ describe("the map's flowing dashes", () => {
    * The hovered edge's rule outranks the pause, and an `animation`
    * shorthand there resets the play state to running: a hovered edge went
    * on moving in a window that had lost focus. Fails if any rule over the
-   * edges sets the play state, by name or through a shorthand in any order,
+   * edges, or any rule that starts the dashes whatever it selects, sets the
+   * play state by name or through a shorthand, in any order,
    * other than the pause and `animation: none`.
    */
   it("are started in longhands, so only the pause sets their play state", () => {
-    const edges = rules.filter((rule) =>
-      /\.map-flow|react-flow__edge/.test(rule.selector)
+    const starts = /animation(-name)?:[^;}]*\bmap-flow\b/;
+    const edges = rules.filter(
+      (rule) =>
+        /\.map-flow|react-flow__edge/.test(rule.selector) ||
+        starts.test(rule.body)
     );
     expect(
       edges.some((rule) => /animation-name:\s*map-flow/.test(rule.body))
