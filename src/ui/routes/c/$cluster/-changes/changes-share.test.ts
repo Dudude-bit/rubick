@@ -118,6 +118,58 @@ describe("the times a shared Changes report prints", () => {
   });
 });
 
+describe("rows no read placed, in the shared Changes report", () => {
+  /** Fails if a change or an event no read placed reaches the file without saying it may be another cluster's, or a placed one says it. */
+  it("says it of each row no read placed, a change and an event alike", () => {
+    const row = {
+      id: "r",
+      seq: 1,
+      at: to,
+      kind: "Pod",
+      group: "",
+      namespace: "shop",
+      name: "api-1",
+      what: { says: "created" as const },
+      atRelist: false,
+    };
+    const event = {
+      name: "api-1.1",
+      namespace: "shop",
+      uid: "e",
+      type: "Warning",
+      reason: "BackOff",
+      message: null,
+      source: null,
+      involvedObject: {
+        kind: "Pod",
+        name: "api-1",
+        namespace: "shop",
+        uid: null,
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    };
+    const section = changesScreenSection(
+      [
+        { kind: "journal", unplaced: true, at: to, row },
+        { kind: "event", unplaced: true, at: to - 1, row, event },
+        { kind: "journal", unplaced: false, at: to - 2, row },
+      ],
+      t,
+      "24h"
+    );
+    const rows = section.body.type === "changes" ? section.body.changes : [];
+    expect(
+      rows.map((change) =>
+        change.parts.some((part) =>
+          part.text.startsWith("Recorded under this name while")
+        )
+      )
+    ).toEqual([true, true, false]);
+  });
+});
+
 describe("what the shared Changes report says beyond the changes", () => {
   /** An event is the cluster's words, with its object and its count. Fails if a series loses either in the file. */
   it("carries an event with its object and its count", () => {
@@ -125,6 +177,7 @@ describe("what the shared Changes report says beyond the changes", () => {
       [
         {
           kind: "event",
+          unplaced: false,
           at: to,
           row: {
             id: "e",

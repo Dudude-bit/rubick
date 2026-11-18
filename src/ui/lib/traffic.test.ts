@@ -218,6 +218,16 @@ describe("the rows the page and the block draw", () => {
       reading([ISTIO], [{ ...flow(0, { requests: 10 }), unknown: ["errors"] }])
     ).rows;
     expect(counted.errorShare).toMatchObject({ value: null, state: "notRead" });
+    const [refused] = pairRows(
+      reading([ISTIO], [flow(0, { bytes: 10 })], [failed(0, "errors")])
+    ).rows;
+    expect(refused.errorShare).toMatchObject({
+      value: null,
+      state: "notRead",
+      source: "Istio",
+    });
+    const [quiet] = pairRows(reading([ISTIO], [flow(0, { bytes: 10 })])).rows;
+    expect(quiet.errorShare.state).toBe("belowHttp");
     const [blank] = pairRows(
       reading([ISTIO], [{ ...flow(0, {}), unknown: ["errors"] }])
     ).rows;

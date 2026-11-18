@@ -1958,6 +1958,14 @@ export const en = {
       "the connected Prometheus holds no sample of its pods in the last day",
     whyPeakUnread:
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
+    whyNoSamplesCpu:
+      "the connected Prometheus holds no sample of its pods' CPU use in the last day",
+    whyNoSamplesMemory:
+      "the connected Prometheus holds no sample of its pods' memory use in the last day",
+    whyPeakUnreadCpu:
+      "the connected Prometheus answered its average CPU use over the last day and no peak, and a peak is what is judged",
+    whyPeakUnreadMemory:
+      "the connected Prometheus answered its average memory use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
     whyPartialCpu: {
@@ -2023,6 +2031,8 @@ export const en = {
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
+    cliFilesUnread:
+      "Which kubeconfig files hold this cluster could not be told, so the command says FILES: {why}",
     objectsOf: {
       one: "{n} object",
       other: "{n} objects",
@@ -2347,6 +2357,8 @@ export const en = {
     journalDeleted: "{kind} gone",
     journalSeenAtRelist:
       "Noticed when the list was read again: it changed some time before this moment, not at it.",
+    journalUnplaced:
+      "Recorded under this name while which cluster this is could not be checked: it may be another cluster's that had the name.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:
@@ -2984,6 +2996,8 @@ export const en = {
       "not known: the rows kept under this name may be another cluster's",
     lastChangeUnchecked:
       "not known: the rows kept under this name may be another cluster's ({reason})",
+    lastChangeUnplaced:
+      "{change}; recorded while which cluster this is could not be checked, so it may be another cluster's",
     nothingSeen: "nothing seen while this app was watching",
     nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
     nothingSeenSinceCleared:

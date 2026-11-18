@@ -1071,3 +1071,82 @@ describe("clusters named like what every object has", () => {
     expect(scopeFor(at, "toString", true).namespaceScope).toEqual([]);
   });
 });
+
+describe("sessions made from a kubeconfig entry that has since changed", () => {
+  let backend: ReturnType<typeof fakeBackend>;
+  let letGo: Gate;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    useClusterStore.setState({
+      currentContext: null,
+      isConnected: false,
+      pendingContext: null,
+      isAuthenticating: false,
+      live: [],
+      wayBack: null,
+      failures: named({}),
+    });
+    backend = fakeBackend();
+    // Tabs show dev and stage, so a release keeps them.
+    holdClusters(() => ["dev", "stage"]);
+    for (const name of ["dev", "stage", "prod"]) await state().connect(name);
+    await settle();
+    letGo = gate();
+    const plain = vi.mocked(commands.disconnectCluster).getMockImplementation();
+    vi.mocked(commands.disconnectCluster).mockImplementation(
+      async (context) => {
+        if (context === "dev") await letGo.promise;
+        return plain?.(context);
+      }
+    );
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    holdClusters(() => []);
+    vi.mocked(commands.connectCluster).mockImplementation(
+      async (context) => ({ context }) as ClusterInfo
+    );
+    vi.mocked(commands.focusCluster).mockImplementation(async () => null);
+    vi.mocked(commands.disconnectCluster).mockImplementation(
+      async () => undefined
+    );
+    vi.mocked(commands.releaseClusters).mockImplementation(async () => []);
+    vi.mocked(commands.connectionAttempt).mockImplementation(async () => null);
+  });
+
+  /**
+   * A release answered while dev was being let go, naming stage's old
+   * session; a switch to stage then focused the client the old entry built,
+   * and the loop skipped it as the reader's own. Fails if a release puts a
+   * session from before the change back where a switch would focus it.
+   */
+  it("connects afresh a changed cluster a release named while others were let go", async () => {
+    const changing = state().entriesChanged(["dev", "stage"]);
+    await settle();
+    await state().release();
+    await state().connect("stage");
+    expect(commands.focusCluster).not.toHaveBeenCalledWith("stage");
+    expect(commands.connectCluster).toHaveBeenCalledWith("stage");
+    letGo.open();
+    await changing;
+    expect(vi.mocked(commands.disconnectCluster).mock.calls).toEqual([["dev"]]);
+  });
+
+  /**
+   * The reader connected stage afresh while dev was being let go, then went
+   * to qa with stage's tab still open. Fails if the loop disconnects the new
+   * session by the name it listed before.
+   */
+  it("keeps a session connected afresh after the change, once the reader moves on", async () => {
+    const changing = state().entriesChanged(["dev", "stage"]);
+    await settle();
+    await state().connect("stage");
+    await state().connect("qa");
+    letGo.open();
+    await changing;
+    expect(vi.mocked(commands.disconnectCluster).mock.calls).toEqual([["dev"]]);
+    expect(backend.live.has("stage")).toBe(true);
+  });
+});

@@ -99,6 +99,7 @@ fn prints(kubeconfig: &Kubeconfig) -> HashMap<String, u64> {
 pub(crate) struct Seen {
     stamp: Stamp,
     prints: HashMap<String, u64>,
+    layout: Vec<super::FileNames>,
 }
 
 impl K8sClientManager {
@@ -122,10 +123,15 @@ impl K8sClientManager {
             .unwrap_or_default()
     }
 
+    async fn loaded_layout(&self) -> Vec<super::FileNames> {
+        self.loaded.read().await.named.clone()
+    }
+
     pub(crate) async fn seen(&self) -> Seen {
         Seen {
             stamp: stamp(&self.loaded_files().await),
             prints: self.loaded_prints().await,
+            layout: self.loaded_layout().await,
         }
     }
 }
@@ -141,12 +147,14 @@ pub(crate) async fn look(
     look_then(manager, seen, overrides, || {}).await
 }
 
-/// What a look found on disk: the contexts whose entry changed or went, and
-/// whether any context was added or went, which the window's list shows.
+/// What a look found on disk: the contexts whose entry changed or went,
+/// whether any context was added or went, which the window's list shows, and
+/// whether which file names what moved, which a CLI is pointed at.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Looked {
     pub changed: Vec<String>,
     pub named: bool,
+    pub layout: bool,
 }
 
 /// [`look`], with `read` run once the files are read: where a test writes
@@ -185,8 +193,20 @@ async fn look_then(
         || prints
             .keys()
             .any(|context| !seen.prints.contains_key(context));
-    *seen = Seen { stamp: now, prints };
-    Some(Looked { changed, named })
+    // The same entries can move to another file: what a CLI is pointed at
+    // moves with them, with no context changed or named.
+    let layout = manager.loaded_layout().await;
+    let moved = layout != seen.layout;
+    *seen = Seen {
+        stamp: now,
+        prints,
+        layout,
+    };
+    Some(Looked {
+        changed,
+        named,
+        layout: moved,
+    })
 }
 
 /// Looks every two seconds for as long as the app runs, and tells the
@@ -197,8 +217,13 @@ pub async fn run(manager: Arc<K8sClientManager>, events: broadcast::Sender<AppEv
     loop {
         tokio::time::sleep(LOOK_EVERY).await;
         let overrides = crate::commands::cluster::read_kubeconfig_overrides();
-        if let Some(Looked { changed, named }) = look(&manager, &mut seen, overrides).await {
-            if !changed.is_empty() || named {
+        if let Some(Looked {
+            changed,
+            named,
+            layout,
+        }) = look(&manager, &mut seen, overrides).await
+        {
+            if !changed.is_empty() || named || layout {
                 let _ = events.send(AppEvent::KubeconfigChanged { changed });
             }
         }
@@ -248,7 +273,8 @@ mod tests {
             look(&manager, &mut seen, pinned.clone()).await,
             Some(Looked {
                 changed: vec!["kind-x".to_string()],
-                named: false
+                named: false,
+                layout: false
             })
         );
         assert_eq!(look(&manager, &mut seen, pinned).await, None);
@@ -278,7 +304,8 @@ mod tests {
             look(&manager, &mut seen, vec![path]).await,
             Some(Looked {
                 changed: Vec::new(),
-                named: true
+                named: true,
+                layout: false
             })
         );
     }
@@ -309,7 +336,49 @@ mod tests {
             look(&manager, &mut seen, vec![path]).await,
             Some(Looked {
                 changed: vec!["kind-x".to_string()],
-                named: false
+                named: false,
+                layout: false
+            })
+        );
+    }
+
+    /// One context named alike in two files, and taken out of the first:
+    /// nothing a client is built from changed, but a CLI is now pointed at
+    /// the second file. Fails if that sends nothing, which left a copied
+    /// command naming the file the context had gone from.
+    #[tokio::test]
+    async fn an_entry_moved_to_another_file_is_said_though_nothing_changed() {
+        let dir = tempfile::tempdir().expect("dir");
+        let first = dir.path().join("first.yaml");
+        let second = dir.path().join("second.yaml");
+        let token = format!("t{}", "1".repeat(12));
+        let both = config("https://127.0.0.1:41001", &token);
+        std::fs::write(&first, &both).expect("write");
+        let only_kind_x = both.replace(
+            ", {name: other, context: {cluster: other, user: kind-x}}",
+            "",
+        );
+        std::fs::write(&second, &only_kind_x).expect("write");
+        let manager = K8sClientManager::new();
+        let pinned = vec![first.clone(), second];
+        manager
+            .load_kubeconfig_resolved(pinned.clone())
+            .await
+            .expect("load");
+        let mut seen = manager.seen().await;
+        replace(
+            &first,
+            &both.replace(
+                "{name: kind-x, context: {cluster: kind-x, user: kind-x}}, ",
+                "",
+            ),
+        );
+        assert_eq!(
+            look(&manager, &mut seen, pinned).await,
+            Some(Looked {
+                changed: Vec::new(),
+                named: false,
+                layout: true
             })
         );
     }
@@ -340,7 +409,8 @@ mod tests {
             look(&manager, &mut seen, vec![path]).await,
             Some(Looked {
                 changed: Vec::new(),
-                named: false
+                named: false,
+                layout: false
             })
         );
     }

@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterContextProvider } from "@tanstack/react-router";
-import type { TimelineQuery, TimelineRow } from "@/generated/types";
+import type {
+  Identity,
+  SeqStretch,
+  TimelineQuery,
+  TimelineRow,
+} from "@/generated/types";
 
 const listEvents = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
   async () => []
@@ -26,6 +31,8 @@ let recorded: TimelineRow[] = [];
 const timelineAsked: TimelineQuery[] = [];
 let timelineFails: Error | null = null;
 let timelineMore = false;
+let timelineVouched: SeqStretch[] = [{ first: 0, last: null }];
+let timelineIdentity: Identity = { says: "known" };
 const timelineRead = async (query: TimelineQuery) => {
   timelineAsked.push(query);
   if (timelineFails) throw timelineFails;
@@ -44,6 +51,8 @@ const timelineAnswer = (query: TimelineQuery) => ({
   letGo: { changes: null, warnings: null, normal: null },
   keeping: { says: "kept" },
   unreadable: 0,
+  vouched: timelineVouched,
+  identity: timelineIdentity,
 });
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -259,6 +268,74 @@ describe("the report of any object", () => {
     );
     expect(timelineAsked[0].subject?.group).toBe("apps");
     timelineFails = null;
+  });
+
+  /**
+   * A change a refused connection recorded went into the object's file as
+   * its history. Fails if the report does not hand the timeline's word on
+   * which rows a read placed to the section, which then says it of none.
+   */
+  it("says of a change no read placed that it may be another cluster's", async () => {
+    const now = Date.now();
+    const change = (seq: number, at: number): TimelineRow => ({
+      id: `c${seq}`,
+      seq,
+      at,
+      kind: "Deployment",
+      group: "apps",
+      namespace: "web",
+      name: "api",
+      what: { says: "created" },
+      atRelist: false,
+    });
+    recorded = [change(2, now - 60_000), change(1, now - 120_000)];
+    timelineVouched = [{ first: 2, last: null }];
+    const deployment = { kind: "Deployment", name: "api", namespace: "web" };
+    const { result } = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    const unplaced = (): (string | null)[] => {
+      const section = result.current.report?.sections.find(
+        (s) => s.id === "changes"
+      );
+      return section?.body.type === "changes"
+        ? section.body.changes
+            .filter((row) =>
+              row.parts.some((part) =>
+                part.text.startsWith("Recorded under this name while")
+              )
+            )
+            .map((row) => row.at)
+        : [];
+    };
+    await waitFor(() =>
+      expect(unplaced()).toEqual([new Date(now - 120_000).toISOString()])
+    );
+    timelineVouched = [{ first: 0, last: null }];
+    recorded = [];
+  });
+
+  /**
+   * A restricted reader's file drew the rows kept under the name with no
+   * word that which cluster this is could not be checked. Fails if the
+   * report does not hand the timeline's word on the name to the section.
+   */
+  it("says what the Changes page says of a name that could not be checked", async () => {
+    timelineIdentity = { says: "unknown", message: "namespaces is forbidden" };
+    const deployment = { kind: "Deployment", name: "api", namespace: "web" };
+    const { result } = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        result.current.report?.sections.find((s) => s.id === "changes")?.partial
+      ).toContain(
+        "which cluster this is could not be checked (namespaces is forbidden)"
+      )
+    );
+    timelineIdentity = { says: "known" };
   });
 
   /**

@@ -92,6 +92,7 @@ describe("ChangesTimeline", () => {
     await mount([
       {
         kind: "journal",
+        unplaced: false,
         at: T0 + 6 * HOUR,
         row: change(
           "j",
@@ -189,11 +190,13 @@ describe("ChangesTimeline", () => {
       [
         {
           kind: "journal",
+          unplaced: false,
           at: T0 + 2 * HOUR,
           row: change("new", T0 + 2 * HOUR, "spec.replicas", "2", "3"),
         },
         {
           kind: "journal",
+          unplaced: false,
           at: T0,
           row: change("old", T0, "spec.replicas", "1", "2"),
         },
@@ -496,6 +499,7 @@ describe("a week of rows", () => {
   it("draws only the rows in view", async () => {
     const items: ChangeItem[] = Array.from({ length: 2000 }, (_, n) => ({
       kind: "journal" as const,
+      unplaced: false,
       at: T0 - n * 60_000,
       row: change(String(n), T0 - n * 60_000, "spec.replicas", "1", "2"),
     }));
@@ -510,6 +514,7 @@ describe("a week of rows", () => {
     const onEnd = vi.fn();
     const items: ChangeItem[] = Array.from({ length: 5 }, (_, n) => ({
       kind: "journal" as const,
+      unplaced: false,
       at: T0 - n * 60_000,
       row: change(String(n), T0 - n * 60_000, "spec.replicas", "1", "2"),
     }));
@@ -528,6 +533,7 @@ describe("the rows the timeline recorded", () => {
     await mount([
       {
         kind: "event",
+        unplaced: false,
         at,
         row: { ...change("e", at, "x", "a", "b"), kind: "Pod" },
         event: {
@@ -555,6 +561,38 @@ describe("the rows the timeline recorded", () => {
       screen.getByText("Back-off restarting failed container app")
     ).toBeInTheDocument();
     expect(screen.getByText("×14")).toHaveAttribute("title");
+  });
+
+  /** An event series no read placed: fails if it is drawn without saying it may be another cluster's, or a placed one says it. */
+  it("says of an event series no read placed that it may be another cluster's", async () => {
+    const series = (id: string, unplaced: boolean): ChangeItem => ({
+      kind: "event",
+      unplaced,
+      at: T0,
+      row: { ...change(id, T0, "x", "a", "b"), kind: "Pod" },
+      event: {
+        name: `api-1.${id}`,
+        namespace: "shop",
+        uid: id,
+        type: "Warning",
+        reason: unplaced ? "Unplaced" : "Placed",
+        message: null,
+        source: "kubelet",
+        involvedObject: {
+          kind: "Pod",
+          name: "api-1",
+          namespace: "shop",
+          uid: "p",
+        },
+        count: 1,
+        firstTimestamp: null,
+        lastTimestamp: new Date(T0).toISOString(),
+      },
+    });
+    await mount([series("u", true), series("p", false)]);
+    expect(
+      screen.getAllByText(/^Recorded under this name while which cluster/)
+    ).toHaveLength(1);
   });
 
   /** Rows let go at a bound are said as such: fails if their stretch has no row. */
@@ -586,7 +624,7 @@ describe("the rows the timeline recorded", () => {
       more: 0,
       before: null,
     };
-    await mount([{ kind: "journal", at: T0, row }]);
+    await mount([{ kind: "journal", unplaced: false, at: T0, row }]);
     expect(screen.queryByText("spec.d")).toBeNull();
     await userEvent.click(screen.getByText("and 2 more fields"));
     expect(screen.getByText("spec.e")).toBeInTheDocument();
@@ -608,8 +646,8 @@ describe("the rows the timeline recorded", () => {
     rolled.what = { ...rolled.what, before: "3" } as ChangeRow["what"];
     const scaled = change("s", T0 - HOUR, "spec.replicas", "1", "2");
     await mount([
-      { kind: "journal", at: T0, row: rolled },
-      { kind: "journal", at: T0 - HOUR, row: scaled },
+      { kind: "journal", unplaced: false, at: T0, row: rolled },
+      { kind: "journal", unplaced: false, at: T0 - HOUR, row: scaled },
     ]);
     const links = screen.getAllByRole("link", {
       name: "Roll back to before this…",

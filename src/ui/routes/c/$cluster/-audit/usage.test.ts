@@ -142,7 +142,7 @@ describe("Audit's reading of requests against use", () => {
       memory: { requested: 4096 * MI, peak: 1500 * MI, atMost: false },
     });
     expect(by.api).toEqual({ says: "within" });
-    expect(by.fresh).toEqual({ says: "noSamples" });
+    expect(by.fresh).toEqual({ says: "noSamples", resource: "both" });
     expect(read.unread).toEqual([
       { namespace: "bank", message: "pods is forbidden" },
     ]);
@@ -191,12 +191,14 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
-   * The requests list has no row in `vault` and the read of use was refused
-   * there: the refusal reached no row, so the backend passed every
-   * workload in it as one requesting nothing. Fails if a refusal is carried
-   * only through a row, or the list's own words are replaced.
+   * The requests list read `vault` and found no pod placed there, and the
+   * read of use was refused in it. Named, every workload in `vault` was
+   * "not checked: could not be read: pods is forbidden in vault" by a rule
+   * that never judges a workload with no row, refused or not. Fails if a
+   * refusal that reached no row is named, or the list's own words for a
+   * namespace it could not read (`bank`) are lost or replaced.
    */
-  it("names every namespace the read of use was refused, with or without a row", () => {
+  it("names a refusal of the read of use only where it took a row's verdict", () => {
     const one = basis([workload("api", 500, 256 * MI)]);
     const read = reading(one, [[300, 450, 150 * MI, 240 * MI]]);
     if (read.state !== "read") throw new Error(read.state);
@@ -221,7 +223,6 @@ describe("Audit's reading of requests against use", () => {
     ]);
     expect(audit.unread).toEqual([
       { namespace: "bank", message: "pods is forbidden" },
-      { namespace: "vault", message: "pods is forbidden in vault" },
     ]);
   });
 
@@ -262,14 +263,46 @@ describe("Audit's reading of requests against use", () => {
     const peakless = reading(one, [[200, null, 200 * MI, 300 * MI]]);
     const read = usageRead(one, null, peakless);
     if (read.state !== "read") throw new Error(read.state);
-    expect(read.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "peakUnread",
+      resource: "cpu",
+    });
 
     // Its CPU average read and its memory not sampled at all: "no sample of
     // its pods" is belied by the CPU average.
     const memoryless = reading(one, [[200, null, null, null]]);
     const mixed = usageRead(one, null, memoryless);
     if (mixed.state !== "read") throw new Error(mixed.state);
-    expect(mixed.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+    expect(mixed.workloads[0]!.verdict).toEqual({
+      says: "peakUnread",
+      resource: "cpu",
+    });
+  });
+
+  /**
+   * Its CPU measured over the whole day and well used, its memory never
+   * sampled: the reason said Prometheus held no sample of its pods, with
+   * the CPU figures on the page. Fails if a reason about one resource is
+   * said of both, or one about both is narrowed to one.
+   */
+  it("names the resource a reason is about, and both only where both have it", () => {
+    const one = basis([
+      workload("web", 2000, 512 * MI),
+      workload("api", 500, 256 * MI),
+    ]);
+    const read = usageRead(
+      one,
+      null,
+      reading(one, [
+        [1200, 1500, null, null],
+        [200, null, 200 * MI, null],
+      ])
+    );
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads.map((w) => w.verdict)).toEqual([
+      { says: "noSamples", resource: "memory" },
+      { says: "peakUnread", resource: "both" },
+    ]);
   });
 
   /**

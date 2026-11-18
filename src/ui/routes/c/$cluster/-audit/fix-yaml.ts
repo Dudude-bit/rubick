@@ -1,5 +1,5 @@
 import type { AuditFinding, RuleId, Subject, What } from "@/generated/types";
-import { cliLine, type CliTarget } from "@/lib/kubectl";
+import { cliLine, cliPipe, type CliTarget } from "@/lib/kubectl";
 
 /**
  * A YAML fragment that fixes a finding, laid out at the path the object's
@@ -345,7 +345,12 @@ export function fixYaml(
       );
       if (held) {
         const crd = subject?.name ?? "CRD";
-        return `${kubectl(`get ${crd} --all-namespaces -o json`)} | ${kubectl("replace -f -")}\n${kubectl(`patch customresourcedefinitions ${crd} --subresource='status' --type='merge' -p '{"status":{"storedVersions":["${storage}"]}}'`)}`;
+        // A YAML patch has no double quotes, which Windows PowerShell 5.1
+        // strips from an argument it hands to a program.
+        return `${cliPipe(cli, [
+          ["kubectl", `get ${crd} --all-namespaces -o json`],
+          ["kubectl", "replace -f -"],
+        ])}\n${kubectl(`patch customresourcedefinitions ${crd} --subresource=status --type=merge -p 'status: {storedVersions: [${storage}]}'`)}`;
       }
       const current =
         at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;

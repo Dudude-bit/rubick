@@ -3,6 +3,7 @@ import type {
   OverBy,
   Subject,
   UsageRead,
+  UsageOf,
   UseVerdict,
   WorkloadUse,
 } from "@/generated/types";
@@ -37,12 +38,11 @@ export function usageRead(
   }
   if (basis.workloads.length > 0 && reading.state !== "read")
     return { state: "reading" };
+  // A refusal of the read of use is said through the rows it took a verdict
+  // from. A namespace the requests list read and found no pod placed in has
+  // nothing to weigh, refused or not: named, every workload there would be
+  // "not checked" by a rule that could never judge it.
   const unread = new Map(basis.unread.map((u) => [u.namespace, u.message]));
-  // A namespace refused to the read of use is unread whether or not the
-  // requests list has a row in it; the list's own words come first.
-  if (reading.state === "read")
-    for (const u of reading.fold.unread)
-      if (!unread.has(u.namespace)) unread.set(u.namespace, u.message);
   const workloads: WorkloadUse[] = [];
   for (const w of basis.workloads) {
     const e = workloadEfficiency(reading, w.key, {
@@ -51,7 +51,12 @@ export function usageRead(
     });
     // Its pods were refused to the read of use: no verdict, and the
     // backend names the refusal where it finds no row.
-    if (e.cpu.state === "failed" || e.memory.state === "failed") continue;
+    const failed = [e.cpu, e.memory].find((one) => one.state === "failed");
+    if (failed?.state === "failed") {
+      if (!unread.has(w.key.namespace))
+        unread.set(w.key.namespace, failed.said);
+      continue;
+    }
     workloads.push({
       namespace: w.key.namespace,
       kind: w.key.kind,
@@ -90,6 +95,17 @@ const young = (e: Efficiency) =>
  * Over where either resource is; not known where either went unsampled, or
  * where its pods have not run the day a peak is judged over.
  */
+/** Which resource has `has`: one, both, or `undefined` for neither. */
+function whichHas(
+  e: { cpu: Efficiency; memory: Efficiency },
+  has: (one: Efficiency) => boolean
+): UsageOf | undefined {
+  const cpu = has(e.cpu);
+  const memory = has(e.memory);
+  if (cpu && memory) return "both";
+  return cpu ? "cpu" : memory ? "memory" : undefined;
+}
+
 function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const cpu = overBy(e.cpu);
   const memory = overBy(e.memory);
@@ -99,11 +115,15 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
     return { says: "young", since: fresh.since };
   // A peak nobody read judges nothing, though the average was read: that
   // is its own reason, and before "no sample", which a read average belies.
-  const peakless = (one: Efficiency) =>
-    one.state === "measured" && one.peakRatio === null;
-  if (peakless(e.cpu) || peakless(e.memory)) return { says: "peakUnread" };
-  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
-    return { says: "noSamples" };
+  // Each names the resource it is about: one resource's gap is not the
+  // other's, and its CPU measured whole is not "no sample of its pods".
+  const unpeaked = whichHas(
+    e,
+    (one) => one.state === "measured" && one.peakRatio === null
+  );
+  if (unpeaked) return { says: "peakUnread", resource: unpeaked };
+  const unsampled = whichHas(e, (one) => one.state === "noSamples");
+  if (unsampled) return { says: "noSamples", resource: unsampled };
   // Its peak measured from some of its pods: neither its peak nor a bound
   // on it, said for each resource. An average from some of them judges
   // nothing either way.
