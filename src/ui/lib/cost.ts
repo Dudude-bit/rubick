@@ -17,7 +17,7 @@ import type {
   WorkloadFold,
   WorkloadKey,
 } from "@/generated/types";
-import { formatAmount, formatPercent } from "@/lib/utils";
+import { formatAmount, formatPercent, type Rounding } from "@/lib/utils";
 import { currentLocale } from "@/stores/localeStore";
 
 /** OpenCost's and Kubecost's own month: 730 hours. */
@@ -816,18 +816,20 @@ export function costOf(
 export function formatMoney(
   value: number,
   currency: string,
-  locale: string = currentLocale()
+  locale: string = currentLocale(),
+  rounding: Rounding = "nearest"
 ): string {
-  const text = formatAmount(value, locale);
+  const text = formatAmount(value, locale, rounding);
   return currency ? `${text}\u00a0${currency}` : text;
 }
 
 /** A share of a whole, to a tenth of a per cent below ten. */
 export function formatShare(
   ratio: number,
+  rounding: Rounding = "nearest",
   locale: string = currentLocale()
 ): string {
-  return formatPercent(ratio, ratio < 0.1 ? 1 : 0, locale);
+  return formatPercent(ratio, ratio < 0.1 ? 1 : 0, locale, rounding);
 }
 
 /** The currency an amount is written in: the entered label, or none for OpenCost's. */

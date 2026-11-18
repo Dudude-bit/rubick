@@ -6,6 +6,7 @@ import type { T } from "@/i18n/useT";
 import { estimatePicture } from "@/lib/cost";
 import { efficiencyOf } from "@/lib/efficiency";
 import {
+  amountWords,
   costLineWords,
   efficiencyWords,
   money,
@@ -284,6 +285,49 @@ describe("a priced row's share where the whole is not known", () => {
     );
     expect(clusterShareWords("bothFloors", t)).toBe(
       "share of the cluster not known, as both amounts are floors"
+    );
+  });
+});
+
+describe("a bound, as a number", () => {
+  /**
+   * 16.4% printed "at most 16%" and 16.6% "at least 17%": rounded to the
+   * nearest, a bound claimed past what is known. Fails if a bound is not
+   * rounded away from what it bounds, in a share, a peak or an amount.
+   */
+  it("is rounded away from what it bounds", () => {
+    const row = { perHour: 0.05, unpriced: [], unknown: [] };
+    expect(share({ ...row, share: { of: 0.164, bound: "atMost" } }, t)).toBe(
+      "at most 17%"
+    );
+    expect(share({ ...row, share: { of: 0.166, bound: "atLeast" } }, t)).toBe(
+      "at least 16%"
+    );
+    expect(share({ ...row, share: { of: 0.166, bound: "exact" } }, t)).toBe(
+      "17%"
+    );
+    expect(clusterShareWords({ of: 0.164, bound: "atMost" }, t)).toBe(
+      "at most 17% of the cluster"
+    );
+    expect(clusterShareWords({ of: 0.166, bound: "atLeast" }, t)).toBe(
+      "at least 16% of the cluster"
+    );
+    const peak = efficiencyOf(
+      1000,
+      100,
+      164,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      {
+        peakAtMost: true,
+      }
+    );
+    expect(efficiencyWords(peak, t)).toBe("10% average, at most 17% peak");
+    expect(amountWords({ perHour: 0.01236, atLeast: true }, "", t)).toBe(
+      "at least 0.0123"
+    );
+    expect(amountWords({ perHour: 0.01236, atLeast: false }, "", t)).toBe(
+      "0.0124"
     );
   });
 });
