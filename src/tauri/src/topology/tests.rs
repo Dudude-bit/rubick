@@ -1009,7 +1009,9 @@ fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
 /// A kind discovery could not name stayed unread until the cluster sent
 /// something else for the pump to wake on, and a quiet cluster sends
 /// nothing. Fails if discovery is not asked again, with nothing arriving,
-/// until the kind is named and what was held for it is drawn.
+/// until the kind is named and what was held for it is drawn. Discovery
+/// answers only once its first ask is seen to fail: a slow pump would
+/// otherwise name the kind on its first ask, with no retry at all.
 #[tokio::test]
 async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
     let (tx, rx) = tokio::sync::mpsc::channel(8);
@@ -1061,7 +1063,13 @@ async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
             .gateways_here
             .map(|list| list.len())
     };
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert!(
+        within_seconds(|| matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        ))
+        .await
+    );
     assert_eq!(gateways(&map), None);
     answers.store(true, std::sync::atomic::Ordering::SeqCst);
     let drawn = tokio::time::timeout(std::time::Duration::from_secs(5), async {
