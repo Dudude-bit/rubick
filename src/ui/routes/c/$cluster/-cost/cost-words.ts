@@ -6,6 +6,7 @@ import type { T } from "@/i18n/useT";
 import {
   costOf,
   totalUnknown,
+  type RowShare,
   type CostPart,
   type Parts,
   currencyOf,
@@ -227,12 +228,8 @@ function readLineWords(
     t("cost", "linePerHour", { amount: amount(of.perHour) }),
     t("cost", "linePerMonth", { amount: amount(monthOf(of.perHour)) }),
   ];
-  if (of.share !== null)
-    parts.push(
-      t("cost", of.atLeast ? "lineShareAtMost" : "lineShare", {
-        share: formatShare(of.share),
-      })
-    );
+  const ofCluster = clusterShareWords(of.share, t);
+  if (ofCluster) parts.push(ofCluster);
   parts.push(
     t(
       "cost",
@@ -419,11 +416,31 @@ export const sortable = (said: Said): number =>
         ? 0
         : -1;
 
-/** A row's share of the whole: not priced only where the row is not. */
+/** A share of the cluster, as an object's line and the scope's tile say it. */
+export function clusterShareWords(share: RowShare, t: T): string | null {
+  if (share === null) return null;
+  if (share === "noTotal") return t("cost", "lineShareNoTotal");
+  return t("cost", share.atMost ? "lineShareAtMost" : "lineShare", {
+    share: formatShare(share.of),
+  });
+}
+
+/**
+ * A row's share of the whole: at most where the whole is a floor, not known
+ * where the whole is, and not priced only where the row is not.
+ */
 export function share(
-  row: Parameters<typeof totalUnknown>[0] & { share: number | null },
+  row: Parameters<typeof totalUnknown>[0] & { share: RowShare },
   t: T
 ): string {
-  if (row.share !== null) return formatShare(row.share);
+  if (row.share === "noTotal") return t("cost", "shareNoTotal");
+  if (row.share)
+    return row.share.atMost
+      ? t("cost", "atMost", { value: formatShare(row.share.of) })
+      : formatShare(row.share.of);
   return t("cost", totalUnknown(row) ? "notKnown" : "notPriced");
 }
+
+/** A share as a number to sort by: one with none sorts last. */
+export const shareSortable = (value: RowShare): number =>
+  value && value !== "noTotal" ? value.of : -1;

@@ -741,11 +741,29 @@ export interface CostOf {
   perHour: number | null;
   /** Its own total is a floor: some of what it holds carries no price. */
   partial: boolean;
-  /** Of the whole cluster, where both are known. */
-  share: number | null;
-  atLeast: boolean;
+  /** Of the whole cluster. */
+  share: RowShare;
   /** No total because what it holds was not read: {@link totalUnknown}. */
   unknown: boolean;
+}
+
+/**
+ * A priced row's share of a whole: at most that where the whole is a floor,
+ * `noTotal` where there is no whole to take it of; `null` for a row with no
+ * total of its own, which its own words say.
+ */
+export type RowShare = { of: number; atMost: boolean } | "noTotal" | null;
+
+export function shareOf(
+  perHour: number | null,
+  whole: Amount | null
+): RowShare {
+  if (perHour === null) return null;
+  if (!whole) return "noTotal";
+  // A floor of nothing is no whole; an exact nothing has no part in it.
+  if (whole.perHour <= 0)
+    return whole.atLeast ? "noTotal" : { of: 0, atMost: false };
+  return { of: perHour / whole.perHour, atMost: whole.atLeast };
 }
 
 /** One workload: a custom kind may share a built-in's name, so the group counts too. */
@@ -771,15 +789,10 @@ export function costOf(
       ? picture.workloads.find((w) => sameKey(w.key, target))
       : picture.namespaces.find((n) => n.namespace === target.namespace);
   if (!row) return null;
-  const cluster = picture.cluster;
   return {
     perHour: row.perHour,
     partial: row.atLeast,
-    share:
-      row.perHour === null || !cluster || cluster.perHour <= 0
-        ? null
-        : row.perHour / cluster.perHour,
-    atLeast: cluster?.atLeast ?? true,
+    share: shareOf(row.perHour, picture.cluster),
     unknown: totalUnknown(row),
   };
 }

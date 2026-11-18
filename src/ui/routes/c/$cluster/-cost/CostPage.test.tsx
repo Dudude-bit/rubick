@@ -508,6 +508,72 @@ describe("efficiency whose read did not answer", () => {
   });
 });
 
+describe("a priced row where the cluster's total is not known", () => {
+  /**
+   * The nodes could not be listed, so there is no cluster total: each
+   * priced row's share read "not priced", and the line left it out. Fails
+   * if the table or the line does not say the share is not known, and why.
+   */
+  it("says its share is not known and why, in the table and on the line", async () => {
+    const picture = readingPicture(
+      { ...BASIS, nodes: null },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    await open();
+    expect(screen.getAllByText("not known: no total").length).toBeGreaterThan(
+      0
+    );
+    expect(screen.queryByText("not priced")).toBeNull();
+
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
+      "share of the cluster not known, as its total is not"
+    );
+  });
+
+  /**
+   * A scope's tile and its Share summary said nothing of the cluster where
+   * its total is not known. Fails if either stays silent.
+   */
+  it("says on the scope's tile and in Share that the cluster's total is not known", async () => {
+    const picture = readingPicture(
+      { ...BASIS, nodes: null },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      ["shop"]
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <CostPage />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/cost", route: "/c/$cluster/cost" }
+    );
+    expect(
+      screen.getByText("share of the cluster not known, as its total is not")
+    ).toBeInTheDocument();
+    const summary = collect!().find((s) => s.id === "cost-summary")!;
+    const cluster =
+      summary.body.type === "facts"
+        ? summary.body.rows.find((r) => r.label === "The cluster")
+        : undefined;
+    expect(cluster?.values).toEqual([{ text: "Not known", mono: true }]);
+  });
+});
+
 describe("the cost line where Prometheus holds no OpenCost series", () => {
   /**
    * No cost source is how most clusters are, not this object's fault: every

@@ -10,6 +10,7 @@ import {
   monthOf,
   type NamespaceCost,
   type NodeCost,
+  type RowShare,
   type WorkloadCost,
 } from "@/lib/cost";
 import {
@@ -31,6 +32,7 @@ import {
   money,
   partOf,
   share,
+  shareSortable,
   sortable,
   totalOf,
   usedLines,
@@ -41,7 +43,7 @@ import { EfficiencyCell, Money, UsedCell } from "./cost-cells";
 
 interface Priced {
   perHour: number | null;
-  share: number | null;
+  share: RowShare;
   currency: string;
 }
 
@@ -108,7 +110,7 @@ export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
       id: "share",
       header: t("cost", "share"),
       size: 70,
-      accessorFn: (row) => row.share ?? -1,
+      accessorFn: (row) => shareSortable(row.share),
       cell: ({ row }) => (
         <span className="font-mono tabular-nums">{share(row.original, t)}</span>
       ),
@@ -225,7 +227,7 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       id: "share",
       header: t("cost", "share"),
       size: 70,
-      accessorFn: (row) => row.share ?? -1,
+      accessorFn: (row) => shareSortable(row.share),
       cell: ({ row }) => (
         <span className="font-mono tabular-nums">{share(row.original, t)}</span>
       ),

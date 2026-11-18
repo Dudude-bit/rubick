@@ -2599,7 +2599,6 @@ export const en = {
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
     theCluster: "The cluster",
-    ofCluster: "{share} of the cluster",
     unclaimed: "Volumes nobody claims",
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
@@ -2609,6 +2608,7 @@ export const en = {
       other: "{line}, from {read} of its {n} pods",
     },
     notKnown: "Not known",
+    shareNoTotal: "not known: no total",
     notPriced: "not priced",
     notMeasured: "not measured",
     fromOpenCost:
@@ -2774,6 +2774,7 @@ export const en = {
     linePerMonth: "{amount} per month projected",
     lineShare: "{share} of the cluster",
     lineShareAtMost: "at most {share} of the cluster",
+    lineShareNoTotal: "share of the cluster not known, as its total is not",
     lineFromOpenCost: "from OpenCost",
     lineFromPrices: "estimated from entered prices",
     lineNotPriced: "No OpenCost series priced its pods.",
