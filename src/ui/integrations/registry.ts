@@ -75,6 +75,7 @@ import type {
 } from "./gitops";
 import type { CrdColumn } from "./kit";
 import type { InClusterHint } from "./forwarded";
+import type { Named } from "@/lib/named";
 
 /**
  * The windows a history capability can be asked for.
@@ -179,9 +180,9 @@ export interface NodeUsageSeries {
  * supplier uses, which may be the short form of the cluster's.
  */
 export interface NodeUsageWindow {
-  nodes: Record<string, NodeUsageSeries>;
+  nodes: Named<NodeUsageSeries>;
   /** When each node's newest sample landed, in epoch ms; absent for a node with none. */
-  newestAt: Record<string, number>;
+  newestAt: Named<number>;
   /**
    * Whether `newestAt` is an answer. `false` says the staleness probe itself
    * failed, so a node missing from it is a node we could not ask about —

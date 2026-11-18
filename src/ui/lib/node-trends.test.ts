@@ -4,6 +4,7 @@ import type { NodeUsageWindow } from "@/integrations";
 import type { NodeInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
 import { everyNodeSilent, nodeTrends } from "./node-trends";
+import { named } from "@/lib/named";
 
 function node(name: string, unschedulable = false): NodeInfo {
   return {
@@ -35,7 +36,7 @@ const T0 = 1_700_000_000_000;
 const BUCKETS: Saying = { key: "promBucketsAtScrape", values: { step: "30s" } };
 
 const window: NodeUsageWindow = {
-  nodes: {
+  nodes: named({
     // Full name against the cluster's short one: the same node.
     "ip-10-0-1-1.eu-central-1.compute.internal": {
       cpuMillicores: [
@@ -51,8 +52,8 @@ const window: NodeUsageWindow = {
       cpuMillicores: [{ t: T0, v: 400 }],
       memoryBytes: [{ t: T0, v: 2 * GI }],
     },
-  },
-  newestAt: { "ip-10-0-1-3": T0 - 4 * 60_000 },
+  }),
+  newestAt: named({ "ip-10-0-1-3": T0 - 4 * 60_000 }),
   basis: "node",
   resolution: BUCKETS,
 };
@@ -122,8 +123,8 @@ describe("nodes whose names share their first label", () => {
       const trends = nodeTrends(
         {
           ...window,
-          nodes: { [busy]: lane(3000), [idle]: lane(400) },
-          newestAt: { [idle]: T0 - 60_000 },
+          nodes: named({ [busy]: lane(3000), [idle]: lane(400) }),
+          newestAt: named({ [idle]: T0 - 60_000 }),
         },
         [node(busy), node(idle)],
         T0
@@ -139,7 +140,11 @@ describe("nodes whose names share their first label", () => {
   /** A series for another cluster's node is nobody's here, not the nearest name's. */
   it("leaves a node without a lane when the only series is another node's", () => {
     const [trend] = nodeTrends(
-      { ...window, nodes: { "10.9.9.9": lane(3000) }, newestAt: {} },
+      {
+        ...window,
+        nodes: named({ "10.9.9.9": lane(3000) }),
+        newestAt: named({}),
+      },
       [node("10.0.1.5")],
       T0
     );
@@ -164,7 +169,12 @@ describe("why a row has no lane", () => {
   /** A window that was read and holds nothing is the one case that may say so. */
   it("says no series only when the window was actually read", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, basis: "node", resolution: BUCKETS },
+      {
+        nodes: named({}),
+        newestAt: named({}),
+        basis: "node",
+        resolution: BUCKETS,
+      },
       [node("worker-1")],
       T0
     );
@@ -180,10 +190,10 @@ describe("why a row has no lane", () => {
     broken.allocatable = { ...broken.allocatable, cpu: "wat", memory: "wat" };
     const trends = nodeTrends(
       {
-        nodes: {
+        nodes: named({
           "worker-1": { cpuMillicores: [{ t: T0, v: 500 }], memoryBytes: [] },
-        },
-        newestAt: {},
+        }),
+        newestAt: named({}),
         basis: "node",
         resolution: BUCKETS,
       },
@@ -197,8 +207,8 @@ describe("why a row has no lane", () => {
   it("carries the staleness probe's own failure", () => {
     const trends = nodeTrends(
       {
-        nodes: {},
-        newestAt: {},
+        nodes: named({}),
+        newestAt: named({}),
         newestKnown: false,
         basis: "node",
         resolution: BUCKETS,
@@ -212,8 +222,8 @@ describe("why a row has no lane", () => {
 
 describe("everyNodeSilent", () => {
   const empty: NodeUsageWindow = {
-    nodes: {},
-    newestAt: {},
+    nodes: named({}),
+    newestAt: named({}),
     basis: "pods",
     resolution: BUCKETS,
   };
@@ -240,7 +250,7 @@ describe("everyNodeSilent", () => {
 
   /** A node whose newest sample is older than the window has its own story to tell. */
   it("does not hold when a node reported before the window", () => {
-    const stale = { ...empty, newestAt: { a: T0 - 3_600_000 } };
+    const stale = { ...empty, newestAt: named({ a: T0 - 3_600_000 }) };
     expect(everyNodeSilent(stale, nodeTrends(stale, [node("a")], T0))).toBe(
       false
     );
