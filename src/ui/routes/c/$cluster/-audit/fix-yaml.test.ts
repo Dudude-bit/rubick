@@ -228,7 +228,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\n# KUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\n# Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first.\n# KUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -290,7 +290,8 @@ describe("the fix Audit offers to copy", () => {
       { context: "default", files }
     )
       .split(/\n| \| /)
-      .map((command) => command.replace(/^# /, ""));
+      .map((command) => command.replace(/^# /, ""))
+      .filter((line) => line.includes("kubectl"));
     expect(commands.map((command) => command.split(" ")[4])).toEqual([
       "get",
       "replace",
@@ -308,8 +309,8 @@ describe("the fix Audit offers to copy", () => {
    * on one object, or a get that answered nothing (replace exits 0 on no
    * input), still let the patch run, and that object stayed stored at a
    * version the CRD no longer records. Fails if the patch runs with the
-   * rewrite in either shell: it stays a comment, run by hand once every
-   * object was written back.
+   * rewrite in either shell, or stands without the line before it that says
+   * when it may be run: only once every object was written back.
    */
   it("hands out the storedVersions patch as a step of its own, in either shell", () => {
     const finding: AuditFinding = {
@@ -350,10 +351,14 @@ describe("the fix Audit offers to copy", () => {
       }
     };
     for (const os of ["linux", "windows"]) {
-      const [rewrite, patch, ...rest] = lines(os);
+      const [rewrite, when, patch, ...rest] = lines(os);
       expect(rest).toEqual([]);
       expect(rewrite).toContain("replace -f -");
       expect(rewrite).not.toContain("storedVersions");
+      // What the comment alone does not say: when it may be run.
+      expect(when).toBe(
+        "# Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first."
+      );
       expect(patch).toMatch(/^# .*patch customresourcedefinitions/);
     }
   });

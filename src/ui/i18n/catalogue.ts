@@ -2031,6 +2031,8 @@ export const en = {
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
+    patchOnceReplaced:
+      "Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first.",
     cliFilesUnread:
       "Which kubeconfig files hold this cluster could not be told, so the command says FILES: {why}",
     objectsOf: {
