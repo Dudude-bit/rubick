@@ -1392,9 +1392,9 @@ export const ru: Catalogue = {
       "Готовы не все поды: {ready} из {desired}. Перезапуск запустит тот же шаблон, и поды, которые падают или не проходят проверки, снова поведут себя так же. {pods}",
     restartSeeWhy: "Причина видна на вкладке Pods.",
     notPermitted:
-      "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
+      "Ваши права этого не позволяют: на {check} кластер отвечает no.",
     notPermittedEither:
-      "Ваши права этого не позволяют: на kubectl auth can-i {check} и на kubectl auth can-i {other} кластер отвечает no.",
+      "Ваши права этого не позволяют: на {check} и на {other} кластер отвечает no.",
     notThroughKubectlProxy:
       "Недоступно в этой сессии: она идёт в кластер через kubectl proxy, а он отклоняет любой запрос exec и attach, что бы ни разрешали ваши права.",
     validationPassed: "Проверка пройдена",

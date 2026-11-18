@@ -214,7 +214,7 @@ describe("NodeList for a reader who may not patch nodes", () => {
       draining: () => false,
       denied: (name: string) =>
         name === "node01"
-          ? "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes/node01."
+          ? "Your access does not allow this: the cluster answers no to KUBECONFIG=FILES kubectl --context CONTEXT auth can-i patch nodes/node01."
           : undefined,
     };
     await open(oneNode());

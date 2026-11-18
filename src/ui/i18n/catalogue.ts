@@ -1384,9 +1384,9 @@ export const en = {
       "Not every pod is ready: {ready} of {desired}. A restart starts the same template again, so pods that crash or fail their probes will do so again. {pods}",
     restartSeeWhy: "See why on the Pods tab.",
     notPermitted:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
+      "Your access does not allow this: the cluster answers no to {check}.",
     notPermittedEither:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+      "Your access does not allow this: the cluster answers no to {check} and to {other}.",
     notThroughKubectlProxy:
       "Not available in this session: it reaches the cluster through kubectl proxy, which refuses every exec and attach request whatever your access allows.",
     validationPassed: "Validation passed",

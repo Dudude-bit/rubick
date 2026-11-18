@@ -14,7 +14,8 @@ const pods = {
   name: null,
 };
 const command = (words: string) =>
-  /kubectl auth can-i (.+)\.$/.exec(words)?.[1];
+  /kubectl --context \S+ auth can-i (.+)\.$/.exec(words)?.[1];
+const nowhere = { context: null, files: null };
 
 describe("the can-i command a refusal quotes", () => {
   /**
@@ -31,7 +32,8 @@ describe("the can-i command a refusal quotes", () => {
         {
           ...pods,
           subresource,
-        }
+        },
+        nowhere
       );
       expect(command(words)).toMatch(
         new RegExp(
@@ -44,27 +46,37 @@ describe("the can-i command a refusal quotes", () => {
 
   /** Fails if a question with no subresource grows a flag, or loses its group or namespace. */
   it("quotes a plain question with its group and namespace", () => {
-    expect(command(deniedWords(t, "create", pods))).toBe(
+    expect(command(deniedWords(t, "create", pods, nowhere))).toBe(
       "create pods -n team-checkout"
     );
     expect(
       command(
-        deniedWords(t, "delete", {
-          group: "apps",
-          resource: "deployments",
-          namespace: "team-checkout",
-          name: null,
-        })
+        deniedWords(
+          t,
+          "delete",
+          {
+            group: "apps",
+            resource: "deployments",
+            namespace: "team-checkout",
+            name: null,
+          },
+          nowhere
+        )
       )
     ).toBe("delete deployments.apps -n team-checkout");
     expect(
       command(
-        deniedWords(t, "delete", {
-          group: "",
-          resource: "nodes",
-          namespace: null,
-          name: null,
-        })
+        deniedWords(
+          t,
+          "delete",
+          {
+            group: "",
+            resource: "nodes",
+            namespace: null,
+            name: null,
+          },
+          nowhere
+        )
       )
     ).toBe("delete nodes");
   });
@@ -77,13 +89,36 @@ describe("the can-i command a refusal quotes", () => {
   it("names the object the question was about, as resource/name", () => {
     expect(
       command(
-        deniedWords(t, "create", {
-          ...pods,
-          name: "web-0",
-          subresource: "portforward",
-        })
+        deniedWords(
+          t,
+          "create",
+          {
+            ...pods,
+            name: "web-0",
+            subresource: "portforward",
+          },
+          nowhere
+        )
       )
     ).toBe("create pods/web-0 --subresource=portforward -n team-checkout");
+  });
+});
+
+describe("the cluster a refusal's command asks", () => {
+  /**
+   * Run in a terminal whose file calls another cluster by the same name,
+   * the quoted can-i asks that cluster and answers for it. Fails if the
+   * line leaves out the context on screen or the files it was read from.
+   */
+  it("names the cluster on screen and its files", () => {
+    expect(
+      deniedWords(t, "create", pods, {
+        context: "default",
+        files: "/home/me/.kube/k3s.yaml",
+      })
+    ).toBe(
+      "Your access does not allow this: the cluster answers no to KUBECONFIG=/home/me/.kube/k3s.yaml kubectl --context default auth can-i create pods -n team-checkout."
+    );
   });
 });
 
