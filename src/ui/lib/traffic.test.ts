@@ -218,6 +218,14 @@ describe("the rows the page and the block draw", () => {
       reading([ISTIO], [{ ...flow(0, { requests: 10 }), unknown: ["errors"] }])
     ).rows;
     expect(counted.errorShare).toMatchObject({ value: null, state: "notRead" });
+    const [blank] = pairRows(
+      reading([ISTIO], [{ ...flow(0, {}), unknown: ["errors"] }])
+    ).rows;
+    expect(blank.errorShare).toMatchObject({
+      value: null,
+      state: "notRead",
+      source: "Istio",
+    });
   });
 
   /** A read that fails with the pair's flows unchanged must not hand back the row that said "none". */
