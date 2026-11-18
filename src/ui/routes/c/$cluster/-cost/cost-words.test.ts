@@ -13,6 +13,7 @@ import {
   pictureNotes,
   troubleWords,
   usedLines,
+  usedWords,
 } from "./cost-words";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -182,6 +183,23 @@ describe("a peak summed over several pods", () => {
       "200m average",
       "at most 800m peak",
     ]);
+  });
+
+  /** A workload that requests nothing still shows what it used. Fails if its summed peak reads as the peak. */
+  it("says at most beside it where nothing was requested", () => {
+    const e = efficiencyOf(
+      0,
+      200,
+      800,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      true
+    );
+    expect(usedLines(e, "cpu", t)).toEqual([
+      "200m average",
+      "at most 800m peak",
+    ]);
+    expect(usedWords(e, "cpu", t)).toBe("200m average · at most 800m peak");
   });
 });
 

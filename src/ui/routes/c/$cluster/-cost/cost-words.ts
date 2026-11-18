@@ -269,7 +269,7 @@ export function youngFor(e: Efficiency, t: T): string | null {
 
 /** A peak as it was read: summed over several pods it is a bound, and says so. */
 const peakSaid = (e: Efficiency, value: string, t: T) =>
-  e.state === "measured" && e.peakAtMost
+  (e.state === "measured" || e.state === "unrequested") && e.peakAtMost
     ? t("cost", "atMost", { value })
     : value;
 

@@ -66,7 +66,12 @@ export type Efficiency =
   /** The supplier answered and holds no sample of this workload's pods: young ones may have none yet. */
   | ({ state: "noSamples" } & Span)
   /** Nothing was requested, so there is no ratio: not 0%, not 100%. */
-  | ({ state: "unrequested"; avg: number | null; peak: number | null } & Span)
+  | ({
+      state: "unrequested";
+      avg: number | null;
+      peak: number | null;
+    } & Span &
+      Peak)
   | ({
       state: "measured";
       requested: number;
@@ -75,12 +80,16 @@ export type Efficiency =
       /** Average used ÷ requested; `null` where only the peak was read. */
       ratio: number | null;
       peakRatio: number | null;
-      /**
-       * Each pod's own peak, summed: the workload's was no higher, and may
-       * have been lower where they peaked apart.
-       */
-      peakAtMost: boolean;
-    } & Span);
+    } & Span &
+      Peak);
+
+interface Peak {
+  /**
+   * Each pod's own peak, summed: the workload's was no higher, and may
+   * have been lower where they peaked apart.
+   */
+  peakAtMost: boolean;
+}
 
 /**
  * How much of the window the readings cover. Each pod is averaged over its
@@ -110,7 +119,8 @@ export function efficiencyOf(
   const started = since === null ? NaN : Date.parse(since);
   const span = { since, whole: now - started >= WINDOW_MS };
   if (avg === null && peak === null) return { state: "noSamples", ...span };
-  if (requested <= 0) return { state: "unrequested", avg, peak, ...span };
+  if (requested <= 0)
+    return { state: "unrequested", avg, peak, peakAtMost, ...span };
   return {
     state: "measured",
     requested,

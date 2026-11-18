@@ -52,6 +52,7 @@ describe("efficiency", () => {
       state: "unrequested",
       avg: 20,
       peak: 40,
+      peakAtMost: false,
       since: DAY_OLD,
       whole: true,
     });
