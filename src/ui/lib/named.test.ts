@@ -69,4 +69,18 @@ describe("a record keyed by names a cluster chose", () => {
     for (const nothing of [null, undefined, "x", 3, ["a"]])
       expect(storedEntries(nothing)).toEqual([]);
   });
+
+  /**
+   * A record is told from entries by whether it can be iterated, not by
+   * whether a property of that name is there. Fails if a record carrying a
+   * non-callable `Symbol.iterator` throws instead of giving its entries.
+   */
+  it("takes a record with a stray Symbol.iterator as a record", () => {
+    const odd = { prod: 1, [Symbol.iterator]: 0 } as unknown as Record<
+      string,
+      number
+    >;
+    expect(entriesOf(named(odd))).toEqual([["prod", 1]]);
+    expect(entriesOf(named(new Map([["prod", 2]])))).toEqual([["prod", 2]]);
+  });
 });
