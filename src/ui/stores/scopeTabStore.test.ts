@@ -38,6 +38,7 @@ import {
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { entryOf, named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -268,7 +269,9 @@ describe("opening", () => {
    */
   it("takes its cluster, and that cluster's scope, from its address", async () => {
     liveScope("prod", ["shop"]);
-    useClusterStore.setState({ savedScopes: { staging: ["web", "shop"] } });
+    useClusterStore.setState({
+      savedScopes: named({ staging: ["web", "shop"] }),
+    });
     await state().openTab({
       href: "/c/staging/pods/web/api-1",
       background: true,
@@ -484,7 +487,7 @@ describe("an activation the reader moved on from", () => {
       pendingContext: null,
       isAuthenticating: false,
       namespaceScope: [],
-      savedScopes: {},
+      savedScopes: named({}),
       live: ["prod", "staging"],
     });
     seed([
@@ -513,7 +516,7 @@ describe("an activation the reader moved on from", () => {
     const cluster = useClusterStore.getState();
     expect(cluster.currentContext).toBe("prod");
     expect(cluster.namespaceScope).toEqual(["prod-ns"]);
-    expect(cluster.savedScopes.prod).toEqual(["prod-ns"]);
+    expect(entryOf(cluster.savedScopes, "prod")).toEqual(["prod-ns"]);
   });
 
   /** Fails if a later tab on the same cluster loses its scope to the earlier one's connect. */

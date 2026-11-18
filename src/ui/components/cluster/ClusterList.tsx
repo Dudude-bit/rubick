@@ -210,7 +210,7 @@ export function ClusterList({
             context={ctx}
             lastUsedAt={entryOf(lastUsed, ctx.name)}
             live={live.includes(ctx.name)}
-            failure={failures[ctx.name]}
+            failure={entryOf(failures, ctx.name)}
             onSelect={onSelect}
           />
         ))}
@@ -223,7 +223,7 @@ export function ClusterList({
             key={ctx.name}
             context={ctx}
             live={live.includes(ctx.name)}
-            failure={failures[ctx.name]}
+            failure={entryOf(failures, ctx.name)}
             onSelect={onSelect}
           />
         ))}

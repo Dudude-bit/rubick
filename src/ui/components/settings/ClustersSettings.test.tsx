@@ -61,6 +61,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { ClustersSettings } from "./ClustersSettings";
 import { useClusterStore } from "@/stores/clusterStore";
+import { named } from "@/lib/named";
 
 /**
  * One of each shape the screen has to describe: a client certificate, a
@@ -130,7 +131,7 @@ describe("Clusters settings", () => {
       currentContext: "k3d-dev",
       isConnected: true,
       live: ["k3d-dev"],
-      failures: {},
+      failures: named({}),
     });
   });
 
@@ -154,9 +155,9 @@ describe("Clusters settings", () => {
         error: null,
         errorContext: null,
         live: ["k3d-dev"],
-        failures: {
+        failures: named({
           "gke-shop": { kind: "timeout", error: "deadline has elapsed" },
-        },
+        }),
       });
       renderPane();
       await screen.findByText("gke-shop");

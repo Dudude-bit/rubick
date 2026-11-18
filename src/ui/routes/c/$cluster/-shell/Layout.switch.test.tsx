@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { clusterColor } from "@/lib/cluster-identity";
 import { renderWithRouter } from "@/test/render";
+import { named } from "@/lib/named";
 
 /** Each cluster's pod count, and a gate the overview's answer waits behind. */
 const answers = vi.hoisted(() => ({
@@ -238,8 +239,8 @@ beforeEach(() => {
     lastConnected: "acme-staging",
     wayBack: null,
     live: ["acme-staging"],
-    paths: { "acme-staging": "direct" },
-    failures: {},
+    paths: named({ "acme-staging": "direct" }),
+    failures: named({}),
   });
 });
 
@@ -278,7 +279,7 @@ describe("the window's cluster, frame by frame", () => {
   it("draws a tab switch between two held clusters in one state at every frame", async () => {
     useClusterStore.setState({
       live: ["acme-staging", "acme-qa"],
-      paths: { "acme-staging": "direct", "acme-qa": "direct" },
+      paths: named({ "acme-staging": "direct", "acme-qa": "direct" }),
     });
     useScopeTabStore.setState(TABS);
     const { frames } = await mount("/c/acme-staging/pods");
@@ -327,7 +328,7 @@ describe("a held cluster's counts across a switch", () => {
   it("keeps the counts on screen, marked as from before, until the cluster's own answer lands", async () => {
     useClusterStore.setState({
       live: ["acme-staging", "acme-qa"],
-      paths: { "acme-staging": "direct", "acme-qa": "direct" },
+      paths: named({ "acme-staging": "direct", "acme-qa": "direct" }),
     });
     useScopeTabStore.setState(TABS);
     const { frames } = await mount("/c/acme-staging/pods");
