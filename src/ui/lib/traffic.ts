@@ -230,14 +230,24 @@ function cellOf(
   const measuring = flows.filter((flow) =>
     reading.sources[flow.source]?.measures.includes(measure)
   );
-  // A failed query leaves its source no flow on any pair to be found by.
-  const unread = reading.sources.findIndex(
+  // A failed query leaves its source no flow on any pair to be found by; a
+  // series that answered with no number leaves the pair's measure unknown.
+  const failedAt = reading.sources.findIndex(
     (source, index) =>
       source.measures.includes(measure) && failed(index, measure)
   );
+  const unread =
+    failedAt >= 0
+      ? failedAt
+      : (measuring.find((flow) => flow.unknown.includes(measure))?.source ??
+        -1);
   const belowHttp =
     HTTP.has(measure) &&
-    measuring.every((flow) => flow.values[at("requests")] == null);
+    measuring.every(
+      (flow) =>
+        flow.values[at("requests")] == null &&
+        !flow.unknown.includes("requests")
+    );
   return {
     cell: {
       value: null,
@@ -264,7 +274,7 @@ function errorShareOf(
   if (!flow) return { ...requests.cell, value: null };
   const from = reading.sources[flow.source];
   const source = from?.name ?? null;
-  if (failed(flow.source, "errors"))
+  if (failed(flow.source, "errors") || flow.unknown.includes("errors"))
     return { value: null, source, state: "notRead" };
   const errors = flow.values[at("errors")];
   const total = requests.cell.value ?? 0;
@@ -290,6 +300,7 @@ const signature = (flows: readonly Flow[]) =>
       flow.reasons,
       flow.protocols,
       flow.sides,
+      flow.unknown,
     ])
   );
 
@@ -356,8 +367,10 @@ export function pairRows(
                 reasons: flow.reasons,
                 protocols: flow.protocols,
                 sides: flow.sides,
-                unread: source.measures.filter((measure) =>
-                  failed(flow.source, measure)
+                unread: source.measures.filter(
+                  (measure) =>
+                    failed(flow.source, measure) ||
+                    flow.unknown.includes(measure)
                 ),
               },
             ]

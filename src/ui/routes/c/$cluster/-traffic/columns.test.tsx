@@ -71,6 +71,7 @@ function standRows(): FlowRow[] {
           m === "requests" ? 0.361 : m === "errors" ? 0 : m === "p95" ? 64 : 12
         ),
         reasons: [],
+        unknown: [],
       })),
       reads: [],
       observed: null,

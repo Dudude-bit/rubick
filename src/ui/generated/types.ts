@@ -2834,6 +2834,7 @@ export interface Flow {
   sides: string[];
   values: (number | null)[];
   reasons: DropRate[];
+  unknown: Measure[];
 }
 
 export interface DropRate {

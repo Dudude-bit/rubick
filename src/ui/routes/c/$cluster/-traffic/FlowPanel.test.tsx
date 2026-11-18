@@ -166,6 +166,7 @@ describe("a flow opened from its edge", () => {
                 m === "requests" ? requests : m === "errors" ? errors : null
               ),
               reasons: [],
+              unknown: [],
             },
           ],
           reads: [],
@@ -266,6 +267,7 @@ describe("a flow opened from its edge", () => {
             sides: [],
             values: MEASURES.map((m) => (m === "events" ? 2 : null)),
             reasons: [],
+            unknown: [],
           },
         ],
         reads: [

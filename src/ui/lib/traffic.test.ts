@@ -63,6 +63,7 @@ const flow = (at: number, set: Partial<Record<Measure, number>>): Flow => ({
   sides: [],
   values: values(set),
   reasons: [],
+  unknown: [],
 });
 
 function reading(
@@ -192,6 +193,31 @@ describe("the rows the page and the block draw", () => {
       reading([hubble], [flow(0, { events: 3, requests: 0, errors: 0 })])
     ).rows;
     expect(idle.p95.state).toBe("measured");
+  });
+
+  /**
+   * A pair whose series answered with no number is unknown in that measure:
+   * not "none", not below HTTP, and its share of errors is not worked out.
+   */
+  it("says a measure a series answered with no number for is not read, never none", () => {
+    const [row] = pairRows(
+      reading(
+        [ISTIO],
+        [{ ...flow(0, { bytes: 10 }), unknown: ["requests", "errors"] }]
+      )
+    ).rows;
+    expect(row.requests).toMatchObject({
+      value: null,
+      state: "notRead",
+      source: "Istio",
+    });
+    expect(row.p95.state).not.toBe("belowHttp");
+    expect(row.errorShare.state).toBe("notRead");
+    expect(row.by[0].unread).toEqual(["requests", "errors"]);
+    const [counted] = pairRows(
+      reading([ISTIO], [{ ...flow(0, { requests: 10 }), unknown: ["errors"] }])
+    ).rows;
+    expect(counted.errorShare).toMatchObject({ value: null, state: "notRead" });
   });
 
   /** A read that fails with the pair's flows unchanged must not hand back the row that said "none". */
