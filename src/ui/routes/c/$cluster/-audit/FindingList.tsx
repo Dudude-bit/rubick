@@ -206,10 +206,26 @@ export function UncheckedList({ unchecked }: { unchecked: Unchecked[] }) {
   );
 }
 
+/** How many rules could not answer here, where a peek has no room to list them. */
+function UncheckedCount({ unchecked }: { unchecked: Unchecked[] }) {
+  const t = useT();
+  const rules = new Set(unchecked.map((each) => each.rule)).size;
+  if (rules === 0) return null;
+  return (
+    <p
+      className="flex items-center gap-1 py-1 text-[11px] text-fg-mut"
+      data-testid="audit-unchecked-count"
+    >
+      <EyeOff className="h-3 w-3" aria-hidden />
+      {t("audit", "peekUnchecked", { n: rules })}
+    </p>
+  );
+}
+
 /**
  * One object's findings, worst first, each opening to why and how; then
- * the rules that could not answer for it. `limit` cuts a peek's list and
- * says how many more the tab holds.
+ * the rules that could not answer for it. `limit` cuts a peek's list,
+ * says how many more the tab holds, and counts the rules unanswered.
  */
 export function FindingList({
   audit,
@@ -226,7 +242,9 @@ export function FindingList({
   return (
     <div className="flex flex-col">
       {audit.findings.length === 0 && (
-        <p className="py-1 text-xs text-fg-mut">{t("audit", "tabNone")}</p>
+        <p className="py-1 text-xs text-fg-mut">
+          {t("audit", audit.unchecked.length > 0 ? "tabNonePartly" : "tabNone")}
+        </p>
       )}
       <ul className="flex flex-col divide-y divide-hair">
         {shown.map((finding) => (
@@ -246,7 +264,11 @@ export function FindingList({
           {t("audit", "peekMore", { n: more })}
         </p>
       )}
-      {limit === undefined && <UncheckedList unchecked={audit.unchecked} />}
+      {limit === undefined ? (
+        <UncheckedList unchecked={audit.unchecked} />
+      ) : (
+        <UncheckedCount unchecked={audit.unchecked} />
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { SectionHeader } from "@/components/ui/section";
-import type { FlowEnd, UnreadNamespace } from "@/generated/types";
+import type { FlowEnd, Measure, UnreadNamespace } from "@/generated/types";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { useLiveTraffic } from "@/hooks/useLiveTraffic";
 import { useCapability } from "@/integrations";
@@ -41,9 +41,9 @@ import { useTopology } from "../-map/useTopology";
 import { newMemo } from "../-topology/model";
 import { toneOf } from "../-topology/tone";
 import { COLLAPSE_ABOVE } from "../-topology/Topology";
-import { flowColumns } from "./columns";
+import { drawnColumns, flowColumns } from "./columns";
 import { FlowPanel } from "./FlowPanel";
-import { trafficModel } from "./model";
+import { newFlowMemo, trafficModel } from "./model";
 import { SourceRail } from "./SourceRail";
 import { liveStopped } from "./live-words";
 import { nothingWords, unreadNotes, WINDOW_WORD } from "./traffic-words";
@@ -261,6 +261,7 @@ function FlowsView({
   panelWindow,
   cut,
   sharePartial,
+  measured,
 }: {
   rows: readonly FlowRow[];
   scope: string[] | null;
@@ -272,6 +273,8 @@ function FlowsView({
   panelWindow: string;
   cut: boolean;
   sharePartial: string | null;
+  /** What the sources here measure; `null` where one could not be looked for. */
+  measured: ReadonlySet<Measure> | null;
 }) {
   const t = useT();
   const navigate = useNavigate();
@@ -295,9 +298,9 @@ function FlowsView({
     [map.kinds]
   );
   const memo = useMemo(
-    () => ({ for: [t, stale], drawn: newMemo() }),
+    () => ({ for: [t, stale], drawn: newMemo(), flows: newFlowMemo() }),
     [t, stale]
-  ).drawn;
+  );
   const several = scope === null || scope.length > 1;
   const model = useMemo(
     () =>
@@ -309,7 +312,8 @@ function FlowsView({
         collapsedAtFirst: several && rows.length * 2 > COLLAPSE_ABOVE,
         toneOf: (node) => toneOf(node, { t, ingress: () => null, stale }),
         t,
-        memo,
+        memo: memo.drawn,
+        flows: memo.flows,
       }),
     [rows, map.nodes, map.reads, toggled, several, t, stale, memo]
   );
@@ -367,7 +371,18 @@ function FlowsView({
       }),
     [model.groups]
   );
-  const columns = useMemo(() => flowColumns(t), [t]);
+  const all = useMemo(() => flowColumns(t), [t]);
+  const measuredKey = measured === null ? null : [...measured].sort().join();
+  const drawn = useMemo(
+    () =>
+      drawnColumns(
+        all,
+        measuredKey === null
+          ? null
+          : new Set(measuredKey.split(",") as Measure[])
+      ),
+    [all, measuredKey]
+  );
   const openRow = rows.find((row) => row.id === opened) ?? null;
 
   return (
@@ -421,7 +436,14 @@ function FlowsView({
           </div>
           <div className="flex min-h-0 flex-[2] flex-col">
             <DataTable
-              columns={columns}
+              columns={drawn.columns}
+              columnsNote={
+                drawn.unfilled.length > 0
+                  ? t("traffic", "columnsUnmeasured", {
+                      columns: drawn.unfilled.join(", "),
+                    })
+                  : undefined
+              }
               data={rows as FlowRow[]}
               fill
               searchParam="q"
@@ -479,6 +501,7 @@ function WindowView({
       panelWindow={windowWords}
       cut={reading.answer.cut > 0}
       sharePartial={partialOf(reading, sources, t)}
+      measured={measuredBy(sources)}
     />
   );
 }
@@ -580,10 +603,23 @@ function LiveView({
       )}
       panelWindow={lastMinute}
       cut={live.untracked > 0}
+      measured={LIVE_MEASURED}
       sharePartial={
         caveats.length > 0 ? caveats.map((note) => note.text).join(" ") : null
       }
     />
+  );
+}
+
+const LIVE_MEASURED: ReadonlySet<Measure> = new Set(LIVE_SOURCE.measures);
+
+/** Every measure a found source has; `null` where a source could not be looked for. */
+function measuredBy(sources: readonly FlowSource[]): Set<Measure> | null {
+  if (sources.some((source) => source.state.says === "failed")) return null;
+  return new Set(
+    sources
+      .filter((source) => source.state.says === "present")
+      .flatMap((source) => source.measures)
   );
 }
 

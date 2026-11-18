@@ -7,13 +7,14 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::context::{beside, Beside, Defaults};
-use super::index::{audited, key_of, why_unread, AuditIndex, Body, Entry};
+use super::index::{audited, key_of, why_unread, AuditIndex, Body, Entry, PodRead, POD_READ_AGAIN};
 use super::rules::{AUTOSCALER, BUDGET, DEPLOYMENT, NETWORK_POLICY, POD, STATEFUL_SET};
 use super::{
     is_system, AuditFinding, AuditSeverity, Category, RuleId, Subject, Unchecked, What, Why,
 };
 use crate::feeds::FeedState;
 use crate::ownership::{ClusterIndex, KindKey, SlotKey};
+use crate::resources::OtherPolicies;
 use crate::state::perf::{wire_len, IPC_TARGET_BYTES};
 
 /// The most rows one answer carries.
@@ -166,7 +167,8 @@ pub struct AuditSummary {
 pub enum AuditRow {
     Rule {
         rule: RuleId,
-        worst: AuditSeverity,
+        /// `None` where the rule found nothing and only could not check.
+        worst: Option<AuditSeverity>,
         objects: u32,
         unchecked: u32,
     },
@@ -420,8 +422,17 @@ pub(super) fn world(
         &slots,
         &mut namespaces,
     );
-    network_policies(&mut world, owners, &slots, &namespaces, &policies);
+    let others = index.others.read().clone();
+    network_policies(
+        &mut world,
+        owners,
+        &slots,
+        &namespaces,
+        &policies,
+        others.as_ref(),
+    );
     readings(&mut world, &slots, owners, scope);
+    admitted(&mut world, index.admission.read().as_ref(), &namespaces);
     super::upgrade::merge(&mut world, index.upgrade.read().as_deref(), scope);
     for object in &mut world.objects {
         object.findings.sort_by_key(|f| (f.severity, f.rule));
@@ -559,9 +570,19 @@ fn pods(
             wanted.entry(key).or_insert((namespace, pod.name.clone()));
         }
     }
+    // Let go only of what this scope no longer wants: a judged pod of a
+    // namespace another caller reads is theirs to keep, or every object's
+    // read would make the page read its pods again.
     let held = {
         let mut pods = index.pods.lock();
-        pods.retain(|key, _| wanted.contains_key(key));
+        pods.retain(|key, held| {
+            wanted.contains_key(key)
+                || match held {
+                    PodRead::Reading => true,
+                    PodRead::Judged(pod) => !in_scope(pod.subject.namespace.as_deref(), scope),
+                    PodRead::Unread { namespace, .. } => !in_scope(Some(namespace), scope),
+                }
+        });
         pods.clone()
     };
     let mut seen: BTreeSet<Subject> = BTreeSet::new();
@@ -571,8 +592,23 @@ fn pods(
                 index.read_pod(key, namespace, name);
                 world.reading += 1;
             }
-            Some(None) => world.reading += 1,
-            Some(Some(pod)) => {
+            Some(PodRead::Unread { at, .. }) if at.elapsed() >= POD_READ_AGAIN => {
+                index.read_pod(key, namespace, name);
+                world.reading += 1;
+            }
+            Some(PodRead::Reading) => world.reading += 1,
+            Some(PodRead::Unread { why, .. }) => {
+                let unread = NotChecked {
+                    kind: POD.to_string(),
+                    namespace: Some(namespace),
+                    why: why.clone(),
+                    rules: blinded_by(POD),
+                };
+                if !world.not_checked.contains(&unread) {
+                    world.not_checked.push(unread);
+                }
+            }
+            Some(PodRead::Judged(pod)) => {
                 if !seen.insert(pod.subject.clone()) {
                     continue;
                 }
@@ -602,13 +638,17 @@ fn pods(
     }
 }
 
-/// One finding per namespace that runs pods and has no `NetworkPolicy`.
+/// One finding per namespace that runs pods and has no `NetworkPolicy`,
+/// where no other engine's policy may hold over them: Cilium, Calico,
+/// Antrea and `AdminNetworkPolicy` admit what a namespace's `NetworkPolicy`
+/// objects alone do not say, so there the rule could not check.
 fn network_policies(
     world: &mut World,
     owners: Owners<'_>,
     slots: &BTreeMap<SlotKey, FeedState>,
     namespaces: &BTreeSet<String>,
     policies: &HashMap<&str, u32>,
+    others: Option<&(Option<Vec<String>>, OtherPolicies)>,
 ) {
     let pod_counts: HashMap<String, usize> = owners
         .ok()
@@ -632,11 +672,23 @@ fn network_policies(
             namespace: None,
             name: namespace.clone(),
         };
+        let engines = match others {
+            Some((read, found)) if read.as_ref().is_none_or(|read| read.contains(namespace)) => {
+                let kinds = found.over(namespace);
+                (!kinds.is_empty()).then(|| (kinds.join(", "), Why::NotAudited))
+            }
+            _ => Some((
+                crate::commands::other_policies::kind_names().join(", "),
+                Why::Reading,
+            )),
+        };
         let blind = pods_unread(owners, namespace)
-            .map(|why| (POD, why))
+            .map(|why| (POD.to_string(), why))
             .or_else(|| {
-                why_unread(slots, &policy_kind, Some(namespace)).map(|why| (NETWORK_POLICY, why))
-            });
+                why_unread(slots, &policy_kind, Some(namespace))
+                    .map(|why| (NETWORK_POLICY.to_string(), why))
+            })
+            .or(engines);
         let mut audited = Audited {
             system: is_system(&subject, None),
             subject,
@@ -646,7 +698,7 @@ fn network_policies(
         if let Some((kind, why)) = blind {
             audited.unchecked.push(Unchecked {
                 rule: RuleId::NamespaceWithoutNetworkPolicy,
-                kind: kind.to_string(),
+                kind,
                 namespace: Some(namespace.clone()),
                 why,
             });
@@ -661,6 +713,48 @@ fn network_policies(
         }
         *world.checked.entry("Namespace".to_string()).or_default() += 1;
         world.objects.push(audited);
+    }
+}
+
+/// Where a mutating webhook may change pods on admission, what the Pod
+/// Security controls judged is the template and not what runs: said where
+/// the counts are, as any kind not read is.
+fn admitted(
+    world: &mut World,
+    admission: Option<&super::admitted::Admission>,
+    namespaces: &BTreeSet<String>,
+) {
+    let controls: Vec<RuleId> = super::rules::RULES
+        .iter()
+        .filter(|rule| rule.standard.is_some())
+        .map(|rule| rule.id)
+        .collect();
+    let webhooks = "MutatingWebhookConfiguration".to_string();
+    for namespace in namespaces {
+        let unread = match admission.and_then(|admission| admission.over(namespace)) {
+            Some(Ok(names)) if names.is_empty() => continue,
+            Some(Ok(names)) => NotChecked {
+                kind: POD.to_string(),
+                namespace: Some(namespace.clone()),
+                why: Why::Admitted { webhooks: names },
+                rules: controls.clone(),
+            },
+            Some(Err(why)) => NotChecked {
+                kind: webhooks.clone(),
+                namespace: None,
+                why,
+                rules: controls.clone(),
+            },
+            None => NotChecked {
+                kind: webhooks.clone(),
+                namespace: None,
+                why: Why::Reading,
+                rules: controls.clone(),
+            },
+        };
+        if !world.not_checked.contains(&unread) {
+            world.not_checked.push(unread);
+        }
     }
 }
 
@@ -898,30 +992,31 @@ fn rows(world: &World, query: &AuditQuery) -> Vec<AuditRow> {
     }
     match query.by {
         Grouping::Rule => {
-            let mut by_rule: BTreeMap<RuleId, (AuditSeverity, u32, u32)> = BTreeMap::new();
+            let mut by_rule: BTreeMap<RuleId, (Option<AuditSeverity>, u32, u32)> = BTreeMap::new();
             for object in part {
                 for finding in object.findings.iter().filter(|f| passes(f, query)) {
-                    let entry = by_rule
-                        .entry(finding.rule)
-                        .or_insert((finding.severity, 0, 0));
-                    entry.0 = entry.0.min(finding.severity);
+                    let entry = by_rule.entry(finding.rule).or_default();
+                    entry.0 = Some(
+                        entry
+                            .0
+                            .map_or(finding.severity, |w| w.min(finding.severity)),
+                    );
                     entry.1 += 1;
                 }
                 for unchecked in object.unchecked.iter().filter(|u| blind_passes(u, query)) {
-                    let entry = by_rule.entry(unchecked.rule).or_insert((
-                        unchecked.rule.rule().severity,
-                        0,
-                        0,
-                    ));
-                    entry.2 += 1;
+                    by_rule.entry(unchecked.rule).or_default().2 += 1;
                 }
             }
-            let mut rows: Vec<(AuditSeverity, RuleId, u32, u32)> = by_rule
+            let mut rows: Vec<(Option<AuditSeverity>, RuleId, u32, u32)> = by_rule
                 .into_iter()
                 .map(|(rule, (worst, objects, unchecked))| (worst, rule, objects, unchecked))
                 .collect();
             rows.sort_by_key(|(worst, rule, objects, _)| {
-                (*worst, std::cmp::Reverse(*objects), *rule)
+                (
+                    worst.map_or(3, |s| s as u8),
+                    std::cmp::Reverse(*objects),
+                    *rule,
+                )
             });
             rows.into_iter()
                 .map(|(worst, rule, objects, unchecked)| AuditRow::Rule {
@@ -1209,6 +1304,60 @@ mod tests {
             .any(|u| u.rule == RuleId::AutoscalerTargetMissing));
     }
 
+    /// A rule that found nothing and only could not check carries no
+    /// severity and sorts after every rule that found something. Fails if an
+    /// autoscaler aimed at a Rollout reads as a High finding on no object.
+    #[test]
+    fn a_rule_that_only_could_not_check_wears_no_severity() {
+        let object = |name: &str| Audited {
+            subject: Subject {
+                kind: "HorizontalPodAutoscaler".to_string(),
+                namespace: Some("shop".to_string()),
+                name: name.to_string(),
+            },
+            system: false,
+            findings: Vec::new(),
+            unchecked: Vec::new(),
+        };
+        let mut low = object("web");
+        low.findings
+            .push(AuditFinding::of(RuleId::NoLivenessProbe, Vec::new()));
+        let mut rollout = object("rollout");
+        rollout.unchecked.push(Unchecked {
+            rule: RuleId::AutoscalerTargetMissing,
+            kind: "Rollout".to_string(),
+            namespace: Some("shop".to_string()),
+            why: Why::NotAudited,
+        });
+        let world = World {
+            objects: vec![low, rollout],
+            ..World::default()
+        };
+        let by_rule = AuditQuery {
+            by: Grouping::Rule,
+            ..query()
+        };
+        let shown: Vec<(RuleId, Option<AuditSeverity>, u32, u32)> = rows(&world, &by_rule)
+            .into_iter()
+            .filter_map(|row| match row {
+                AuditRow::Rule {
+                    rule,
+                    worst,
+                    objects,
+                    unchecked,
+                } => Some((rule, worst, objects, unchecked)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            vec![
+                (RuleId::NoLivenessProbe, Some(AuditSeverity::Low), 1, 0),
+                (RuleId::AutoscalerTargetMissing, None, 0, 1),
+            ]
+        );
+    }
+
     /// One finding per namespace, never per workload. Fails if a namespace
     /// whose policies or pods went unread is said to have none.
     #[tokio::test]
@@ -1254,6 +1403,144 @@ mod tests {
         let blind = shop(&world(&index, Err(&missing), Some(&["shop".to_string()])));
         assert!(blind.findings.is_empty());
         assert_eq!(blind.unchecked[0].kind, POD);
+    }
+
+    /// kubeadm's own cluster-admin binding folds with the system's, its
+    /// finding kept; the same group bound by a binding someone made is a
+    /// finding in the scope's own part. Fails if every kubeadm cluster
+    /// shows its bootstrap as the reader's High finding.
+    #[tokio::test]
+    async fn kubeadms_own_binding_folds_with_the_systems_and_another_to_its_group_does_not() {
+        let index = crate::audit::index::AuditIndex::holding(client().await, None);
+        let bindings = ApiResource::erase::<k8s_openapi::api::rbac::v1::ClusterRoleBinding>(&());
+        let binding = |name: &str| {
+            json!({
+                "apiVersion": "rbac.authorization.k8s.io/v1", "kind": "ClusterRoleBinding",
+                "metadata": { "name": name, "uid": name, "resourceVersion": "1" },
+                "roleRef": { "apiGroup": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "cluster-admin" },
+                "subjects": [{ "kind": "Group", "name": "kubeadm:cluster-admins" }]
+            })
+        };
+        index.feed(&bindings, binding("kubeadm:cluster-admins"));
+        index.feed(&bindings, binding("open"));
+        let seen = world(&index, Err(&Why::Reading), None);
+        let of = |name: &str| {
+            seen.objects
+                .iter()
+                .find(|o| o.subject.name == name)
+                .cloned()
+                .unwrap()
+        };
+        let own = of("kubeadm:cluster-admins");
+        assert!(
+            own.system,
+            "kubeadm's own binding is not filed with the system's"
+        );
+        assert_eq!(own.findings.len(), 1);
+        let open = of("open");
+        assert!(!open.system);
+        assert_eq!(open.findings[0].rule, RuleId::ClusterAdminBinding);
+    }
+
+    /// A world of two namespaces running pods and holding no `NetworkPolicy`,
+    /// with `others` as the last read of other engines' policies said.
+    async fn policed(others: (Option<Vec<String>>, OtherPolicies)) -> World {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        for namespace in ["shop", "web"] {
+            owners.hold(
+                &pods(),
+                "Pod",
+                namespace,
+                (namespace, Some(namespace)),
+                Some("someone"),
+            );
+        }
+        *index.others.write() = Some(others);
+        world(&index, Ok(&owners), None)
+    }
+
+    fn namespace(seen: &World, name: &str) -> Audited {
+        seen.objects
+            .iter()
+            .find(|o| o.subject.kind == "Namespace" && o.subject.name == name)
+            .cloned()
+            .unwrap()
+    }
+
+    /// Where another engine's policy may hold over a namespace's pods, its
+    /// `NetworkPolicy` objects do not say who is let in: the rule could not
+    /// check there, and names the kinds. Fails if a Cilium cluster's
+    /// namespaces are each told every pod accepts traffic from every pod.
+    #[tokio::test]
+    async fn a_namespace_another_engine_may_police_is_not_checked_not_open() {
+        let mut found = OtherPolicies::none();
+        found.within("shop", "CiliumNetworkPolicy");
+        let seen = policed((None, found)).await;
+        let shop = namespace(&seen, "shop");
+        assert!(shop.findings.is_empty());
+        assert_eq!(shop.unchecked[0].kind, "CiliumNetworkPolicy");
+        assert_eq!(shop.unchecked[0].why, Why::NotAudited);
+        assert_eq!(namespace(&seen, "web").findings.len(), 1);
+    }
+
+    /// A namespace whose pods pass a webhook that may add containers is said
+    /// not checked by the Pod Security controls, with the webhook named; one
+    /// no webhook selects is not. Fails if Istio's injected init container
+    /// passes the controls unread, or every namespace is said so.
+    #[tokio::test]
+    async fn a_namespace_a_webhook_may_change_pods_in_is_not_checked_by_the_controls() {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        index.feed(&deployments(), deployment("mesh", "web", "1", "web:1"));
+        index.feed(&deployments(), deployment("plain", "web", "1", "web:1"));
+        let injection: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector =
+            serde_json::from_value(
+                json!({ "matchLabels": { "kubernetes.io/metadata.name": "mesh" } }),
+            )
+            .expect("a selector");
+        let named = |name: &str| {
+            (
+                name.to_string(),
+                BTreeMap::from([("kubernetes.io/metadata.name".to_string(), name.to_string())]),
+            )
+        };
+        *index.admission.write() = Some(super::super::admitted::Admission::of(
+            vec![("sidecar-injector.istio.io".to_string(), injection)],
+            BTreeMap::from([named("mesh"), named("plain")]),
+        ));
+        let seen = world(&index, Ok(&owners), None);
+        let mesh: Vec<&NotChecked> = seen
+            .not_checked
+            .iter()
+            .filter(|each| matches!(each.why, Why::Admitted { .. }))
+            .collect();
+        assert_eq!(mesh.len(), 1, "{:?}", seen.not_checked);
+        assert_eq!(mesh[0].kind, POD);
+        assert_eq!(mesh[0].namespace.as_deref(), Some("mesh"));
+        assert_eq!(
+            mesh[0].why,
+            Why::Admitted {
+                webhooks: vec!["sidecar-injector.istio.io".to_string()]
+            }
+        );
+        assert!(mesh[0].rules.contains(&RuleId::PssCapabilities));
+    }
+
+    /// Fails if a namespace the other engines were not yet asked about
+    /// reads as open rather than as still being read.
+    #[tokio::test]
+    async fn a_namespace_not_yet_asked_about_other_engines_is_still_being_read() {
+        let seen = policed((Some(vec!["shop".to_string()]), OtherPolicies::none())).await;
+        let web = namespace(&seen, "web");
+        assert!(
+            web.findings.is_empty(),
+            "a namespace not yet asked about reads as open"
+        );
+        assert_eq!(web.unchecked[0].why, Why::Reading);
+        assert_eq!(namespace(&seen, "shop").findings.len(), 1);
     }
 
     /// A `CronJob`'s runs are judged on the `CronJob`, a Deployment's pods on the
@@ -1320,6 +1607,98 @@ mod tests {
         );
         let held: Vec<String> = index.pods.lock().keys().cloned().collect();
         assert_eq!(held, vec!["controller/pg-1".to_string()]);
+        index.stop_for_test();
+    }
+
+    /// One namespace's read lets go of no pod another namespace's reader
+    /// judged. Fails if opening an object in `shop` drops the judged static
+    /// pods of `kube-system`, which the page then reads again, in a loop.
+    #[tokio::test]
+    async fn a_read_of_one_namespace_keeps_the_pods_judged_in_others() {
+        let client = client().await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        let owners = ClusterIndex::holding(client, &[]);
+        owners.hold(
+            &pods(),
+            "Pod",
+            "etcd",
+            ("etcd-node", Some("kube-system")),
+            None,
+        );
+        owners.hold(&pods(), "Pod", "lone", ("lone", Some("shop")), None);
+        let judged = |namespace: &str, name: &str| crate::audit::index::PodJudged {
+            subject: Subject {
+                kind: POD.to_string(),
+                namespace: Some(namespace.to_string()),
+                name: name.to_string(),
+            },
+            system: false,
+            own: Vec::new(),
+            facts: super::super::template::TemplateFacts::default(),
+        };
+        {
+            let mut pods = index.pods.lock();
+            pods.insert(
+                "pod/etcd".to_string(),
+                PodRead::Judged(judged("kube-system", "etcd-node")),
+            );
+            pods.insert(
+                "pod/lone".to_string(),
+                PodRead::Judged(judged("shop", "lone")),
+            );
+            pods.insert(
+                "pod/gone".to_string(),
+                PodRead::Judged(judged("shop", "gone")),
+            );
+        }
+        let shop = ["shop".to_string()];
+        world(&index, Ok(&owners), Some(&shop[..]));
+        let mut held: Vec<String> = index.pods.lock().keys().cloned().collect();
+        held.sort();
+        assert_eq!(held, vec!["pod/etcd".to_string(), "pod/lone".to_string()]);
+        let page = world(&index, Ok(&owners), None);
+        assert_eq!(page.reading, 0, "the page reads its pods again");
+        index.stop_for_test();
+    }
+
+    /// A pod the cluster will not hand over is named not checked with its
+    /// words, not read as "still being read" and fetched on every read.
+    /// Fails if a refused GET reads as reading for good.
+    #[tokio::test]
+    async fn a_pod_the_cluster_will_not_hand_over_is_not_checked_not_reading() {
+        let (client, hits) = crate::client::served::test_server::answering(|path, _| {
+            if path.ends_with("/pods/lone") {
+                crate::client::served::test_server::failure(403, "Forbidden")
+            } else {
+                (404, "{}".to_string())
+            }
+        })
+        .await;
+        let index = crate::audit::index::AuditIndex::holding(client.clone(), None);
+        index.pod_reads.add_permits(1);
+        let owners = ClusterIndex::holding(client, &[]);
+        owners.hold(&pods(), "Pod", "lone", ("lone", Some("shop")), None);
+        assert_eq!(world(&index, Ok(&owners), None).reading, 1);
+        for _ in 0..200 {
+            if matches!(
+                index.pods.lock().get("pod/lone"),
+                Some(PodRead::Unread { .. })
+            ) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let seen = world(&index, Ok(&owners), None);
+        assert_eq!(seen.reading, 0, "a refused read is still being read");
+        assert!(seen.not_checked.iter().any(|unread| unread.kind == POD
+            && unread.namespace.as_deref() == Some("shop")
+            && matches!(unread.why, Why::Refused { .. })));
+        assert_eq!(
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/namespaces/shop/pods/lone"),
+            Some(&1)
+        );
         index.stop_for_test();
     }
 

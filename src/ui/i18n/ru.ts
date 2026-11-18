@@ -1986,6 +1986,8 @@ export const ru: Catalogue = {
     whyRefused: "отказано: {message}",
     whyFailed: "не удалось прочитать: {message}",
     whyNotAudited: "этот вид Аудит не читает",
+    whyAdmitted:
+      "поды проходят через {webhooks}, а они могут добавить контейнеры, которых нет в шаблоне",
     whyUnserved: "кластер этот вид не обслуживает",
     whyNoPrometheus:
       "к кластеру не подключён Prometheus, а собственный счёт устаревших запросов API-сервера читается из него",
@@ -2083,6 +2085,14 @@ export const ru: Catalogue = {
     showMore: "Показать ещё",
     tab: "Аудит",
     tabNone: "Ничего не найдено",
+    sharedOnly: "Только {filters}.",
+    rulesUnchecked: {
+      one: "{n} правило не смогло проверить все объекты",
+      few: "{n} правила не смогли проверить все объекты",
+      many: "{n} правил не смогли проверить все объекты",
+      other: "{n} правила не смогли проверить все объекты",
+    },
+    tabNonePartly: "В том, что удалось прочитать, ничего не найдено.",
     judgedOn: "Шаблон этого {kind} проверяется в составе {object}.",
     notCheckedHere: "Здесь не проверено",
     uncheckedLine: "{rule}: {kind} {where}, {why}",
@@ -2091,6 +2101,13 @@ export const ru: Catalogue = {
       few: "и ещё {n} на вкладке «Аудит»",
       many: "и ещё {n} на вкладке «Аудит»",
       other: "и ещё {n} на вкладке «Аудит»",
+    },
+    peekUnchecked: {
+      one: "{n} правило здесь не удалось проверить; почему, сказано на вкладке «Аудит»",
+      few: "{n} правила здесь не удалось проверить; почему, сказано на вкладке «Аудит»",
+      many: "{n} правил здесь не удалось проверить; почему, сказано на вкладке «Аудит»",
+      other:
+        "{n} правила здесь не удалось проверить; почему, сказано на вкладке «Аудит»",
     },
     couldNotRead: "Аудиту не удалось прочитать кластер: {error}",
     noneOpen:
@@ -2124,7 +2141,7 @@ export const ru: Catalogue = {
       many: "автомасштабирование {autoscaler} держит не меньше {n} реплик",
       other: "автомасштабирование {autoscaler} держит не меньше {n} реплики",
     },
-    wBudget: "требует {required} здоровых из {selected} выбранных",
+    wBudget: "нужно здоровых: {required}, выбрано: {selected}",
     wTokenPod: "под задаёт automountServiceAccountToken: true",
     wTokenAccount:
       "ServiceAccount default задаёт automountServiceAccountToken: true",
@@ -2248,10 +2265,10 @@ export const ru: Catalogue = {
       "На записываемой корневой файловой системе тот, кто попал в контейнер, может подменить его программы и оставить свои. readOnlyRootFilesystem: true и emptyDir там, где нужно писать, это предотвращают.",
     clusterAdminBinding: "Привязывает cluster-admin",
     clusterAdminBindingWhy:
-      "cluster-admin может что угодно с любым объектом. Если эта роль у субъекта не из самой системы, весь кластер отделяет один украденный токен.",
+      "cluster-admin может что угодно с любым объектом. Сама Kubernetes привязывает эту роль только к группе system:masters; у любого другого субъекта весь кластер отделяет один украденный токен, а группа вроде system:authenticated отдаёт её всем.",
     wildcardRole: "Разрешает любое действие с любым ресурсом",
     wildcardRoleWhy:
-      "Роль с * в глаголах и * в ресурсах даёт всё, что есть сейчас, и всё, что поставят потом, включая право раздавать права.",
+      "Роль с * в глаголах и * в ресурсах даёт всё, что есть в её группах сейчас, и всё, что поставят в них потом. Если среди групп есть группа самого RBAC (* или rbac.authorization.k8s.io), это и право раздавать права.",
     defaultServiceAccountToken: "Монтирует токен ServiceAccount default",
     defaultServiceAccountTokenWhy:
       "Поды под ServiceAccount default делят одну учётную запись, а смонтированный токен служит пропуском к API-серверу в каждом из них. Поду, который не обращается к API, токен не нужен.",
@@ -2428,6 +2445,12 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     earlierRows:
       "Изменения до {since} приложение записало, когда наблюдало с {from} по {to}; события взяты из записей самого кластера",
+    kindsCount: {
+      one: "{n} вид",
+      few: "{n} вида",
+      many: "{n} видов",
+      other: "{n} вида",
+    },
     unwatchedRefused: "{kinds} не отслеживаются {where}: кластер отказал",
     unwatchedRefusedThen: "{kinds} не отслеживались {where}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
@@ -2472,7 +2495,7 @@ export const ru: Catalogue = {
       other: "{n} сохранённых записи не удалось прочитать, они пропущены.",
     },
     metaSince:
-      "Остальные виды видны только по имени (создание, удаление, generation), читаются с {since}",
+      "Остальные виды видны только по имени, читаются с {since}: создание, удаление и новый generation, если объектом не владеет контроллер",
     metaNotNow:
       "Остальные виды видны только по имени, и сейчас они не читаются",
     noWarningsInWindow: "За это время предупреждений не записано.",
@@ -2557,8 +2580,10 @@ export const ru: Catalogue = {
     railUnpaired: "ряды без источника и получателя",
     railFailed: "не удалось проверить: {said}",
     measureFailed: "Не удалось прочитать показатель «{measure}»: {said}",
-    coverage:
-      "Меш {source}: все поды у {marked}, часть подов у {partly}, {of} здесь.",
+    coverage: "В меше {source} {of} здесь: {parts}.",
+    coverageWhole: "{n} всеми подами",
+    coveragePartly: "{n} частью подов",
+    coverageNone: "{n} ни одним",
     nodeAgent:
       "{source} видит только узлы, где работает его агент; какие это узлы, здесь неизвестно.",
     nothingInWindow: "{sources}: потоков в {scope} нет ({window}).",
@@ -2587,6 +2612,8 @@ export const ru: Catalogue = {
     cellFrom: "по данным {source}",
     cellNotMeasured: "Не измеряется: {sources}",
     cellNotReadBy: "{source} не смог это прочитать",
+    cellBelowHttp:
+      "{sources}: эта пара видна только ниже HTTP, поэтому запросы, ошибки и задержки для неё не считаются.",
     cellFloor:
       "Не меньше этой доли: {source} считает только HTTP 5xx, а неудачный вызов gRPC отвечает кодом 200.",
     panelLabel: "Один поток",
@@ -2603,6 +2630,8 @@ export const ru: Catalogue = {
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
+    panelBelowHttp:
+      "Видна только ниже HTTP: запросы, ошибки и задержки для этой пары не считаются.",
     panelSideServer: "По данным прокси сервера.",
     panelSideCaller:
       "По данным прокси вызывающей стороны: прокси сервера ничего из этого не сообщил.",
@@ -2615,10 +2644,13 @@ export const ru: Catalogue = {
     columnFrom: "Откуда",
     columnTo: "Куда",
     columnRequests: "Запросы/с",
+    columnEvents: "Потоки/с",
     columnErrors: "Ошибки",
     columnBytes: "Байты/с",
     columnDrops: "Отброшено/с",
     columnSeenBy: "Видит",
+    columnsUnmeasured:
+      "Не показаны, их не измеряет ни один источник здесь: {columns}",
     callers: "Кто вызывает",
     callees: "Кого вызывает",
     blockCaption: "{sources} через {endpoint} · {window}",
@@ -2681,6 +2713,9 @@ export const ru: Catalogue = {
     memoryUsed: "Потрачено памяти, {window}",
     usedAvgPeak: "{avg} в среднем · {peak} в пике",
     usedAvgPeakFor: "{avg} в среднем · {peak} в пике, за {age}",
+    usedAvg: "{avg} в среднем",
+    usedPeak: "{peak} в пике",
+    usedPeakFor: "{peak} в пике, за {age}",
     efficiency: "Эффективность",
     effMeasured: "{avg} в среднем, {peak} в пике",
     effMeasuredFor: "{avg} в среднем, {peak} в пике, за {age}",
@@ -2692,6 +2727,8 @@ export const ru: Catalogue = {
     effReading: "читаю…",
     effFailed: "не удалось прочитать потребление: {said}",
     effNoSamples: "нет замеров за {window}",
+    effNoSamplesYet: "замеров ещё нет, под запущен {age} назад",
+    noSamplesYet: "замеров ещё нет",
     effUnrequested: "ничего не запрошено",
     overRequested: "За сутки пик не дошёл и до половины запроса.",
     instanceType: "Тип машины",
@@ -2834,6 +2871,8 @@ export const ru: Catalogue = {
       "Не входит в {kept} нагрузок этого пространства имён, которые запрашивают больше всего; остальные страница «Стоимость» складывает.",
     lineBilledTo: "Оплачивается как {kind} {name}: {line}",
     lineNotRead: "В прочитанной стоимости её пока нет.",
+    lineNoSeries: "В этом Prometheus нет рядов OpenCost; подробнее на {page}.",
+    lineCostPage: "странице «Стоимость»",
     lineUnread: "Не удалось прочитать, сколько это стоит.",
   },
   hints: {
@@ -9684,10 +9723,10 @@ export const ru: Catalogue = {
       other: "{n} потока",
     },
     ofWorkloads: {
-      one: "из {n} рабочей нагрузки",
-      few: "из {n} рабочих нагрузок",
-      many: "из {n} рабочих нагрузок",
-      other: "из {n} рабочей нагрузки",
+      one: "из {n} нагрузки",
+      few: "из {n} нагрузок",
+      many: "из {n} нагрузок",
+      other: "из {n} нагрузки",
     },
     itsPods: {
       one: "её {n} пода",

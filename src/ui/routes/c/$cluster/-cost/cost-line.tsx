@@ -3,29 +3,50 @@
  * total, never the whole picture, and the number read through `costOf` off
  * the same picture the Cost page draws its row from.
  */
-import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
+import { useMemo, type ReactNode } from "react";
 
+import { parts } from "@/i18n/parts";
 import type { T } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
+import { pageLink } from "@/lib/links";
 import { sameKey, type CostTarget } from "@/lib/cost";
 import { overRequested, workloadEfficiency } from "@/lib/efficiency";
 import { useCost, useWorkloadUsage, type CostState } from "@/hooks/useCost";
 import { cn } from "@/lib/utils";
 import { costLineWords, efficiencyWords, troubleWords } from "./cost-words";
 
-/** What the line says outside a picture; `null` draws nothing. */
+/**
+ * What the line says outside a picture; `null` draws nothing. No OpenCost
+ * series is how most clusters are, not a fault of this object: one quiet
+ * line that sends the reader to the Cost page, where the whole of it is
+ * said. What did not answer stays amber.
+ */
 function waitingWords(
   cost: Exclude<CostState, { state: "picture" }>,
   t: T
-): string | null {
+): { words: ReactNode; tone?: "warn" } | null {
   switch (cost.state) {
     case "loading":
     case "nothing":
       return null;
     case "supplier":
-      return troubleWords(cost.trouble, t);
+      return cost.trouble.kind === "noSeries"
+        ? {
+            words: parts(t("cost", "lineNoSeries"), {
+              page: (
+                <Link
+                  {...pageLink("cost")}
+                  className="text-info hover:underline"
+                >
+                  {t("cost", "lineCostPage")}
+                </Link>
+              ),
+            }),
+          }
+        : { words: troubleWords(cost.trouble, t), tone: "warn" };
     case "basisFailed":
-      return t("cost", "lineUnread");
+      return { words: t("cost", "lineUnread"), tone: "warn" };
   }
 }
 
@@ -34,7 +55,7 @@ function Line({
   tone,
   testId,
 }: {
-  words: string;
+  words: ReactNode;
   tone?: "warn";
   testId: string;
 }) {
@@ -64,11 +85,17 @@ function useLine(target: CostTarget) {
   if (cost.state === "picture")
     return {
       cost,
-      words: costLineWords(cost.picture, target, t),
+      words: costLineWords(cost.picture, target, t) as ReactNode,
       tone: undefined,
+      said: true,
     };
-  const words = waitingWords(cost, t);
-  return { cost, words, tone: words === null ? undefined : ("warn" as const) };
+  const waiting = waitingWords(cost, t);
+  return {
+    cost,
+    words: waiting?.words ?? null,
+    tone: waiting?.tone,
+    said: false,
+  };
 }
 
 export function NamespaceCostLine({ namespace }: { namespace: string }) {
@@ -107,8 +134,9 @@ export function WorkloadCostLine({
   );
   const line = useLine(target);
   const { cost, tone } = line;
+  // Whose row it is matters only where there is a row.
   const words =
-    billedTo && line.words !== null
+    billedTo && line.said && typeof line.words === "string"
       ? t("cost", "lineBilledTo", {
           kind: billedTo.kind,
           name: billedTo.name,

@@ -67,7 +67,11 @@ export function PeekAudit({ query }: { query: ObjectAuditQuery }) {
     <div className="mt-3" data-testid="peek-audit">
       <PeekHeading
         title={t("audit", "tab")}
-        count={audit && !audit.judgedOn ? audit.findings.length : undefined}
+        count={
+          audit && !audit.judgedOn && audit.findings.length > 0
+            ? audit.findings.length
+            : undefined
+        }
       />
       <AuditBody query={query} compact={5} />
     </div>

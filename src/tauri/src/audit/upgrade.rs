@@ -398,15 +398,21 @@ async fn releases(
         .await;
     for (revision, got) in fetched {
         decoded.fetched += 1;
-        let objects = match got {
+        // A Secret that would not decode stays so until it is rewritten; one
+        // the cluster did not hand over is said this pass and asked again at
+        // the next, held against no version.
+        let (version, objects) = match got {
             Ok(None) => continue,
-            Ok(Some(Ok(objects))) => Ok(objects),
-            Ok(Some(Err(words))) => Err(Why::Failed { message: words }),
-            Err(error) => Err(super::why_of(&error)),
+            Ok(Some(Ok(objects))) => (revision.version.clone(), Ok(objects)),
+            Ok(Some(Err(words))) => (
+                revision.version.clone(),
+                Err(Why::Failed { message: words }),
+            ),
+            Err(error) => (String::new(), Err(super::why_of(&error))),
         };
         decoded.held.insert(
             (revision.namespace.clone(), revision.secret.clone()),
-            (revision.version.clone(), Arc::new(objects)),
+            (version, Arc::new(objects)),
         );
     }
     let live: BTreeSet<(String, String)> = revisions
@@ -1290,6 +1296,57 @@ mod tests {
         .await;
         assert_eq!(decoded.fetched, 2);
         assert_eq!(hits.lock().unwrap()[SECRET], 2);
+    }
+
+    /// A release Secret the cluster did not hand over is read again at the
+    /// next pass. Would break if a refused or timed-out read stood against a
+    /// `resourceVersion` that did not change, hiding a removed API behind
+    /// "not checked" until the release was next upgraded.
+    #[tokio::test]
+    async fn a_release_whose_read_failed_is_read_again_at_the_next_pass() {
+        let secret = release_secret(
+            "---\napiVersion: extensions/v1beta1\nkind: Ingress\nmetadata:\n  name: web\n",
+        );
+        let (client, hits) = answering(move |path, nth| match path {
+            "/api/v1/secrets" => (200, release_list("20")),
+            SECRET if nth == 1 => failure(403, "Forbidden"),
+            SECRET => (200, secret.clone()),
+            "/apis" => (200, api_groups()),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let served = ServedIndex::default();
+        let mut decoded = Decoded::default();
+        let release = |pass: &Read| {
+            pass.objects
+                .iter()
+                .find(|o| o.subject.kind == HELM_RELEASE)
+                .map(|o| (o.findings.len(), o.unchecked.len()))
+        };
+
+        let first = read(
+            &client,
+            &served,
+            "fake",
+            None,
+            Some(31),
+            &mut decoded,
+            &Prometheus::NotConnected,
+        )
+        .await;
+        assert_eq!(release(&first), Some((0, 1)));
+        let second = read(
+            &client,
+            &served,
+            "fake",
+            None,
+            Some(31),
+            &mut decoded,
+            &Prometheus::NotConnected,
+        )
+        .await;
+        assert_eq!(hits.lock().unwrap()[SECRET], 2);
+        assert_eq!(release(&second), Some((1, 0)));
     }
 
     /// A namespace whose release Secrets would not list is named as not

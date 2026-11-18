@@ -33,6 +33,66 @@ describe("the fix Audit offers to copy", () => {
   });
 
   /**
+   * A container's own securityContext overrides the pod's, an autoscaler's
+   * floor overrides the workload's replicas, and an ephemeral container
+   * cannot be changed at all. Fails if a fix is put where the setting that
+   * wins is left as it was.
+   */
+  it("puts each fix where the setting that wins is", () => {
+    const root = (
+      at: {
+        list: "containers" | "ephemeralContainers";
+        container: string;
+      } | null
+    ): AuditFinding => ({
+      rule: "pss-run-as-user-root",
+      severity: "medium",
+      what: [
+        { says: "set", at, field: "securityContext.runAsUser", value: "0" },
+      ],
+    });
+    expect(
+      fixYaml(
+        "pss-run-as-user-root",
+        "Pod",
+        root({ list: "containers", container: "app" })
+      )
+    ).toBe(
+      "spec:\n  containers:\n    - name: app\n      securityContext:\n        runAsUser: 10001\n        runAsGroup: 10001"
+    );
+    expect(fixYaml("pss-run-as-user-root", "Pod", root(null))).toBe(
+      "spec:\n  securityContext:\n    runAsUser: 10001\n    runAsGroup: 10001"
+    );
+    expect(
+      fixYaml("pss-seccomp-unconfined", "Deployment", {
+        ...root({ list: "containers", container: "app" }),
+        rule: "pss-seccomp-unconfined",
+      })
+    ).toMatch(
+      /containers:\n {8}- name: app\n {10}securityContext:\n {12}seccompProfile:/
+    );
+    expect(
+      fixYaml(
+        "pss-run-as-user-root",
+        "Pod",
+        root({ list: "ephemeralContainers", container: "debugger" }),
+        { kind: "Pod", namespace: "shop", name: "web-x" }
+      )
+    ).toBe("kubectl delete pod web-x --namespace shop");
+    const single = (autoscaler: string | null): AuditFinding => ({
+      rule: "single-replica",
+      severity: "medium",
+      what: [{ says: "replicas", replicas: 1, autoscaler }],
+    });
+    expect(fixYaml("single-replica", "Deployment", single("web"))).toBe(
+      "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web\nspec:\n  minReplicas: 2"
+    );
+    expect(fixYaml("single-replica", "Deployment", single(null))).toBe(
+      "spec:\n  replicas: 2"
+    );
+  });
+
+  /**
    * A release whose stored manifest names a version this cluster no longer
    * serves is mapped in place by the Helm plugin, named with the release, and
    * its chart moves each kind to its replacement; a version still served

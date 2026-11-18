@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::Result;
 use crate::ownership::slots::{spawn_slot, SlotHost, PAGE_WITHIN};
-use crate::ownership::{KindKey, SlotKey, SlotState};
+use crate::ownership::{KindKey, SlotKey, SlotState, LISTED_FOR};
 
 /// How long a kind nobody follows keeps its watch: a page left and opened
 /// again does not list the cluster twice.
@@ -190,9 +190,9 @@ impl Lease {
                 let Some(sub) = inner.subscribers.get_mut(&self.id) else {
                     return;
                 };
-                let within = scope.clone().filter(|_| sub.narrow);
-                let moved = namespaces(sub.scope.as_deref()) != namespaces(within.as_deref());
-                sub.scope = within;
+                let filter = scope.clone().filter(|_| sub.narrow);
+                let moved = namespaces(sub.scope.as_deref()) != namespaces(filter.as_deref());
+                sub.scope = filter;
                 sub.fallback = scope;
                 let kinds = sub.kinds.clone();
                 if moved {
@@ -463,6 +463,8 @@ pub struct Feeds {
     linger: Duration,
     page_idle: Duration,
     queue: usize,
+    /// How long one page of a reader's own list may take, body and all.
+    page_within: Duration,
 }
 
 impl Feeds {
@@ -476,6 +478,7 @@ impl Feeds {
             linger: LINGER,
             page_idle: PAGE_IDLE,
             queue: QUEUE,
+            page_within: PAGE_WITHIN,
         }
     }
 
@@ -515,6 +518,7 @@ impl Feeds {
             linger: self.linger,
             page_idle: self.page_idle,
             queue: self.queue,
+            page_within: self.page_within,
         });
         let context = self
             .contexts
@@ -567,6 +571,12 @@ impl Feeds {
         self.linger = linger;
         self.page_idle = page_idle;
         self.queue = queue;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn listing_within(mut self, page_within: Duration) -> Self {
+        self.page_within = page_within;
         self
     }
 
@@ -759,11 +769,13 @@ impl Inner {
         let Some(sub) = self.subscribers.get_mut(&id) else {
             return;
         };
-        if let Update::Whole { slot, .. } = &update {
-            sub.seen.insert(slot.clone());
-        }
+        // A set it never received is not one it has seen.
+        let whole = match &update {
+            Update::Whole { slot, .. } => Some(slot.clone()),
+            _ => None,
+        };
         match sub.tx.try_send(update) {
-            Ok(()) => {}
+            Ok(()) => sub.seen.extend(whole),
             Err(mpsc::error::TrySendError::Full(_)) => sub.lagged = true,
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 self.leave(id);
@@ -771,8 +783,9 @@ impl Inner {
         }
     }
 
-    /// A subscriber that fell behind is handed every slot it follows whole,
-    /// and is caught up when all of them fit.
+    /// A subscriber that fell behind is handed each slot it follows as it
+    /// stands, its state and then its set, and is caught up when all of
+    /// them fit. What it lost meanwhile, a state among them, is in these.
     fn resync(&mut self, id: u64) {
         let Some(sub) = self.subscribers.get(&id) else {
             return;
@@ -784,40 +797,51 @@ impl Inner {
                     .get(&slot.kind)
                     .is_some_and(|f| f.serving == generation)
         };
-        let unkept: Vec<SlotKey> = self
-            .stores
-            .iter()
-            .filter(|((generation, slot), store)| {
-                store.synced && !keeps(&slot.kind) && serving(*generation, slot)
-            })
-            .map(|((_, slot), _)| slot.clone())
-            .collect();
-        let wholes: Vec<Update> = self
-            .stores
-            .iter()
-            .filter(|((generation, slot), store)| {
-                store.synced && keeps(&slot.kind) && serving(*generation, slot)
-            })
-            .map(|((_, slot), store)| Update::Whole {
+        let mut unkept: Vec<SlotKey> = Vec::new();
+        let mut updates: Vec<Update> = Vec::new();
+        for ((generation, slot), state) in &self.states {
+            if !serving(*generation, slot) {
+                continue;
+            }
+            let store = self
+                .stores
+                .get(&(*generation, slot.clone()))
+                .filter(|store| store.synced);
+            if store.is_some() && !keeps(&slot.kind) {
+                // Listed for it, which says its own states.
+                unkept.push(slot.clone());
+                continue;
+            }
+            updates.push(Update::State {
                 slot: slot.clone(),
-                why: Whole::Relist,
-                objects: unpacked(store.objects.values())
-                    .into_iter()
-                    .filter(|o| in_scope(sub.scope.as_deref(), o))
-                    .collect(),
-            })
-            .collect();
+                state: state.clone(),
+            });
+            if let Some(store) = store {
+                updates.push(Update::Whole {
+                    slot: slot.clone(),
+                    why: if sub.seen.contains(slot) {
+                        Whole::Relist
+                    } else {
+                        Whole::Fresh
+                    },
+                    objects: unpacked(store.objects.values())
+                        .into_iter()
+                        .filter(|o| in_scope(sub.scope.as_deref(), o))
+                        .collect(),
+                });
+            }
+        }
         let Some(sub) = self.subscribers.get_mut(&id) else {
             return;
         };
-        if sub.tx.capacity() < wholes.len() + 1 {
+        if sub.tx.capacity() < updates.len() {
             return;
         }
-        for whole in wholes {
-            if let Update::Whole { slot, .. } = &whole {
+        for update in updates {
+            if let Update::Whole { slot, .. } = &update {
                 sub.seen.insert(slot.clone());
             }
-            let _ = sub.tx.try_send(whole);
+            let _ = sub.tx.try_send(update);
         }
         sub.lagged = false;
         for slot in unkept {
@@ -922,23 +946,29 @@ impl Inner {
             },
         );
         for update in waited {
-            let newer = match &update {
-                Update::Applied { object, .. } => match (version_of(object), at) {
-                    (Some(version), Some(at)) => version > at,
-                    _ => true,
-                },
+            let handed = match &update {
+                Update::Applied { object, .. } => {
+                    in_scope(scope.as_deref(), object)
+                        && match (version_of(object), at) {
+                            (Some(version), Some(at)) => version > at,
+                            _ => true,
+                        }
+                }
+                Update::Deleted { object, .. } => in_scope(scope.as_deref(), object),
                 _ => true,
             };
-            if newer {
+            if handed {
                 self.send(id, update);
             }
         }
     }
 
-    /// A list for `id` failed: it is told, and the list is tried again.
+    /// A list for `id` failed: it is told, and the list is tried again. What
+    /// waited on it is let go: the next list holds it.
     fn list_failed(&mut self, id: u64, slot: &SlotKey, message: String) {
         if let Some(sub) = self.subscribers.get_mut(&id) {
-            if sub.pending.contains_key(slot) {
+            if let Some(waited) = sub.pending.get_mut(slot) {
+                waited.clear();
                 let _ = sub.tx.try_send(Update::State {
                     slot: slot.clone(),
                     state: FeedState::Failed { message },
@@ -1064,6 +1094,7 @@ pub(crate) struct ContextFeeds {
     linger: Duration,
     page_idle: Duration,
     queue: usize,
+    page_within: Duration,
 }
 
 impl ContextFeeds {
@@ -1240,7 +1271,7 @@ impl ContextFeeds {
                 let listed = tokio::select! {
                     biased;
                     () = context.stop.cancelled() => return,
-                    listed = list_slot(client, &resource, &slot) => listed,
+                    listed = list_slot(client, &resource, &slot, context.page_within) => listed,
                 };
                 match listed {
                     Ok((objects, at)) => {
@@ -1304,13 +1335,7 @@ impl ContextFeeds {
                 {
                     continue;
                 }
-                spawn_slot(
-                    &generation,
-                    slot,
-                    resource.clone(),
-                    RELIST_EVERY,
-                    PAGE_WITHIN,
-                );
+                generation.spawn(&slot, resource.clone());
             }
         }
     }
@@ -1349,6 +1374,11 @@ impl ContextFeeds {
     /// Lets go of page subscriptions nobody touched, and of kinds nobody
     /// has followed for the linger. `true` once nothing is left.
     fn reap(&self, now: Instant) -> bool {
+        let generations: Vec<Arc<Generation>> =
+            self.inner.lock().generations.values().cloned().collect();
+        for generation in generations {
+            generation.overdue(chrono::Utc::now());
+        }
         let mut stopping: Vec<(Arc<Generation>, KindKey)> = Vec::new();
         let empty = {
             let mut inner = self.inner.lock();
@@ -1407,11 +1437,14 @@ impl ContextFeeds {
 }
 
 /// Every object of `slot`, narrowed and cut as its watch is, and the
-/// collection's resourceVersion the list was read at.
+/// collection's resourceVersion the list was read at. Each page is given up
+/// after `within`: the client's own deadline ends at the response head, and
+/// a body that stalls part-way would hold the reader listing for good.
 async fn list_slot(
     client: Client,
     resource: &ApiResource,
     slot: &SlotKey,
+    within: Duration,
 ) -> Result<(Vec<Arc<DynamicObject>>, Option<u64>)> {
     let api: Api<DynamicObject> = match &slot.namespace {
         Some(namespace) => Api::namespaced_with(client, namespace, resource),
@@ -1424,7 +1457,11 @@ async fn list_slot(
     let mut objects = Vec::new();
     let mut at = None;
     loop {
-        let page = api.list(&params).await?;
+        let page = tokio::time::timeout(within, api.list(&params))
+            .await
+            .map_err(|_| crate::error::Error::ReadDeadline {
+                after_secs: within.as_secs(),
+            })??;
         at = at.or_else(|| page.metadata.resource_version.as_deref()?.parse().ok());
         objects.extend(page.items.into_iter().map(|object| kept(slot, object)));
         match page.metadata.continue_.filter(|token| !token.is_empty()) {
@@ -1470,7 +1507,47 @@ impl Generation {
             kind: kind.clone(),
             namespace: None,
         };
-        spawn_slot(self, slot, resource, RELIST_EVERY, PAGE_WITHIN);
+        self.spawn(&slot, resource);
+    }
+
+    /// Starts reading `slot`; one left waiting for a watch says so, rather
+    /// than nothing until its turn comes.
+    fn spawn(self: &Arc<Self>, slot: &SlotKey, resource: ApiResource) {
+        spawn_slot(self, slot.clone(), resource, RELIST_EVERY, PAGE_WITHIN);
+        let slots = self.slots.lock();
+        if matches!(slots.get(slot), Some(SlotState::Queued)) {
+            let id = self.id;
+            self.tell(|inner| {
+                inner.state(id, slot, FeedState::Queued);
+                Vec::new()
+            });
+        }
+    }
+
+    /// A slot read by its list alone whose next turn is long overdue is no
+    /// longer the kind as it is: it says since when, as the ownership index
+    /// says of the same slot.
+    fn overdue(&self, now: chrono::DateTime<chrono::Utc>) {
+        let slots = self.slots.lock();
+        let id = self.id;
+        for (slot, state) in slots.iter() {
+            let SlotState::Listed { at } = state else {
+                continue;
+            };
+            if now
+                .signed_duration_since(*at)
+                .to_std()
+                .is_ok_and(|age| age > LISTED_FOR)
+            {
+                let blind = FeedState::Blind {
+                    since: at.to_rfc3339(),
+                };
+                self.tell(|inner| {
+                    inner.state(id, slot, blind);
+                    Vec::new()
+                });
+            }
+        }
     }
 
     fn stop_kind(&self, kind: &KindKey) {
@@ -2163,72 +2240,6 @@ mod tests {
         context.end();
     }
 
-    /// With the window on `shop`, a page draws `shop` and the timeline records
-    /// the cluster, whose span says it watched the whole of it. Fails if the
-    /// timeline loses a rollout in `payments` the whole-cluster watch saw, a
-    /// page is handed it, or the timeline stops falling back to its window's
-    /// namespaces where the cluster refuses.
-    #[tokio::test]
-    async fn the_timeline_is_handed_the_whole_cluster_and_a_page_its_namespaces() {
-        let feeds = feeds();
-        let context = feeds.context_for("prod", client().await);
-        let window = Some(vec!["shop".to_string()]);
-        let mut page = context.join(
-            &ask(Some(vec!["shop"]), Binding::Page),
-            &[deployments()],
-            &[],
-        );
-        let mut timeline = context.join(
-            &crate::timeline::follow::ask(window.clone()),
-            &[deployments()],
-            &[],
-        );
-        let generation = context.serving();
-        let slot = whole(&deployments().0);
-        list(
-            &generation,
-            &slot,
-            vec![
-                deployment("shop", "web", "1"),
-                deployment("payments", "api", "1"),
-            ],
-        );
-        apply(&generation, &slot, deployment("payments", "api", "2"));
-        let named = |updates: Vec<Update>| -> Vec<String> {
-            updates
-                .iter()
-                .flat_map(|update| match update {
-                    Update::Whole { objects, .. } => names(objects),
-                    Update::Applied { object, .. } => {
-                        vec![object.metadata.name.clone().unwrap_or_default()]
-                    }
-                    _ => Vec::new(),
-                })
-                .collect()
-        };
-        assert_eq!(named(drain(&mut page)), ["web"]);
-        assert_eq!(named(drain(&mut timeline)), ["api", "web", "api"]);
-        timeline.lease.rescope(Some(vec!["ops".to_string()]));
-        apply(&generation, &slot, deployment("payments", "api", "3"));
-        assert_eq!(named(drain(&mut timeline)), ["api"]);
-
-        let refusing = feeds.context_for("staging", client().await);
-        let _timeline = refusing.join(&crate::timeline::follow::ask(window), &[deployments()], &[]);
-        let generation = refusing.serving();
-        SlotHost::refused(
-            &generation,
-            &whole(&deployments().0),
-            "deployments is forbidden".to_string(),
-            None,
-        );
-        assert!(generation.holds(&SlotKey {
-            kind: deployments().0,
-            namespace: Some("shop".to_string()),
-        }));
-        context.end();
-        refusing.end();
-    }
-
     /// A reader moved to other namespaces is handed, from the store, what is
     /// there now as a set to start from; only a real move hands anything.
     /// Fails if a namespace added to the scope reads as empty until the next
@@ -2334,6 +2345,113 @@ mod tests {
         context.end();
     }
 
+    /// A kind left waiting for a watch says so at once. Fails if it reads
+    /// as nothing at all until its turn, which the map drew as not installed.
+    #[tokio::test]
+    async fn a_kind_waiting_for_a_watch_says_it_is_queued() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        let slot = whole(&deployments().0);
+        assert!(drain(&mut sub).iter().any(|u| matches!(
+            u,
+            Update::State { slot: at, state: FeedState::Queued } if *at == slot
+        )));
+        context.end();
+    }
+
+    /// A list whose next turn is long overdue says since when, as the
+    /// ownership index says of the same slot. Fails if an old list reads as
+    /// synced for good.
+    #[tokio::test]
+    async fn a_list_long_overdue_says_since_when() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(&ask(None, Binding::Page), &[deployments()], &[]);
+        drain(&mut sub);
+        let slot = whole(&deployments().0);
+        let at = chrono::Utc::now()
+            - chrono::Duration::from_std(LISTED_FOR + Duration::from_secs(1)).expect("a span");
+        context
+            .serving()
+            .slots
+            .lock()
+            .insert(slot, SlotState::Listed { at });
+        context.reap(Instant::now());
+        let since = at.to_rfc3339();
+        assert!(drain(&mut sub).iter().any(|u| matches!(
+            u,
+            Update::State { state: FeedState::Blind { since: said }, .. } if *said == since
+        )));
+        context.end();
+    }
+
+    /// With the window on `shop`, a page draws `shop` and the timeline records
+    /// the cluster, whose span says it watched the whole of it. Fails if the
+    /// timeline loses a rollout in `payments` the whole-cluster watch saw, a
+    /// page is handed it, or the timeline stops falling back to its window's
+    /// namespaces where the cluster refuses.
+    #[tokio::test]
+    async fn the_timeline_is_handed_the_whole_cluster_and_a_page_its_namespaces() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let window = Some(vec!["shop".to_string()]);
+        let mut page = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let mut timeline = context.join(
+            &crate::timeline::follow::ask(window.clone()),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(
+            &generation,
+            &slot,
+            vec![
+                deployment("shop", "web", "1"),
+                deployment("payments", "api", "1"),
+            ],
+        );
+        apply(&generation, &slot, deployment("payments", "api", "2"));
+        let named = |updates: Vec<Update>| -> Vec<String> {
+            updates
+                .iter()
+                .flat_map(|update| match update {
+                    Update::Whole { objects, .. } => names(objects),
+                    Update::Applied { object, .. } => {
+                        vec![object.metadata.name.clone().unwrap_or_default()]
+                    }
+                    _ => Vec::new(),
+                })
+                .collect()
+        };
+        assert_eq!(named(drain(&mut page)), ["web"]);
+        assert_eq!(named(drain(&mut timeline)), ["api", "web", "api"]);
+        timeline.lease.rescope(Some(vec!["ops".to_string()]));
+        apply(&generation, &slot, deployment("payments", "api", "3"));
+        assert_eq!(named(drain(&mut timeline)), ["api"]);
+
+        let refusing = feeds.context_for("staging", client().await);
+        let _timeline = refusing.join(&crate::timeline::follow::ask(window), &[deployments()], &[]);
+        let generation = refusing.serving();
+        SlotHost::refused(
+            &generation,
+            &whole(&deployments().0),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        assert!(generation.holds(&SlotKey {
+            kind: deployments().0,
+            namespace: Some("shop".to_string()),
+        }));
+        context.end();
+        refusing.end();
+    }
+
     /// A renewed client reads every kind again; the old one serves until the
     /// new one has listed, then the new set is handed over with no gap.
     /// Fails if a change on the old client is lost before the hand-over, or
@@ -2391,6 +2509,7 @@ mod tests {
         let feeds = feeds();
         let context = feeds.context_for("prod", client().await);
         let mut sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        drain(&mut sub);
         feeds.client_replaced("prod", None);
         let ended = tokio::time::timeout(Duration::from_secs(2), sub.updates.recv()).await;
         assert!(matches!(ended, Ok(None)), "{ended:?}");
@@ -2421,8 +2540,12 @@ mod tests {
         context.end();
     }
 
-    /// A reader that falls behind is handed the whole set once there is
-    /// room, not left holding half of the changes.
+    /// A reader that falls behind is handed its slot's state and whole set
+    /// once there is room, not left holding half of the changes; a set it
+    /// never received comes as its first. Fails if a watch that broke while
+    /// it was behind still reads as synced, or if its first set comes as a
+    /// relist, which the Timeline compared with nothing and wrote every
+    /// object as created.
     #[tokio::test]
     async fn a_reader_that_falls_behind_is_handed_the_whole_set_again() {
         let feeds = feeds().lingering(LINGER, PAGE_IDLE, 2);
@@ -2438,18 +2561,42 @@ mod tests {
                 deployment("shop", &format!("burst-{n}"), "1"),
             );
         }
-        drain(&mut sub);
-        apply(&generation, &slot, deployment("shop", "after", "1"));
+        let first = drain(&mut sub);
+        assert!(
+            !first.iter().any(|u| matches!(u, Update::Whole { .. })),
+            "the queue held the first set: {first:?}"
+        );
+        generation.failed(
+            &slot,
+            "connection reset".to_string(),
+            &CancellationToken::new(),
+        );
         let caught_up = drain(&mut sub);
-        let set = caught_up.iter().find_map(|u| match u {
-            Update::Whole {
-                why: Whole::Relist,
-                objects,
-                ..
-            } => Some(objects.len()),
-            _ => None,
-        });
-        assert_eq!(set, Some(7));
+        assert!(
+            matches!(
+                caught_up.as_slice(),
+                [
+                    Update::State {
+                        state: FeedState::Blind { .. },
+                        ..
+                    },
+                    Update::Whole {
+                        why: Whole::Fresh,
+                        ..
+                    }
+                ]
+            ),
+            "{caught_up:?}"
+        );
+        let Update::Whole { objects, .. } = &caught_up[1] else {
+            unreachable!()
+        };
+        assert_eq!(objects.len(), 6);
+        apply(&generation, &slot, deployment("shop", "after", "1"));
+        assert!(matches!(
+            drain(&mut sub).as_slice(),
+            [Update::Applied { .. }]
+        ));
         context.end();
     }
 
@@ -2925,6 +3072,133 @@ mod tests {
             1,
             "a second watch was opened"
         );
+        context.end();
+    }
+
+    /// A change that waited on a reader's own list is handed only within its
+    /// namespaces, as the list is. Fails if a `ConfigMap` edited elsewhere
+    /// during the list reaches it, which the Timeline wrote as created.
+    #[tokio::test]
+    async fn a_change_that_waited_on_a_list_is_handed_only_within_the_readers_namespaces() {
+        let (client, _) = answering(|path, _| {
+            if path == "/api/v1/configmaps" {
+                (200, config_map_list("500", &["app"]))
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut first = context.join(&config_maps_of(&context), std::slice::from_ref(&maps), &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut first);
+
+        let mut ask = config_maps_of(&context);
+        ask.scope = Some(vec!["shop".to_string()]);
+        let mut late = context.join(&ask, &[maps], &[]);
+        let elsewhere: DynamicObject = serde_json::from_value(json!({ "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": { "name": "ledger", "namespace": "payments", "uid": "payments/ledger", "resourceVersion": "600" } }))
+        .unwrap();
+        apply(&generation, &slot, elsewhere.clone());
+        let resource = ApiResource::erase::<ConfigMap>(&());
+        generation.saw(
+            &slot,
+            &resource,
+            Event::Delete(elsewhere),
+            &CancellationToken::new(),
+        );
+        apply(&generation, &slot, config_map("cache", "700"));
+        let seen = whole_within(&mut late).await;
+        let changed: Vec<String> = seen
+            .iter()
+            .filter_map(|u| match u {
+                Update::Applied { object, .. } | Update::Deleted { object, .. } => {
+                    object.metadata.name.clone()
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(changed, vec!["cache".to_string()]);
+        context.end();
+    }
+
+    /// An API server whose `ConfigMap` list sends its head, half its body,
+    /// and nothing more.
+    async fn stalled_body() -> Client {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let _ = socket.read(&mut buf).await;
+                    let body = config_map_list("500", &["app", "db"]);
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = socket.write_all(head.as_bytes()).await;
+                    let _ = socket.write_all(&body.as_bytes()[..body.len() / 2]).await;
+                    tokio::time::sleep(Duration::from_mins(10)).await;
+                });
+            }
+        });
+        Client::try_from(kube::Config::new(url.parse().expect("url"))).expect("client")
+    }
+
+    /// A reader's own list whose body stalls is given up within the page's
+    /// deadline: the reader is told it failed, and the changes that waited
+    /// on it are let go for the next list to hold. Fails if it reads as
+    /// listing for good while those changes pile up.
+    #[tokio::test]
+    async fn a_readers_own_list_whose_body_stalls_reads_as_failed() {
+        let feeds = feeds().listing_within(Duration::from_millis(200));
+        let context = feeds.context_for("prod", stalled_body().await);
+        let maps = (
+            slot_of("", "configmaps").kind,
+            (ApiResource::erase::<ConfigMap>(&()), true),
+        );
+        let mut first = context.join(&config_maps_of(&context), std::slice::from_ref(&maps), &[]);
+        let generation = context.serving();
+        let slot = slot_of("", "configmaps");
+        list(&generation, &slot, vec![config_map("app", "100")]);
+        drain(&mut first);
+
+        let mut late = context.join(&config_maps_of(&context), &[maps], &[]);
+        apply(&generation, &slot, config_map("db", "400"));
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut failed = false;
+        while let Ok(Some(update)) = tokio::time::timeout_at(deadline, late.updates.recv()).await {
+            if matches!(
+                update,
+                Update::State {
+                    state: FeedState::Failed { .. },
+                    ..
+                }
+            ) {
+                failed = true;
+                break;
+            }
+        }
+        assert!(failed, "the reader was never told its list failed");
+        let waiting: Vec<usize> = context
+            .inner
+            .lock()
+            .subscribers
+            .values()
+            .filter_map(|sub| sub.pending.get(&slot).map(Vec::len))
+            .collect();
+        assert_eq!(waiting, vec![0], "what waited on the list is held");
         context.end();
     }
 

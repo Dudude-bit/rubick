@@ -3173,6 +3173,7 @@ export type AppEvent =
       why: AuthOutcome | null;
     }
   | { channel: "credentials-renewed"; context: string }
+  | { channel: "kubeconfig-changed"; changed: string[] }
   | {
       channel: "auth-terminal-session-created";
       auth_session_id: string;
@@ -3968,7 +3969,8 @@ export type Why =
   | { says: "noUsage" }
   | { says: "noSamples" }
   | { says: "young"; since: string | null }
-  | { says: "folded" };
+  | { says: "folded" }
+  | { says: "admitted"; webhooks: string[] };
 
 export type RuleId =
   | "pss-host-process"
@@ -4102,7 +4104,7 @@ export type AuditRow =
   | {
       row: "rule";
       rule: RuleId;
-      worst: AuditSeverity;
+      worst: AuditSeverity | null;
       objects: number;
       unchecked: number;
     }

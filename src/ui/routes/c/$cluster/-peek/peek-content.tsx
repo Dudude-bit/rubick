@@ -72,6 +72,7 @@ import { PeekTabBody } from "./PeekTabs";
 import { PeekHeading } from "./peek-heading";
 import { PeekTraffic } from "./peek-traffic";
 import { PeekAudit } from "../-audit/PeekAudit";
+import { WorkloadFlows, type Frame } from "../-traffic/workload-traffic";
 import { useObjectAudit } from "../-audit/useAudit";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
 import { usePeekHost } from "./peek-dock";
@@ -412,6 +413,7 @@ export function PeekContent({
                 summary={summary}
                 error={error}
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
+                owners={owned}
                 isLoading={isLoading}
                 readAt={dataUpdatedAt}
               />
@@ -509,6 +511,7 @@ function PeekOverview({
   summary,
   error,
   gone,
+  owners,
   isLoading,
   readAt,
 }: {
@@ -517,6 +520,8 @@ function PeekOverview({
   error: Error | null;
   /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
   gone: KnownOwners | false;
+  /** What its read says owns it, as `ownersOf` has it. */
+  owners: KnownOwners;
   isLoading: boolean;
   /** When the object on screen was read. */
   readAt: number;
@@ -586,19 +591,34 @@ function PeekOverview({
           namespace={target.namespace ?? null}
         />
       )}
-      {gone === false && <LiveReads target={target} />}
+      {gone === false && <LiveReads target={target} owners={owners} />}
       <PeekEvents target={target} />
     </div>
   );
 }
 
 /** What is read about the object as it is now, which a gone one has no answer to. */
-function LiveReads({ target }: { target: PeekTarget }) {
+function LiveReads({
+  target,
+  owners,
+}: {
+  target: PeekTarget;
+  owners: KnownOwners;
+}) {
   const kind = builtInKindOf(target);
   return (
     <>
       {kind && TRAFFIC_KINDS.has(kind) && (
         <PeekTraffic target={target} kind={kind} />
+      )}
+      {kind && FLOW_KINDS.has(kind) && (
+        <WorkloadFlows
+          kind={kind}
+          namespace={target.namespace}
+          name={target.name}
+          owners={owners ?? undefined}
+          frame={PEEK_FRAME}
+        />
       )}
       {kind && AUDITED_KINDS.has(kind) && target.namespace && (
         <PeekAuditOf
@@ -887,6 +907,22 @@ const AUDITED_KINDS = new Set<string>([
   "Job",
   "CronJob",
 ]);
+
+/** The kinds whose page has who calls them and whom they call. */
+const FLOW_KINDS = new Set<string>([
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "Job",
+  "CronJob",
+]);
+
+const PEEK_FRAME: Frame = (title, caption, body) => (
+  <>
+    <PeekHeading title={title} count={caption} />
+    {body}
+  </>
+);
 
 /** The peek's Audit group, reading the answer the object's tab reads. */
 function PeekAuditOf({

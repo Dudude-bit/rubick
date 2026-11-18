@@ -270,14 +270,21 @@ impl Recorder {
 
     /// One object of a kind read by name only, as it is now: its generation
     /// moved, or it is new. A followed kind is said whole by its own watch,
-    /// and a controller's object's birth is its owner's story.
+    /// and what a controller made is its owner's story, birth and changes
+    /// alike: a rollout was a screen of generations of its `Pod`, both
+    /// `ReplicaSet`s and an `EndpointSlice`. An `EndpointSlice` moves on every
+    /// readiness flip of its Service's pods, owned or not.
     pub fn named_seen(&mut self, item: &Named, sight: Sight) {
         if item.kind == EVENT || followed(&item.kind, &item.group).is_some() {
             return;
         }
+        let owned =
+            item.controlled || (item.kind == "EndpointSlice" && item.group == "discovery.k8s.io");
         let before = self.named.insert(item.uid.clone(), item.clone());
         let what = match before {
-            Some(prev) if prev.generation != item.generation && item.generation.is_some() => {
+            Some(prev)
+                if !owned && prev.generation != item.generation && item.generation.is_some() =>
+            {
                 prev.generation.map(|from| RowSays::Generation {
                     from: Some(from),
                     to: item.generation,
@@ -309,6 +316,23 @@ impl Recorder {
         let was = self.cover(source);
         self.slots.insert((source, slot), state);
         self.settle(source, was.as_ref(), since);
+    }
+
+    /// The window's namespaces moved: a kind refused across the cluster is
+    /// no longer asked for in the namespaces it left, so what stood there is
+    /// not this watch's to name or to wait on. A slot live for another
+    /// reader is still handed over, and stays.
+    pub fn rescope(&mut self, scope: Option<&[String]>) {
+        let was = self.cover(Source::Followed);
+        self.slots.retain(|(source, slot), state| {
+            *source != Source::Followed
+                || *state == SlotState::Live
+                || slot
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| scope.is_some_and(|names| names.contains(namespace)))
+        });
+        self.settle(Source::Followed, was.as_ref(), None);
     }
 
     /// How one watch stands, as last told.

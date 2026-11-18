@@ -172,6 +172,7 @@ describe("a flow opened from its edge", () => {
       <FlowPanel row={both} window="last 5 minutes" onClose={() => {}} />,
       { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
     );
+    expect(screen.getByText(/of them errors/).className).toContain("text-err");
     expect(
       screen.getByText(
         "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server."
@@ -187,5 +188,35 @@ describe("a flow opened from its edge", () => {
       { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
     );
     expect(screen.getByText("From the server's proxy.")).toBeTruthy();
+  });
+
+  /**
+   * A pair Hubble sees only at L4 has no requests to show: the panel says it
+   * once, where the table's cells are blank and titled the same.
+   */
+  it("says a pair seen only below HTTP is that, beside the flows it has", async () => {
+    const row = liveRow({
+      from: end("caller"),
+      to: end("db"),
+      forwarded: 2,
+      dropped: 0,
+      drops: [],
+      requests: null,
+      errors: null,
+      p50: null,
+      p95: null,
+      p99: null,
+      protocols: [],
+    });
+    await renderWithRouter(
+      <FlowPanel row={row} window="last minute" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(
+      screen.getByText(
+        "Seen only below HTTP: requests, errors and latency are not counted for this pair."
+      )
+    ).toBeTruthy();
+    expect(screen.getByText("2 flow events/s")).toBeTruthy();
   });
 });

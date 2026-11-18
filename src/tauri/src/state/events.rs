@@ -385,6 +385,9 @@ pub enum AppEvent {
     /// the `kube::Client` it started with, so a renewal that only swapped the
     /// manager's copy would renew the session and kill the screens anyway.
     CredentialsRenewed { context: String },
+    /// The kubeconfig changed on disk, and these contexts' entries with it:
+    /// a server, a CA or credentials. Another cluster may be behind a name.
+    KubeconfigChanged { changed: Vec<String> },
     /// Auth terminal session created (for interactive exec auth)
     AuthTerminalSessionCreated {
         auth_session_id: String,
@@ -539,6 +542,7 @@ impl AppEvent {
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
             AppEvent::CredentialsRenewed { .. } => "credentials-renewed",
+            AppEvent::KubeconfigChanged { .. } => "kubeconfig-changed",
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
             AppEvent::DrainProgress { .. } => "drain-progress",
             AppEvent::DrainFinished { .. } => "drain-finished",
@@ -779,6 +783,9 @@ mod tests {
                 rows: true,
                 spans: false,
             },
+            AppEvent::KubeconfigChanged {
+                changed: vec!["kind-rubick".into()],
+            },
         ]
     }
 
@@ -816,6 +823,7 @@ mod tests {
             AppEvent::HubbleFlows { .. } => 29,
             AppEvent::HubbleFlowsEnded { .. } => 30,
             AppEvent::TimelineChanged { .. } => 31,
+            AppEvent::KubeconfigChanged { .. } => 32,
         }
     }
 
@@ -824,7 +832,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=31).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=32).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

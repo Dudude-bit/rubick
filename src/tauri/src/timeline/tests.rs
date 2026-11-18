@@ -258,6 +258,31 @@ fn an_annotation_that_may_copy_the_object_is_compared_by_digest_alone() {
     }
 }
 
+/// Istio renews its election in a `ConfigMap` annotation every few seconds:
+/// three such rows took nine of sixteen lines on screen, without end. Fails
+/// if a renewal alone is a row, or a data change made with it is lost.
+#[test]
+fn a_leader_election_renewal_is_not_a_change() {
+    let lock = |renewed: &str, data: &str| {
+        let record = format!(r#"{{"holderIdentity":"istiod-1","renewTime":"{renewed}"}}"#);
+        json!({"metadata": {"name": "istio-leader", "namespace": "istio-system",
+            "annotations": {"control-plane.alpha.kubernetes.io/leader": record}},
+            "data": {"k": data}})
+    };
+    let at = |renewed: &str, data: &str| snap("ConfigMap", "", &lock(renewed, data));
+    let before = at("2026-11-17T10:00:00Z", "a");
+    assert!(changed(&before, &at("2026-11-17T10:00:02Z", "a")).is_none());
+    let found = moves(&before, &at("2026-11-17T10:00:04Z", "b"));
+    assert_eq!(
+        found,
+        [FieldMove::NotKept {
+            path: "data.k".into(),
+            was: true,
+            is: true
+        }]
+    );
+}
+
 /// A private key never reaches the screen, whatever field carries it.
 /// Fails if a kept value skips the one door.
 #[test]
@@ -1443,6 +1468,33 @@ mod recording {
             .all(|span| span.to.is_some()));
     }
 
+    /// The window opened on `team-a`, refused, then moved to `audit-test`:
+    /// minutes later the header still named `team-a` as refused. Fails if a
+    /// namespace the window left is still named, or still holds the span.
+    #[test]
+    fn a_namespace_the_window_left_is_no_longer_named_as_refused() {
+        let (_t, cluster, mut recorder) = recorder();
+        for (namespace, state) in [
+            (None, SlotState::Refused),
+            (Some("team-a"), SlotState::Refused),
+            (Some("audit-test"), SlotState::Live),
+            (Some("ops"), SlotState::Listing),
+        ] {
+            recorder.state(Source::Followed, slot("Deployment", namespace), state, None);
+        }
+        assert!(
+            followed_spans(&cluster)
+                .iter()
+                .all(|span| span.to.is_some()),
+            "ops lists"
+        );
+        recorder.rescope(Some(&["audit-test".to_string()]));
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(span.to, None);
+        assert_eq!(span.scope, ["audit-test"]);
+        assert!(span.unwatched_in.is_empty(), "{:?}", span.unwatched_in);
+    }
+
     /// A refusal that arrives while watching is a new stretch with its own
     /// words. Fails if the span goes on claiming the kind it lost.
     #[test]
@@ -1488,6 +1540,32 @@ mod recording {
             generation,
             controlled,
         }
+    }
+
+    /// One image set on a Deployment wrote nine by-name rows: the generation
+    /// of its `Pod`, both `ReplicaSet`s and an `EndpointSlice`, four times
+    /// over. Fails if what a controller made, or an `EndpointSlice`, has a
+    /// generation row of its own, or an object nobody owns stops having one.
+    #[test]
+    fn what_a_controller_made_and_an_endpoint_slice_leave_their_changes_to_their_owner() {
+        let (_t, cluster, mut recorder) = recorder();
+        let slice = |generation| Named {
+            kind: "EndpointSlice".into(),
+            group: "discovery.k8s.io".into(),
+            uid: "slice".into(),
+            name: "web-96nx5".into(),
+            namespace: Some("shop".into()),
+            generation: Some(generation),
+            controlled: false,
+        };
+        recorder.named_seen(&named("pod", Some(1), true), Sight::First);
+        recorder.named_seen(&slice(5), Sight::First);
+        recorder.named_seen(&named("lone", Some(1), false), Sight::First);
+        recorder.named_seen(&named("pod", Some(2), true), Sight::Watched);
+        recorder.named_seen(&slice(6), Sight::Watched);
+        recorder.named_seen(&named("lone", Some(2), false), Sight::Watched);
+        let found: Vec<String> = rows(&cluster).iter().map(|row| row.name.clone()).collect();
+        assert_eq!(found, ["job-lone"]);
     }
 
     /// Seen by name only: a moved generation is a row that says so, a birth

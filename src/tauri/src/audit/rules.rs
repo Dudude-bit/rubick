@@ -131,7 +131,7 @@ pub const RULES: &[Rule] = &[
     rule(R::EnvSecretLiteral, Security, Medium, None, &[]),
     rule(R::WritableRootFilesystem, Security, Low, None, &[]),
     rule(R::ClusterAdminBinding, Security, High, None, &[]),
-    rule(R::WildcardRole, Security, High, None, &[]),
+    rule(R::WildcardRole, Security, Medium, None, &[]),
     rule(
         R::DefaultServiceAccountToken,
         Security,

@@ -6,7 +6,7 @@ import type { T } from "@/i18n/useT";
 import { MEASURES, pairRows, type TrafficReading } from "@/lib/traffic";
 import { nodeId } from "../-map/ids";
 import { newMemo, OWNERLESS } from "../-topology/model";
-import { trafficModel } from "./model";
+import { newFlowMemo, trafficModel, type FlowMemo } from "./model";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -37,7 +37,9 @@ const workload = (kind: string, name: string, namespace = "shop"): FlowEnd => ({
 function model(
   ends: FlowEnd[],
   pairs: [number, number][],
-  nodes: TopologyNode[]
+  nodes: TopologyNode[],
+  flows: FlowMemo = newFlowMemo(),
+  requests: (pair: number) => number = () => 1
 ) {
   const reading: TrafficReading = {
     sources: [
@@ -57,13 +59,15 @@ function model(
     window: "5m",
     answer: {
       ends,
-      flows: pairs.map(([from, to]) => ({
+      flows: pairs.map((pair) => ({
+        from: pair[0],
+        to: pair[1],
         source: 0,
-        from,
-        to,
         protocols: [],
         sides: [],
-        values: MEASURES.map((m) => (m === "requests" ? 1 : null)),
+        values: MEASURES.map((m) =>
+          m === "requests" ? requests(pairs.indexOf(pair)) : null
+        ),
         reasons: [],
       })),
       reads: [],
@@ -83,6 +87,7 @@ function model(
     toneOf: () => "ok",
     t,
     memo: newMemo(),
+    flows,
   });
 }
 
@@ -202,5 +207,34 @@ describe("flows on the map", () => {
       [mapped("Deployment", "cart", "apps")]
     );
     expect(drawn.edges).toEqual([]);
+  });
+
+  /**
+   * Live redrew the whole map every second: each batch built every edge,
+   * stand-in and card anew, and the canvas redraws what is new. One flow
+   * that moved is one new edge; everything that says the same is handed back.
+   */
+  it("hands back every object a batch did not change, and a new one for the flow that moved", () => {
+    const ends = [
+      workload("Deployment", "cart"),
+      workload("Deployment", "pay"),
+      { is: "address", address: "10.0.3.4" } as FlowEnd,
+    ];
+    const pairs: [number, number][] = [
+      [0, 1],
+      [0, 2],
+    ];
+    const flows = newFlowMemo();
+    const before = model(ends, pairs, [], flows, (pair) =>
+      pair === 1 ? 10 : 1
+    );
+    const after = model(ends, pairs, [], flows, (pair) =>
+      pair === 1 ? 10 : 2
+    );
+    expect(after.groups).toEqual(before.groups);
+    after.groups.forEach((group, i) => expect(group).toBe(before.groups[i]));
+    after.nodes.forEach((node, i) => expect(node).toBe(before.nodes[i]));
+    expect(after.edges[1]).toBe(before.edges[1]);
+    expect(after.edges[0]).not.toBe(before.edges[0]);
   });
 });

@@ -154,6 +154,8 @@ interface DataTableProps<TData extends RowData> {
   onRowMenu?: (row: TData, at: { x: number; y: number }) => void;
   /** Drawn in place of the search box, for a page that narrows its rows before they reach the table. */
   toolbar?: React.ReactNode;
+  /** Said beside the columns hidden for width: columns the page itself does not draw, and why. */
+  columnsNote?: string;
 }
 
 /**
@@ -699,6 +701,7 @@ function DataTableInner<TData extends RowData>({
   pageKeys = false,
   onRowMenu,
   toolbar,
+  columnsNote,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -758,17 +761,23 @@ function DataTableInner<TData extends RowData>({
 
   // One namespace chosen is the same word on every row, and the scope bar
   // above already says it; several are grouped, and the caption says it.
+  // Not where it is the row's own name: a row of a table by namespace.
   const oneNamespace = useClusterStore(
     (state) => state.namespaceScope.length === 1
+  );
+  const namespaceNamesRow = columns.some(
+    (column) =>
+      columnIdOf(column) === "namespace" &&
+      (column.meta as AppColumnMeta | undefined)?.names
   );
   const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
     const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
-    if (oneNamespace) state.namespace = false;
+    if (oneNamespace && !namespaceNamesRow) state.namespace = false;
     return state;
-  }, [groupingActive, grouping, oneNamespace]);
+  }, [groupingActive, grouping, oneNamespace, namespaceNamesRow]);
 
   // Latched rather than derived: between the two marks the answer is
   // "whatever it already was", which is a fact about the last render and not
@@ -1912,6 +1921,16 @@ function DataTableInner<TData extends RowData>({
                           shown: formatCount(filteredRows),
                         })}
           </div>
+          {columnsNote && (
+            <span
+              className="flex min-w-0 max-w-full items-center gap-1"
+              title={columnsNote}
+              data-testid="columns-note"
+            >
+              <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+              <span className="truncate">{columnsNote}</span>
+            </span>
+          )}
           {yieldedNames && (
             <span
               className="flex min-w-0 max-w-full items-center gap-1"

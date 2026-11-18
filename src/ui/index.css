@@ -490,7 +490,9 @@
 }
 
 /* A map edge carrying traffic: dashes moving from its source to its target,
-   held still under reduced motion and while the map is off screen. */
+   held still under reduced motion and while the map is off screen. They step
+   a third of a dash at a time: an SVG stroke is repainted for every frame
+   it moves in, and a smooth march over fifteen edges held a core at 40%. */
 @keyframes map-flow {
   to {
     stroke-dashoffset: -12;
@@ -499,7 +501,7 @@
 
 .map-flow {
   stroke-dasharray: 6 6;
-  animation: map-flow 0.8s linear infinite;
+  animation: map-flow 1.2s steps(3) infinite;
 }
 
 .map-canvas[data-paused] .map-flow {

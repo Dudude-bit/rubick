@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { ChangesTimeline } from "./ChangesTimeline";
+import { RefusedWords } from "./RefusedWords";
 import { ShowFilter } from "./ShowFilter";
 import { TOGGLE } from "./toggle";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
@@ -168,7 +169,7 @@ export function Changes() {
                     .join("\n")}
                 >
                   <Lock className="h-3 w-3" aria-hidden="true" />
-                  {refused}
+                  <RefusedWords span={watching} />
                 </span>
               )}
             </>
@@ -259,7 +260,13 @@ export function Changes() {
             )
           )}
           <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
-            {t("changes", "clusterExplained")} {named}
+            {t("changes", "clusterExplained")} {named.said}
+            {named.open && unwatchedWords(named.open, t) && (
+              <>
+                {" · "}
+                <RefusedWords span={named.open} />
+              </>
+            )}
           </p>
         </SectionBody>
       </Section>

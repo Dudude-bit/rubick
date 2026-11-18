@@ -15,7 +15,11 @@ import {
   type CostPicture,
   type CostTarget,
 } from "@/lib/cost";
-import { EFFICIENCY_WINDOW, type Efficiency } from "@/lib/efficiency";
+import {
+  EFFICIENCY_WINDOW,
+  windowWords,
+  type Efficiency,
+} from "@/lib/efficiency";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
 import { formatAge } from "@/lib/utils";
@@ -198,13 +202,23 @@ const EFFICIENCY_WORDS: Record<
   reading: (_, t) => t("cost", "effReading"),
   failed: (e, t) =>
     t("cost", "effFailed", { said: e.state === "failed" ? e.said : "" }),
-  noSamples: (_, t) => t("cost", "effNoSamples", { window: EFFICIENCY_WINDOW }),
+  noSamples: (e, t) => {
+    const age = youngFor(e, t);
+    return age === null
+      ? t("cost", "effNoSamples", { window: windowWords(EFFICIENCY_WINDOW, t) })
+      : t("cost", "effNoSamplesYet", { age });
+  },
   unrequested: (_, t) => t("cost", "effUnrequested"),
 };
 
 /** How long the readings cover where that is less than the window: its youngest pod's age. */
 export function youngFor(e: Efficiency, t: T): string | null {
-  if (e.state !== "measured" && e.state !== "unrequested") return null;
+  if (
+    e.state !== "measured" &&
+    e.state !== "unrequested" &&
+    e.state !== "noSamples"
+  )
+    return null;
   return e.whole || e.since === null ? null : formatAge(e.since, t);
 }
 
@@ -226,6 +240,8 @@ export function efficiencyWords(e: Efficiency, t: T): string {
 
 /** What one resource used, in its own units, over the span the readings cover. */
 export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
+  if (e.state === "noSamples" && youngFor(e, t) !== null)
+    return t("cost", "noSamplesYet");
   if (e.state !== "measured" && e.state !== "unrequested")
     return t("cost", "notMeasured");
   const say = (v: number | null) =>
@@ -235,6 +251,30 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
   return age === null
     ? t("cost", "usedAvgPeak", values)
     : t("cost", "usedAvgPeakFor", { ...values, age });
+}
+
+/**
+ * The same, as the cell draws it: the average on one line and the peak on
+ * the next, so the column is as wide as the longer of the two.
+ */
+export function usedLines(
+  e: Efficiency,
+  kind: "cpu" | "memory",
+  t: T
+): [string] | [string, string] {
+  if (e.state === "noSamples" && youngFor(e, t) !== null)
+    return [t("cost", "noSamplesYet")];
+  if (e.state !== "measured" && e.state !== "unrequested")
+    return [t("cost", "notMeasured")];
+  const say = (v: number | null) =>
+    v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
+  const age = youngFor(e, t);
+  return [
+    t("cost", "usedAvg", { avg: say(e.avg) }),
+    age === null
+      ? t("cost", "usedPeak", { peak: say(e.peak) })
+      : t("cost", "usedPeakFor", { peak: say(e.peak), age }),
+  ];
 }
 
 /**

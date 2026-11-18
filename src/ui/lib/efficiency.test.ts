@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { WorkloadKey } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import {
+  EFFICIENCY_WINDOW,
   efficiencyOf,
   overRequested,
+  windowWords,
   workloadEfficiency,
   type UsageReading,
 } from "./efficiency";
@@ -24,6 +28,21 @@ describe("efficiency", () => {
   it("is not measured where no sample came back", () => {
     expect(efficiencyOf(500, null, null, DAY_OLD, NOW)).toEqual({
       state: "noSamples",
+      since: DAY_OLD,
+      whole: true,
+    });
+  });
+
+  /**
+   * A workload three minutes old has no sample yet, which is not the same
+   * as a day without one: it says when its youngest pod started. Fails if
+   * a young workload's empty reading lost its start.
+   */
+  it("says when the youngest pod started where no sample came back yet", () => {
+    expect(efficiencyOf(500, null, null, TWO_HOURS_OLD, NOW)).toEqual({
+      state: "noSamples",
+      since: TWO_HOURS_OLD,
+      whole: false,
     });
   });
 
@@ -128,6 +147,33 @@ describe("efficiency", () => {
       since: TWO_HOURS_OLD,
       whole: false,
     });
-    expect(of.memory).toEqual({ state: "noSamples" });
+    expect(of.memory).toEqual({
+      state: "noSamples",
+      since: TWO_HOURS_OLD,
+      whole: false,
+    });
+  });
+});
+
+describe("the usage window in words", () => {
+  const tIn =
+    (locale: "en" | "ru"): T =>
+    (section, key, values) =>
+      translate(locale, section, key, values);
+
+  /**
+   * A PromQL token is not a word of either language. Fails if Audit's line
+   * or the Cost columns read "за последние 24h".
+   */
+  it("says the window in the reader's language", () => {
+    expect(windowWords(EFFICIENCY_WINDOW, tIn("en"))).toBe("24 hours");
+    expect(windowWords(EFFICIENCY_WINDOW, tIn("ru"))).toBe("24 часа");
+    expect(windowWords("7d", tIn("ru"))).toBe("7 дней");
+    expect(windowWords("whenever", tIn("en"))).toBe("whenever");
+    expect(
+      tIn("ru")("audit", "usageRead", {
+        window: windowWords(EFFICIENCY_WINDOW, tIn("ru")),
+      })
+    ).toContain("за последние 24 часа");
   });
 });

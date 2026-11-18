@@ -81,6 +81,25 @@ vi.mock("../-object/AlertsAbout", () => ({
   ),
 }));
 
+vi.mock("../-traffic/workload-traffic", () => ({
+  WorkloadFlows: ({
+    kind,
+    name,
+    owners,
+    frame,
+  }: {
+    kind: string;
+    name: string;
+    owners?: { kind: string; name: string }[];
+    frame?: (title: string, caption: string, body: ReactNode) => ReactNode;
+  }) =>
+    frame?.(
+      "Traffic",
+      "from the page's block",
+      <p>{`flows of ${kind} ${name}${(owners ?? []).map((o) => ` owned by ${o.kind} ${o.name}`).join("")}`}</p>
+    ),
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     forgetDiscovery: vi.fn(() => Promise.resolve()),
@@ -561,6 +580,49 @@ describe("PeekPanel", () => {
     await wrap(POD_PEEK);
     expect(
       await screen.findByText("alerts about Pod crash-demo-56588f6b8c-8bj9v")
+    ).toBeVisible();
+  });
+
+  /**
+   * A workload's page says who calls it and whom it calls; its peek, opened
+   * from the map or the flows table, said nothing of its flows. It draws the
+   * page's block, with the owners a Job's CronJob is found by.
+   */
+  it("draws the workload's flows block the page draws, with its owners", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "checkout",
+      namespace: "shop",
+      uid: "checkout-uid",
+      replicas: { desired: 1, ready: 1, updated: 1, available: 1 },
+      rollout: { state: "ready" },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [
+        {
+          kind: "Rollout",
+          name: "checkout",
+          api_version: "argoproj.io/v1alpha1",
+          uid: "r",
+          controller: true,
+        },
+      ],
+      createdAt: null,
+    } as never);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue({
+      uid: "checkout-uid",
+      pods: [],
+    });
+    await wrap("/c/prod/events?peek=deployments/shop/checkout");
+    expect(
+      await screen.findByText(
+        "flows of Deployment checkout owned by Rollout checkout"
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", {
+        name: /^Traffic\s*from the page's block$/,
+      })
     ).toBeVisible();
   });
 

@@ -35,9 +35,13 @@ const KEY_QUALIFIERS: &[&str] = &[
 const ABOUT_A_SECRET: &[&str] = &[
     "FILE", "FILES", "PATH", "DIR", "NAME", "NAMES", "URL", "URI", "ENDPOINT", "HOST", "PORT",
     "TTL", "TIMEOUT", "EXPIRY", "EXPIRES", "AGE", "LENGTH", "LEN", "SIZE", "TYPE", "MODE",
-    "HEADER", "FIELD", "ENABLED", "ENABLE", "DISABLED", "DISABLE", "REQUIRED", "POLICY",
-    "ROTATION", "REF", "ID",
+    "HEADER", "HEADERS", "FIELD", "ENABLED", "ENABLE", "DISABLED", "DISABLE", "REQUIRED", "POLICY",
+    "ROTATION", "REF", "ID", "ISSUER", "AUDIENCE", "SECONDS", "MINUTES", "HOURS", "DAYS",
 ];
+
+/// Values that switch something on or off: `ALLOW_EMPTY_PASSWORD=yes` says
+/// there is no password, `OAUTH2_PROXY_PASS_ACCESS_TOKEN=true` passes one on.
+const SWITCHES: &[&str] = &["yes", "no", "true", "false", "on", "off", "y", "n"];
 
 /// The words of a variable name: split at `_`, `-`, `.` and a lower-case
 /// letter followed by a capital, all upper-case.
@@ -81,13 +85,14 @@ pub fn suggests_secret(name: &str) -> bool {
     })
 }
 
-/// Whether an env value is a literal worth naming: not empty, and not only
-/// a `$(VAR)` reference to another variable.
+/// Whether an env value is a literal worth naming: not empty, not only a
+/// `$(VAR)` reference to another variable, and not a switch.
 #[must_use]
 pub fn is_literal(value: &str) -> bool {
     let value = value.trim();
     let reference = value.starts_with("$(") && value.ends_with(')') && !value[2..].contains("$(");
-    !value.is_empty() && !reference
+    let switch = SWITCHES.iter().any(|word| value.eq_ignore_ascii_case(word));
+    !value.is_empty() && !reference && !switch
 }
 
 /// Whether an image reference pins nothing: tagged `latest`, or neither
@@ -211,13 +216,18 @@ mod tests {
             "TOKENIZER_MODEL",
             "SECRETARY",
             "HOME",
+            "TOKEN_ISSUER",
+            "TOKEN_AUDIENCE",
+            "PASSWORD_RESET_TIMEOUT_MINUTES",
+            "OAUTH2_PROXY_PASS_USER_HEADERS",
         ] {
             assert!(!suggests_secret(name), "{name}");
         }
     }
 
-    /// An empty value and a reference to another variable carry no secret.
-    /// Fails if either is called a literal, or a real value is not.
+    /// An empty value, a reference to another variable and a switch carry no
+    /// secret: `ALLOW_EMPTY_PASSWORD=yes` says there is none. Fails if any
+    /// is called a literal, or a real value is not.
     #[test]
     fn only_a_value_that_is_more_than_a_reference_is_a_literal() {
         assert!(!is_literal(""));
@@ -225,6 +235,9 @@ mod tests {
         assert!(!is_literal("$(DB_PASSWORD)"));
         assert!(is_literal("hunter2-but-longer"));
         assert!(is_literal("$(PREFIX)-$(SUFFIX)"));
+        for switch in ["yes", "True", "false", "on", " OFF "] {
+            assert!(!is_literal(switch), "{switch}");
+        }
     }
 
     /// `latest`, and no tag at all, pull whatever was pushed last. Fails if

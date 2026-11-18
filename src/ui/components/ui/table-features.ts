@@ -56,6 +56,8 @@ export interface AppColumnMeta {
   ideal?: number | ((t: T, rows: readonly never[]) => number);
   /** Where a port too narrow for every floor hides it, the lowest first; never hidden without one. */
   yields?: number;
+  /** It says whose row it is: one namespace chosen does not hide it, as it does a namespace column beside a name. */
+  names?: true;
 }
 
 /**

@@ -168,6 +168,32 @@ describe("the rows the page and the block draw", () => {
     }
   });
 
+  /**
+   * A pair Hubble's HTTP metric has no series for is one no L7 rule shows
+   * it: its requests, errors and latency are not counted, not "none", in
+   * the window as in Live; a pair whose HTTP was idle stays "none".
+   */
+  it("says a windowed pair a source sees only below HTTP is that, not none", () => {
+    const hubble = source("Hubble", [
+      "events",
+      "drops",
+      "requests",
+      "errors",
+      "p95",
+    ]);
+    const [l4] = pairRows(
+      reading([hubble], [flow(0, { events: 3, errors: 0, drops: 0 })])
+    ).rows;
+    for (const cell of [l4.requests, l4.errorShare, l4.p95])
+      expect(cell.state).toBe("belowHttp");
+    expect(l4.events.value).toBe(3);
+    expect(flowTone(l4)).toBe("mute");
+    const [idle] = pairRows(
+      reading([hubble], [flow(0, { events: 3, requests: 0, errors: 0 })])
+    ).rows;
+    expect(idle.p95.state).toBe("measured");
+  });
+
   /** A read that fails with the pair's flows unchanged must not hand back the row that said "none". */
   it("draws a row again when a read failed though its flows did not change", () => {
     const memo = new RowMemo();
@@ -314,12 +340,13 @@ describe("a live pair as a row", () => {
 
   /**
    * Hubble sees HTTP only where L7 visibility is on: a pair it saw no HTTP
-   * on has its requests not measured, never 0.
+   * on is seen below HTTP, never "none" requests.
    */
-  it("says HTTP not measured where Hubble saw none, and keeps drops with their policy", () => {
+  it("says a live pair with no HTTP is seen below it, and keeps drops with their policy", () => {
     const row = liveRow(pair());
-    expect(row.requests.state).toBe("notMeasured");
-    expect(row.errorShare.state).toBe("notMeasured");
+    expect(row.requests.state).toBe("belowHttp");
+    expect(row.errorShare.state).toBe("belowHttp");
+    expect(row.p95.state).toBe("belowHttp");
     expect(row.events).toEqual({
       value: 3,
       source: "Hubble Relay",

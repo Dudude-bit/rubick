@@ -54,6 +54,19 @@ const inContainer = (
 const securityContext = (finding: AuditFinding | undefined, body: string) =>
   inContainer(finding, `securityContext:\n${indent(body, 1)}`);
 
+const atContainer = (finding: AuditFinding | undefined) =>
+  finding?.what.some((what) => "at" in what && what.at !== null) ?? false;
+
+/**
+ * A pod-level setting, or the container's own where the finding was made
+ * at a container: a container's securityContext overrides the pod's, so a
+ * pod-level fix leaves that container as it was.
+ */
+const podOrContainer = (finding: AuditFinding | undefined, body: string) =>
+  atContainer(finding)
+    ? securityContext(finding, body)
+    : `securityContext:\n${indent(body, 1)}`;
+
 const first = <S extends What["says"]>(
   finding: AuditFinding | undefined,
   says: S
@@ -95,6 +108,13 @@ export function fixYaml(
     first(finding, "volume")?.volume ??
     first(finding, "socket")?.volume ??
     "data";
+  // An ephemeral container cannot be changed or removed once added
+  // (concepts/workloads/pods/ephemeral-containers): it goes with its pod.
+  if (
+    atContainer(finding) &&
+    containerOf(finding).list === "ephemeralContainers"
+  )
+    return `kubectl delete pod ${subject?.name ?? "POD"} --namespace ${subject?.namespace ?? "NAMESPACE"}`;
   switch (rule) {
     case "pss-host-process":
       return pod("securityContext:\n  windowsOptions:\n    hostProcess: false");
@@ -127,16 +147,18 @@ export function fixYaml(
       );
     case "pss-apparmor":
       return pod(
-        "securityContext:\n  appArmorProfile:\n    type: RuntimeDefault"
+        podOrContainer(finding, "appArmorProfile:\n  type: RuntimeDefault")
       );
     case "pss-selinux":
-      return pod("securityContext:\n  seLinuxOptions:\n    type: container_t");
+      return pod(
+        podOrContainer(finding, "seLinuxOptions:\n  type: container_t")
+      );
     case "pss-proc-mount":
       return pod(securityContext(finding, "procMount: Default"));
     case "pss-seccomp-unconfined":
     case "pss-seccomp-required":
       return pod(
-        "securityContext:\n  seccompProfile:\n    type: RuntimeDefault"
+        podOrContainer(finding, "seccompProfile:\n  type: RuntimeDefault")
       );
     case "pss-sysctls":
       return pod(
@@ -145,9 +167,13 @@ export function fixYaml(
     case "pss-privilege-escalation":
       return pod(securityContext(finding, "allowPrivilegeEscalation: false"));
     case "pss-run-as-non-root":
-      return pod("securityContext:\n  runAsNonRoot: true\n  runAsUser: 10001");
+      return pod(
+        podOrContainer(finding, "runAsNonRoot: true\nrunAsUser: 10001")
+      );
     case "pss-run-as-user-root":
-      return pod("securityContext:\n  runAsUser: 10001\n  runAsGroup: 10001");
+      return pod(
+        podOrContainer(finding, "runAsUser: 10001\nrunAsGroup: 10001")
+      );
     case "config-map-private-key": {
       const key = first(finding, "key")?.key ?? "tls.key";
       return `apiVersion: v1\nkind: Secret\nmetadata:\n  name: app-tls\ntype: Opaque\nstringData:\n  ${key}: ""`;
@@ -194,8 +220,13 @@ export function fixYaml(
       const name = image.replace(/(:latest)?$/, "");
       return pod(inContainer(finding, `image: ${name}:1.2.3`));
     }
-    case "single-replica":
-      return "spec:\n  replicas: 2";
+    case "single-replica": {
+      // An autoscaler's floor is the replica count; the workload's is overridden.
+      const autoscaler = first(finding, "replicas")?.autoscaler;
+      return autoscaler
+        ? `apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: ${autoscaler}\nspec:\n  minReplicas: 2`
+        : "spec:\n  replicas: 2";
+    }
     case "no-disruption-budget":
       return "apiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: app\nspec:\n  maxUnavailable: 1\n  selector:\n    matchLabels:\n      app: app";
     case "budget-blocks-disruption":

@@ -15,6 +15,8 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { listenEvent } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
 import { basisOf, usageKey, usageRead } from "./usage";
 
@@ -29,17 +31,22 @@ async function read<T>(ask: () => Promise<T>): Promise<T> {
 /**
  * One page of the Audit page's answer for the window's namespaces. Asking
  * is what keeps Audit's watches running; they stop three minutes after the
- * page is left. Read again when the backend says its watches moved, at most
- * once a second, and otherwise at the rate of things that change with a deploy.
+ * page is left or the window hidden. Read again when the backend says its
+ * watches moved, at most once a second, only while the page is seen (the
+ * live query reads once more on return), and otherwise at the rate of things
+ * that change with a deploy.
  */
 export function useAuditPage(query: AuditQuery) {
   const context = useClusterStore((s) => s.currentContext);
   const connected = useClusterStore((s) => s.isConnected);
   const scope = useClusterStore((s) => s.namespaceScope);
   const client = useQueryClient();
+  const surface = useSurfaceVisible();
+  const shown = useWindowActivity((s) => s.visible);
+  const seen = surface && shown;
 
   useEffect(() => {
-    if (!context) return;
+    if (!context || !seen) return;
     let left = false;
     let leave: (() => void) | undefined;
     void listenEvent("audit-changed", ({ payload }) => {
@@ -55,7 +62,7 @@ export function useAuditPage(query: AuditQuery) {
       left = true;
       leave?.();
     };
-  }, [context, client]);
+  }, [context, client, seen]);
 
   const namespaces = useMemo(
     () => (scope.length > 0 ? [...scope] : null),

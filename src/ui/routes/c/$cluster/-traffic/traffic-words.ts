@@ -2,7 +2,7 @@
  * The words for flows: an end, a cell, a source's own line. Every map from
  * a state to words is a `Record` the compiler holds total.
  */
-import type { FlowEnd, Measure, PolicyRef } from "@/generated/types";
+import type { Coverage, FlowEnd, Measure, PolicyRef } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { formatShare } from "@/lib/cost";
 import { formatQuantity } from "@/lib/metric-format";
@@ -16,7 +16,8 @@ import type {
   TrafficReading,
   TrafficWord,
 } from "@/lib/traffic";
-import { MEASURES, silenceOf } from "@/lib/traffic";
+import type { MapTone } from "@/integrations";
+import { lineShare, MEASURES, shareTone, silenceOf } from "@/lib/traffic";
 import { formatRate } from "@/lib/utils";
 
 export const WINDOW_WORD = {
@@ -90,6 +91,41 @@ export function endSub(end: FlowEnd, t: T): string {
   }
 }
 
+/** How much of the workloads here a source's mesh holds, each part said only where it is not zero. */
+export function coverageWords(
+  coverage: Coverage,
+  source: string,
+  t: T
+): string {
+  const none = coverage.workloads - coverage.marked - coverage.partly;
+  const parts = (
+    [
+      ["coverageWhole", coverage.marked],
+      ["coveragePartly", coverage.partly],
+      ["coverageNone", none],
+    ] as const
+  )
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => t("traffic", key, { n }));
+  return t("traffic", "coverage", {
+    source,
+    of: t("count", "ofWorkloads", { n: coverage.workloads }),
+    parts: parts.join(", "),
+  });
+}
+
+/** What an end's cell says on its one line, for the width it takes. */
+export function endText(end: FlowEnd, t: T): string {
+  switch (end.is) {
+    case "workload":
+      return `${end.key.namespace}/${end.key.name}`;
+    case "service":
+      return `${end.namespace ? `${end.namespace}/` : ""}${end.name} Service`;
+    default:
+      return `${endLabel(end)} ${endSub(end, t)}`;
+  }
+}
+
 /** The kind an end is drawn as. */
 export function endKind(end: FlowEnd): string {
   switch (end.is) {
@@ -135,6 +171,7 @@ export function cellText(cell: Cell, kind: CellKind, t: T): string {
 const CELL_EMPTY: Record<CellState, (t: T) => string> = {
   measured: (t) => t("traffic", "cellNone"),
   notMeasured: () => "",
+  belowHttp: () => "",
   notRead: (t) => t("traffic", "cellNotRead"),
 };
 
@@ -153,27 +190,37 @@ export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
       });
     case "notRead":
       return t("traffic", "cellNotReadBy", { source: cell.source ?? "" });
+    case "belowHttp":
+      return t("traffic", "cellBelowHttp", { sources: row.seenBy.join(", ") });
   }
 }
 
 const at = (measure: Measure) => MEASURES.indexOf(measure);
 
+/** A line of a source's numbers; `tone` where it is a share of errors. */
+export interface PanelLine {
+  text: string;
+  tone: MapTone | null;
+}
+
 /** One source's own numbers on a pair, each said as what it counted. */
-export function sourceLines(line: SourceLine, t: T): string[] {
+export function sourceLines(line: SourceLine, t: T): PanelLine[] {
   const value = (measure: Measure) => line.values[at(measure)] ?? null;
-  const out: string[] = [];
+  const out: PanelLine[] = [];
+  const say = (text: string) => out.push({ text, tone: null });
   const requests = value("requests");
   if (requests !== null) {
-    out.push(t("traffic", "panelRequests", { v: rate(requests) }));
-    const errors = value("errors");
-    if (errors !== null && requests > 0)
-      out.push(
-        t(
+    say(t("traffic", "panelRequests", { v: rate(requests) }));
+    const share = lineShare(line);
+    if (share.value !== null)
+      out.push({
+        text: t(
           "traffic",
           line.source.grpcErrors ? "panelErrors" : "panelErrorsHttp",
-          { share: formatShare(errors / requests) }
-        )
-      );
+          { share: formatShare(share.value) }
+        ),
+        tone: shareTone(share),
+      });
   }
   const quantiles = (["p50", "p95", "p99"] as const)
     .map((measure) => {
@@ -181,19 +228,17 @@ export function sourceLines(line: SourceLine, t: T): string[] {
       return v === null ? null : `${measure} ${ms(v, t)}`;
     })
     .filter((part): part is string => part !== null);
-  if (quantiles.length > 0) out.push(quantiles.join(" · "));
+  if (quantiles.length > 0) say(quantiles.join(" · "));
   const bytes = value("bytes");
-  if (bytes !== null)
-    out.push(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
+  if (bytes !== null) say(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
   const events = value("events");
-  if (events !== null)
-    out.push(t("traffic", "panelEvents", { v: rate(events) }));
+  if (events !== null) say(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
-  if (drops !== null) out.push(t("traffic", "panelDrops", { v: rate(drops) }));
+  if (drops !== null) say(t("traffic", "panelDrops", { v: rate(drops) }));
+  if (requests === null && line.source.measures.includes("requests"))
+    say(t("traffic", "panelBelowHttp"));
   if (line.protocols.length > 0)
-    out.push(
-      t("traffic", "panelProtocols", { list: line.protocols.join(", ") })
-    );
+    say(t("traffic", "panelProtocols", { list: line.protocols.join(", ") }));
   return out;
 }
 

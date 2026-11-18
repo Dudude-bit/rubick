@@ -1940,6 +1940,8 @@ export const en = {
     whyRefused: "refused: {message}",
     whyFailed: "could not be read: {message}",
     whyNotAudited: "a kind Audit does not read",
+    whyAdmitted:
+      "admitted through {webhooks}, which may add containers the template does not show",
     whyUnserved: "this cluster does not serve the kind",
     whyNoPrometheus:
       "no Prometheus is connected to this cluster, and the API server's own count of deprecated requests is read from one",
@@ -2017,12 +2019,22 @@ export const en = {
     showMore: "Show more",
     tab: "Audit",
     tabNone: "Nothing found",
+    sharedOnly: "Only {filters}.",
+    rulesUnchecked: {
+      one: "{n} rule could not check every object",
+      other: "{n} rules could not check every object",
+    },
+    tabNonePartly: "Nothing found in what could be read.",
     judgedOn: "This {kind}'s template is judged as part of {object}.",
     notCheckedHere: "Not checked here",
     uncheckedLine: "{rule}: {kind} {where}, {why}",
     peekMore: {
       one: "and {n} more on the Audit tab",
       other: "and {n} more on the Audit tab",
+    },
+    peekUnchecked: {
+      one: "{n} rule could not check here; the Audit tab says why",
+      other: "{n} rules could not check here; the Audit tab says why",
     },
     couldNotRead: "Audit could not read this cluster: {error}",
     noneOpen: "Pick a row to see why it matters and how to fix it.",
@@ -2170,10 +2182,10 @@ export const en = {
       "On a writable root filesystem whoever gets into the container can change its binaries and leave tools behind. readOnlyRootFilesystem: true, with an emptyDir where it needs to write, prevents it.",
     clusterAdminBinding: "Binds cluster-admin",
     clusterAdminBindingWhy:
-      "cluster-admin may do anything to any object. A subject other than the system's own holding it is one stolen token away from the whole cluster.",
+      "cluster-admin may do anything to any object. Kubernetes binds it only to the system:masters group; any other subject holding it is one stolen token away from the whole cluster, and a group such as system:authenticated hands it to everyone.",
     wildcardRole: "Grants every verb on every resource",
     wildcardRoleWhy:
-      "A role with * verbs on * resources grants whatever exists now and whatever is installed later, including the power to grant more.",
+      "A role with * verbs on * resources grants whatever its groups hold now and whatever is installed in them later. Where the groups take in RBAC's own (* or rbac.authorization.k8s.io), that includes the power to grant more.",
     defaultServiceAccountToken: "Mounts the default ServiceAccount's token",
     defaultServiceAccountTokenWhy:
       "Pods under the default ServiceAccount share one identity, and a mounted token is a credential for the API server inside every one of them. A pod that does not call the API needs none.",
@@ -2322,6 +2334,7 @@ export const en = {
     watchingNow: "Watching since {since}",
     earlierRows:
       "Changes before {since} were recorded by this app while it watched from {from} to {to}; the events are the cluster's own record",
+    kindsCount: { one: "{n} kind", other: "{n} kinds" },
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
@@ -2357,7 +2370,7 @@ export const en = {
       other: "{n} kept rows could not be read and were skipped.",
     },
     metaSince:
-      "Other kinds are seen by name only (created, deleted, generation), read since {since}",
+      "Other kinds are seen by name only, read since {since}: created, deleted or given a new generation, where no controller owns them",
     metaNotNow: "Other kinds are seen by name only, and are not being read now",
     noWarningsInWindow: "No warning recorded in the window.",
     openTimeline: "Its timeline from here",
@@ -2441,8 +2454,10 @@ export const en = {
     railUnpaired: "series without source or destination",
     railFailed: "could not look: {said}",
     measureFailed: "Its {measure} could not be read: {said}",
-    coverage:
-      "{source}'s mesh: every pod of {marked}, some pods of {partly}, {of} here.",
+    coverage: "In {source}'s mesh, {of} here: {parts}.",
+    coverageWhole: "{n} with every pod",
+    coveragePartly: "{n} with some pods",
+    coverageNone: "{n} with none",
     nodeAgent:
       "{source} sees only the nodes its agent runs on; which nodes those are is not known here.",
     nothingInWindow: "{sources} saw no flows in {scope} in the {window}.",
@@ -2471,6 +2486,8 @@ export const en = {
     cellFrom: "from {source}",
     cellNotMeasured: "Not measured by {sources}",
     cellNotReadBy: "{source} could not read this",
+    cellBelowHttp:
+      "{sources}: this pair is seen only below HTTP, so its requests, errors and latency are not counted.",
     cellFloor:
       "At least this share: {source} counts HTTP 5xx only, and a failed gRPC call is answered with a 200.",
     panelLabel: "One flow",
@@ -2488,6 +2505,8 @@ export const en = {
     panelDrops: "{v} drops/s",
     panelProtocols: "protocols: {list}",
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
+    panelBelowHttp:
+      "Seen only below HTTP: requests, errors and latency are not counted for this pair.",
     panelSideServer: "From the server's proxy.",
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
@@ -2500,10 +2519,12 @@ export const en = {
     columnFrom: "From",
     columnTo: "To",
     columnRequests: "Requests/s",
+    columnEvents: "Flows/s",
     columnErrors: "Errors",
     columnBytes: "Bytes/s",
     columnDrops: "Drops/s",
     columnSeenBy: "Seen by",
+    columnsUnmeasured: "Not drawn, no source here measures them: {columns}",
     callers: "Calls it",
     callees: "It calls",
     blockCaption: "{sources} via {endpoint} · {window}",
@@ -2566,6 +2587,9 @@ export const en = {
     memoryUsed: "Memory used, {window}",
     usedAvgPeak: "{avg} average · {peak} peak",
     usedAvgPeakFor: "{avg} average · {peak} peak, over {age}",
+    usedAvg: "{avg} average",
+    usedPeak: "{peak} peak",
+    usedPeakFor: "{peak} peak, over {age}",
     efficiency: "Efficiency",
     effMeasured: "{avg} average, {peak} peak",
     effMeasuredFor: "{avg} average, {peak} peak, over {age}",
@@ -2577,6 +2601,8 @@ export const en = {
     effReading: "reading…",
     effFailed: "could not read use: {said}",
     effNoSamples: "no samples in {window}",
+    effNoSamplesYet: "no samples yet, started {age} ago",
+    noSamplesYet: "no samples yet",
     effUnrequested: "nothing requested",
     overRequested:
       "Its peak over 24 hours stayed under half of what it requests.",
@@ -2702,6 +2728,8 @@ export const en = {
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
     lineNotRead: "Not in the cost read yet.",
+    lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
+    lineCostPage: "the Cost page",
     lineUnread: "Could not read what this costs.",
   },
   hints: {

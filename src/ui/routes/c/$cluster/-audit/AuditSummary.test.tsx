@@ -171,7 +171,7 @@ describe("Audit's summary of a scope", () => {
     );
     expect(screen.queryByText(/Nothing to report/)).toBeNull();
     expect(screen.getByTestId("audit-usage-read")).toHaveTextContent(
-      /weighed over the last 24h/
+      /weighed over the last 24 hours/
     );
   });
 
