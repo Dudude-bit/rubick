@@ -297,6 +297,9 @@ pub async fn pump(
     mut types: BTreeMap<Kind, ApiResource>,
     mut unresolved: BTreeSet<Kind>,
     resolve: Option<Resolve>,
+    // How often discovery is asked again while something is held: a quiet
+    // cluster sends nothing else that would ask.
+    again: std::time::Duration,
 ) {
     let Some(resolve) = resolve else {
         return pump_resolved(updates, map, types).await;
@@ -305,11 +308,20 @@ pub async fn pump(
     // parsed without its type it would be dropped, and its list read as empty.
     let mut held: BTreeMap<Kind, BTreeMap<crate::ownership::SlotKey, Kept>> = BTreeMap::new();
     let mut said: BTreeMap<Kind, String> = BTreeMap::new();
-    while let Some(first) = updates.recv().await {
-        let mut batch = vec![first];
-        while let Ok(more) = updates.try_recv() {
-            batch.push(more);
-        }
+    let mut retry = tokio::time::interval_at(tokio::time::Instant::now() + again, again);
+    retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        let batch = tokio::select! {
+            first = updates.recv() => {
+                let Some(first) = first else { break };
+                let mut batch = vec![first];
+                while let Ok(more) = updates.try_recv() {
+                    batch.push(more);
+                }
+                batch
+            }
+            _ = retry.tick(), if !held.is_empty() => Vec::new(),
+        };
         let waiting: BTreeSet<Kind> = batch
             .iter()
             .filter_map(kind_of)
@@ -364,12 +376,15 @@ pub async fn pump(
                 _ => ready.push(update),
             }
         }
-        if !feed_batch(ready, &map, &types).await {
+        if !ready.is_empty() && !feed_batch(ready, &map, &types).await {
             break;
         }
     }
     map.end();
 }
+
+/// How often a map asks discovery again for a kind it holds updates for.
+pub const RESOLVE_AGAIN: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// The pump where every kind's type is known from the open.
 async fn pump_resolved(

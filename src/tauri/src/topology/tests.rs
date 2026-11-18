@@ -564,6 +564,7 @@ async fn a_map_ends_when_the_layer_closes_its_channel() {
         std::collections::BTreeMap::new(),
         BTreeSet::new(),
         None,
+        RESOLVE_AGAIN,
     ));
     tx.send(crate::feeds::Update::State {
         slot: slot(Kind::Deployment, None),
@@ -731,6 +732,7 @@ async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
         std::collections::BTreeMap::new(),
         BTreeSet::from([Kind::Gateway]),
         Some(resolve),
+        RESOLVE_AGAIN,
     ));
     tx.send(crate::feeds::Update::State {
         slot: slot(Kind::Gateway, None),
@@ -877,6 +879,7 @@ async fn a_kind_discovery_cannot_name_yet_is_unread_and_kept_until_it_can() {
         std::collections::BTreeMap::new(),
         BTreeSet::from([Kind::Gateway]),
         Some(resolve),
+        RESOLVE_AGAIN,
     ));
     tx.send(crate::feeds::Update::State {
         slot: slot(Kind::Gateway, None),
@@ -1001,4 +1004,77 @@ fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
         1,
         "a newer set outdates what came before"
     );
+}
+
+/// A kind discovery could not name stayed unread until the cluster sent
+/// something else for the pump to wake on, and a quiet cluster sends
+/// nothing. Fails if discovery is not asked again, with nothing arriving,
+/// until the kind is named and what was held for it is drawn.
+#[tokio::test]
+async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let answers = answers.clone();
+        Arc::new(move |_| {
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )))
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+        std::time::Duration::from_millis(20),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a"), gateway_object("b")],
+    })
+    .await
+    .expect("sent");
+    let gateways = |map: &ClusterMap| {
+        map.stores()
+            .held("infra", OtherPolicies::none(), now())
+            .gateways_here
+            .map(|list| list.len())
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert_eq!(gateways(&map), None);
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    let drawn = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while gateways(&map) != Some(2) {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(
+        drawn.is_ok(),
+        "still {:?} with nothing more sent",
+        gateways(&map)
+    );
+    drop(tx);
+    pumping.await.expect("the pump ends");
 }
