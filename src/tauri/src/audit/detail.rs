@@ -86,19 +86,22 @@ async fn read_beside(client: &Client, namespace: &str) -> Beside {
 
 async fn beside_in(
     state: &AppState,
-    context: &str,
-    client: &Client,
+    here: &crate::state::Here<'_>,
     namespace: &str,
 ) -> Arc<Beside> {
-    let key = (context.to_string(), namespace.to_string());
+    let key = (here.context.clone(), namespace.to_string());
     if let Some(kept) = state.audit.besides.get(&key) {
         if kept.0.elapsed() < KEPT_FOR {
             return kept.1.clone();
         }
     }
-    let era = state.audit.era(context);
-    let read = Arc::new(read_beside(client, namespace).await);
-    state.audit.keep_beside(era, key, read.clone());
+    let era = state.audit.era(&here.context);
+    let read = Arc::new(read_beside(&here.client, namespace).await);
+    // The era is read after the client was taken: one replaced in between
+    // is caught by the client itself.
+    if state.still_holds(&here.context, &here.client) {
+        state.audit.keep_beside(era, key, read.clone());
+    }
     read
 }
 
@@ -261,7 +264,7 @@ pub async fn object_audit(
         };
         (entry.own, facts, replicas, entry.system, fields)
     };
-    let ns = beside_in(state, &here.context, &client, namespace).await;
+    let ns = beside_in(state, &here, namespace).await;
     let (mut findings, mut unchecked) = beside(kind, name, &facts, replicas, &ns);
     findings.extend(own);
     let (written, blind) = super::upgrade::written_of(&here, minor, &subject, &fields).await;
@@ -281,6 +284,51 @@ pub async fn object_audit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::served::test_server::{answering, failure};
+
+    /// A read through a client the context let go before the read's era was
+    /// taken is answered and not kept: kept, the old client's refusals or
+    /// the old cluster's labels stood for the new one until they aged out.
+    /// Fails if either cache keeps it; the first half fails if neither keeps
+    /// anything at all.
+    #[tokio::test]
+    async fn a_read_through_a_client_let_go_before_its_era_is_not_kept() {
+        let (client, _) = answering(|path, _| match path {
+            "/api/v1/namespaces" => (
+                200,
+                serde_json::json!({ "apiVersion": "meta.k8s.io/v1",
+                    "kind": "PartialObjectMetadataList", "metadata": {}, "items": [] })
+                .to_string(),
+            ),
+            _ => failure(403, "Forbidden"),
+        })
+        .await;
+        let state = AppState::new().expect("state");
+        let taken = Arc::new(client);
+        state.client_manager.install("prod", taken.clone(), None);
+        state.set_current_context(Some("prod".to_string()));
+        let key = ("prod".to_string(), "shop".to_string());
+
+        let here = state.here().expect("here");
+        beside_in(&state, &here, "shop").await;
+        super::super::enforced(&state, &here, None)
+            .await
+            .expect("labels");
+        assert!(state.audit.besides.contains_key(&key));
+        assert!(state.audit.enforced.contains_key("prod"));
+
+        let here = state.here().expect("here");
+        state
+            .client_manager
+            .install("prod", Arc::new((*taken).clone()), None);
+        state.client_replaced("prod");
+        beside_in(&state, &here, "shop").await;
+        super::super::enforced(&state, &here, None)
+            .await
+            .expect("labels");
+        assert!(!state.audit.besides.contains_key(&key));
+        assert!(!state.audit.enforced.contains_key("prod"));
+    }
 
     /// A row for a deprecated API the server was asked for opens, though its
     /// name holds a slash; any other kind's name with one is still refused

@@ -714,6 +714,17 @@ fn in_scope(scope: Option<&[String]>, object: &DynamicObject) -> bool {
 }
 
 impl Inner {
+    /// Every namespace a subscriber to `kind` names, read in when it is
+    /// refused across the cluster.
+    fn fallen_back(&self, kind: &KindKey) -> BTreeSet<String> {
+        self.subscribers
+            .values()
+            .filter(|sub| sub.kinds.contains(kind))
+            .filter_map(|sub| sub.fallback.clone())
+            .flatten()
+            .collect()
+    }
+
     fn leave(&mut self, id: u64) {
         let Some(sub) = self.subscribers.remove(&id) else {
             return;
@@ -1352,49 +1363,52 @@ impl ContextFeeds {
     /// lets go of a namespace no subscriber names any longer: a reader moving
     /// through namespaces would otherwise hold a watch in each it ever saw.
     fn fall_back_all(&self, kind: &KindKey) {
-        let (generations, namespaces, resource) = {
+        self.fall_back_all_then(kind, || {});
+    }
+
+    /// [`Self::fall_back_all`], with `between` run once the namespaces asked
+    /// for are read and before a slot is stopped: where a test has a reader
+    /// join in between.
+    fn fall_back_all_then(&self, kind: &KindKey, mut between: impl FnMut()) {
+        let (generations, resource) = {
             let inner = self.inner.lock();
             let Some(feed) = inner.kinds.get(kind).filter(|feed| feed.namespaced) else {
                 return;
             };
-            let namespaces: BTreeSet<String> = inner
-                .subscribers
-                .values()
-                .filter(|sub| sub.kinds.contains(kind))
-                .filter_map(|sub| sub.fallback.clone())
-                .flatten()
-                .collect();
             (
                 inner.generations.values().cloned().collect::<Vec<_>>(),
-                namespaces,
                 feed.resource.clone(),
             )
         };
+        let whole = SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        };
         for generation in generations {
-            let unasked: Vec<SlotKey> = generation
-                .slots
-                .lock()
-                .keys()
-                .filter(|slot| {
-                    slot.kind == *kind
-                        && slot
-                            .namespace
-                            .as_ref()
-                            .is_some_and(|namespace| !namespaces.contains(namespace))
-                })
-                .cloned()
-                .collect();
-            for slot in &unasked {
-                generation.stop_slot(slot);
-            }
-            let whole = SlotKey {
-                kind: kind.clone(),
-                namespace: None,
+            // Read under the slots and stopped before they are let go: a
+            // reader that joins after the read waits for them, then finds its
+            // slot gone and starts it, rather than finding it held and losing it.
+            let (namespaces, refused) = {
+                let mut slots = generation.slots.lock();
+                let namespaces = self.inner.lock().fallen_back(kind);
+                between();
+                let unasked: Vec<SlotKey> = slots
+                    .keys()
+                    .filter(|slot| {
+                        slot.kind == *kind
+                            && slot
+                                .namespace
+                                .as_ref()
+                                .is_some_and(|namespace| !namespaces.contains(namespace))
+                    })
+                    .cloned()
+                    .collect();
+                for slot in &unasked {
+                    generation.stop_slot(&mut slots, slot);
+                }
+                let refused = matches!(slots.get(&whole), Some(SlotState::Refused { .. }));
+                (namespaces, refused)
             };
-            let refused = matches!(
-                generation.slots.lock().get(&whole),
-                Some(SlotState::Refused { .. })
-            );
             if !refused {
                 continue;
             }
@@ -1623,9 +1637,9 @@ impl Generation {
         }
     }
 
-    /// Stops one slot and lets go of what it held.
-    fn stop_slot(&self, slot: &SlotKey) {
-        let mut slots = self.slots.lock();
+    /// Stops one slot and lets go of what it held, under the slots' lock the
+    /// caller holds.
+    fn stop_slot(&self, slots: &mut BTreeMap<SlotKey, SlotState>, slot: &SlotKey) {
         if let Some(stop) = self.stops.lock().remove(slot) {
             stop.cancel();
         }
@@ -2326,6 +2340,82 @@ mod tests {
             namespace: Some("ops".to_string()),
         }));
         drop(other);
+        context.end();
+    }
+
+    /// A reader that joins on a namespace while the last reader of it leaves
+    /// keeps it read: the leaver's fall-back read who asks for what before
+    /// the joiner was there. Fails if the leaver stops the slot the joiner
+    /// found held, which left the joiner registered and handed nothing of
+    /// that namespace again.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_reader_joining_as_the_last_reader_of_its_namespace_leaves_keeps_it_read() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let leaving = context.join(
+            &ask(Some(vec!["billing"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let staying = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(
+            &generation,
+            &whole(&kind),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        let billing = SlotKey {
+            kind: kind.clone(),
+            namespace: Some("billing".to_string()),
+        };
+        assert!(generation.holds(&billing));
+
+        // The leaver's drop, with a reader of billing joining in between.
+        context.inner.lock().leave(leaving.lease.id);
+        let (hand, arrived) = std::sync::mpsc::channel();
+        let mut joiner = Some((context.clone(), tokio::runtime::Handle::current()));
+        let mut kept = None;
+        context.fall_back_all_then(&kind, || {
+            let Some((on, runtime)) = joiner.take() else {
+                return;
+            };
+            let hand = hand.clone();
+            std::thread::spawn(move || {
+                let _entered = runtime.enter();
+                let sub = on.join(
+                    &ask(Some(vec!["billing"]), Binding::Page),
+                    &[deployments()],
+                    &[],
+                );
+                let _ = hand.send(sub);
+            });
+            let asked = Instant::now();
+            while context.inner.lock().subscribers.len() < 2 {
+                assert!(
+                    asked.elapsed() < Duration::from_secs(5),
+                    "the reader never joined"
+                );
+                std::thread::yield_now();
+            }
+            // Given its time to finish, where nothing holds it back.
+            kept = arrived.recv_timeout(Duration::from_millis(200)).ok();
+        });
+        let joiner = kept.unwrap_or_else(|| {
+            arrived
+                .recv_timeout(Duration::from_secs(5))
+                .expect("the reader joined")
+        });
+        assert!(
+            generation.holds(&billing),
+            "the joiner's namespace was stopped under it"
+        );
+        drop((joiner, staying, leaving));
         context.end();
     }
 

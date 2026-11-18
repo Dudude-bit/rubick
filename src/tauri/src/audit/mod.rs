@@ -422,7 +422,9 @@ async fn enforced(
     } else {
         let era = state.audit.era(&here.context);
         let (read, whole) = read_enforced(&here.client, scope).await?;
-        if whole {
+        // As for a namespace's read: a client let go before the era was
+        // taken is caught by the client itself.
+        if whole && state.still_holds(&here.context, &here.client) {
             state.audit.keep_enforced(era, &here.context, read.clone());
         }
         read
