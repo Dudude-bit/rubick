@@ -112,6 +112,17 @@ pub struct Recorder {
     /// When each name-only slot read by its list alone was listed: live until
     /// its next turn is overdue, as the index counts it.
     listed: BTreeMap<Slot, i64>,
+    /// The window's namespaces as last rescoped: a followed slot outside
+    /// them is held only while live.
+    scope: Rescoped,
+}
+
+enum Rescoped {
+    /// Never: every slot is held as told.
+    Not,
+    /// Every namespace, read across the cluster.
+    Everywhere,
+    To(Vec<String>),
 }
 
 fn now() -> i64 {
@@ -127,6 +138,7 @@ impl Recorder {
             named: HashMap::new(),
             slots: BTreeMap::new(),
             listed: BTreeMap::new(),
+            scope: Rescoped::Not,
         }
     }
 
@@ -320,10 +332,28 @@ impl Recorder {
     /// of its watches is live or refused and one is live; a change in what
     /// was refused ends it and starts the next, which says the new refusal.
     /// A watch gone blind ends it where it was last known to see, `since`.
+    ///
+    /// A followed slot outside the window's namespaces, still fed for
+    /// another reader, is held as `rescope` holds it: while live, and never
+    /// to shut the window's span when it lists or goes blind.
     pub fn state(&mut self, source: Source, slot: Slot, state: SlotState, since: Option<i64>) {
         let was = self.cover(source);
-        self.slots.insert((source, slot), state);
+        if self.held(source, &slot, state) {
+            self.slots.insert((source, slot), state);
+        } else {
+            self.slots.remove(&(source, slot));
+        }
         self.settle(source, was.as_ref(), since);
+    }
+
+    fn held(&self, source: Source, slot: &Slot, state: SlotState) -> bool {
+        source != Source::Followed
+            || state == SlotState::Live
+            || match (&slot.namespace, &self.scope) {
+                (None, _) | (_, Rescoped::Not) => true,
+                (Some(_), Rescoped::Everywhere) => false,
+                (Some(namespace), Rescoped::To(names)) => names.contains(namespace),
+            }
     }
 
     /// The window's namespaces moved: a kind refused across the cluster is
@@ -332,14 +362,16 @@ impl Recorder {
     /// reader is still handed over, and stays.
     pub fn rescope(&mut self, scope: Option<&[String]>) {
         let was = self.cover(Source::Followed);
-        self.slots.retain(|(source, slot), state| {
-            *source != Source::Followed
-                || *state == SlotState::Live
-                || slot
-                    .namespace
-                    .as_ref()
-                    .is_none_or(|namespace| scope.is_some_and(|names| names.contains(namespace)))
-        });
+        self.scope = scope.map_or(Rescoped::Everywhere, |names| Rescoped::To(names.to_vec()));
+        let held: Vec<_> = self
+            .slots
+            .iter()
+            .filter(|((source, slot), state)| !self.held(*source, slot, **state))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in held {
+            self.slots.remove(&key);
+        }
         self.settle(Source::Followed, was.as_ref(), None);
     }
 

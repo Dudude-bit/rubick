@@ -1655,6 +1655,43 @@ mod recording {
         assert!(span.unwatched_in.is_empty(), "{:?}", span.unwatched_in);
     }
 
+    /// `ops`, left by the window while it listed, is still fed for another
+    /// reader: its watch failing later re-entered it and shut the span over
+    /// `audit-test`. Fails if a state of a slot outside the window can shut
+    /// it again; one live there is still held, as `rescope` holds it.
+    #[test]
+    fn a_slot_the_window_left_does_not_shut_its_span_when_it_fails_later() {
+        let (_t, cluster, mut recorder) = recorder();
+        for (namespace, state) in [
+            (Some("audit-test"), SlotState::Live),
+            (Some("ops"), SlotState::Listing),
+        ] {
+            recorder.state(Source::Followed, slot("Deployment", namespace), state, None);
+        }
+        recorder.rescope(Some(&["audit-test".to_string()]));
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", Some("ops")),
+            SlotState::Blind,
+            None,
+        );
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(
+            (span.to, span.scope),
+            (None, vec!["audit-test".to_string()])
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", Some("ops")),
+            SlotState::Live,
+            None,
+        );
+        assert_eq!(
+            recorder.slot_state(Source::Followed, &slot("Deployment", Some("ops"))),
+            Some(SlotState::Live)
+        );
+    }
+
     /// A refusal that arrives while watching is a new stretch with its own
     /// words. Fails if the span goes on claiming the kind it lost.
     #[test]
