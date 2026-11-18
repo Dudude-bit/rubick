@@ -14,12 +14,7 @@ import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import { parentWords, stopParent } from "@/lib/parent-at";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
-import {
-  doorDoubt,
-  doorVerdict,
-  refusedStop,
-  type DoorAsk,
-} from "@/lib/policy-door";
+import { doorReading, type DoorAsk } from "@/lib/policy-door";
 import { publishedFor } from "@/lib/published";
 import { stopMood } from "@/lib/stop-mood";
 import type {
@@ -194,20 +189,17 @@ export function trafficDoors(
     service: ObjectRef,
     port: string | null
   ) => {
-    if (!door || !controller) return { shut: null, doubt: null, unsure: false };
-    const read = door.ask(controller);
-    const published = publishedFor(conns, service);
-    const shut = refusedStop(published, port, read);
-    return {
-      shut,
-      doubt: shut ? null : doorDoubt(published, port, read, controller),
-      // Unsure is not judged, with or without policies or words to name.
-      unsure:
-        !shut &&
-        published !== undefined &&
-        !published.stop &&
-        doorVerdict(published, port, read).state === "unsure",
-    };
+    if (!door) return { shut: null, doubt: null, unsure: false };
+    // Asked about the policies, with no controller to ask them for: its
+    // class unread, or not one the list holds. Nothing settled the door.
+    if (!controller) return { shut: null, doubt: null, unsure: true };
+    // Unsure is not judged, with or without policies or words to name.
+    return doorReading(
+      publishedFor(conns, service),
+      port,
+      door.ask(controller),
+      controller
+    );
   };
 
   const entries = new Map<string, TrafficEntry>();
@@ -259,7 +251,7 @@ export function trafficDoors(
             ? t("empty", "gwDoorGatewayClass", { name: className })
             : "Gateway"
         );
-        const { shut, doubt, unsure } = doorAt(
+        const { shut, unsure } = doorAt(
           className ? door?.ask.classController?.(className) : null,
           edge.to,
           edge.relation.port
@@ -272,7 +264,7 @@ export function trafficDoors(
             : shut
               ? t("empty", "stopPolicyShutUnder")
               : null);
-        const note = doubt && !broken ? t("empty", "doorNotChecked") : null;
+        const note = unsure && !broken ? t("empty", "doorNotChecked") : null;
         // Judged only where the Gateway, its class and the NetworkPolicies
         // over the backend were all read.
         const checked =
