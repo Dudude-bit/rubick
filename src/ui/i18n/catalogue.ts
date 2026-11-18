@@ -4377,7 +4377,7 @@ export const en = {
     traefikNoArgs:
       "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
-      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or let the app forward a port to it.",
     reachNoScheme:
       "{host} has no scheme: write http:// or https:// in front of it.",
     connReasonAndShape: "{said}. {shape}",
