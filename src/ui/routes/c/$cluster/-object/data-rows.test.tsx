@@ -80,31 +80,34 @@ describe("DataSection", () => {
   });
 
   /**
+   * A data key is the cluster's to choose. Fails if a key called
+   * `constructor` or `toString` finds `Object`'s function in the withheld
+   * or binary record and is drawn as withheld instead of as its value, or
+   * if a key called `__proto__` that is withheld loses its reason. Each
+   * row's own status is read: the value alone is drawn either way.
+   */
+  it("reads each key's own value, whatever the key is called", () => {
+    render(
+      <DataSection
+        data={JSON.parse('{"constructor":"one","toString":"three"}')}
+        withheld={JSON.parse('{"__proto__":{"says":"privateKey"}}')}
+      />
+    );
+    const row = (key: string) =>
+      screen.getByText(key, { selector: "span" }).closest(".border-b")!;
+    expect(row("constructor")).toHaveTextContent(/^constructor3 chars/);
+    expect(row("toString")).toHaveTextContent(/^toString5 chars/);
+    expect(row("__proto__")).toHaveTextContent(
+      "__proto__a private key, which the app never shows"
+    );
+  });
+
+  /**
    * Would break if a private key became renderable or copyable. The backend
    * withholds it, and the row that stands in for it must not offer either
    * control — a Reveal on a value the app does not hold is a button that
    * either lies or, worse, one day starts working.
    */
-  /**
-   * A data key is the cluster's to choose. Fails if a key called
-   * `constructor` or `toString` finds `Object`'s function in the withheld
-   * or binary record and is drawn as withheld instead of as its value, or
-   * if a key called `__proto__` that is withheld loses its reason.
-   */
-  it("reads each key's own value, whatever the key is called", () => {
-    render(
-      <DataSection
-        data={JSON.parse('{"constructor":"one","toString":"two"}')}
-        withheld={JSON.parse('{"__proto__":{"says":"privateKey"}}')}
-      />
-    );
-    expect(screen.getByText("one")).toBeInTheDocument();
-    expect(screen.getByText("two")).toBeInTheDocument();
-    expect(
-      screen.getAllByText("a private key, which the app never shows")
-    ).toHaveLength(1);
-  });
-
   it("offers neither reveal nor copy for a withheld value", () => {
     render(
       <DataSection

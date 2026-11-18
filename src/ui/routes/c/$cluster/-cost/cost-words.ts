@@ -276,6 +276,13 @@ const peakSaid = (e: Efficiency, value: string, t: T) =>
     ? t("cost", "atMost", { value })
     : value;
 
+/** A peak in its own units; a bound rounded up, never below what it bounds. */
+const sayPeak = (
+  e: Extract<Efficiency, { state: "measured" | "unrequested" }>,
+  kind: "cpu" | "memory"
+) =>
+  formatQuantity(e.peak ?? 0, kind, undefined, e.peakAtMost ? "up" : "nearest");
+
 /** A figure read from some of its pods, saying how many: its own query's count. */
 const ofPods = (value: string, pods: PodsRead | null, t: T) =>
   pods ? t("cost", "ofPods", { value, read: pods.read, n: pods.of }) : value;
@@ -320,7 +327,7 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
     peak:
       e.peak === null
         ? say(null)
-        : ofPods(peakSaid(e, say(e.peak), t), e.peakPods, t),
+        : ofPods(peakSaid(e, sayPeak(e, kind), t), e.peakPods, t),
   };
   const age = youngFor(e, t);
   return age === null
@@ -348,7 +355,7 @@ export function usedLines(
   const peak =
     e.peak === null
       ? say(null)
-      : ofPods(peakSaid(e, say(e.peak), t), e.peakPods, t);
+      : ofPods(peakSaid(e, sayPeak(e, kind), t), e.peakPods, t);
   return [
     t("cost", "usedAvg", { avg }),
     age === null

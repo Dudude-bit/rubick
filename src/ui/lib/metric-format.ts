@@ -1,6 +1,7 @@
 import type { T } from "@/i18n/useT";
 import { formatBytes, formatCPU, parseQuantity } from "@/lib/k8s-quantity";
 import type { ReportValue } from "@/lib/report";
+import type { Rounding } from "@/lib/utils";
 
 /**
  * Pure helpers behind the table's quantity cells.
@@ -41,10 +42,11 @@ export type QuantityKind = "cpu" | "memory" | "count" | "throughput";
 export function formatQuantity(
   value: number,
   kind: QuantityKind,
-  unit?: string
+  unit?: string,
+  rounding: Rounding = "nearest"
 ): string {
-  if (kind === "cpu") return formatCPU(value);
-  if (kind === "memory") return formatBytes(value, { trim: true });
+  if (kind === "cpu") return formatCPU(value, undefined, rounding);
+  if (kind === "memory") return formatBytes(value, { trim: true, rounding });
   if (kind === "throughput") return `${formatBytes(value, { trim: true })}/s`;
   return `${Math.round(value)}${unit ?? ""}`;
 }

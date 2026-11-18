@@ -80,15 +80,17 @@ export function formatDecimal(
   value: number,
   fractionDigits: number,
   locale: string = currentLocale(),
-  trim = false
+  trim = false,
+  rounding: Rounding = "nearest"
 ): string {
-  const key = `${locale}|${fractionDigits}|${trim}`;
+  const key = `${locale}|${fractionDigits}|${trim}|${rounding}`;
   let format = decimalFormats.get(key);
   if (!format) {
     format = new Intl.NumberFormat(locale, {
       minimumFractionDigits: trim ? 0 : fractionDigits,
       maximumFractionDigits: fractionDigits,
       useGrouping: false,
+      ...roundingOf(rounding),
     });
     decimalFormats.set(key, format);
   }
