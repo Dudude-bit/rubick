@@ -105,7 +105,9 @@ export const packingKey = (
 ) =>
   JSON.stringify([
     sizes,
-    links.map((link) => `${link.from}>${link.to}`).sort(),
+    // By id too: a route is kept per edge, and a new edge between the same
+    // two ends has none until it is laid out.
+    links.map((link) => `${link.id}:${link.from}>${link.to}`).sort(),
   ]);
 
 const CARD = cardId("");
@@ -211,7 +213,7 @@ export function askFor(
       );
     const signature = JSON.stringify([
       ordered.map((node) => node.id),
-      shaping.map((edge) => `${edge.from}>${edge.to}`).sort(),
+      shaping.map((edge) => `${edge.id}:${edge.from}>${edge.to}`).sort(),
     ]);
     const held = cache.get(group.id);
     // A group last laid out with others holds no routes of its own; once it
