@@ -86,4 +86,15 @@ describe("the Topology screen", () => {
       "GatewayClass could not be read, so routes and Gateways are drawn not checked: gatewayclasses is forbidden"
     );
   });
+
+  /**
+   * A kind still listing was said twice, above the map and over it. Fails
+   * if it is said anywhere but once, in the line above the map.
+   */
+  it("says a kind still listing once, above the map", async () => {
+    given.kinds = [{ kind: "Pod", reading: { says: "syncing" } }];
+    await open();
+    expect(screen.getAllByText("Still listing: Pod")).toHaveLength(1);
+    expect(screen.getByTestId("topology-not-read")).toHaveTextContent(/Pod/);
+  });
 });
