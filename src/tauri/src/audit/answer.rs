@@ -259,6 +259,23 @@ fn blinded_by(kind: &str) -> Vec<RuleId> {
         .collect()
 }
 
+/// The rules a kind not read leaves unanswered: those that read it beside
+/// what they judge, and those that judge it.
+fn unread_rules(kind: &str) -> Vec<RuleId> {
+    let mut rules = blinded_by(kind);
+    if counted(kind) {
+        rules.extend(
+            super::rules::RULES
+                .iter()
+                .filter(|rule| judges(rule.id, kind))
+                .map(|rule| rule.id),
+        );
+    }
+    rules.sort();
+    rules.dedup();
+    rules
+}
+
 /// A namespace's neighbours, as its slots read them.
 pub(super) fn beside_of(
     slots: &BTreeMap<SlotKey, FeedState>,
@@ -606,7 +623,7 @@ fn pods(
                     kind: POD.to_string(),
                     namespace: Some(namespace),
                     why: why.clone(),
-                    rules: blinded_by(POD),
+                    rules: unread_rules(POD),
                 };
                 if !world.not_checked.contains(&unread) {
                     world.not_checked.push(unread);
@@ -786,21 +803,11 @@ fn readings(
             kind: POD.to_string(),
             namespace: None,
             why: why.clone(),
-            rules: blinded_by(POD),
+            rules: unread_rules(POD),
         }),
     }
     for (kind, key, namespaced, states) in kinds {
-        let mut rules = blinded_by(&kind);
-        if counted(&kind) && kind != POD {
-            rules.extend(
-                super::rules::RULES
-                    .iter()
-                    .filter(|rule| judges(rule.id, &kind))
-                    .map(|rule| rule.id),
-            );
-        }
-        rules.sort();
-        rules.dedup();
+        let rules = unread_rules(&kind);
         let reaches: Vec<Option<String>> = match scope {
             None => vec![None],
             Some(names) if namespaced => names.iter().cloned().map(Some).collect(),
@@ -833,9 +840,10 @@ fn readings(
 /// The rules judged on an object of `kind` itself.
 fn judges(rule: RuleId, kind: &str) -> bool {
     use RuleId as R;
+    // A pod no workload Audit reads stamped is judged whole, as a template.
     let template = matches!(
         kind,
-        "Deployment" | "StatefulSet" | "DaemonSet" | "Job" | "CronJob"
+        "Deployment" | "StatefulSet" | "DaemonSet" | "Job" | "CronJob" | POD
     );
     match rule {
         R::ConfigMapPrivateKey => kind == "ConfigMap",
@@ -1740,9 +1748,18 @@ mod tests {
         }
         let seen = world(&index, Ok(&owners), None);
         assert_eq!(seen.reading, 0, "a refused read is still being read");
-        assert!(seen.not_checked.iter().any(|unread| unread.kind == POD
-            && unread.namespace.as_deref() == Some("shop")
-            && matches!(unread.why, Why::Refused { .. })));
+        let refused = seen
+            .not_checked
+            .iter()
+            .find(|unread| {
+                unread.kind == POD
+                    && unread.namespace.as_deref() == Some("shop")
+                    && matches!(unread.why, Why::Refused { .. })
+            })
+            .expect("the pod named not checked");
+        // A pod read whole is judged by the template rules, unanswered here.
+        assert!(refused.rules.contains(&RuleId::PssPrivileged));
+        assert!(refused.rules.contains(&RuleId::NoLivenessProbe));
         assert_eq!(
             hits.lock()
                 .unwrap()
