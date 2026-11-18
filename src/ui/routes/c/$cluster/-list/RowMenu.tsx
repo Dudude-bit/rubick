@@ -23,7 +23,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
-import { kubectlGet } from "@/lib/kubectl";
+import { kubectlGet, useCliTarget } from "@/lib/kubectl";
 import { clusterOf } from "@/lib/links";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -71,7 +71,8 @@ export function RowMenu<Row extends Listed>({
   const openTab = useScopeTabStore((state) => state.openTab);
 
   const qualified = row.namespace ? `${row.namespace}/${row.name}` : null;
-  const command = kind ? kubectlGet({ kind, ...row }) : null;
+  const cli = useCliTarget();
+  const command = kind ? kubectlGet({ kind, ...row }, cli) : null;
   const link = href && clusterOf(href) ? buildDeepLink(href) : null;
   const copyText = (text: string) =>
     void copy(text, t("action", "nameCopied", { name: text }));

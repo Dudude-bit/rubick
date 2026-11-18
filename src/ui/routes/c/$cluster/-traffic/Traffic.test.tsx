@@ -415,6 +415,7 @@ describe("the Traffic page, live", () => {
     },
     lost: 0,
     untracked: 0,
+    waiting: 0,
     unreached: [],
     end: null,
     error: null,
@@ -559,6 +560,22 @@ describe("the Traffic page, live", () => {
     );
     expect(text).toContain("on the nodes it reaches");
     expect(text).not.toContain("saw no flows in any namespace in the");
+  });
+
+  /**
+   * The relay sent a flow from a pod whose namespace is still being read:
+   * it is held, not drawn, and the window is not empty. Fails if the page
+   * says it saw no flows while one waits.
+   */
+  it("says flows wait for their pods, never no flows, while the relay's are held", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    live.mockReturnValue(snapshot({ waiting: 2 }));
+    await open();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(
+      "2 flows the relay sent wait for their pods to be read"
+    );
+    expect(text).not.toContain("saw no flows");
   });
 
   /** Without anything live to read, there is no live switch to offer. */

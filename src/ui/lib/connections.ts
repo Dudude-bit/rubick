@@ -38,11 +38,10 @@ import { conditionSaid } from "./condition-health";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import { parentWords, stopParent } from "./parent-at";
 import {
-  doorDoubt,
   doorDoubtWords,
+  doorReading,
   isPolicyStop,
   policyNamesOf,
-  refusedStop,
   type DoorAsk,
   type DoorDoubt,
 } from "./policy-door";
@@ -1315,8 +1314,12 @@ function doorHops(
   for (const { controller, port, urls } of ways) {
     if (controller === null) continue;
     const read = ask(controller);
-    const refused = refusedStop(published, port, read);
-    const doubt = refused ? null : doorDoubt(published, port, read, controller);
+    const { shut: refused, doubt } = doorReading(
+      published,
+      port,
+      read,
+      controller
+    );
     const hop = refused
       ? chainStopHop(refused, subject, t, own)
       : doubt

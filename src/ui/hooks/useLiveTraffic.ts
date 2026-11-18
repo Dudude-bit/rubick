@@ -22,6 +22,8 @@ export interface LiveSnapshot {
   relay: RelayAt | null;
   lost: number;
   untracked: number;
+  /** Pairs sent and not drawn until their pods are read: the window is not empty. */
+  waiting: number;
   /** Nodes whose flows do not arrive: their silence is not quiet. */
   unreached: readonly UnreachedNode[];
   end: LiveEnd | null;
@@ -35,6 +37,7 @@ const EMPTY: LiveSnapshot = {
   relay: null,
   lost: 0,
   untracked: 0,
+  waiting: 0,
   unreached: [],
   end: null,
   error: null,
@@ -67,6 +70,7 @@ export class LiveStore {
       relay: batch.relay ?? this.current.relay,
       lost: batch.lost,
       untracked: batch.untracked,
+      waiting: batch.waiting,
       unreached: batch.unreached,
     });
   }

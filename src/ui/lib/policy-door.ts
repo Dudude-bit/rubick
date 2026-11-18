@@ -534,9 +534,40 @@ export function refusedStop(
   backend: string | null,
   read: DoorRead | null | undefined
 ): PolicyStop | null {
-  if (!published || published.stop) return null;
+  return doorReading(published, backend, read, "").shut;
+}
+
+/**
+ * The door as one verdict reads it: shut, a doubt worth naming, and whether
+ * nothing settled it at all, named or not. Where all three are wanted this
+ * walks the clients and their policies once, not three times.
+ */
+export function doorReading(
+  published: DoorSubject | undefined,
+  backend: string | null,
+  read: DoorRead | null | undefined,
+  client: string
+): { shut: PolicyStop | null; doubt: DoorDoubt | null; unsure: boolean } {
+  if (!published || published.stop)
+    return { shut: null, doubt: null, unsure: false };
   const verdict = doorVerdict(published, backend, read);
-  return verdict.state === "refused" ? verdict.stop : null;
+  if (verdict.state === "refused")
+    return { shut: verdict.stop, doubt: null, unsure: false };
+  if (verdict.state !== "unsure")
+    return { shut: null, doubt: null, unsure: false };
+  return {
+    shut: null,
+    unsure: true,
+    doubt: nameable(verdict)
+      ? {
+          policies: verdict.policies,
+          why: verdict.why,
+          side: verdict.side,
+          client: read?.name ?? client,
+          said: verdict.said,
+        }
+      : null,
+  };
 }
 
 /** A controller's way to pods that NetworkPolicies guard, where no answer was reached. */
@@ -556,17 +587,7 @@ export function doorDoubt(
   read: DoorRead | null | undefined,
   client: string
 ): DoorDoubt | null {
-  if (!published || published.stop) return null;
-  const verdict = doorVerdict(published, backend, read);
-  return verdict.state === "unsure" && nameable(verdict)
-    ? {
-        policies: verdict.policies,
-        why: verdict.why,
-        side: verdict.side,
-        client: read?.name ?? client,
-        said: verdict.said,
-      }
-    : null;
+  return doorReading(published, backend, read, client).doubt;
 }
 
 const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
