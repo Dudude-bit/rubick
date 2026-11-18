@@ -21,6 +21,7 @@ const node: GraphNode = {
 function draw() {
   const actions: MapActions = {
     open: vi.fn(),
+    pressed: vi.fn(),
     toggle: vi.fn(),
     setActive: vi.fn(),
     reveal: vi.fn(),
@@ -38,8 +39,8 @@ function draw() {
 }
 
 describe("a node on the map", () => {
-  /** The brief's contract with the keyboard: Enter goes to the page, Space and a click open the peek, a double-click goes to the page. */
-  it("opens its page on Enter and double-click, its peek on Space and click", () => {
+  /** The brief's contract with the keyboard: Enter goes to the page, Space and a click open the peek. */
+  it("opens its page on Enter, its peek on Space and click", () => {
     vi.useFakeTimers();
     try {
       const { actions, target } = draw();
@@ -60,9 +61,10 @@ describe("a node on the map", () => {
   /**
    * A double click opened the peek, which narrowed the canvas and moved the
    * node from under the second click, so the page never opened. Fails if a
-   * double click opens the peek at all, or does not open the page.
+   * quick double click opens the peek at all, or its first click does not
+   * press the node for the canvas to open the page of.
    */
-  it("opens only the page on a double click, never the peek its first click would", () => {
+  it("opens no peek on a quick double click, and presses the node its first click landed on", () => {
     vi.useFakeTimers();
     try {
       const { actions, target } = draw();
@@ -70,9 +72,9 @@ describe("a node on the map", () => {
       fireEvent.click(target, { detail: 2 });
       fireEvent.doubleClick(target);
       vi.advanceTimersByTime(DOUBLE_CLICK_MS * 2);
-      expect(vi.mocked(actions.open).mock.calls.map(([, how]) => how)).toEqual([
-        "page",
-      ]);
+      expect(actions.open).not.toHaveBeenCalled();
+      expect(actions.pressed).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(actions.pressed).mock.calls[0][0]).toBe(node);
     } finally {
       vi.useRealTimers();
     }

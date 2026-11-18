@@ -9,6 +9,8 @@ import type { GraphEdge, GraphNode } from "./types";
  */
 export interface MapActions {
   open: (node: GraphNode, how: "peek" | "page") => void;
+  /** A node's first click: a double click that follows opens its page. */
+  pressed: (node: GraphNode, at: number) => void;
   openEdge?: (edge: GraphEdge) => void;
   toggle: (group: string) => void;
   /** The node under the pointer or the keyboard, which lights its neighbours. */

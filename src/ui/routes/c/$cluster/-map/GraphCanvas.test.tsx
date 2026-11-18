@@ -187,6 +187,9 @@ describe("the map's view", () => {
     expect(setViewport).toHaveBeenCalledWith({ x: 150, y: 0, zoom: 1 });
     expect(fitView).toHaveBeenCalledTimes(2);
 
+    fireEvent.click(screen.getByRole("button", { name: /web/ }), {
+      detail: 1,
+    });
     fireEvent.doubleClick(screen.getByRole("button", { name: /web/ }));
     expect(opened).toHaveBeenCalledWith(
       expect.objectContaining({ id: "web" }),
@@ -294,6 +297,50 @@ describe("the map's view", () => {
     Object.assign(view, { width: 800, height: 600 });
     rerender(draw());
     expect(setViewport).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A double click slower than the peek's wait opened the peek, which moved
+   * the map, and the second click landed on empty canvas: the page never
+   * opened. Fails if a double click does not open the page of the node its
+   * first click landed on, wherever and however slowly its second lands, or
+   * if a click elsewhere in between does not let that node go.
+   */
+  it("opens the page of the node a double click began on, wherever its second click lands", async () => {
+    const opened = vi.fn();
+    const draw = () => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={opened}
+        ariaLabel="map"
+      />
+    );
+    render(draw());
+    const card = await screen.findByRole("button", { name: /web/ }, SLOW);
+    const canvas = screen.getByRole("group", { name: "map" });
+
+    fireEvent.click(card, { detail: 1 });
+    await waitFor(() =>
+      expect(opened).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "web" }),
+        "peek"
+      )
+    );
+    fireEvent.click(canvas, { detail: 2 });
+    fireEvent.doubleClick(canvas);
+    expect(opened).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "web" }),
+      "page"
+    );
+
+    opened.mockClear();
+    fireEvent.click(card, { detail: 1 });
+    fireEvent.click(canvas, { detail: 1 });
+    fireEvent.doubleClick(canvas);
+    expect(opened).not.toHaveBeenCalledWith(expect.anything(), "page");
   });
 
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */

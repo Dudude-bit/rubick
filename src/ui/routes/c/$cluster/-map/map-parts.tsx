@@ -56,7 +56,11 @@ export type ObjectNodeType = Node<{ node: GraphNode }, "object">;
  */
 export const DOUBLE_CLICK_MS = 250;
 
-/** One object: click or Space for the peek, double-click or Enter for its page. */
+/**
+ * One object: click or Space for the peek, Enter for its page. A double
+ * click's page is opened by the canvas, from the node its first click
+ * pressed: a slow one's second click lands after the peek moved the map.
+ */
 export const ObjectNode = memo(function ObjectNode({
   id,
   data,
@@ -97,15 +101,13 @@ export const ObjectNode = memo(function ObjectNode({
         // The second click of a double click: the double click answers it.
         if (event.detail > 1) return;
         settle();
+        actions.pressed(node, event.timeStamp);
         pending.current = setTimeout(() => {
           pending.current = null;
           actions.open(node, "peek");
         }, DOUBLE_CLICK_MS);
       }}
-      onDoubleClick={() => {
-        settle();
-        actions.open(node, "page");
-      }}
+      onDoubleClick={settle}
       onKeyDown={onKey}
       onMouseEnter={() => actions.setActive(id)}
       onMouseLeave={() => actions.setActive(null)}
