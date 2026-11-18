@@ -115,6 +115,35 @@ describe("a line for PowerShell", () => {
   });
 
   /**
+   * Windows PowerShell 5.1 strips a double quote inside an argument it hands
+   * kubectl: `ops"blue"` arrives as `opsblue`, which may be another context
+   * in the same kubeconfig. Fails if such a name, or a spaced one ending in
+   * a backslash, is written into the line rather than the stand-in.
+   */
+  it("puts the stand-in for a context PowerShell 5.1 cannot hand kubectl whole", () => {
+    const line = (context: string) =>
+      cliLine(
+        "kubectl",
+        { context, files: "C:\\k\\config" },
+        "get pods",
+        "powershell"
+      );
+    expect(line('ops"blue"')).toContain("kubectl --context 'CONTEXT' get pods");
+    expect(line("lab one\\")).toContain("kubectl --context 'CONTEXT' get pods");
+    expect(line("my cluster")).toContain(
+      "kubectl --context 'my cluster' get pods"
+    );
+    expect(
+      cliLine(
+        "kubectl",
+        { context: 'ops"blue"', files: "/k" },
+        "get pods",
+        "posix"
+      )
+    ).toContain(`--context 'ops"blue"' get pods`);
+  });
+
+  /**
    * Each stage of a pipe setting the files for itself races the others over
    * the one environment, and the last to put it back wins. Fails if a pipe
    * sets them more than once, or a POSIX pipe leaves a stage without them.

@@ -80,7 +80,12 @@ export function cliPipe(
     return steps
       .map((step) => `KUBECONFIG=${word(files)} ${run(step, word(context))}`)
       .join(" | ");
-  const pipe = steps.map((step) => run(step, psWord(context))).join(" | ");
+  // Windows PowerShell 5.1 drops a double quote inside an argument it hands
+  // a program, and one ending a spaced argument in a backslash is read as a
+  // quote: `ops"blue"` reaches kubectl as `opsblue`, another context. Such a
+  // name gets the stand-in, which no kubeconfig resolves, never a neighbour.
+  const carried = /"|\s.*\\$/.test(context) ? "CONTEXT" : context;
+  const pipe = steps.map((step) => run(step, psWord(carried))).join(" | ");
   return `& { $was = $env:KUBECONFIG; $env:KUBECONFIG = ${psWord(files)}; try { ${pipe} } finally { $env:KUBECONFIG = $was } }`;
 }
 
