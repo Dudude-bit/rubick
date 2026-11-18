@@ -7,7 +7,8 @@ const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
 const OVERLAY_SCROLLBAR =
   /(^|[^a-z0-9-])(scrollbar-thin(?![a-z0-9-])|\[scrollbar-width:(?!none\])|\[scrollbar-color:(?!auto\]))/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
-const STORE_FILE = /(^|[/\\])stores[/\\][^/\\]+(?<!\.test)\.tsx?$/;
+const STORE_FILE =
+  /(^|[/\\])stores[/\\](?:[^/\\]+[/\\])*[^/\\]+(?<!\.test)\.tsx?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */
 function guard(types, test, message) {
