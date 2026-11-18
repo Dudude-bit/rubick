@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
@@ -15,6 +21,14 @@ const VIOLATIONS: Record<string, string> = {
   "no-overlay-scrollbar": `export const c = "overflow-y-auto scrollbar-thin";`,
 };
 
+/** Rules that hold only inside a folder, each case written there. */
+const PLACED: Record<string, [string, string]> = {
+  "store-records-are-named": [
+    "stores",
+    `export interface S { lastUsed: Record<string, number>; marks: { [context: string]: number } }`,
+  ],
+};
+
 const CLEAN = `
 import { useCapability } from "@/integrations";
 import { IntegrationPage } from "./integrations/-components/IntegrationPage";
@@ -23,6 +37,7 @@ export const b = <Badge status={code}>{t("ready")}</Badge>;
 export const s = <Select />;
 export const l = "overflow-y-auto scrollbar-lane [scrollbar-width:none]";
 export const cm = { scrollbarColor: "auto" };
+export type Outside = Record<string, number>;
 `;
 
 interface Diagnostic {
@@ -38,6 +53,10 @@ beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "rubick-lint-"));
   for (const [rule, code] of Object.entries(VIOLATIONS))
     writeFileSync(join(dir, `${rule}.tsx`), code);
+  for (const [rule, [folder, code]] of Object.entries(PLACED)) {
+    mkdirSync(join(dir, folder), { recursive: true });
+    writeFileSync(join(dir, folder, `${rule}.tsx`), code);
+  }
   writeFileSync(join(dir, "clean.tsx"), CLEAN);
   const run = spawnSync(
     "node_modules/.bin/vp",
@@ -59,10 +78,22 @@ describe("the project's own lint guards", () => {
    * The guards live in a local plugin the config has to load and switch on
    * by name; a rule dropped from the config fails nothing and guards nothing.
    */
-  it.each(Object.keys(VIOLATIONS))("refuse %s as an error", (rule) => {
-    expect(rubickIn(`${rule}.tsx`)).toContainEqual(
-      expect.objectContaining({ code: `rubick(${rule})`, severity: "error" })
-    );
+  it.each([...Object.keys(VIOLATIONS), ...Object.keys(PLACED)])(
+    "refuse %s as an error",
+    (rule) => {
+      expect(rubickIn(`${rule}.tsx`)).toContainEqual(
+        expect.objectContaining({ code: `rubick(${rule})`, severity: "error" })
+      );
+    }
+  );
+
+  /** Fails if a store's string-keyed record, either way it is spelled, passes: the guard counts both. */
+  it("refuse each string-keyed record in a store", () => {
+    expect(
+      rubickIn("store-records-are-named.tsx").filter(
+        (d) => d.code === "rubick(store-records-are-named)"
+      )
+    ).toHaveLength(2);
   });
 
   /** Fails if a scrollbar width or colour reaches WebKit through a style object or a class built in a template, the two ways around the class name. */
