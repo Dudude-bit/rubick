@@ -225,6 +225,21 @@ describe("the map's view", () => {
     await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(2), SLOW);
   });
 
+  /**
+   * A layout that failed under a new key must not leave the next good one
+   * under that key unfitted. Fails if the view is not fitted to the layout
+   * that comes after the failure.
+   */
+  it("fits the layout that recovers from a failed one under the same key", async () => {
+    fits.length = 0;
+    const { rerender } = render(canvas(["argo"], "a"));
+    await waitFor(() => expect(fits).toEqual([2]), SLOW);
+    rerender(canvas(["argo", "broken"], "b"));
+    await screen.findByRole("alert", undefined, SLOW);
+    rerender(canvas(["argo", "billing"], "b"));
+    await waitFor(() => expect(fits.at(-1)).toBe(4), SLOW);
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();
