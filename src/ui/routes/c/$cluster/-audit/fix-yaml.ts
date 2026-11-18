@@ -43,13 +43,57 @@ function containerOf(finding: AuditFinding | undefined): {
   return { list: "containers", name: "app" };
 }
 
-const inContainer = (
+type Seat = { list: string; name: string };
+
+/** Every container a finding names, each once, in the order it names them. */
+function containersOf(finding: AuditFinding | undefined): Seat[] {
+  const seats: Seat[] = [];
+  for (const what of finding?.what ?? []) {
+    const at = "at" in what ? what.at : null;
+    if (at && !seats.some((s) => s.list === at.list && s.name === at.container))
+      seats.push({ list: at.list, name: at.container });
+  }
+  return seats.length > 0 ? seats : [containerOf(finding)];
+}
+
+/**
+ * `body` for each container a finding names, under the list each is in: a
+ * finding about two containers is fixed in both, not in the first alone.
+ */
+function eachContainer(
   finding: AuditFinding | undefined,
-  body: string
-): string => {
-  const { list, name } = containerOf(finding);
-  return `${list}:\n  - name: ${name}\n${indent(body, 2)}`;
-};
+  body: (seat: Seat) => string
+): string {
+  const seats = containersOf(finding);
+  const lists = [...new Set(seats.map((seat) => seat.list))];
+  return lists
+    .map((list) =>
+      [
+        `${list}:`,
+        ...seats
+          .filter((seat) => seat.list === list)
+          .map((seat) => `  - name: ${seat.name}\n${indent(body(seat), 2)}`),
+      ].join("\n")
+    )
+    .join("\n");
+}
+
+const inContainer = (finding: AuditFinding | undefined, body: string) =>
+  eachContainer(finding, () => body);
+
+/** The witnesses of `says` a finding holds at one container. */
+const at = <S extends What["says"]>(
+  finding: AuditFinding | undefined,
+  says: S,
+  seat: Seat
+): Extract<What, { says: S }>[] =>
+  (finding?.what ?? []).filter(
+    (what): what is Extract<What, { says: S }> =>
+      what.says === says &&
+      "at" in what &&
+      what.at?.list === seat.list &&
+      what.at.container === seat.name
+  );
 
 const securityContext = (finding: AuditFinding | undefined, body: string) =>
   inContainer(finding, `securityContext:\n${indent(body, 1)}`);
@@ -62,10 +106,17 @@ const atContainer = (finding: AuditFinding | undefined) =>
  * at a container: a container's securityContext overrides the pod's, so a
  * pod-level fix leaves that container as it was.
  */
-const podOrContainer = (finding: AuditFinding | undefined, body: string) =>
-  atContainer(finding)
-    ? securityContext(finding, body)
-    : `securityContext:\n${indent(body, 1)}`;
+const podOrContainer = (finding: AuditFinding | undefined, body: string) => {
+  const atPod = `securityContext:\n${indent(body, 1)}`;
+  if (!atContainer(finding)) return atPod;
+  // Made at the pod as well as at a container: both are set.
+  const alsoPod = finding?.what.some(
+    (what) => "at" in what && what.at === null
+  );
+  return [alsoPod ? atPod : null, securityContext(finding, body)]
+    .filter(Boolean)
+    .join("\n");
+};
 
 const first = <S extends What["says"]>(
   finding: AuditFinding | undefined,
@@ -191,17 +242,19 @@ export function fixYaml(
       return `apiVersion: v1\nkind: Secret\nmetadata:\n  name: app-tls\ntype: Opaque\nstringData:\n  ${key}: ""`;
     }
     case "env-secret-literal": {
-      const variable = first(finding, "envLiteral")?.variable ?? "PASSWORD";
+      const fromSecret = (variable: string) =>
+        `  - name: ${variable}\n    valueFrom:\n      secretKeyRef:\n        name: app\n        key: ${variable.toLowerCase()}`;
       return pod(
-        inContainer(
-          finding,
-          `env:\n  - name: ${variable}\n    valueFrom:\n      secretKeyRef:\n        name: app\n        key: ${variable.toLowerCase()}`
-        )
+        eachContainer(finding, (seat) => {
+          const named = at(finding, "envLiteral", seat).map((w) => w.variable);
+          const variables = named.length > 0 ? named : ["PASSWORD"];
+          return `env:\n${variables.map(fromSecret).join("\n")}`;
+        })
       );
     }
     case "writable-root-filesystem":
       return pod(
-        `${securityContext(finding, "readOnlyRootFilesystem: true")}\n${indent("volumeMounts:\n  - name: tmp\n    mountPath: /tmp", 2)}\nvolumes:\n  - name: tmp\n    emptyDir: {}`
+        `${inContainer(finding, "securityContext:\n  readOnlyRootFilesystem: true\nvolumeMounts:\n  - name: tmp\n    mountPath: /tmp")}\nvolumes:\n  - name: tmp\n    emptyDir: {}`
       );
     case "cluster-admin-binding":
       return 'apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: app\nrules:\n  - apiGroups: ["apps"]\n    resources: ["deployments"]\n    verbs: ["get", "list", "watch"]';
@@ -227,11 +280,13 @@ export function fixYaml(
           "livenessProbe:\n  httpGet:\n    path: /healthz\n    port: 8080\n  periodSeconds: 10\n  failureThreshold: 3"
         )
       );
-    case "image-tag-latest": {
-      const image = first(finding, "image")?.image ?? "app";
-      const name = image.replace(/(:latest)?$/, "");
-      return pod(inContainer(finding, `image: ${name}:1.2.3`));
-    }
+    case "image-tag-latest":
+      return pod(
+        eachContainer(finding, (seat) => {
+          const image = at(finding, "image", seat)[0]?.image ?? "app";
+          return `image: ${image.replace(/(:latest)?$/, "")}:1.2.3`;
+        })
+      );
     case "single-replica": {
       // An autoscaler's floor is the replica count; the workload's is overridden.
       const autoscaler = first(finding, "replicas")?.autoscaler;

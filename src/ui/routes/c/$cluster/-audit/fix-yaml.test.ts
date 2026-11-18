@@ -254,6 +254,79 @@ describe("the fix Audit offers to copy", () => {
 
   /** Fails if a rule has no fix, or one with a word of prose in it. */
   /**
+   * One finding about two containers is fixed in both: the backend folds
+   * every container a rule found into one finding. Fails if the second
+   * container keeps its setting, its literal or its floating image.
+   */
+  it("fixes every container a finding names, each with its own values", () => {
+    const seat = (container: string) => ({
+      list: "containers" as const,
+      container,
+    });
+    const unconfined: AuditFinding = {
+      rule: "pss-seccomp-unconfined",
+      severity: "medium",
+      what: [
+        {
+          says: "set",
+          at: seat("app"),
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+        {
+          says: "set",
+          at: seat("proxy"),
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+      ],
+    };
+    const both = fixYaml("pss-seccomp-unconfined", "Pod", {
+      ...unconfined,
+      what: [
+        {
+          says: "set",
+          at: null,
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+        unconfined.what[0],
+      ],
+    });
+    expect(both).toMatch(/^spec:\n {2}securityContext:\n {4}seccompProfile:/);
+    expect(both).toContain("- name: app\n      securityContext:");
+    const fix = fixYaml("pss-seccomp-unconfined", "Pod", unconfined);
+    expect(fix).toContain(
+      "- name: app\n      securityContext:\n        seccompProfile:"
+    );
+    expect(fix).toContain(
+      "- name: proxy\n      securityContext:\n        seccompProfile:"
+    );
+    const images: AuditFinding = {
+      rule: "image-tag-latest",
+      severity: "low",
+      what: [
+        { says: "image", at: seat("app"), image: "web:latest" },
+        { says: "image", at: seat("proxy"), image: "envoy" },
+      ],
+    };
+    const pinned = fixYaml("image-tag-latest", "Pod", images);
+    expect(pinned).toContain("- name: app\n      image: web:1.2.3");
+    expect(pinned).toContain("- name: proxy\n      image: envoy:1.2.3");
+    const literals: AuditFinding = {
+      rule: "env-secret-literal",
+      severity: "medium",
+      what: [
+        { says: "envLiteral", at: seat("app"), variable: "DB_PASSWORD" },
+        { says: "envLiteral", at: seat("worker"), variable: "API_TOKEN" },
+      ],
+    };
+    const env = fixYaml("env-secret-literal", "Pod", literals);
+    expect(env).toMatch(/- name: app\n {6}env:\n {8}- name: DB_PASSWORD/);
+    expect(env).toMatch(/- name: worker\n {6}env:\n {8}- name: API_TOKEN/);
+  });
+
+  /**
    * kubectl and helm act on their kubeconfig's current context unless told:
    * a pod deleted by name in the terminal's cluster may be another one's.
    * Fails if any command the fix offers leaves out the cluster on screen.
