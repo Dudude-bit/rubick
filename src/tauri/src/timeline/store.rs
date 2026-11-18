@@ -247,6 +247,11 @@ impl Store {
         }
     }
 
+    /// Forgets what each class let go: it was another cluster's history.
+    pub(super) fn forget_let_go(&mut self) {
+        self.let_go.clear();
+    }
+
     /// Forgets every row and says they were cleared, now.
     pub(super) fn clear(&mut self, now: i64) {
         self.rows.clear();

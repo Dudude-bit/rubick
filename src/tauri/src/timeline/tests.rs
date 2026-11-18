@@ -1139,6 +1139,34 @@ fn another_cluster_lets_go_of_the_old_ones_rows_and_keeps_the_unplaced() {
     );
 }
 
+/// The cluster under the name before this one let rows go at a bound, and
+/// this one's page said its own history was let go. Fails if what the old
+/// cluster let go is said of the new one, or a check of the same cluster
+/// again forgets what it let go.
+#[test]
+fn another_cluster_does_not_inherit_what_the_old_one_let_go() {
+    let (timelines, _rx) = holder(None, false);
+    let let_go = LetGoes {
+        changes: Some(LetGo {
+            before: ClusterTimeline::now(),
+            cleared: false,
+        }),
+        ..LetGoes::default()
+    };
+    for (context, again, said) in [("kind", "uid-b", None), ("same", "uid-a", let_go.changes)] {
+        let cluster = timelines.cluster(context);
+        cluster.seen_cluster("uid-a".into());
+        cluster
+            .inner
+            .lock()
+            .store
+            .restore(Vec::new(), let_go, ClusterTimeline::now());
+        timelines.client_replaced(context);
+        cluster.seen_cluster(again.into());
+        assert_eq!(cluster.page(&query(Show::All)).let_go.changes, said);
+    }
+}
+
 /// A kept file that says nothing of its connections, as a build before
 /// them wrote it, or says it unreadably: fails if anything in it is
 /// vouched for, its watching drawn, or the rest of the file is lost.

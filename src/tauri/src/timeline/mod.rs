@@ -394,6 +394,7 @@ impl ClusterTimeline {
                     .iter()
                     .any(|(first, last)| (*first..=*last).contains(&row.seq))
             });
+            inner.store.forget_let_go();
             let kept = inner.store.rows();
             inner.spans = SpanSets::default();
             inner.disk_let_go = LetGoes::default();
