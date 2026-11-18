@@ -243,6 +243,18 @@ export function workloadEfficiency(
 export const efficiencyWarns = (efficiency: Efficiency): boolean =>
   efficiency.state === "failed" || overRequested(efficiency);
 
+/**
+ * Its figures, or the one named, were read from some of its pods: drawn
+ * quieter than a figure over every pod, whatever the words say.
+ */
+export const fromSomePods = (
+  efficiency: Efficiency,
+  figure: "avg" | "peak" | "either" = "either"
+): boolean =>
+  (efficiency.state === "measured" || efficiency.state === "unrequested") &&
+  ((figure !== "peak" && efficiency.avgPods !== null) ||
+    (figure !== "avg" && efficiency.peakPods !== null));
+
 /** The share of a request a peak must stay under for the request to be far above use. */
 export const OVER_REQUESTED_BELOW = 0.5;
 

@@ -11,7 +11,11 @@ import type { T } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
 import { pageLink } from "@/lib/links";
 import { sameKey, type CostTarget } from "@/lib/cost";
-import { efficiencyWarns, workloadEfficiency } from "@/lib/efficiency";
+import {
+  efficiencyWarns,
+  fromSomePods,
+  workloadEfficiency,
+} from "@/lib/efficiency";
 import { useCost, useWorkloadUsage, type CostState } from "@/hooks/useCost";
 import { cn } from "@/lib/utils";
 import { costLineWords, efficiencyWords, troubleWords } from "./cost-words";
@@ -174,7 +178,9 @@ export function WorkloadCostLine({
                 <span
                   key={resource}
                   className={cn(
-                    efficiencyWarns(efficiency[resource]) && "text-warn"
+                    efficiencyWarns(efficiency[resource])
+                      ? "text-warn"
+                      : fromSomePods(efficiency[resource]) && "text-fg-fnt"
                   )}
                 >
                   {i > 0 && " · "}
