@@ -15,6 +15,7 @@ import type {
   ConditionInfo,
   EventInfo,
   FieldMove,
+  Identity,
   LetGoes,
   SeqStretch,
   SpanSets,
@@ -375,6 +376,19 @@ export function changesTargets(
  * rows it let go as rows of their own. `null` for an object nothing is asked
  * of: an empty list would read as "nothing changed".
  */
+/** Whether the rows held are this cluster's, in words where that is not known; a new answer does not compile until it is said. */
+export function identityLine(identity: Identity, t: T): string | null {
+  switch (identity.says) {
+    case "known":
+    case "notChecked":
+      return null;
+    case "unknown":
+      return t("changes", "identityUnknown", { reason: identity.message });
+    case "unsettled":
+      return t("changes", "identityUnsettled");
+  }
+}
+
 /** What a row no read placed says beside it, as the screen does. */
 export const unplacedPart = (unplaced: boolean, t: T) =>
   unplaced ? [{ text: t("changes", "journalUnplaced"), quiet: false }] : [];
@@ -384,6 +398,8 @@ export function changesSection(
     rows: readonly TimelineRow[];
     /** Which rows a read placed; see `placedBy`. */
     vouched: readonly SeqStretch[] | undefined;
+    /** Whether the name was checked, as the Changes page says it. */
+    identity: Identity | undefined;
     spans: SpanSets | undefined;
     letGo: LetGoes | undefined;
     /** Older rows than this were not read; `null` where every one was. */
@@ -505,6 +521,7 @@ export function changesSection(
     count: all.length,
     partial:
       [
+        read.identity && identityLine(read.identity, t),
         read.unread,
         readFrom === null
           ? null

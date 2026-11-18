@@ -23,6 +23,7 @@ import { connectionCount } from "./connections";
 
 /** Every row placed by a read, for tests that are not about placing. */
 const PLACED = [{ first: 0, last: null }];
+const KNOWN = { says: "known" } as const;
 
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
   values
@@ -599,6 +600,7 @@ describe("changesSection", () => {
   ) => ({
     rows,
     vouched: PLACED,
+    identity: KNOWN,
     spans: { followed, meta },
     letGo: undefined,
   });
@@ -621,6 +623,7 @@ describe("changesSection", () => {
       {
         rows: [],
         vouched: PLACED,
+        identity: KNOWN,
         spans: { followed: [], meta: [] },
         letGo: {
           changes: { before, cleared: true },
@@ -667,6 +670,7 @@ describe("changesSection", () => {
       {
         rows: [row()],
         vouched: PLACED,
+        identity: KNOWN,
         spans: undefined,
         letGo: undefined,
         unread: "changes.readFailed",
@@ -685,6 +689,7 @@ describe("changesSection", () => {
       {
         rows: [row({ name: "other" })],
         vouched: PLACED,
+        identity: KNOWN,
         spans: undefined,
         letGo: undefined,
         unread: "changes.readFailed",
@@ -720,6 +725,27 @@ describe("changesSection", () => {
     expect(marked.map((change) => change.at)).toEqual([
       new Date(at - 60_000).toISOString(),
     ]);
+  });
+
+  /**
+   * The Changes page warned that the rows kept under the name may be another
+   * cluster's, and the file drew them with no word of it. Fails if the
+   * section does not say what the page says of the name, or says it of a
+   * name that was checked.
+   */
+  it("says of the name what the Changes page says, where it could not be checked", () => {
+    const partial = (
+      identity: Parameters<typeof changesSection>[0]["identity"]
+    ) =>
+      changesSection({ ...read([row()]), identity }, payments, AT, t)
+        ?.partial ?? "";
+    expect(partial({ says: "unknown", message: "forbidden" })).toContain(
+      "changes.identityUnknown"
+    );
+    expect(partial({ says: "unsettled" })).toContain(
+      "changes.identityUnsettled"
+    );
+    expect(partial(KNOWN)).not.toContain("changes.identity");
   });
 
   /** Nothing recorded and no span over the object is not "nothing changed". */
