@@ -606,8 +606,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
           : before.wayBack,
     });
     for (const name of held) {
-      // One the reader went to meanwhile is theirs now, not a held one.
-      if (get().currentContext === name) continue;
+      // One the reader connected afresh meanwhile is theirs now, on screen
+      // or left for another.
+      if (!outdated.has(name)) continue;
       await commands
         .disconnectCluster(name)
         .then(() => outdated.delete(name))

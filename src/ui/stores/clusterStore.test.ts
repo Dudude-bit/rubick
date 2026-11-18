@@ -1133,4 +1133,20 @@ describe("sessions made from a kubeconfig entry that has since changed", () => {
     await changing;
     expect(vi.mocked(commands.disconnectCluster).mock.calls).toEqual([["dev"]]);
   });
+
+  /**
+   * The reader connected stage afresh while dev was being let go, then went
+   * to qa with stage's tab still open. Fails if the loop disconnects the new
+   * session by the name it listed before.
+   */
+  it("keeps a session connected afresh after the change, once the reader moves on", async () => {
+    const changing = state().entriesChanged(["dev", "stage"]);
+    await settle();
+    await state().connect("stage");
+    await state().connect("qa");
+    letGo.open();
+    await changing;
+    expect(vi.mocked(commands.disconnectCluster).mock.calls).toEqual([["dev"]]);
+    expect(backend.live.has("stage")).toBe(true);
+  });
 });
