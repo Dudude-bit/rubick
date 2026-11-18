@@ -1384,9 +1384,9 @@ export const en = {
       "Not every pod is ready: {ready} of {desired}. A restart starts the same template again, so pods that crash or fail their probes will do so again. {pods}",
     restartSeeWhy: "See why on the Pods tab.",
     notPermitted:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
+      "Your access does not allow this: the cluster answers no to {check}.",
     notPermittedEither:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+      "Your access does not allow this: the cluster answers no to {check} and to {other}.",
     notThroughKubectlProxy:
       "Not available in this session: it reaches the cluster through kubectl proxy, which refuses every exec and attach request whatever your access allows.",
     validationPassed: "Validation passed",
@@ -1958,12 +1958,30 @@ export const en = {
       "the connected Prometheus holds no sample of its pods in the last day",
     whyPeakUnread:
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
+    whyNoSamplesCpu:
+      "the connected Prometheus holds no sample of its pods' CPU use in the last day",
+    whyNoSamplesMemory:
+      "the connected Prometheus holds no sample of its pods' memory use in the last day",
+    whyPeakUnreadCpu:
+      "the connected Prometheus answered its average CPU use over the last day and no peak, and a peak is what is judged",
+    whyPeakUnreadMemory:
+      "the connected Prometheus answered its average memory use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
-    whyPartial: {
-      one: "the connected Prometheus holds samples of {read} of its {n} pod in the last day, and a peak is judged over every one",
+    whyPartialCpu: {
+      one: "the connected Prometheus holds the last day's CPU peak of {read} of its {n} pod, and a peak is judged over every one",
       other:
-        "the connected Prometheus holds samples of {read} of its {n} pods in the last day, and a peak is judged over every one",
+        "the connected Prometheus holds the last day's CPU peak of {read} of its {n} pods, and a peak is judged over every one",
+    },
+    whyPartialMemory: {
+      one: "the connected Prometheus holds the last day's memory peak of {read} of its {n} pod, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds the last day's memory peak of {read} of its {n} pods, and a peak is judged over every one",
+    },
+    whyPartialBoth: {
+      one: "the connected Prometheus holds the last day's CPU peak of {cpu} and memory peak of {memory} of its {n} pod, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds the last day's CPU peak of {cpu} and memory peak of {memory} of its {n} pods, and a peak is judged over every one",
     },
     whyYoungUndated:
       "when its pods started is not known, and a peak is judged over a whole day",
@@ -2450,6 +2468,8 @@ export const en = {
       "The live stream was not listened to in time and stopped.",
     liveFailed: "Hubble Relay could not be read: {said}",
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
+    liveWaiting:
+      "{waiting} the relay sent wait for their pods to be read, and are drawn once they are.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
     liveUnreached:
@@ -2605,9 +2625,9 @@ export const en = {
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
     atMost: "at most {value}",
-    fromPods: {
-      one: "{line}, from {read} of its {n} pod",
-      other: "{line}, from {read} of its {n} pods",
+    ofPods: {
+      one: "{value} (from {read} of its {n} pod)",
+      other: "{value} (from {read} of its {n} pods)",
     },
     notKnown: "Not known",
     shareNoTotal: "not known: no total",
@@ -4377,7 +4397,7 @@ export const en = {
     traefikNoArgs:
       "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
-      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or let the app forward a port to it.",
     reachNoScheme:
       "{host} has no scheme: write http:// or https:// in front of it.",
     connReasonAndShape: "{said}. {shape}",

@@ -21,6 +21,7 @@ export function openLiveFlows(
         relay: payload.relay,
         lost: payload.lost,
         untracked: payload.untracked,
+        waiting: payload.waiting,
         unreached: payload.unreached,
       });
     }),

@@ -1009,6 +1009,55 @@ fn a_check_through_the_client_held_outlasts_another_call_that_could_not_settle()
     assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
 }
 
+/// A reconnect found nothing held, so the name stayed "checked" for the
+/// next client; what that client recorded was then called this cluster's
+/// though `kube-system` was never read through it. Fails if rows recorded
+/// after a reconnect are called checked before a read settles it.
+#[test]
+fn rows_recorded_after_a_reconnect_that_found_nothing_held_wait_for_a_check() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    timelines.client_replaced("kind");
+    cluster.change(change(
+        "1",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    cluster.unsettled();
+    assert_eq!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::Unsettled
+    );
+}
+
+/// A cluster named in an earlier run, with nothing kept from it: the name
+/// read as checked, and a reader who may not read `kube-system` saw the
+/// next cluster's rows called the named one's. Fails if a name read before
+/// is called checked before this run reads it.
+#[test]
+fn a_name_read_in_an_earlier_run_is_checked_again_though_nothing_was_kept() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        timelines.cluster("kind").seen_cluster("uid-a".into());
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    assert_eq!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::NotChecked
+    );
+    cluster.not_identified("forbidden".into());
+    assert!(matches!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::Unknown { .. }
+    ));
+}
+
 /// A switch of keeping waits for the flush under way: one that read
 /// keeping on before it wrote rows and said "kept" after it was turned off.
 /// Fails if the switch lands while a flush holds the files.

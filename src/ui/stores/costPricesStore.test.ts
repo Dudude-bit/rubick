@@ -65,7 +65,7 @@ describe("entered prices", () => {
   /**
    * A context named `__proto__`, assigned into the record, set its
    * prototype: the prices were not its own and the next save lost them.
-   * Fails if a restore or a save writes that name by assignment.
+   * Fails if a restore, a save or what is written to disk loses that name.
    */
   it("keeps the prices of a context named __proto__ as its own", async () => {
     localStorage.setItem(
@@ -81,7 +81,12 @@ describe("entered prices", () => {
     useCostPricesStore.getState().setPrices("__proto__", prices);
     const { result } = renderHook(() => useCostPrices("__proto__"));
     expect(result.current).toEqual(prices);
+    // What was saved is what comes back after a restart, and so is its removal.
+    await act(() => useCostPricesStore.persist.rehydrate());
+    expect(result.current).toEqual(prices);
     act(() => useCostPricesStore.getState().setPrices("__proto__", null));
+    expect(result.current).toBeNull();
+    await act(() => useCostPricesStore.persist.rehydrate());
     expect(result.current).toBeNull();
   });
 });

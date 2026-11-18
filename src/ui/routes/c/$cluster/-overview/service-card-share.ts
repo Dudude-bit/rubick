@@ -50,7 +50,8 @@ export function lastChangeOf(
     "read" | "rows" | "letGo" | "unreadable" | "identity" | "error"
   >
 ): LastChange {
-  if (!read.read) return undefined;
+  if (!read.read)
+    return read.error ? { failed: errorToShow(read.error) } : undefined;
   // The Changes page warns of it; the card does not name another cluster's
   // row as this service's last change.
   if (read.identity?.says === "unknown")

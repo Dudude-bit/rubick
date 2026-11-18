@@ -2009,6 +2009,11 @@ export interface Unchecked {
   why: Why;
 }
 
+export interface PodsRead {
+  read: number;
+  of: number;
+}
+
 export interface AuditFinding {
   rule: RuleId;
   severity: AuditSeverity;
@@ -3259,6 +3264,7 @@ export type AppEvent =
       relay: RelayAt | null;
       lost: number;
       untracked: number;
+      waiting: number;
       unreached: UnreachedNode[];
     }
   | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd }
@@ -4013,12 +4019,14 @@ export type Why =
   | { says: "noPrometheus" }
   | { says: "notScraped" }
   | { says: "noUsage" }
-  | { says: "noSamples" }
-  | { says: "peakUnread" }
+  | { says: "noSamples"; resource: UsageOf }
+  | { says: "peakUnread"; resource: UsageOf }
   | { says: "young"; since: string | null }
-  | { says: "partial"; read: number; of: number }
+  | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null }
   | { says: "folded" }
   | { says: "admitted"; webhooks: string[] };
+
+export type UsageOf = "cpu" | "memory" | "both";
 
 export type RuleId =
   | "pss-host-process"
@@ -4194,10 +4202,10 @@ export type UsageRead =
 export type UseVerdict =
   | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
   | { says: "within" }
-  | { says: "noSamples" }
-  | { says: "peakUnread" }
+  | { says: "noSamples"; resource: UsageOf }
+  | { says: "peakUnread"; resource: UsageOf }
   | { says: "young"; since: string | null }
-  | { says: "partial"; read: number; of: number };
+  | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null };
 
 export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 

@@ -379,6 +379,41 @@ describe("the map's view", () => {
     expect(setCenter.mock.calls[1].slice(0, 2)).toEqual([x, y]);
   });
 
+  /**
+   * A node picked in one view was brought back by a resize after the view
+   * changed key, was fitted, and was moved by the reader: the pick belonged
+   * to the view before. Fails if a resize under a new key centres a node
+   * picked under the old one rather than keeping the middle.
+   */
+  it("keeps the middle, not a node picked in the view before, after the key changes", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    setCenter.mockClear();
+    setViewport.mockClear();
+    fitView.mockClear();
+    const pick = { id: "billing/web" };
+    const draw = (fitKey: string) => (
+      <GraphCanvas
+        groups={[group("argo"), group("billing")]}
+        nodes={[node("argo/web", "argo"), node("billing/web", "billing")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        focus={pick}
+        fitKey={fitKey}
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw("namespace"));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(1), SLOW);
+    rerender(draw("app"));
+    await waitFor(() => expect(fitView).toHaveBeenCalled(), SLOW);
+    handed.onMoveStart({} as MouseEvent);
+    Object.assign(view, { width: 10 });
+    rerender(draw("app"));
+    expect(setCenter).toHaveBeenCalledTimes(1);
+    expect(setViewport).toHaveBeenCalled();
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();

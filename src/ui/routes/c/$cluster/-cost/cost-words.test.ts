@@ -6,6 +6,7 @@ import type { T } from "@/i18n/useT";
 import { estimatePicture } from "@/lib/cost";
 import { efficiencyOf } from "@/lib/efficiency";
 import {
+  amountWords,
   costLineWords,
   efficiencyWords,
   money,
@@ -197,18 +198,35 @@ describe("a peak summed over several pods", () => {
 });
 
 describe("figures read from some of a workload's pods", () => {
-  /** A sum over two of three pods says so, and is not "at most". Fails if it reads as the workload's. */
-  it("says how many pods they were read from", () => {
+  /**
+   * A sum over two of three pods says so beside the figure it is, and is
+   * not "at most"; a figure over every pod says nothing. Fails if a count
+   * lands on the other figure, or a sum over some reads as the workload's.
+   */
+  it("says how many pods each figure was read from", () => {
     const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
-      podsRead: { read: 2, of: 3 },
+      avgPods: { read: 2, of: 3 },
     });
     expect(efficiencyWords(e, t)).toBe(
-      "20% average, 80% peak, from 2 of its 3 pods"
+      "20% (from 2 of its 3 pods) average, 80% peak"
     );
     expect(usedLines(e, "cpu", t)).toEqual([
-      "200m average",
-      "800m peak, from 2 of its 3 pods",
+      "200m (from 2 of its 3 pods) average",
+      "800m peak",
     ]);
+    const peak = efficiencyOf(
+      1000,
+      200,
+      800,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      {
+        peakPods: { read: 1, of: 3 },
+      }
+    );
+    expect(usedWords(peak, "cpu", t)).toBe(
+      "200m average · 800m (from 1 of its 3 pods) peak"
+    );
   });
 });
 
@@ -230,9 +248,16 @@ describe("a namespace with no total for want of a read", () => {
     };
     expect(money(totalOf(row), "", t)).toBe("Not known");
     expect(share(row, t)).toBe("Not known");
-    expect(share({ ...row, unknown: [], unpriced: ["cpu" as const] }, t)).toBe(
-      "not priced"
-    );
+    const unpricedOnly = { ...row, unknown: [], unpriced: ["cpu" as const] };
+    expect(share(unpricedOnly, t)).toBe("not priced");
+    // CPU and memory with no price and storage not read: had storage been
+    // read, it might have priced a floor. Not known, not "not priced".
+    const unpricedToo = {
+      ...row,
+      unpriced: ["cpu" as const, "memory" as const],
+    };
+    expect(money(totalOf(unpricedToo), "", t)).toBe("Not known");
+    expect(share(unpricedToo, t)).toBe("Not known");
     const picture = {
       ...estimatePicture(refused, prices, null),
       unread: [],
@@ -277,6 +302,66 @@ describe("a priced row's share where the whole is not known", () => {
     );
     expect(clusterShareWords("bothFloors", t)).toBe(
       "share of the cluster not known, as both amounts are floors"
+    );
+  });
+});
+
+describe("a bound, as a number", () => {
+  /**
+   * 16.4% printed "at most 16%" and 16.6% "at least 17%": rounded to the
+   * nearest, a bound claimed past what is known. Fails if a bound is not
+   * rounded away from what it bounds, in a share, a peak or an amount.
+   */
+  it("is rounded away from what it bounds", () => {
+    const row = { perHour: 0.05, unpriced: [], unknown: [] };
+    expect(share({ ...row, share: { of: 0.164, bound: "atMost" } }, t)).toBe(
+      "at most 17%"
+    );
+    expect(share({ ...row, share: { of: 0.166, bound: "atLeast" } }, t)).toBe(
+      "at least 16%"
+    );
+    expect(share({ ...row, share: { of: 0.166, bound: "exact" } }, t)).toBe(
+      "17%"
+    );
+    expect(clusterShareWords({ of: 0.164, bound: "atMost" }, t)).toBe(
+      "at most 17% of the cluster"
+    );
+    expect(clusterShareWords({ of: 0.166, bound: "atLeast" }, t)).toBe(
+      "at least 16% of the cluster"
+    );
+    const peak = efficiencyOf(
+      1000,
+      100,
+      164,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      {
+        peakAtMost: true,
+      }
+    );
+    expect(efficiencyWords(peak, t)).toBe("10% average, at most 17% peak");
+    const used = (peak: number, kind: "cpu" | "memory") =>
+      usedLines(
+        efficiencyOf(
+          4 * 1024 ** 3,
+          100,
+          peak,
+          "2020-01-01T00:00:00Z",
+          Date.now(),
+          {
+            peakAtMost: true,
+          }
+        ),
+        kind,
+        t
+      )[1];
+    expect(used(812.4, "cpu")).toBe("at most 813m peak");
+    expect(used(1.24 * 1024 ** 3, "memory")).toBe("at most 1.3Gi peak");
+    expect(amountWords({ perHour: 0.01236, atLeast: true }, "", t)).toBe(
+      "at least 0.0123"
+    );
+    expect(amountWords({ perHour: 0.01236, atLeast: false }, "", t)).toBe(
+      "0.0124"
     );
   });
 });

@@ -4,6 +4,7 @@ import type {
   Category,
   RuleId,
   Unchecked,
+  UsageOf,
   What,
   Why,
 } from "@/generated/types";
@@ -194,6 +195,18 @@ export const standardWords = (rule: RuleId, t: T) => {
   return standard ? t("audit", standard) : "";
 };
 
+/** A reason about use, worded for the resource it is about. */
+const NO_SAMPLES: Record<UsageOf, AuditKey> = {
+  cpu: "whyNoSamplesCpu",
+  memory: "whyNoSamplesMemory",
+  both: "whyNoSamples",
+};
+const PEAK_UNREAD: Record<UsageOf, AuditKey> = {
+  cpu: "whyPeakUnreadCpu",
+  memory: "whyPeakUnreadMemory",
+  both: "whyPeakUnread",
+};
+
 const WHY_WORDS: {
   [K in Why["says"]]: (why: Extract<Why, { says: K }>, t: T) => string;
 } = {
@@ -206,13 +219,26 @@ const WHY_WORDS: {
   noPrometheus: (_, t) => t("audit", "whyNoPrometheus"),
   notScraped: (_, t) => t("audit", "whyNotScraped"),
   noUsage: (_, t) => t("audit", "whyNoUsage"),
-  noSamples: (_, t) => t("audit", "whyNoSamples"),
-  peakUnread: (_, t) => t("audit", "whyPeakUnread"),
+  noSamples: (why, t) => t("audit", NO_SAMPLES[why.resource]),
+  peakUnread: (why, t) => t("audit", PEAK_UNREAD[why.resource]),
   young: (why, t) =>
     why.says === "young" && why.since !== null
       ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
       : t("audit", "whyYoungUndated"),
-  partial: (why, t) => t("audit", "whyPartial", { read: why.read, n: why.of }),
+  partial: (why, t) => {
+    const { cpu, memory } = why;
+    if (cpu && memory)
+      return t("audit", "whyPartialBoth", {
+        cpu: cpu.read,
+        memory: memory.read,
+        n: cpu.of,
+      });
+    const one = cpu ?? memory;
+    return t("audit", cpu ? "whyPartialCpu" : "whyPartialMemory", {
+      read: one?.read ?? 0,
+      n: one?.of ?? 0,
+    });
+  },
   folded: (_, t) => t("audit", "whyFolded"),
   admitted: (why, t) =>
     t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),

@@ -863,7 +863,14 @@ describe("trafficDoors", () => {
      * followed to its controller at the pods' door.
      */
     it("calls a Gateway door shut where the pods' policies refuse the controller its class names", () => {
-      const doorWith = (read: DoorRead | null, pods = published) =>
+      const doorWith = (
+        read: DoorRead | null,
+        pods = published,
+        // `null`: the classes were not read, and the ask names none.
+        classController: ((name: string) => string | undefined) | null = (
+          name
+        ) => (name === "traefik" ? "traefik.io/gateway-controller" : undefined)
+      ) =>
         trafficDoors(
           conns({
             published: [pods],
@@ -886,15 +893,24 @@ describe("trafficDoors", () => {
           undefined,
           {
             controllerOf: () => undefined,
-            ask: Object.assign(() => read, {
-              classController: (name: string) =>
-                name === "traefik"
-                  ? "traefik.io/gateway-controller"
-                  : undefined,
-            }),
+            ask: Object.assign(
+              () => read,
+              classController ? { classController } : {}
+            ),
           }
         ).entries[0].doors[0];
 
+      // The classes not read, or this one not among them: no controller to
+      // ask the policies for, so the door is not judged fine.
+      expect(doorWith(traefik, published, null)).toMatchObject({
+        broken: null,
+        checked: false,
+        note: "NetworkPolicy not checked",
+      });
+      expect(doorWith(traefik, published, () => undefined)).toMatchObject({
+        broken: null,
+        checked: false,
+      });
       expect(doorWith(traefik)).toMatchObject({
         broken: "shut by NetworkPolicy",
         checked: true,
@@ -905,6 +921,19 @@ describe("trafficDoors", () => {
         checked: false,
         note: "NetworkPolicy not checked",
       });
+      // One verdict per door: the clients and their policies are walked
+      // once, not once for the refusal, again for the doubt and again for
+      // whether it is unsure.
+      let walked = 0;
+      const counted = {
+        ...traefik,
+        get clients() {
+          walked += 1;
+          return traefik.clients;
+        },
+      };
+      doorWith(counted);
+      expect(walked).toBeLessThanOrEqual(2);
       // No policy over the pods, and the controller's pods still listing:
       // unsure with no policy or words to name, and still not judged fine.
       expect(
@@ -912,7 +941,11 @@ describe("trafficDoors", () => {
           { ...traefik, clients: { known: false, why: null } },
           { ...published, door: { state: "open" } }
         )
-      ).toMatchObject({ broken: null, checked: false, note: null });
+      ).toMatchObject({
+        broken: null,
+        checked: false,
+        note: "NetworkPolicy not checked",
+      });
     });
   });
 

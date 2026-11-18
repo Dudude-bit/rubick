@@ -29,6 +29,41 @@ const PLACED: Record<string, [string, string]> = {
   ],
 };
 
+/**
+ * A store's records by the shape they are written in, at the path they are
+ * written to, and how many reports each is owed.
+ */
+const STORE_SHAPES: Record<string, [string, number]> = {
+  "stores/forwards/nested.ts": [
+    "export type Saved = Record<string, number>;",
+    1,
+  ],
+  "stores/union-index.ts": [
+    "export interface S { marks: { [context: string | symbol]: number } }",
+    1,
+  ],
+  "stores/union-record.ts": [
+    "export type Saved = Record<string | symbol, number>;",
+    1,
+  ],
+  "stores/heritage.ts": [
+    "export interface Saved extends Record<string, number> {}",
+    1,
+  ],
+  "stores/implements.ts": [
+    "export class Saved implements Record<string, number> { [key: symbol]: number }",
+    1,
+  ],
+  "stores/symbol-index.ts": [
+    "export interface S { tags: { [tag: symbol]: number } }",
+    0,
+  ],
+  "stores/forwards/nested.test.ts": [
+    "export type Fixture = Record<string, number>;",
+    0,
+  ],
+};
+
 const CLEAN = `
 import { useCapability } from "@/integrations";
 import { IntegrationPage } from "./integrations/-components/IntegrationPage";
@@ -56,6 +91,10 @@ beforeAll(() => {
   for (const [rule, [folder, code]] of Object.entries(PLACED)) {
     mkdirSync(join(dir, folder), { recursive: true });
     writeFileSync(join(dir, folder, `${rule}.tsx`), code);
+  }
+  for (const [path, [code]] of Object.entries(STORE_SHAPES)) {
+    mkdirSync(join(dir, path, ".."), { recursive: true });
+    writeFileSync(join(dir, path), code);
   }
   writeFileSync(join(dir, "clean.tsx"), CLEAN);
   const run = spawnSync(
@@ -95,6 +134,24 @@ describe("the project's own lint guards", () => {
       )
     ).toHaveLength(2);
   });
+
+  /**
+   * A string-keyed record is refused in a store however it is written and
+   * wherever under `stores/` it lies; a store's test may still use one.
+   * Fails if a shape or a folder gets past the rule.
+   */
+  it.each(Object.entries(STORE_SHAPES))(
+    "count %s as the store rule's to refuse",
+    (path, [, owed]) => {
+      expect(
+        found.filter(
+          (d) =>
+            d.filename.endsWith(`/${path}`) &&
+            d.code === "rubick(store-records-are-named)"
+        )
+      ).toHaveLength(owed);
+    }
+  );
 
   /** Fails if a scrollbar width or colour reaches WebKit through a style object or a class built in a template, the two ways around the class name. */
   it("refuse an overlay scrollbar however it is spelled", () => {

@@ -7,7 +7,8 @@ const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
 const OVERLAY_SCROLLBAR =
   /(^|[^a-z0-9-])(scrollbar-thin(?![a-z0-9-])|\[scrollbar-width:(?!none\])|\[scrollbar-color:(?!auto\]))/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
-const STORE_FILE = /(^|[/\\])stores[/\\][^/\\]+(?<!\.test)\.tsx?$/;
+const STORE_FILE =
+  /(^|[/\\])stores[/\\](?:[^/\\]+[/\\])*[^/\\]+(?<!\.test)\.tsx?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */
 function guard(types, test, message) {
@@ -41,13 +42,28 @@ const overlayScrollbar = (node) => {
 const sourceMatching = (pattern) => (node) =>
   node.source?.type === "Literal" && stringMatching(pattern)(node.source);
 
-const keyedByString = (node) =>
-  node.type === "TSIndexSignature"
-    ? node.parameters?.[0]?.typeAnnotation?.typeAnnotation?.type ===
-      "TSStringKeyword"
-    : node.typeName?.name === "Record" &&
-      (node.typeArguments ?? node.typeParameters)?.params?.[0]?.type ===
-        "TSStringKeyword";
+/** A key type any string gets through: `string`, or a union holding it. */
+const takesString = (type) =>
+  type?.type === "TSStringKeyword" ||
+  (type?.type === "TSUnionType" && type.types.some(takesString));
+
+/** `Record<string, …>` named by `name` with `args`, however it is reached. */
+const recordOfString = (name, args) =>
+  name === "Record" && takesString(args?.params?.[0]);
+
+const keyedByString = (node) => {
+  const args = node.typeArguments ?? node.typeParameters;
+  switch (node.type) {
+    case "TSIndexSignature":
+      return takesString(node.parameters?.[0]?.typeAnnotation?.typeAnnotation);
+    // `interface S extends Record<string, …>`, or a class implementing one.
+    case "TSInterfaceHeritage":
+    case "TSClassImplements":
+      return recordOfString(node.expression?.name, args);
+    default:
+      return recordOfString(node.typeName?.name, args);
+  }
+};
 
 export default {
   meta: { name: "rubick" },
@@ -123,7 +139,12 @@ export default {
           if (keyedByString(node))
             context.report({ node, messageId: "refused" });
         };
-        return { TSTypeReference: check, TSIndexSignature: check };
+        return {
+          TSTypeReference: check,
+          TSIndexSignature: check,
+          TSInterfaceHeritage: check,
+          TSClassImplements: check,
+        };
       },
     },
     // The OS paints it: in a dark window it opens white. Reported an hour

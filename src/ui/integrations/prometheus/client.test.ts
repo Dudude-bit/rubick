@@ -84,10 +84,20 @@ describe("nodeUsage", () => {
    * its own.
    */
   it("keeps a lane for a node named constructor like any other", async () => {
+    // Each node its own figures, so a lane holding another's shows.
+    const figures = {
+      constructor: { cpu: 900, memory: 5e9 },
+      n1: { cpu: 300, memory: 2e9 },
+    };
     prometheusQueryRange.mockImplementation(async (query) =>
-      ["constructor", "n1"].map((node) => ({
+      (["constructor", "n1"] as const).map((node) => ({
         labels: { node },
-        points: [{ t: 1, v: query.includes("cpu") ? 900 : 5e9 }],
+        points: [
+          {
+            t: 1,
+            v: query.includes("cpu") ? figures[node].cpu : figures[node].memory,
+          },
+        ],
       }))
     );
     prometheusQuery.mockResolvedValue([
@@ -98,7 +108,11 @@ describe("nodeUsage", () => {
       "constructor",
       "n1",
     ]);
-    expect(entryOf(window.nodes, "constructor")!.cpuMillicores[0].v).toBe(900);
+    for (const node of ["constructor", "n1"] as const) {
+      const lane = entryOf(window.nodes, node)!;
+      expect(lane.cpuMillicores.map((p) => p.v)).toEqual([figures[node].cpu]);
+      expect(lane.memoryBytes.map((p) => p.v)).toEqual([figures[node].memory]);
+    }
     expect(entryOf(window.newestAt, "constructor")).toBe(7000);
   });
 

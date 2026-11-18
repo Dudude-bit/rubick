@@ -111,3 +111,27 @@ describe("a cell a source sees only below HTTP", () => {
     );
   });
 });
+
+describe("a share of errors said as a floor", () => {
+  /**
+   * "≥13%" for a floor of 12.6% claims more than was measured: a floor is
+   * rounded down, and a share that is not one to the nearest.
+   */
+  it("rounds a floor down and an exact share to the nearest", () => {
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const share = (floor: boolean) =>
+      cellText(
+        {
+          value: 0.126,
+          source: "Hubble",
+          state: "measured",
+          ...(floor ? { floor: true as const } : {}),
+        },
+        "share",
+        t
+      );
+    expect(share(true)).toBe("≥12%");
+    expect(share(false)).toBe("13%");
+  });
+});

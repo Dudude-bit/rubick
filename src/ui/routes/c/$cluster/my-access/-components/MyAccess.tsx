@@ -18,6 +18,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { cliLine, useCliTarget, word } from "@/lib/kubectl";
 
 /**
  * "What can I do here", answered by the cluster for the signed-in user, one
@@ -26,6 +27,7 @@ import { useClusterStore } from "@/stores/clusterStore";
  */
 export function MyAccess() {
   const t = useT();
+  const cli = useCliTarget();
   const { scope } = useNamespaceScope();
   const [picked, setPicked] = useState<string | null>(null);
   const namespace =
@@ -38,7 +40,11 @@ export function MyAccess() {
         description={parts(t("myAccess", "description"), {
           command: (
             <span className="whitespace-nowrap font-mono">
-              kubectl auth can-i --list
+              {cliLine(
+                "kubectl",
+                cli,
+                `auth can-i --list${namespace ? ` -n ${word(namespace)}` : ""}`
+              )}
             </span>
           ),
         })}

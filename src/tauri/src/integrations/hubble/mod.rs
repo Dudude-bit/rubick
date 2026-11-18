@@ -563,6 +563,7 @@ async fn run(
             relay,
             lost: fold.lost,
             untracked: fold.untracked,
+            waiting: fold.waiting,
             unreached: fold.unreached.values().cloned().collect(),
         });
     };
@@ -899,8 +900,11 @@ struct Fold {
     /// Each pair as last sent, so a second that changes nothing a reader
     /// sees sends nothing.
     sent: HashMap<Key, LivePair>,
-    /// `lost` and `untracked` as last sent.
-    sent_counts: (u64, u64),
+    /// Pairs held at the last tick for a read of their pods: flows the relay
+    /// sent that are not drawn yet, so the window is not empty.
+    waiting: u64,
+    /// `lost`, `untracked` and `waiting` as last sent.
+    sent_counts: (u64, u64, u64),
 }
 
 fn policies(denied: &[flow::Policy]) -> Vec<PolicyRef> {
@@ -936,14 +940,15 @@ impl Fold {
             nodes_changed: false,
             owners: Owners::pending(),
             sent: HashMap::new(),
-            sent_counts: (0, 0),
+            waiting: 0,
+            sent_counts: (0, 0, 0),
         }
     }
 
-    /// Whether the events lost or not held moved since it was last asked:
-    /// a relay that reports only losses still has news to send.
+    /// Whether the events lost, not held or waiting moved since it was last
+    /// asked: a relay that reports only losses still has news to send.
     fn counts_moved(&mut self) -> bool {
-        let now = (self.lost, self.untracked);
+        let now = (self.lost, self.untracked, self.waiting);
         let moved = now != self.sent_counts;
         self.sent_counts = now;
         moved
@@ -1123,6 +1128,7 @@ impl Fold {
         }
         let mut pairs = Vec::new();
         let mut gone = Vec::new();
+        self.waiting = 0;
         for key in changed {
             // A pod no read has looked for waits. One the window emptied goes
             // below, or it holds a place under the cap with nothing in it.
@@ -1133,6 +1139,7 @@ impl Fold {
                     .is_some_and(|seconds| !seconds.is_empty())
             {
                 self.touched.insert(key);
+                self.waiting += 1;
                 continue;
             }
             match self.pairs.get(&key) {
@@ -1654,6 +1661,8 @@ mod tests {
             },
         );
         assert!(fold.tick(101).0.is_empty());
+        assert_eq!(fold.waiting, 1, "the page is told a flow waits");
+        assert!(fold.counts_moved());
         assert!(fold
             .owners
             .missing
@@ -1664,6 +1673,8 @@ mod tests {
             &pairs[0].from,
             FlowEnd::NotListed { why: NotListedWhy::NoSuch, namespace, .. } if namespace == "monitoring"
         ));
+        assert_eq!(fold.waiting, 0);
+        assert!(fold.counts_moved());
     }
 
     /// A pod's pair held back before the first read, and emptied by the

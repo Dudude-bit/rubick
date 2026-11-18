@@ -266,19 +266,26 @@ pub enum Why {
     NotScraped,
     /// Nothing keeps usage history for this cluster: no Prometheus connected.
     NoUsage,
-    /// The usage supplier holds no sample of its pods in the window.
-    NoSamples,
-    /// The supplier gave its average use in the window and no peak.
-    PeakUnread,
+    /// The usage supplier holds no sample of its pods' use of `resource`
+    /// in the window.
+    NoSamples {
+        resource: usage::UsageOf,
+    },
+    /// The supplier gave its average use of `resource` in the window and no
+    /// peak.
+    PeakUnread {
+        resource: usage::UsageOf,
+    },
     /// Its youngest pod, started at `since` where known, has not been seen
     /// to run the usage window.
     Young {
         since: Option<String>,
     },
-    /// The usage supplier holds samples of `read` of the `of` pods it runs.
+    /// The usage supplier holds the peak of some of the pods it runs, per
+    /// resource.
     Partial {
-        read: u32,
-        of: u32,
+        cpu: Option<usage::PodsRead>,
+        memory: Option<usage::PodsRead>,
     },
     /// Past the row cap of the requests list, its usage was read only as a sum.
     Folded,

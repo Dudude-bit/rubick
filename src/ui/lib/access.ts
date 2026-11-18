@@ -20,6 +20,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { ListQuery } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
+import { cliLine, useCliTarget, word, type CliTarget } from "@/lib/kubectl";
 
 /**
  * The verbs an action needs: delete takes an object away, patch is every
@@ -152,7 +153,7 @@ export function useAccessReview(asked: readonly Asked[]): void {
           settleRefusal(
             deniedRead(query.verb, query),
             answers[at]?.allowed === false,
-            `SelfSubjectAccessReview: may not ${query.verb} ${checkOf(query)}`,
+            `SelfSubjectAccessReview: may not ${questionWords(query)}`,
             connection
           );
         });
@@ -164,23 +165,32 @@ export function useAccessReview(asked: readonly Asked[]): void {
 /**
  * `create pods --subresource=exec -n shop`: the question as `kubectl auth
  * can-i` takes it. `pods/exec` there names a pod called exec, and the answer
- * to that is no wherever only the subresource is granted.
+ * to that is no wherever only the subresource is granted. Asked of the
+ * cluster on screen: another cluster's answer is about another cluster.
  */
-function checkOf(asked: Asked): string {
+function questionWords(asked: Asked): string {
   const resource = asked.group
     ? `${asked.resource}.${asked.group}`
     : asked.resource;
   return [
     asked.verb,
-    asked.name ? `${resource}/${asked.name}` : resource,
+    asked.name ? `${resource}/${word(asked.name)}` : resource,
     ...(asked.subresource ? [`--subresource=${asked.subresource}`] : []),
-    ...(asked.namespace ? ["-n", asked.namespace] : []),
+    ...(asked.namespace ? ["-n", word(asked.namespace)] : []),
   ].join(" ");
 }
 
+const checkOf = (asked: Asked, cli: CliTarget) =>
+  cliLine("kubectl", cli, `auth can-i ${questionWords(asked)}`);
+
 /** Why `verb` on `on` is not this user's to run, as `kubectl auth can-i` would ask it. */
-export function deniedWords(t: T, verb: GuardedVerb, on: Guarded): string {
-  return t("action", "notPermitted", { check: checkOf({ ...on, verb }) });
+export function deniedWords(
+  t: T,
+  verb: GuardedVerb,
+  on: Guarded,
+  cli: CliTarget
+): string {
+  return t("action", "notPermitted", { check: checkOf({ ...on, verb }, cli) });
 }
 
 /**
@@ -192,6 +202,7 @@ export function useDeniedOf(
   asked: readonly (Asked | null)[]
 ): (string | undefined)[] {
   const t = useT();
+  const cli = useCliTarget();
   const connection = useClusterStore((s) => s.connectionAttemptId);
   const real = asked.filter((query): query is Asked => query !== null);
   useAccessReview(real);
@@ -201,7 +212,7 @@ export function useDeniedOf(
   );
   return asked.map((query) =>
     query && refused.has(deniedRead(query.verb, query))
-      ? deniedWords(t, query.verb, query)
+      ? deniedWords(t, query.verb, query, cli)
       : undefined
   );
 }
@@ -270,6 +281,7 @@ export function usePodDenied(
   pod: string | null
 ): PodDenied {
   const t = useT();
+  const cli = useCliTarget();
   const asks = podAsks(namespace, pod);
   const [ephemeral, copy, shell, portForward] = useDeniedOf(
     asks ?? [null, null, null, null]
@@ -280,8 +292,8 @@ export function usePodDenied(
   const debug =
     asks?.[0] && asks[1] && ephemeral && copy
       ? t("action", "notPermittedEither", {
-          check: checkOf(asks[0]),
-          other: checkOf(asks[1]),
+          check: checkOf(asks[0], cli),
+          other: checkOf(asks[1], cli),
         })
       : undefined;
   return {
@@ -347,6 +359,7 @@ export function useRowDenial(
   verb: GuardedVerb
 ): (row: { name: string; namespace?: string | null }) => string | undefined {
   const t = useT();
+  const cli = useCliTarget();
   const connection = useClusterStore((s) => s.connectionAttemptId);
   const refused = useRefusedReads(connection);
   const group = list?.group;
@@ -362,9 +375,9 @@ export function useRowDenial(
         name: row.name,
       };
       return refused.has(deniedRead(verb, on))
-        ? deniedWords(t, verb, on)
+        ? deniedWords(t, verb, on, cli)
         : undefined;
     },
-    [group, resource, namespaced, verb, refused, t]
+    [group, resource, namespaced, verb, refused, t, cli]
   );
 }

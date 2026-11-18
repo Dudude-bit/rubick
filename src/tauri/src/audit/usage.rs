@@ -63,18 +63,39 @@ pub enum UseVerdict {
     },
     /// Measured, and not over; or requesting nothing, so with no ratio.
     Within,
-    /// The supplier holds no sample of its pods in the window.
-    NoSamples,
-    /// Its average use was read and its peak was not: the peak query
-    /// answered with no series for its pods.
-    PeakUnread,
+    /// The supplier holds no sample of its pods' use of `resource` in the
+    /// window.
+    NoSamples { resource: UsageOf },
+    /// Its average use of `resource` was read and its peak was not: the
+    /// peak query answered with no series for its pods.
+    PeakUnread { resource: UsageOf },
     /// Measured, but its youngest pod, started at `since` where that is
     /// known, has not been seen to run the whole window: a peak of fewer
     /// hours is not judged.
     Young { since: Option<String> },
-    /// Measured from `read` of the `of` pods it runs: a sum over some of
-    /// its pods is not its figure, and is not judged.
-    Partial { read: u32, of: u32 },
+    /// Its peak, per resource, measured from some of the pods it runs: a
+    /// sum over some of its pods is not its peak, and is not judged.
+    Partial {
+        cpu: Option<PodsRead>,
+        memory: Option<PodsRead>,
+    },
+}
+
+/// Which of the two resources a reason about use is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UsageOf {
+    Cpu,
+    Memory,
+    Both,
+}
+
+/// Of the `of` pods a workload runs, how many one query had a series for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodsRead {
+    pub read: u32,
+    pub of: u32,
 }
 
 /// A request and the peak of what was used under it: millicores, or bytes.
@@ -170,12 +191,12 @@ pub fn judge(
                     );
                 }
                 Some(UseVerdict::Within) => return (None, None),
-                Some(UseVerdict::NoSamples) => Why::NoSamples,
-                Some(UseVerdict::PeakUnread) => Why::PeakUnread,
+                Some(&UseVerdict::NoSamples { resource }) => Why::NoSamples { resource },
+                Some(&UseVerdict::PeakUnread { resource }) => Why::PeakUnread { resource },
                 Some(UseVerdict::Young { since }) => Why::Young {
                     since: since.clone(),
                 },
-                Some(&UseVerdict::Partial { read, of }) => Why::Partial { read, of },
+                Some(&UseVerdict::Partial { cpu, memory }) => Why::Partial { cpu, memory },
                 None if !workload => return (None, None),
                 None => match unread.iter().find(|u| u.namespace == namespace) {
                     Some(gone) => Why::Failed {
@@ -263,13 +284,16 @@ mod tests {
                 { "namespace": "shop", "kind": "Deployment", "name": "web",
                   "verdict": { "says": "over", "cpu": { "requested": 2000, "peak": 300, "atMost": true }, "memory": null } },
                 { "namespace": "shop", "kind": "Deployment", "name": "api", "verdict": { "says": "within" } },
-                { "namespace": "shop", "kind": "CronJob", "name": "nightly", "verdict": { "says": "noSamples" } },
+                { "namespace": "shop", "kind": "CronJob", "name": "nightly",
+                  "verdict": { "says": "noSamples", "resource": "both" } },
+                { "namespace": "shop", "kind": "Deployment", "name": "forgetful",
+                  "verdict": { "says": "noSamples", "resource": "memory" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "fresh",
                   "verdict": { "says": "young", "since": "2026-11-15T10:00:00Z" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "peakless",
-                  "verdict": { "says": "peakUnread" } },
+                  "verdict": { "says": "peakUnread", "resource": "cpu" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "half",
-                  "verdict": { "says": "partial", "read": 1, "of": 2 } },
+                  "verdict": { "says": "partial", "cpu": null, "memory": { "read": 1, "of": 2 } } },
             ],
             "unread": [{ "namespace": "bank", "message": "pods is forbidden" }],
             "folded": 0,
@@ -304,7 +328,19 @@ mod tests {
         );
         let why = |s: &Subject, read: Option<&UsageRead>| judge(s, read).1.map(|u| u.why);
         let nightly = subject("CronJob", Some("shop"), "nightly");
-        assert_eq!(why(&nightly, Some(&usage)), Some(Why::NoSamples));
+        assert_eq!(
+            why(&nightly, Some(&usage)),
+            Some(Why::NoSamples {
+                resource: UsageOf::Both
+            })
+        );
+        let forgetful = subject("Deployment", Some("shop"), "forgetful");
+        assert_eq!(
+            why(&forgetful, Some(&usage)),
+            Some(Why::NoSamples {
+                resource: UsageOf::Memory
+            })
+        );
         let fresh = subject("Deployment", Some("shop"), "fresh");
         assert_eq!(
             why(&fresh, Some(&usage)),
@@ -313,11 +349,19 @@ mod tests {
             })
         );
         let peakless = subject("Deployment", Some("shop"), "peakless");
-        assert_eq!(why(&peakless, Some(&usage)), Some(Why::PeakUnread));
+        assert_eq!(
+            why(&peakless, Some(&usage)),
+            Some(Why::PeakUnread {
+                resource: UsageOf::Cpu
+            })
+        );
         let half = subject("Deployment", Some("shop"), "half");
         assert_eq!(
             why(&half, Some(&usage)),
-            Some(Why::Partial { read: 1, of: 2 })
+            Some(Why::Partial {
+                cpu: None,
+                memory: Some(PodsRead { read: 1, of: 2 })
+            })
         );
         let teller = subject("Deployment", Some("bank"), "teller");
         assert_eq!(

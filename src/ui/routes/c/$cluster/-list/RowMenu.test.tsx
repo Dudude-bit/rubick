@@ -16,6 +16,9 @@ const getStatefulset = vi.hoisted(() => vi.fn());
 const getDeployment = vi.hoisted(() => vi.fn());
 const getResourceConnections = vi.hoisted(() => vi.fn());
 const restartDeployment = vi.hoisted(() => vi.fn());
+const cliKubeconfig = vi.hoisted(() =>
+  vi.fn(async (context: string) => `/home/me/.kube/${context}.yaml`)
+);
 vi.mock("@/lib/commands", async (original) => {
   const real = await original<typeof import("@/lib/commands")>();
   return {
@@ -25,6 +28,7 @@ vi.mock("@/lib/commands", async (original) => {
       getDeployment,
       getResourceConnections,
       restartDeployment,
+      cliKubeconfig,
     },
   };
 });
@@ -364,8 +368,14 @@ describe("a list row's right-click menu", () => {
     useClusterIdentityStore.setState({ marks: {} });
   });
 
+  /**
+   * Run in a terminal whose file calls another cluster by the same name,
+   * a bare `kubectl get` reads that one's object, or answers not found.
+   * Fails if the line leaves out the cluster on screen or its files.
+   */
   it("copies the kubectl command that reads this object", async () => {
     const user = userEvent.setup();
+    useClusterStore.setState({ currentContext: "default" });
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -373,11 +383,15 @@ describe("a list row's right-click menu", () => {
     });
     await draw();
     openMenu();
+    await vi.waitFor(() =>
+      expect(cliKubeconfig).toHaveBeenCalledWith("default")
+    );
+    await new Promise((settle) => setTimeout(settle, 0));
     await user.click(
       screen.getByRole("menuitem", { name: "Copy kubectl get command" })
     );
     expect(writeText).toHaveBeenCalledWith(
-      "kubectl get deployment web -n shop"
+      "KUBECONFIG=/home/me/.kube/default.yaml kubectl --context default get deployment web -n shop"
     );
   });
 

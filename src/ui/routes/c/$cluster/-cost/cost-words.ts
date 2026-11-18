@@ -21,6 +21,7 @@ import {
   EFFICIENCY_WINDOW,
   windowWords,
   type Efficiency,
+  type PodsRead,
 } from "@/lib/efficiency";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
@@ -31,8 +32,10 @@ const names = (list: readonly string[]) => list.join(", ");
 
 /** An amount, said as "at least" where something in it carries no price. */
 export function amountWords(amount: Amount, currency: string, t: T): string {
-  const money = formatMoney(amount.perHour, currency);
-  return amount.atLeast ? t("cost", "atLeast", { amount: money }) : money;
+  if (!amount.atLeast) return formatMoney(amount.perHour, currency);
+  // A floor rounded up would claim more than is known.
+  const money = formatMoney(amount.perHour, currency, undefined, "down");
+  return t("cost", "atLeast", { amount: money });
 }
 
 /** Where the numbers come from, in one line under the title. */
@@ -273,34 +276,42 @@ const peakSaid = (e: Efficiency, value: string, t: T) =>
     ? t("cost", "atMost", { value })
     : value;
 
-/** A line of figures read from some of its pods, saying which. */
-const fromPods = (e: Efficiency, line: string, t: T) =>
-  (e.state === "measured" || e.state === "unrequested") && e.podsRead
-    ? t("cost", "fromPods", {
-        line,
-        read: e.podsRead.read,
-        n: e.podsRead.of,
-      })
-    : line;
+/** A peak in its own units; a bound rounded up, never below what it bounds. */
+const sayPeak = (
+  e: Extract<Efficiency, { state: "measured" | "unrequested" }>,
+  kind: "cpu" | "memory"
+) =>
+  formatQuantity(e.peak ?? 0, kind, undefined, e.peakAtMost ? "up" : "nearest");
+
+/** A figure read from some of its pods, saying how many: its own query's count. */
+const ofPods = (value: string, pods: PodsRead | null, t: T) =>
+  pods ? t("cost", "ofPods", { value, read: pods.read, n: pods.of }) : value;
 
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
   const values = {
-    avg: e.ratio === null ? t("cost", "notMeasured") : formatShare(e.ratio),
+    avg:
+      e.ratio === null
+        ? t("cost", "notMeasured")
+        : ofPods(formatShare(e.ratio), e.avgPods, t),
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
-        : peakSaid(e, formatShare(e.peakRatio), t),
+        : ofPods(
+            peakSaid(
+              e,
+              formatShare(e.peakRatio, e.peakAtMost ? "up" : "nearest"),
+              t
+            ),
+            e.peakPods,
+            t
+          ),
   };
   const age = youngFor(e, t);
-  return fromPods(
-    e,
-    age === null
-      ? t("cost", "effMeasured", values)
-      : t("cost", "effMeasuredFor", { ...values, age }),
-    t
-  );
+  return age === null
+    ? t("cost", "effMeasured", values)
+    : t("cost", "effMeasuredFor", { ...values, age });
 }
 
 /** What one resource used, in its own units, over the span the readings cover. */
@@ -312,17 +323,16 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
   const values = {
-    avg: say(e.avg),
-    peak: e.peak === null ? say(null) : peakSaid(e, say(e.peak), t),
+    avg: e.avg === null ? say(null) : ofPods(say(e.avg), e.avgPods, t),
+    peak:
+      e.peak === null
+        ? say(null)
+        : ofPods(peakSaid(e, sayPeak(e, kind), t), e.peakPods, t),
   };
   const age = youngFor(e, t);
-  return fromPods(
-    e,
-    age === null
-      ? t("cost", "usedAvgPeak", values)
-      : t("cost", "usedAvgPeakFor", { ...values, age }),
-    t
-  );
+  return age === null
+    ? t("cost", "usedAvgPeak", values)
+    : t("cost", "usedAvgPeakFor", { ...values, age });
 }
 
 /**
@@ -341,16 +351,16 @@ export function usedLines(
   const say = (v: number | null) =>
     v === null ? t("cost", "notMeasured") : formatQuantity(v, kind);
   const age = youngFor(e, t);
-  const peak = e.peak === null ? say(null) : peakSaid(e, say(e.peak), t);
+  const avg = e.avg === null ? say(null) : ofPods(say(e.avg), e.avgPods, t);
+  const peak =
+    e.peak === null
+      ? say(null)
+      : ofPods(peakSaid(e, sayPeak(e, kind), t), e.peakPods, t);
   return [
-    t("cost", "usedAvg", { avg: say(e.avg) }),
-    fromPods(
-      e,
-      age === null
-        ? t("cost", "usedPeak", { peak })
-        : t("cost", "usedPeakFor", { peak, age }),
-      t
-    ),
+    t("cost", "usedAvg", { avg }),
+    age === null
+      ? t("cost", "usedPeak", { peak })
+      : t("cost", "usedPeakFor", { peak, age }),
   ];
 }
 
@@ -427,8 +437,13 @@ export function clusterShareWords(share: RowShare, t: T): string | null {
   if (share === null) return null;
   if (share === "noTotal") return t("cost", "lineShareNoTotal");
   if (share === "bothFloors") return t("cost", "lineShareBothFloors");
-  return t("cost", LINE_SHARE[share.bound], { share: formatShare(share.of) });
+  return t("cost", LINE_SHARE[share.bound], {
+    share: formatShare(share.of, ROUNDED[share.bound]),
+  });
 }
+
+/** A bound rounded away from what it bounds. */
+const ROUNDED = { exact: "nearest", atLeast: "down", atMost: "up" } as const;
 
 const SHARE_BOUND: Record<
   Extract<RowShare, object>["bound"],
@@ -451,7 +466,10 @@ export function share(
   if (row.share === "noTotal") return t("cost", "shareNoTotal");
   if (row.share === "bothFloors") return t("cost", "shareBothFloors");
   if (row.share)
-    return SHARE_BOUND[row.share.bound](formatShare(row.share.of), t);
+    return SHARE_BOUND[row.share.bound](
+      formatShare(row.share.of, ROUNDED[row.share.bound]),
+      t
+    );
   return t("cost", totalUnknown(row) ? "notKnown" : "notPriced");
 }
 

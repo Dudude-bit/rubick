@@ -76,13 +76,26 @@ describe("an address only the cluster can resolve", () => {
     expect(unreachable("", DNS)).toBeNull();
   });
 
-  /** The sentence has to carry the way out, not just the diagnosis. */
-  it("names both ways out", () => {
-    const said = sayWords(
-      explain({ kind: "cluster-dns", host: "prometheus.monitoring" }),
-      t
-    );
+  /**
+   * The sentence has to carry the way out, not just the diagnosis. The
+   * forward is the app's own, to the cluster on screen: a kubectl line run
+   * in a terminal forwards from whatever cluster that terminal's file calls
+   * by this name, and its 9090 was Prometheus's port where Loki also says
+   * this. Fails if the way out is a hand-typed command again, in either
+   * language.
+   */
+  it("names both ways out, the forward being the app's own", () => {
+    const hint = explain({
+      kind: "cluster-dns",
+      host: "prometheus.monitoring",
+    });
+    const said = sayWords(hint, t);
     expect(said).toContain("runs on your machine");
-    expect(said).toContain("port-forward");
+    expect(said).toContain("let the app forward a port to it");
+    const ru = sayWords(hint, (section, key, values) =>
+      translate("ru", section, key, values)
+    );
+    expect(ru).toContain("дайте приложению пробросить порт");
+    for (const words of [said, ru]) expect(words).not.toMatch(/kubectl|9090/);
   });
 });

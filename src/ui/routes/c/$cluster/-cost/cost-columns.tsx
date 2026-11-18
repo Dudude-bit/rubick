@@ -39,7 +39,7 @@ import {
   usedWords,
   type Said,
 } from "./cost-words";
-import { EfficiencyCell, Money, UsedCell } from "./cost-cells";
+import { EfficiencyCell, Money, ShareCell, UsedCell } from "./cost-cells";
 
 interface Priced {
   perHour: number | null;
@@ -111,9 +111,7 @@ export function namespaceColumns(t: T): ColumnDef<NamespaceRow>[] {
       header: t("cost", "share"),
       size: 70,
       accessorFn: (row) => shareSortable(row.share),
-      cell: ({ row }) => (
-        <span className="font-mono tabular-nums">{share(row.original, t)}</span>
-      ),
+      cell: ({ row }) => <ShareCell row={row.original} />,
       meta: {
         share: (row: NamespaceRow, tt: T) => share(row, tt),
         floor: wordsFloor((row: NamespaceRow, tt) => share(row, tt)),
@@ -228,9 +226,7 @@ export function workloadColumns(t: T): ColumnDef<WorkloadRow>[] {
       header: t("cost", "share"),
       size: 70,
       accessorFn: (row) => shareSortable(row.share),
-      cell: ({ row }) => (
-        <span className="font-mono tabular-nums">{share(row.original, t)}</span>
-      ),
+      cell: ({ row }) => <ShareCell row={row.original} />,
       meta: {
         share: (row: WorkloadRow, tt: T) => share(row, tt),
         floor: saying((row: WorkloadRow, tt) => share(row, tt), "mono"),

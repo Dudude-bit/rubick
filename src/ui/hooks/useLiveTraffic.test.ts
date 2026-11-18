@@ -41,6 +41,7 @@ describe("what a live stream holds", () => {
       },
       lost: 0,
       untracked: 0,
+      waiting: 0,
       unreached: [],
     });
     store.apply({
@@ -49,6 +50,7 @@ describe("what a live stream holds", () => {
       relay: null,
       lost: 5,
       untracked: 0,
+      waiting: 4,
       unreached: [
         { name: "kind/worker", state: "NODE_UNAVAILABLE", message: "" },
       ],
@@ -58,6 +60,7 @@ describe("what a live stream holds", () => {
     expect(now.phase).toBe("live");
     expect(now.relay?.pod).toBe("r-1");
     expect(now.lost).toBe(5);
+    expect(now.waiting).toBe(4);
     expect([...now.pairs.values()]).toContain(kept);
     expect([...now.pairs.values()].map((p) => p.forwarded).sort()).toEqual([
       1, 2,
@@ -68,6 +71,7 @@ describe("what a live stream holds", () => {
       relay: null,
       lost: 5,
       untracked: 0,
+      waiting: 0,
       unreached: [],
     });
     expect(store.snapshot().pairs.size).toBe(1);
@@ -83,6 +87,7 @@ describe("what a live stream holds", () => {
       relay: null,
       lost: 0,
       untracked: 0,
+      waiting: 0,
       unreached: [],
     });
     expect(store.snapshot().phase).toBe("ended");

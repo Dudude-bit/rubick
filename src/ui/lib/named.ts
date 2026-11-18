@@ -20,8 +20,9 @@ type Plain<T> = Record<string, T>;
 export function named<T>(
   from: Readonly<Plain<T>> | Iterable<readonly [string, T]> = []
 ): Named<T> {
+  // Iterated only where it can be: a record may carry a symbol of the name.
   const entries =
-    Symbol.iterator in from
+    typeof (from as Partial<Iterable<unknown>>)[Symbol.iterator] === "function"
       ? (from as Iterable<readonly [string, T]>)
       : Object.entries(from as Plain<T>);
   return Object.fromEntries(entries) as Named<T>;

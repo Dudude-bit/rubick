@@ -87,6 +87,7 @@ describe("a live stream from Hubble Relay", () => {
       relay: null,
       lost: 2,
       untracked: 0,
+      waiting: 3,
       unreached: [],
     };
     emit("hubble-flows", { stream_id: "other", ...batch });
@@ -96,6 +97,7 @@ describe("a live stream from Hubble Relay", () => {
       end: { says: "notEnabled" },
     });
     expect(batches.map((b) => b.lost)).toEqual([2]);
+    expect(batches[0].waiting).toBe(3);
     expect(batches[0].unreached).toEqual([]);
     expect(ended).toEqual(["notEnabled"]);
     stop();

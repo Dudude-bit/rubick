@@ -570,14 +570,10 @@ function TopologyMap() {
             summaryText={(group) => model.summaries.get(group.id) ?? ""}
             caveats={caveats}
           />
-          {(map.phase === "opening" ||
-            (syncing.length > 0 && map.phase !== "ended")) && (
+          {/* A kind still listing is said in the notes above the map. */}
+          {map.phase === "opening" && syncing.length === 0 && (
             <p className="pointer-events-none absolute left-3 top-3 rounded-md bg-raise/90 px-2 py-1 text-[11.5px] text-fg-mut">
-              {syncing.length > 0
-                ? t("topology", "stillListing", {
-                    kinds: syncing.map((kind) => kind.kind).join(", "),
-                  })
-                : t("count", "namespacesDrawn", { n: drawnNamespaces })}
+              {t("count", "namespacesDrawn", { n: drawnNamespaces })}
             </p>
           )}
           {nothing && (
