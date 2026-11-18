@@ -129,6 +129,7 @@ describe("efficiency", () => {
         ],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [null],
       },
     };
@@ -159,6 +160,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [[1, 1, 1, 1]],
+        pods: [1],
         since: [since],
       },
       at: readAt,
@@ -184,6 +186,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [[2, 2, 1, 1]],
+        pods: [2],
         since: [DAY_OLD],
       },
     };
@@ -225,6 +228,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [DAY_OLD, TWO_HOURS_OLD],
       },
     };

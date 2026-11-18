@@ -2884,6 +2884,7 @@ export interface WorkloadFold {
   unread: UnreadSums[];
   unlabelled: number;
   covered: number[][];
+  pods: number[];
   since: (string | null)[];
 }
 

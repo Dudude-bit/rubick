@@ -108,6 +108,7 @@ const READING: CostReading = {
     unread: [],
     unlabelled: 0,
     covered: [],
+    pods: [],
     since: [null],
   },
   storage: {
@@ -455,6 +456,7 @@ describe("the Cost page", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [started],
       },
     });
@@ -589,6 +591,7 @@ describe("a workload minutes old", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [started],
       },
     });

@@ -66,6 +66,10 @@ pub struct WorkloadFold {
     /// the answer had a series for. Fewer than run is a sum over some of
     /// them; more than one is a sum of each pod's own figure.
     pub covered: Vec<Vec<u32>>,
+    /// Positional like `values`: how many of the workload's pods this read
+    /// listed on a node, the count `covered` is out of. A basis read before
+    /// may count otherwise: the workload scaled between the two.
+    pub pods: Vec<u32>,
     /// Positional like `values`: when the youngest of the workload's pods on
     /// a node started (or, not started yet, was created). A window of use is
     /// no longer than the pods it was read from have run.
@@ -165,10 +169,12 @@ pub(crate) fn fold(
     let in_scope = |namespace: &str| scope.is_none_or(|names| names.iter().any(|n| n == namespace));
 
     let mut youngest: Vec<Option<k8s_openapi::jiff::Timestamp>> = vec![None; keys.len()];
+    let mut listed = vec![0_u32; keys.len()];
     for pod in read.pods.iter().filter(|pod| on_a_node(pod)) {
         let Some(&row) = index.get(&cost_key(pod, &read.cron_of)) else {
             continue;
         };
+        listed[row] += 1;
         let started = pod
             .status
             .as_ref()
@@ -189,6 +195,7 @@ pub(crate) fn fold(
         unread: Vec::new(),
         unlabelled: 0,
         covered: Vec::new(),
+        pods: listed,
         since: youngest
             .into_iter()
             .map(|at| at.map(|at| at.to_string()))
@@ -417,6 +424,28 @@ mod tests {
         ];
         let fold = fold(&answers, &read, &[key("kept")], None);
         assert_eq!(fold.covered, vec![vec![1, 2]]);
+    }
+
+    /// The basis counted one pod and the workload scaled to two before this
+    /// read: a series for one of them was compared with the basis's one and
+    /// read as whole. The fold counts the pods it read itself. Fails if
+    /// `covered` has no count from the same read to be out of.
+    #[test]
+    fn the_fold_counts_each_workload_s_pods_from_the_read_its_coverage_is_of() {
+        let waiting = Spec {
+            node: None,
+            phase: "Pending",
+            ..running("shop", "kept-2", ("StatefulSet", "kept"))
+        };
+        let read = read_of(vec![
+            pod(&running("shop", "kept-0", ("StatefulSet", "kept"))),
+            pod(&running("shop", "kept-1", ("StatefulSet", "kept"))),
+            pod(&waiting),
+        ]);
+        let answers = vec![vec![series("shop", "kept-0", 1.0)]];
+        let fold = fold(&answers, &read, &[key("kept"), key("none")], None);
+        assert_eq!(fold.pods, vec![2, 0]);
+        assert_eq!(fold.covered, vec![vec![1], vec![0]]);
     }
 
     /// A window of use is no longer than the pods it was read from: the

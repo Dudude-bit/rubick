@@ -62,6 +62,7 @@ const reading = (
     unread: [],
     unlabelled: 0,
     covered: [],
+    pods: [],
     since,
   },
 });
@@ -241,6 +242,7 @@ describe("Audit's reading of requests against use", () => {
         unread: [],
         unlabelled: 0,
         covered: [[2, 2, 2, 2]],
+        pods: [2],
         since: [LONG_AGO],
       },
     };
