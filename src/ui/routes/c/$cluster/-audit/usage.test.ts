@@ -299,8 +299,9 @@ describe("Audit's reading of requests against use", () => {
 
   /**
    * Two of three pods were read and their summed peak stayed low: Audit
-   * called the workload over-requested, or within. Fails if a workload
-   * measured from some of its pods is judged either way.
+   * called the workload over-requested, or within; then it gave one count
+   * without saying whose. Fails if a workload measured from some of its
+   * pods is judged, or a count is not its own resource's.
    */
   it("says from how many pods a workload was measured, rather than judging it", () => {
     const one = basis([workload("web", 2000, 512 * MI)]);
@@ -313,7 +314,7 @@ describe("Audit's reading of requests against use", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
-        covered: [[2, 2, 2, 2]],
+        covered: [[2, 2, 3, 1]],
         pods: [3],
         since: [LONG_AGO],
       },
@@ -322,8 +323,8 @@ describe("Audit's reading of requests against use", () => {
     if (read.state !== "read") throw new Error(read.state);
     expect(read.workloads[0]!.verdict).toEqual({
       says: "partial",
-      read: 2,
-      of: 3,
+      cpu: { read: 2, of: 3 },
+      memory: { read: 1, of: 3 },
     });
   });
 

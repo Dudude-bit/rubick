@@ -10,7 +10,7 @@
  * The Cost page reads this for its efficiency column, and Audit for its
  * rule about requests far above use ({@link overRequested}).
  */
-import type { WorkloadFold, WorkloadKey } from "@/generated/types";
+import type { PodsRead, WorkloadFold, WorkloadKey } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
 /** The window usage is read over, as PromQL writes it. */
@@ -99,10 +99,7 @@ interface Pods {
   peakPods: PodsRead | null;
 }
 
-export interface PodsRead {
-  read: number;
-  of: number;
-}
+export type { PodsRead };
 
 /**
  * How much of the window the readings cover. Each pod is averaged over its

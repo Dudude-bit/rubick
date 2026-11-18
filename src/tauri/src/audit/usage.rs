@@ -72,9 +72,20 @@ pub enum UseVerdict {
     /// known, has not been seen to run the whole window: a peak of fewer
     /// hours is not judged.
     Young { since: Option<String> },
-    /// Measured from `read` of the `of` pods it runs: a sum over some of
-    /// its pods is not its figure, and is not judged.
-    Partial { read: u32, of: u32 },
+    /// Its peak, per resource, measured from some of the pods it runs: a
+    /// sum over some of its pods is not its peak, and is not judged.
+    Partial {
+        cpu: Option<PodsRead>,
+        memory: Option<PodsRead>,
+    },
+}
+
+/// Of the `of` pods a workload runs, how many one query had a series for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodsRead {
+    pub read: u32,
+    pub of: u32,
 }
 
 /// A request and the peak of what was used under it: millicores, or bytes.
@@ -175,7 +186,7 @@ pub fn judge(
                 Some(UseVerdict::Young { since }) => Why::Young {
                     since: since.clone(),
                 },
-                Some(&UseVerdict::Partial { read, of }) => Why::Partial { read, of },
+                Some(&UseVerdict::Partial { cpu, memory }) => Why::Partial { cpu, memory },
                 None if !workload => return (None, None),
                 None => match unread.iter().find(|u| u.namespace == namespace) {
                     Some(gone) => Why::Failed {
@@ -269,7 +280,7 @@ mod tests {
                 { "namespace": "shop", "kind": "Deployment", "name": "peakless",
                   "verdict": { "says": "peakUnread" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "half",
-                  "verdict": { "says": "partial", "read": 1, "of": 2 } },
+                  "verdict": { "says": "partial", "cpu": null, "memory": { "read": 1, "of": 2 } } },
             ],
             "unread": [{ "namespace": "bank", "message": "pods is forbidden" }],
             "folded": 0,
@@ -317,7 +328,10 @@ mod tests {
         let half = subject("Deployment", Some("shop"), "half");
         assert_eq!(
             why(&half, Some(&usage)),
-            Some(Why::Partial { read: 1, of: 2 })
+            Some(Why::Partial {
+                cpu: None,
+                memory: Some(PodsRead { read: 1, of: 2 })
+            })
         );
         let teller = subject("Deployment", Some("bank"), "teller");
         assert_eq!(
