@@ -261,16 +261,22 @@ pub(crate) fn fold(
             values,
         })
         .collect();
-    fold.unread = unread_sums
+    // Every refusal, with or without a series in it: a namespace no series
+    // fell in is still one whose pods were not read.
+    let mut refused: Vec<_> = unread
+        .iter()
+        .filter(|(namespace, _)| in_scope(namespace))
+        .collect();
+    refused.sort_by_key(|(namespace, _)| *namespace);
+    fold.unread = refused
         .into_iter()
-        .map(|(namespace, values)| {
-            let why = unread[namespace];
-            UnreadSums {
-                namespace: namespace.to_string(),
-                code: why.code.clone(),
-                message: why.message.clone(),
-                values,
-            }
+        .map(|(namespace, why)| UnreadSums {
+            namespace: (*namespace).to_string(),
+            code: why.code.clone(),
+            message: why.message.clone(),
+            values: unread_sums
+                .remove(namespace)
+                .unwrap_or_else(|| vec![None; width]),
         })
         .collect();
     fold
@@ -362,6 +368,23 @@ mod tests {
         assert_eq!(fold.unread[0].namespace, "bank");
         assert_eq!(fold.unread[0].code, "PERMISSION_DENIED");
         assert_eq!(fold.unread[0].values, vec![Some(4.0)]);
+    }
+
+    /// `vault`'s pods were refused and no series fell in it: the refusal
+    /// was dropped with nothing to sum, and its workloads read as having
+    /// no samples. Fails if a refusal is named only where a series was.
+    #[test]
+    fn a_namespace_whose_pods_were_refused_is_named_with_no_series_in_it() {
+        let mut read = read_of(vec![]);
+        read.unread.push(UnreadNamespace::of(
+            "vault".into(),
+            &Error::PermissionDenied("pods is forbidden".into()),
+        ));
+        let fold = fold(&[vec![], vec![]], &read, &[], None);
+        assert_eq!(fold.unread.len(), 1);
+        assert_eq!(fold.unread[0].namespace, "vault");
+        assert_eq!(fold.unread[0].code, "PERMISSION_DENIED");
+        assert_eq!(fold.unread[0].values, vec![None, None]);
     }
 
     /// A query that named none of a workload's pods has no value for it:
