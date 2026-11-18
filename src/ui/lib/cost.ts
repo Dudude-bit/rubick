@@ -159,12 +159,14 @@ function pricedRow(
   unknown: readonly CostPart[] = []
 ): Priced {
   const unpriced = held.filter((part) => parts[part] === undefined);
-  // Priced where something it holds has a price: a part it holds none of,
-  // storage at 0 say, prices nothing of it.
-  const any =
-    held.length === 0
-      ? Object.keys(parts).length > 0
-      : held.some((part) => parts[part] !== undefined);
+  // Priced where something it holds has a price, or a part beyond those
+  // costs something: a LoadBalancer is billed to the namespace whatever it
+  // holds, where storage at 0 for one that holds none prices nothing of it.
+  const any = Object.entries(parts).some(([part, value]) =>
+    held.includes(part as CostPart)
+      ? value !== undefined
+      : held.length === 0 || (value ?? 0) > 0
+  );
   return {
     perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
     atLeast: any && (unpriced.length > 0 || unknown.length > 0),

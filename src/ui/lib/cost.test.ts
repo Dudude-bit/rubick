@@ -379,6 +379,25 @@ describe("a picture from OpenCost's prices", () => {
     expect(bank.perHour).toBeNull();
   });
 
+  /**
+   * A LoadBalancer is billed to its namespace whatever the namespace holds:
+   * with CPU and memory unpriced its known price was dropped and the row had
+   * no total. Fails if a part beyond what it holds prices nothing of it.
+   */
+  it("keeps a LoadBalancer's price as a floor where CPU and memory carry none", () => {
+    const picture = readingPicture(
+      basis(),
+      reading({ namespaces: { shop: { loadBalancer: 0.1 } } }),
+      opencost,
+      null
+    );
+    expect(picture.namespaces[0]).toMatchObject({
+      perHour: 0.1,
+      atLeast: true,
+      unpriced: ["cpu", "memory"],
+    });
+  });
+
   /** No series for any of a workload's pods is "not priced", never 0/h. */
   it("leaves a workload no series priced without a cost rather than at zero", () => {
     const picture = readingPicture(
