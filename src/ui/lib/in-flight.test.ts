@@ -29,6 +29,29 @@ describe("a read shared while in flight", () => {
     ]);
   });
 
+  /**
+   * A switch to another cluster and back while the first read was going
+   * read the first cluster again: one read was held, for whichever cluster
+   * asked last. Fails if a cluster's read in flight is not shared after
+   * another cluster asked in between.
+   */
+  it("keeps each cluster's read in flight while another cluster asks", async () => {
+    const settle: Array<(value: string) => void> = [];
+    const read = vi.fn(
+      () => new Promise<string>((resolve) => settle.push(resolve))
+    );
+    const shared = inFlightOnce(read);
+    useClusterStore.setState({ currentContext: "prod" });
+    const first = shared();
+    useClusterStore.setState({ currentContext: "staging" });
+    const staging = shared();
+    useClusterStore.setState({ currentContext: "prod" });
+    expect(shared()).toBe(first);
+    expect(read).toHaveBeenCalledTimes(2);
+    settle.forEach((resolve, at) => resolve(`read#${at}`));
+    expect(await staging).toBe("read#1");
+  });
+
   /** A failed read is not kept: the next call asks again. */
   it("reads again after a read that failed", async () => {
     let fail = true;

@@ -9,16 +9,18 @@ import { useClusterStore } from "@/stores/clusterStore";
  * cluster waiting behind them. A call after it settles reads again.
  */
 export function inFlightOnce<T>(read: () => Promise<T>): () => Promise<T> {
-  let held: { context: string | null; answer: Promise<T> } | null = null;
+  // Per cluster: one switched to and back finds its own read still going.
+  const held = new Map<string | null, Promise<T>>();
   return () => {
     const context = useClusterStore.getState().currentContext;
-    if (held?.context === context) return held.answer;
-    const mine = { context, answer: read() };
-    held = mine;
+    const going = held.get(context);
+    if (going) return going;
+    const answer = read();
+    held.set(context, answer);
     const settled = () => {
-      if (held === mine) held = null;
+      if (held.get(context) === answer) held.delete(context);
     };
-    mine.answer.then(settled, settled);
-    return mine.answer;
+    answer.then(settled, settled);
+    return answer;
   };
 }
