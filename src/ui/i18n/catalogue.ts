@@ -1857,6 +1857,7 @@ export const en = {
     notRead: "not read",
     missing: "missing",
     noPolicyBadge: "no policy",
+    policyPartlyBadge: "no policy for {n} of {total}",
     policyUnknownBadge: "policies unknown",
     noAppLabel: "{namespace} · no app label",
     refusedWhole: "Refused: nothing in {namespace} could be read. {said}",
@@ -1900,6 +1901,8 @@ export const en = {
       "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
     shareStillOpening:
       "The map was still being opened: nothing in it had been read yet.",
+    shareStillDrawing:
+      "The map was still being drawn: these are the groups read so far.",
     shareGroup: "Group",
     shareHolds: "What it holds",
   },

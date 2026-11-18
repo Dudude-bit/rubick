@@ -16,6 +16,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { useDeliveries } from "../-delivery/useDelivery";
 import { nodeId } from "../-map/ids";
+import type { TopologySnapshot } from "../-map/useTopology";
 import type { GraphEdge, GraphNode } from "../-map/types";
 
 export interface VendorNode {
@@ -46,17 +47,19 @@ const NO_SERVICES: readonly { namespace: string; name: string }[] = [];
 /**
  * The delivery owners of every object the map holds, asked once for all of
  * them, and the vendor routes into the Services of the groups drawn open.
- * Nothing is asked until the map is drawn `whole`: each batch before it
- * would have asked the vendors about the whole cluster again.
+ * Nothing is asked until the map's current stream has drawn it whole: each
+ * batch before it, a reopen's included, would have asked the vendors about
+ * the whole cluster again.
  */
 export function useVendorLayers(
-  nodes: ReadonlyMap<string, TopologyNode>,
+  map: Pick<TopologySnapshot, "nodes" | "phase">,
   openServices: readonly { namespace: string; name: string }[],
   /** The group a namespace's objects are drawn in, `null` where none is. */
   groupOf: (namespace: string) => string | null,
-  t: T,
-  whole: boolean
+  t: T
 ): VendorLayers {
+  const { nodes } = map;
+  const whole = map.phase === "ready" || map.phase === "ended";
   const asked = whole ? openServices : NO_SERVICES;
   const queries = useMemo<DeliveryQuery[]>(
     () =>

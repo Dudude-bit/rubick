@@ -29,7 +29,7 @@ use crate::resources::topology::{MapKindReading, MapKindState};
 use crate::resources::{GatewayInfo, ListenerSetInfo, OtherPolicies, RouteInfo, UnexploredKind};
 
 pub use feed::{ask, pump, types_of, Resolve};
-pub use stream::{run, Drawn, Opening, Reread, SessionCheck};
+pub use stream::{run, Drawn, Opening, Reread, SessionCheck, ASK_AT_MOST};
 
 /// How one slot of a kind is being read, as the watch layer says it.
 pub use crate::feeds::FeedState as Reading;

@@ -379,6 +379,26 @@ describe("the cluster map's model", () => {
     ]);
   });
 
+  /**
+   * Pods drawn as one whose covers differ say how many no policy selects;
+   * the badge is the overlay's, so a group half covered reads as neither
+   * covered nor bare. Fails if a partly cover draws no badge or another's.
+   */
+  it("badges pods a policy only partly covers with how many it leaves out", () => {
+    const pods: TopologyNode = {
+      ...node("Pod", OWNERLESS),
+      verdict: { says: "ownerless", statuses: [] },
+      cover: {
+        says: "partly",
+        policies: ["only-front"],
+        uncovered: 1,
+        total: 2,
+      },
+    };
+    const [drawn] = of([pods], [read("shop")], [], { policies: true }).nodes;
+    expect(drawn.badge).toEqual({ text: "no policy for 1 of 2", tone: "warn" });
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [

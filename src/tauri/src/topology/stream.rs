@@ -25,6 +25,10 @@ const REDRAW_EVERY: Duration = Duration::from_secs(1);
 /// well inside the three minutes it lets an untouched page go after.
 const TOUCH_EVERY: Duration = Duration::from_mins(1);
 
+/// How long one touch's asks may wait together: well inside the page's
+/// lease, which the layer lets go while the stream is still waiting.
+pub const ASK_AT_MOST: Duration = Duration::from_secs(crate::feeds::PAGE_IDLE.as_secs() / 2);
+
 /// How long the first drawing waits for kinds still listing. Past it the
 /// map is drawn with them named as still listing, and drawn again when
 /// they answer.
@@ -230,6 +234,8 @@ pub struct Opening {
     /// The watch layer's hold on what feeds `map`, touched while the stream
     /// is open: a page subscription nobody touches is let go.
     pub lease: Option<crate::feeds::Lease>,
+    /// [`ASK_AT_MOST`]; a test waits out a shorter one.
+    pub ask_at_most: Duration,
 }
 
 impl Opening {
@@ -311,22 +317,28 @@ pub async fn run(opening: Opening) -> TopologyEnd {
                 if let Some(lease) = &opening.lease {
                     lease.touch();
                 }
-                if let Some(check) = &opening.session {
-                    if opening.map.stores().failing() {
-                        if let Some(said) = check().await {
-                            return TopologyEnd::Failed { said };
+                let asked = tokio::time::timeout(opening.ask_at_most, async {
+                    if let Some(check) = &opening.session {
+                        if opening.map.stores().failing() {
+                            if let Some(said) = check().await {
+                                return Err(said);
+                            }
                         }
                     }
-                }
-                match &opening.reread {
-                    Some(reread) => match reread().await {
-                        Some(read) if read != others => {
-                            others = read;
-                            touched.all = true;
-                        }
-                        _ => continue,
-                    },
-                    None => continue,
+                    Ok(match &opening.reread {
+                        Some(reread) => reread().await,
+                        None => None,
+                    })
+                })
+                .await;
+                match asked {
+                    Ok(Err(said)) => return TopologyEnd::Failed { said },
+                    Ok(Ok(Some(read))) if read != others => {
+                        others = read;
+                        touched.all = true;
+                    }
+                    // Nothing new, or no answer in time: asked again next touch.
+                    _ => continue,
                 }
             }
             change = changes.recv() => match change {

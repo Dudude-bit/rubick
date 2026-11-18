@@ -2,7 +2,7 @@
 //! Connections tab reads every object by: the map is another reader of the
 //! same facts, fed from held lists instead of one object's reads.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use k8s_openapi::api::core::v1::Event;
 use k8s_openapi::api::networking::v1::NetworkPolicy;
@@ -738,6 +738,57 @@ fn cover_of(labels: &BTreeMap<String, String>, snapshot: &Snapshot, ns: &str) ->
     }
 }
 
+/// What covers pods drawn as one: their one answer where they agree. Where
+/// they differ, how many no policy selects; and where none is unselected,
+/// unknown if any one's cover could not be told.
+fn cover_of_pods(pods: &[&Pod], snapshot: &Snapshot, ns: &str) -> Option<PolicyCover> {
+    let covers: Vec<PolicyCover> = pods
+        .iter()
+        .map(|pod| cover_of(pod.labels(), snapshot, ns))
+        .collect();
+    let first = covers.first()?;
+    if covers.iter().all(|cover| cover == first) {
+        return Some(first.clone());
+    }
+    let mut policies = BTreeSet::new();
+    let mut kinds = BTreeSet::new();
+    let mut unreadable = BTreeSet::new();
+    let (mut uncovered, mut unknown) = (0, false);
+    for cover in &covers {
+        match cover {
+            PolicyCover::Covered { policies: by } | PolicyCover::Partly { policies: by, .. } => {
+                policies.extend(by.iter().cloned());
+            }
+            PolicyCover::None => uncovered += 1,
+            PolicyCover::Unknown {
+                kinds: of,
+                unreadable: not,
+            } => {
+                unknown = true;
+                kinds.extend(of.iter().cloned());
+                unreadable.extend(not.iter().cloned());
+            }
+            PolicyCover::Unread { .. } => return Some(cover.clone()),
+        }
+    }
+    Some(if uncovered > 0 {
+        PolicyCover::Partly {
+            policies: policies.into_iter().collect(),
+            uncovered,
+            total: covers.len(),
+        }
+    } else if unknown {
+        PolicyCover::Unknown {
+            kinds: kinds.into_iter().collect(),
+            unreadable: unreadable.into_iter().collect(),
+        }
+    } else {
+        PolicyCover::Covered {
+            policies: policies.into_iter().collect(),
+        }
+    })
+}
+
 /// What an Ingress names, as its own Connections tab draws it.
 fn ingress_edges(ing: &Ingress, ns: &str, snapshot: &Snapshot, out: &mut Neighbourhood) {
     let subject = ingress_ref(ing, ns);
@@ -855,9 +906,7 @@ fn folded_owners(
             uses_from_spec(ns, &owner, spec, &snapshot.claims, out);
         }
         selected_pods(ns, &owner, &pods, None, snapshot, out);
-        // ponytail: the first pod's labels stand for an owner's pods, which
-        // share them; per-pod covers if an owner's pods ever differ.
-        let cover = pods.first().map(|pod| cover_of(pod.labels(), snapshot, ns));
+        let cover = cover_of_pods(&pods, snapshot, ns);
         let verdict = if owner.name == OWNERLESS {
             NodeVerdict::Ownerless {
                 statuses: statuses_of(&pods),
@@ -1686,6 +1735,52 @@ mod tests {
             .cover
             .clone()
             .expect("a workload's cover")
+    }
+
+    /// Pods with no owner, drawn as one, took the first pod's cover: a group
+    /// one policy half covered read covered, or uncovered, by which pod was
+    /// listed first. Fails if a mixed group does not say how many no policy
+    /// selects, whichever pod comes first, or a group whose pods agree loses
+    /// their one answer.
+    #[test]
+    fn pods_drawn_as_one_say_how_many_no_policy_selects() {
+        let labelled = |name: &str, app: &str| {
+            let mut pod = pod(name, true, "", None);
+            pod.metadata.labels = Some(BTreeMap::from([("app".to_string(), app.to_string())]));
+            pod
+        };
+        let ownerless = |pods: Vec<Pod>| {
+            slice_of(
+                Held {
+                    pods: Ok(pods),
+                    policies: Ok(vec![policy(json!({ "matchLabels": { "app": "web" } }))]),
+                    ..held()
+                },
+                chrono::Utc::now(),
+            )
+            .nodes[&format!("/Pod/shop/{OWNERLESS}")]
+                .cover
+                .clone()
+        };
+        let partly = Some(PolicyCover::Partly {
+            policies: vec!["only-front".into()],
+            uncovered: 1,
+            total: 2,
+        });
+        assert_eq!(
+            ownerless(vec![labelled("a", "web"), labelled("b", "db")]),
+            partly
+        );
+        assert_eq!(
+            ownerless(vec![labelled("a", "db"), labelled("b", "web")]),
+            partly
+        );
+        assert_eq!(
+            ownerless(vec![labelled("a", "web"), labelled("b", "web")]),
+            Some(PolicyCover::Covered {
+                policies: vec!["only-front".into()],
+            })
+        );
     }
 
     /// "No `NetworkPolicy` selects it" is said only where every engine that

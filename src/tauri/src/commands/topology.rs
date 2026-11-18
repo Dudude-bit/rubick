@@ -122,6 +122,7 @@ pub async fn open_topology(
                 events: events.clone(),
                 cancel,
                 lease: Some(lease),
+                ask_at_most: crate::topology::ASK_AT_MOST,
             })
             .await
         } else {

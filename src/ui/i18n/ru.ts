@@ -1903,6 +1903,7 @@ export const ru: Catalogue = {
     notRead: "не прочитано",
     missing: "отсутствует",
     noPolicyBadge: "без политик",
+    policyPartlyBadge: "без политик: {n} из {total}",
     policyUnknownBadge: "политики неизвестны",
     noAppLabel: "{namespace} · без метки приложения",
     refusedWhole: "Отказано: в {namespace} ничего не удалось прочитать. {said}",
@@ -1946,6 +1947,8 @@ export const ru: Catalogue = {
       "{namespaces}: не прочитано, это пространство имён вне области карты, поэтому здесь только то, на что ссылаются из неё",
     shareStillOpening:
       "Карта ещё открывалась: в ней ещё ничего не было прочитано.",
+    shareStillDrawing:
+      "Карта ещё рисовалась: здесь только группы, прочитанные к этому моменту.",
     shareGroup: "Группа",
     shareHolds: "Что в ней",
   },

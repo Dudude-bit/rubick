@@ -836,42 +836,43 @@ impl UnexploredKind {
     }
 }
 
-/// Whether the volume names `kind`/`name` with `optional: true`.
+/// Whether every place the volume names `kind`/`name` says `optional: true`.
+/// One that does not keeps the pod waiting for it, however many others do.
 fn optional_in(volume: &Volume, kind: &str, name: &str) -> bool {
-    let named = |optional: Option<bool>| optional.unwrap_or(false);
-    match kind {
-        "ConfigMap" => {
-            volume
-                .config_map
-                .as_ref()
-                .is_some_and(|source| source.name == name && named(source.optional))
-                || volume
-                    .projected
-                    .iter()
-                    .flat_map(|p| p.sources.iter().flatten())
-                    .any(|source| {
-                        source
-                            .config_map
-                            .as_ref()
-                            .is_some_and(|source| source.name == name && named(source.optional))
-                    })
-        }
-        "Secret" => {
-            volume.secret.as_ref().is_some_and(|source| {
-                source.secret_name.as_deref() == Some(name) && named(source.optional)
-            }) || volume
-                .projected
-                .iter()
-                .flat_map(|p| p.sources.iter().flatten())
-                .any(|source| {
-                    source
-                        .secret
-                        .as_ref()
-                        .is_some_and(|source| source.name == name && named(source.optional))
-                })
-        }
-        _ => false,
-    }
+    let sources = volume
+        .projected
+        .iter()
+        .flat_map(|p| p.sources.iter().flatten());
+    let says: Vec<Option<bool>> = match kind {
+        "ConfigMap" => volume
+            .config_map
+            .iter()
+            .map(|source| (source.name.as_str(), source.optional))
+            .chain(sources.filter_map(|source| {
+                source
+                    .config_map
+                    .as_ref()
+                    .map(|source| (source.name.as_str(), source.optional))
+            }))
+            .filter(|(named, _)| *named == name)
+            .map(|(_, optional)| optional)
+            .collect(),
+        "Secret" => volume
+            .secret
+            .iter()
+            .map(|source| (source.secret_name.as_deref().unwrap_or(""), source.optional))
+            .chain(sources.filter_map(|source| {
+                source
+                    .secret
+                    .as_ref()
+                    .map(|source| (source.name.as_str(), source.optional))
+            }))
+            .filter(|(named, _)| *named == name)
+            .map(|(_, optional)| optional)
+            .collect(),
+        _ => Vec::new(),
+    };
+    !says.is_empty() && says.iter().all(|optional| optional.unwrap_or(false))
 }
 
 /// Every way a pod spec draws on one named object.
@@ -1076,6 +1077,43 @@ mod tests {
         assert_eq!(optional("dex-tls"), vec![true, true]);
         assert_eq!(optional("repo-mtls"), vec![true]);
         assert_eq!(optional("repo-ca"), vec![false]);
+    }
+
+    /// A projected volume naming one Secret twice, once optional and once
+    /// not, read as optional: the pod waits for that Secret all the same.
+    /// Fails if any one optional reference makes the volume's use optional.
+    #[test]
+    fn a_volume_that_also_needs_a_source_does_not_call_it_optional() {
+        let spec: PodSpec = serde_json::from_value(serde_json::json!({
+            "volumes": [
+                { "name": "tls", "projected": { "sources": [
+                    { "secret": { "name": "dex-tls", "optional": true,
+                                  "items": [{ "key": "ca", "path": "ca" }] } },
+                    { "secret": { "name": "dex-tls", "optional": false,
+                                  "items": [{ "key": "crt", "path": "crt" }] } },
+                    { "configMap": { "name": "dex-conf", "optional": true } },
+                    { "configMap": { "name": "dex-conf" } }
+                ] } }
+            ],
+            "containers": [{
+                "name": "dex",
+                "volumeMounts": [{ "name": "tls", "mountPath": "/tls" }]
+            }]
+        }))
+        .expect("spec");
+        for (kind, name) in [("Secret", "dex-tls"), ("ConfigMap", "dex-conf")] {
+            let usages = usages_in_pod_spec(&spec, kind, name);
+            assert!(
+                matches!(
+                    usages.as_slice(),
+                    [Usage::Mount {
+                        optional: false,
+                        ..
+                    }]
+                ),
+                "{kind} {usages:?}"
+            );
+        }
     }
 
     #[test]

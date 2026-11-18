@@ -3396,7 +3396,8 @@ export type PolicyCover =
   | { says: "covered"; policies: string[] }
   | { says: "none" }
   | { says: "unknown"; kinds: string[]; unreadable: string[] }
-  | { says: "unread"; said: string };
+  | { says: "unread"; said: string }
+  | { says: "partly"; policies: string[]; uncovered: number; total: number };
 
 export type NodeVerdict =
   | { says: "rollout"; rollout: Rollout }
