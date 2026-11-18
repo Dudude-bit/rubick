@@ -69,7 +69,12 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
     case "noSeries":
       return t("cost", "noSeries", { endpoint: trouble.endpoint });
     case "noNodePrices":
-      return t("cost", "noNodePrices", { endpoint: trouble.endpoint });
+      return trouble.lastFailed === null
+        ? t("cost", "noNodePrices", { endpoint: trouble.endpoint })
+        : t("cost", "noNodePricesLastFailed", {
+            endpoint: trouble.endpoint,
+            said: trouble.lastFailed,
+          });
     case "unreachable":
       return t("cost", "unreachable", {
         endpoint: trouble.endpoint,
@@ -163,20 +168,26 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
 }
 
 /** The line's words for a picture: its cost, or why it has none. */
+/**
+ * One object's cost line, and whether it says a read did not answer: that
+ * is amber, where a part with no price is not.
+ */
 export function costLineWords(
   picture: CostPicture,
   target: CostTarget,
   t: T
-): string {
+): { words: string; unread: boolean } {
+  const unread = (words: string) => ({ words, unread: true });
   const of = costOf(picture, target);
   // Its namespace's pods could not be read: no row, or one with no price,
   // is the refusal, not an absence.
   const refused = picture.unread.some((u) => u.namespace === target.namespace);
-  if (refused && (!of || of.perHour === null)) return t("cost", "lineUnread");
+  if (refused && (!of || of.perHour === null))
+    return unread(t("cost", "lineUnread"));
   // What each workload costs was not read: its row has no price for that
   // reason, not for want of a price.
   if ("kind" in target && picture.workloadsFailed && of?.perHour === null)
-    return t("cost", "lineFailed", { said: picture.workloadsFailed });
+    return unread(t("cost", "lineFailed", { said: picture.workloadsFailed }));
   // A CronJob's runs went under each Job while the Jobs were refused.
   if (
     !of &&
@@ -184,7 +195,18 @@ export function costLineWords(
     target.kind === "CronJob" &&
     picture.jobsUnread
   )
-    return t("cost", "lineJobsUnread", { said: picture.jobsUnread.message });
+    return unread(
+      t("cost", "lineJobsUnread", { said: picture.jobsUnread.message })
+    );
+  return { words: readLineWords(picture, target, of, t), unread: false };
+}
+
+function readLineWords(
+  picture: CostPicture,
+  target: CostTarget,
+  of: ReturnType<typeof costOf>,
+  t: T
+): string {
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)
@@ -247,9 +269,19 @@ export function youngFor(e: Efficiency, t: T): string | null {
 
 /** A peak as it was read: summed over several pods it is a bound, and says so. */
 const peakSaid = (e: Efficiency, value: string, t: T) =>
-  e.state === "measured" && e.peakAtMost
+  (e.state === "measured" || e.state === "unrequested") && e.peakAtMost
     ? t("cost", "atMost", { value })
     : value;
+
+/** A line of figures read from some of its pods, saying which. */
+const fromPods = (e: Efficiency, line: string, t: T) =>
+  (e.state === "measured" || e.state === "unrequested") && e.podsRead
+    ? t("cost", "fromPods", {
+        line,
+        read: e.podsRead.read,
+        n: e.podsRead.of,
+      })
+    : line;
 
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
@@ -262,9 +294,13 @@ export function efficiencyWords(e: Efficiency, t: T): string {
         : peakSaid(e, formatShare(e.peakRatio), t),
   };
   const age = youngFor(e, t);
-  return age === null
-    ? t("cost", "effMeasured", values)
-    : t("cost", "effMeasuredFor", { ...values, age });
+  return fromPods(
+    e,
+    age === null
+      ? t("cost", "effMeasured", values)
+      : t("cost", "effMeasuredFor", { ...values, age }),
+    t
+  );
 }
 
 /** What one resource used, in its own units, over the span the readings cover. */
@@ -280,9 +316,13 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
     peak: e.peak === null ? say(null) : peakSaid(e, say(e.peak), t),
   };
   const age = youngFor(e, t);
-  return age === null
-    ? t("cost", "usedAvgPeak", values)
-    : t("cost", "usedAvgPeakFor", { ...values, age });
+  return fromPods(
+    e,
+    age === null
+      ? t("cost", "usedAvgPeak", values)
+      : t("cost", "usedAvgPeakFor", { ...values, age }),
+    t
+  );
 }
 
 /**
@@ -304,9 +344,13 @@ export function usedLines(
   const peak = e.peak === null ? say(null) : peakSaid(e, say(e.peak), t);
   return [
     t("cost", "usedAvg", { avg: say(e.avg) }),
-    age === null
-      ? t("cost", "usedPeak", { peak })
-      : t("cost", "usedPeakFor", { peak, age }),
+    fromPods(
+      e,
+      age === null
+        ? t("cost", "usedPeak", { peak })
+        : t("cost", "usedPeakFor", { peak, age }),
+      t
+    ),
   ];
 }
 

@@ -75,15 +75,17 @@ function PricesForm({
   const [touched, setTouched] = useState(false);
   // The name turned into another cluster while the form was open: what it
   // holds are the old cluster's prices, and Save must not give them to it.
-  useEffect(
-    () =>
-      persistedByName((turned) => {
-        if (turned !== context) return;
-        setDraft(draftOf(null));
-        setTouched(false);
-      }),
-    [context]
-  );
+  // A turn told again as it subscribes came before it opened.
+  useEffect(() => {
+    let open = false;
+    const off = persistedByName((turned) => {
+      if (!open || turned !== context) return;
+      setDraft(draftOf(null));
+      setTouched(false);
+    });
+    open = true;
+    return off;
+  }, [context]);
 
   const answer = pricesFromDraft(draft);
   const save = () => {

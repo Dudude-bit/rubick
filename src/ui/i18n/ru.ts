@@ -2003,6 +2003,13 @@ export const ru: Catalogue = {
       "в подключённом Prometheus нет ни одного замера её подов за последние сутки",
     whyYoung:
       "самый молодой её под запущен {age} назад, а пик оценивается по целым суткам",
+    whyPartial: {
+      one: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её пода, а пик оценивается по всем",
+      few: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+      many: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+      other:
+        "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+    },
     whyYoungUndated:
       "неизвестно, когда запущены её поды, а пик оценивается по целым суткам",
     whyFolded:
@@ -2732,6 +2739,12 @@ export const ru: Catalogue = {
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
     atMost: "не больше {value}",
+    fromPods: {
+      one: "{line}, по замерам {read} из {n} пода",
+      few: "{line}, по замерам {read} из {n} подов",
+      many: "{line}, по замерам {read} из {n} подов",
+      other: "{line}, по замерам {read} из {n} подов",
+    },
     notKnown: "Неизвестно",
     notPriced: "без цены",
     notMeasured: "не измерено",
@@ -2818,6 +2831,8 @@ export const ru: Catalogue = {
       "Prometheus по адресу {endpoint} ответил, но рядов OpenCost (node_total_hourly_cost) в нём нет. OpenCost пишет их, когда его /metrics собирается в этот Prometheus; Kubecost пишет ряды с теми же именами.",
     noNodePrices:
       "OpenCost в Prometheus по адресу {endpoint} не дал цену ни одному узлу этого кластера: прайс-листа для них он не нашёл.",
+    noNodePricesLastFailed:
+      "OpenCost в Prometheus по адресу {endpoint} в последнем полученном ответе не дал цену ни одному узлу этого кластера; следующее чтение не удалось ({said}).",
     whyNoNodePrices:
       "OpenCost не нашёл прайс-листа для этих узлов, так бывает на kind или у провайдера, которого он не знает. Задайте OpenCost свои цены или {prices}, и страница посчитает по ним.",
     whySomeNodePrices:

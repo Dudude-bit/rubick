@@ -11,7 +11,7 @@ import type { T } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
 import { pageLink } from "@/lib/links";
 import { sameKey, type CostTarget } from "@/lib/cost";
-import { overRequested, workloadEfficiency } from "@/lib/efficiency";
+import { efficiencyWarns, workloadEfficiency } from "@/lib/efficiency";
 import { useCost, useWorkloadUsage, type CostState } from "@/hooks/useCost";
 import { cn } from "@/lib/utils";
 import { costLineWords, efficiencyWords, troubleWords } from "./cost-words";
@@ -83,7 +83,7 @@ function useLine(target: CostTarget) {
   const namespaces = useMemo(() => [target.namespace], [target.namespace]);
   const { cost } = useCost(namespaces, { detail: true });
   if (cost.state === "picture") {
-    const words = costLineWords(cost.picture, target, t);
+    const { words, unread } = costLineWords(cost.picture, target, t);
     // The latest read failed: the figures are the one before, and say so.
     const last = cost.trouble?.kind === "lastFailed" ? cost.trouble : null;
     return {
@@ -91,7 +91,7 @@ function useLine(target: CostTarget) {
       words: (last
         ? t("cost", "lineLastFailed", { line: words, said: last.said })
         : words) as ReactNode,
-      tone: last ? ("warn" as const) : undefined,
+      tone: last || unread ? ("warn" as const) : undefined,
       said: true,
     };
   }
@@ -174,7 +174,7 @@ export function WorkloadCostLine({
                 <span
                   key={resource}
                   className={cn(
-                    overRequested(efficiency[resource]) && "text-warn"
+                    efficiencyWarns(efficiency[resource]) && "text-warn"
                   )}
                 >
                   {i > 0 && " · "}

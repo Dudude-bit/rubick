@@ -99,6 +99,7 @@ const fold = (
   unread: [],
   unlabelled: 0,
   covered: [],
+  pods: values.map(() => 2),
   since: values.map(() => null),
 });
 
@@ -536,6 +537,36 @@ describe("what the supplier's series cover", () => {
     );
     expect(all.workloads[0]!.atLeast).toBe(false);
     expect(all.namespaces[0]!.atLeast).toBe(false);
+  });
+
+  /**
+   * The basis counted one pod and the workload scaled to two before the
+   * series were read, which covered one: compared with the basis's count
+   * the row read as whole. Fails if coverage is judged out of any count but
+   * the read's own.
+   */
+  it("judges coverage out of the pods the same read listed", () => {
+    const one = basis({ workloads: [{ ...workload("web"), pods: 1 }] });
+    const scaled = fold([[0.03, 0.02, null, null]]);
+    scaled.covered = [[1, 1, 0, 0]];
+    scaled.pods = [2];
+    const up = readingPicture(
+      one,
+      reading({ workloads: scaled }),
+      opencost,
+      null
+    );
+    expect(up.workloads[0]!.atLeast).toBe(true);
+    expect(up.namespaces[0]!.atLeast).toBe(true);
+
+    scaled.pods = [1];
+    const same = readingPicture(
+      one,
+      reading({ workloads: scaled }),
+      opencost,
+      null
+    );
+    expect(same.workloads[0]!.atLeast).toBe(false);
   });
 });
 

@@ -33,16 +33,20 @@ export function pricesOf(raw: unknown): Prices | null {
   };
 }
 
-/** What a stored state holds that is a cluster's prices; the rest is dropped. */
+/**
+ * What a stored state holds that is a cluster's prices; the rest is dropped.
+ * Built as own entries: assigned, a context named `__proto__` sets the
+ * record's prototype and is never a key.
+ */
 function validPrices(persisted: unknown): Record<string, Prices> {
   const stored = (persisted as { prices?: unknown } | undefined)?.prices;
-  const prices: Record<string, Prices> = {};
-  if (stored && typeof stored === "object")
-    for (const [context, raw] of Object.entries(stored)) {
+  if (!stored || typeof stored !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(stored).flatMap(([context, raw]) => {
       const valid = pricesOf(raw);
-      if (valid) prices[context] = valid;
-    }
-  return prices;
+      return valid ? [[context, valid]] : [];
+    })
+  );
 }
 
 export const useCostPricesStore = create<CostPricesState>()(
@@ -51,11 +55,15 @@ export const useCostPricesStore = create<CostPricesState>()(
       prices: {},
       setPrices: (context, prices) =>
         set((state) => {
-          const next = { ...state.prices };
           const valid = prices && pricesOf(prices);
-          if (valid) next[context] = valid;
-          else delete next[context];
-          return { prices: next };
+          const rest = Object.entries(state.prices).filter(
+            ([name]) => name !== context
+          );
+          return {
+            prices: Object.fromEntries(
+              valid ? [...rest, [context, valid]] : rest
+            ),
+          };
         }),
     }),
     {

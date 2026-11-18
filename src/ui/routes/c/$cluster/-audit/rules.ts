@@ -211,6 +211,7 @@ const WHY_WORDS: {
     why.says === "young" && why.since !== null
       ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
       : t("audit", "whyYoungUndated"),
+  partial: (why, t) => t("audit", "whyPartial", { read: why.read, n: why.of }),
   folded: (_, t) => t("audit", "whyFolded"),
   admitted: (why, t) =>
     t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),

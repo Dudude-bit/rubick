@@ -62,6 +62,7 @@ const reading = (
     unread: [],
     unlabelled: 0,
     covered: [],
+    pods: [],
     since,
   },
 });
@@ -145,6 +146,47 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * The basis listed `vault`'s pods and the read of use was refused them:
+   * each efficiency was "failed", which no verdict named, so it fell
+   * through to "within" and the backend passed the workload. Fails if a
+   * refused read of use judges a workload, or leaves the refusal unnamed.
+   */
+  it("judges no workload whose use was refused to it, and names the refusal", () => {
+    const teller: WorkloadBasis = {
+      ...workload("teller", 2000, 512 * MI),
+      key: {
+        namespace: "vault",
+        group: "apps",
+        kind: "Deployment",
+        name: "teller",
+      },
+    };
+    const both = basis([workload("api", 500, 256 * MI), teller]);
+    const read = reading(both, [
+      [300, 450, 150 * MI, 240 * MI],
+      [null, null, null, null],
+    ]);
+    if (read.state !== "read") throw new Error(read.state);
+    read.fold.unread = [
+      {
+        namespace: "vault",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden in vault",
+        values: [null, null, null, null],
+      },
+    ];
+    const audit = usageRead(both, null, read);
+    if (audit.state !== "read") throw new Error(audit.state);
+    expect(audit.workloads.map((w) => [w.name, w.verdict.says])).toEqual([
+      ["api", "within"],
+    ]);
+    expect(audit.unread).toEqual([
+      { namespace: "bank", message: "pods is forbidden" },
+      { namespace: "vault", message: "pods is forbidden in vault" },
+    ]);
+  });
+
+  /**
    * A workload rolled out two hours ago has a peak of two hours, which has
    * not met the day's busiest hour: neither page calls its request far
    * above use, and Audit says why it did not judge rather than passing it.
@@ -200,6 +242,7 @@ describe("Audit's reading of requests against use", () => {
         unread: [],
         unlabelled: 0,
         covered: [[2, 2, 2, 2]],
+        pods: [2],
         since: [LONG_AGO],
       },
     };
@@ -208,6 +251,36 @@ describe("Audit's reading of requests against use", () => {
     expect(read.workloads[0]!.verdict).toMatchObject({
       says: "over",
       cpu: { requested: 2000, peak: 300, atMost: true },
+    });
+  });
+
+  /**
+   * Two of three pods were read and their summed peak stayed low: Audit
+   * called the workload over-requested, or within. Fails if a workload
+   * measured from some of its pods is judged either way.
+   */
+  it("says from how many pods a workload was measured, rather than judging it", () => {
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const some: UsageReading = {
+      state: "read",
+      keys: one.workloads.map((w) => w.key),
+      fold: {
+        values: [[200, 300, 200 * MI, 300 * MI]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 2, 2]],
+        pods: [3],
+        since: [LONG_AGO],
+      },
+    };
+    const read = usageRead(one, null, some);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "partial",
+      read: 2,
+      of: 3,
     });
   });
 

@@ -605,12 +605,15 @@ export function readingPicture(
 
   const fold = "failed" in reading.workloads ? null : reading.workloads;
   // Series for fewer of its pods than run: the sum is of some of them.
-  const partly = (i: number, pods: number) => {
+  // Out of the pods the same read listed: the basis's count is from before,
+  // and a workload scaled between the two would read as whole.
+  const partly = (i: number) => {
     const covered = fold?.covered[i];
+    const of = fold?.pods[i] ?? Number.POSITIVE_INFINITY;
     return (
       covered !== undefined &&
       covered.length > 0 &&
-      WORKLOAD_PARTS.slice(0, 2).some((_, at) => (covered[at] ?? 0) < pods)
+      WORKLOAD_PARTS.slice(0, 2).some((_, at) => (covered[at] ?? 0) < of)
     );
   };
   const workloads = basis.workloads.map((w, i): WorkloadCost => {
@@ -626,7 +629,7 @@ export function readingPicture(
       // A failed read priced nothing it could vouch for: no total at all.
       ...(fold
         ? floorWhere(
-            partly(i, w.pods),
+            partly(i),
             pricedRow(
               parts,
               heldParts({ ...w, storageBytes: w.claimBytes }),
@@ -640,9 +643,7 @@ export function readingPicture(
   // A namespace whose workloads' series cover some of their pods is summed
   // from the same series, and is a floor for the same reason.
   const partial = new Set(
-    basis.workloads
-      .filter((w, i) => partly(i, w.pods))
-      .map((w) => w.key.namespace)
+    basis.workloads.filter((_, i) => partly(i)).map((w) => w.key.namespace)
   );
   // Every namespace the cluster runs something in, priced or not: one
   // nothing priced is a row that says so, not a row left out.

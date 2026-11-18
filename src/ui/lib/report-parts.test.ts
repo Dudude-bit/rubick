@@ -637,6 +637,43 @@ describe("changesSection", () => {
     ]);
   });
 
+  /**
+   * The object's own history was read and its owner's not yet: the section
+   * dropped the rows it had and said only that it was still reading. Fails
+   * if a partial read loses what it read, or a read without the object's
+   * own spans draws a gap or an empty journal.
+   */
+  it("keeps the rows one read gave beside why the other gave none", () => {
+    const texts = (section: ReturnType<typeof changesSection>) =>
+      section?.body.type === "changes"
+        ? section.body.changes.map((change) => change.parts[0].text)
+        : [];
+    const ownRead = changesSection(
+      { ...read([row()]), unread: "share.stillReading" },
+      payments,
+      AT,
+      t
+    );
+    expect(ownRead?.unread).toBeUndefined();
+    expect(ownRead?.partial).toBe("share.stillReading");
+    expect(texts(ownRead)).toHaveLength(1);
+
+    const ownerOnly = changesSection(
+      {
+        rows: [row()],
+        spans: undefined,
+        letGo: undefined,
+        unread: "changes.readFailed",
+      },
+      payments,
+      AT,
+      t
+    );
+    expect(ownerOnly?.partial).toBe("changes.readFailed");
+    expect(texts(ownerOnly)).toHaveLength(1);
+    expect(texts(ownerOnly)).not.toContain("share.journalEmpty");
+  });
+
   /** Nothing recorded and no span over the object is not "nothing changed". */
   it("says it was not watching when nothing was recorded and nothing watched", () => {
     const section = changesSection(read([], []), payments, AT, t);

@@ -4,6 +4,7 @@ import type {
   Subject,
   UsageRead,
   UseVerdict,
+  WorkloadUse,
 } from "@/generated/types";
 import {
   EFFICIENCY_WINDOW,
@@ -36,20 +37,35 @@ export function usageRead(
   }
   if (basis.workloads.length > 0 && reading.state !== "read")
     return { state: "reading" };
-  return {
-    state: "read",
-    window: EFFICIENCY_WINDOW,
-    workloads: basis.workloads.map((w) => ({
+  const unread = new Map(basis.unread.map((u) => [u.namespace, u.message]));
+  const workloads: WorkloadUse[] = [];
+  for (const w of basis.workloads) {
+    const e = workloadEfficiency(reading, w.key, {
+      cpu: w.cpu,
+      memory: w.memory,
+    });
+    // Its pods were refused to the read of use: no verdict, and the
+    // backend names the refusal where it finds no row.
+    const failed = [e.cpu, e.memory].find((one) => one.state === "failed");
+    if (failed?.state === "failed") {
+      if (!unread.has(w.key.namespace))
+        unread.set(w.key.namespace, failed.said);
+      continue;
+    }
+    workloads.push({
       namespace: w.key.namespace,
       kind: w.key.kind,
       name: w.key.name,
-      verdict: verdictOf(
-        workloadEfficiency(reading, w.key, { cpu: w.cpu, memory: w.memory })
-      ),
-    })),
-    unread: basis.unread.map((u) => ({
-      namespace: u.namespace,
-      message: u.message,
+      verdict: verdictOf(e),
+    });
+  }
+  return {
+    state: "read",
+    window: EFFICIENCY_WINDOW,
+    workloads,
+    unread: [...unread].map(([namespace, message]) => ({
+      namespace,
+      message,
     })),
     folded: basis.rest?.workloads ?? 0,
   };
@@ -87,6 +103,10 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const peakless = (one: Efficiency) =>
     one.state === "measured" && one.peakRatio === null;
   if (peakless(e.cpu) || peakless(e.memory)) return { says: "noSamples" };
+  // Measured from some of its pods: neither its figure nor a bound on it.
+  for (const one of [e.cpu, e.memory])
+    if (one.state === "measured" && one.podsRead)
+      return { says: "partial", ...one.podsRead };
   return { says: "within" };
 }
 
