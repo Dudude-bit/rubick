@@ -994,6 +994,46 @@ fn rows_held_when_the_cluster_could_not_be_settled_are_said_to_be() {
     assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
 }
 
+/// A switch of keeping waits for the flush under way: one that read
+/// keeping on before it wrote rows and said "kept" after it was turned off.
+/// Fails if the switch lands while a flush holds the files.
+#[test]
+fn a_keeping_switch_waits_for_a_flush_under_way() {
+    let (timelines, _rx) = holder(None, true);
+    let held = timelines.io.lock();
+    let switching = {
+        let timelines = timelines.clone();
+        std::thread::spawn(move || timelines.set_keep(false))
+    };
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert!(timelines.keeps(), "switched while a flush held the files");
+    drop(held);
+    switching.join().unwrap();
+    assert!(!timelines.keeps());
+}
+
+/// A flush that read keeping on said "kept" after it was turned off, and
+/// the next flush, with nothing to write, left it. Fails if keeping off is
+/// not said once nothing more is written.
+#[test]
+fn keeping_off_is_said_after_a_flush_that_read_it_on() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.change(change(
+        "1",
+        ClusterTimeline::now(),
+        "Deployment",
+        Some("shop"),
+        "api",
+    ));
+    let taken = Timelines::take(&cluster, true);
+    timelines.set_keep(false);
+    timelines.write(&cluster, true, taken);
+    timelines.flush();
+    assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Off);
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {

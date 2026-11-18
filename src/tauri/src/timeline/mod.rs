@@ -492,6 +492,9 @@ impl Timelines {
     /// Keeping between restarts on or off. Off writes nothing more and
     /// deletes nothing: what is kept stays until it is cleared.
     pub fn set_keep(&self, keep: bool) {
+        // Between flushes: one under way read keeping before it, and would
+        // write and say "kept" after it was turned off.
+        let _io = self.io.lock();
         self.keep.store(keep, Ordering::Relaxed);
         for cluster in &self.clusters {
             let mut inner = cluster.inner.lock();
@@ -603,11 +606,11 @@ impl Timelines {
     /// Writes what each cluster recorded since the last flush and tells the
     /// window, at most once per flush per cluster.
     pub fn flush(&self) {
-        let keep = self.keeps();
         let clusters: Vec<Arc<ClusterTimeline>> =
             self.clusters.iter().map(|held| held.clone()).collect();
         for cluster in clusters {
             let _io = self.io.lock();
+            let keep = self.keeps();
             let taken = Self::take(&cluster, keep);
             self.write(&cluster, keep, taken);
         }
@@ -682,6 +685,18 @@ impl Timelines {
             };
             if inner.keeping != next {
                 inner.keeping = next;
+                let _ = self.events.send(AppEvent::TimelineChanged {
+                    context: cluster.context.clone(),
+                    rows: false,
+                    spans: true,
+                });
+            }
+        } else if !keep {
+            // Nothing written with keeping off: it is off, whatever a flush
+            // that read it on before left said.
+            let mut inner = cluster.inner.lock();
+            if inner.keeping != Keeping::Off {
+                inner.keeping = Keeping::Off;
                 let _ = self.events.send(AppEvent::TimelineChanged {
                     context: cluster.context.clone(),
                     rows: false,
