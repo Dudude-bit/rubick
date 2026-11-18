@@ -2011,6 +2011,10 @@ export async function getClusterInfo(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("get_cluster_info", { context });
 }
 
+export async function cliKubeconfig(context: string): Promise<string> {
+  return invoke<string>("cli_kubeconfig", { context });
+}
+
 export async function getKubeconfigSource(): Promise<KubeconfigSource> {
   return invoke<KubeconfigSource>("get_kubeconfig_source");
 }

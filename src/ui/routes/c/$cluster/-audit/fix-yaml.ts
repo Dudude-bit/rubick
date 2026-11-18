@@ -153,20 +153,24 @@ const word = (text: string) =>
 
 /**
  * The fix for `rule` on an object of `kind`, filled from `finding` where it
- * has one. A command names `context`, the cluster on screen: without it
- * kubectl and helm act on whatever their kubeconfig's current context is,
- * which may be another cluster with an object of the same name.
+ * has one. A command names `context`, the cluster on screen, read from
+ * `kubeconfig`, the files the app read it from: without the context kubectl
+ * and helm act on their kubeconfig's current one, and without the files on
+ * whatever the terminal's file calls by that name, which may be another
+ * cluster with an object of the same name.
  */
 export function fixYaml(
   rule: RuleId,
   kind: string,
   finding?: AuditFinding,
   subject?: Subject,
-  context?: string | null
+  context?: string | null,
+  kubeconfig?: string | null
 ): string {
   const pod = (body: string) => underPodSpec(kind, body);
   const on = word(context ?? "CONTEXT");
-  const kubectl = `kubectl --context ${on}`;
+  const files = `KUBECONFIG=${word(kubeconfig ?? "FILES")}`;
+  const kubectl = `${files} kubectl --context ${on}`;
   const volume =
     first(finding, "volume")?.volume ??
     first(finding, "socket")?.volume ??
@@ -330,7 +334,7 @@ export function fixYaml(
         !finding || finding.what.some((w) => w.says === "stored" && !w.served);
       const map = gone
         ? [
-            `helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis ${subject?.name ?? "RELEASE"} --namespace ${subject?.namespace ?? "NAMESPACE"} --kube-context ${on}`,
+            `helm plugin install https://github.com/helm/helm-mapkubeapis\n${files} helm mapkubeapis ${subject?.name ?? "RELEASE"} --namespace ${subject?.namespace ?? "NAMESPACE"} --kube-context ${on}`,
           ]
         : [];
       return [...map, ...replaced(finding, kind)].join("\n---\n");
