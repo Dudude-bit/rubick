@@ -1098,11 +1098,16 @@ impl Fold {
         let mut gone = Vec::new();
         for key in changed {
             // Before the first read a pod's pair waits: "not listed" would be
-            // said of a list not yet made.
-            if self.owners.pending && (unlisted_pod(&key.0) || unlisted_pod(&key.1)) {
-                if self.pairs.contains_key(&key) {
-                    self.touched.insert(key);
-                }
+            // said of a list not yet made. One the window emptied goes below,
+            // or it holds a place under the cap with nothing in it.
+            if self.owners.pending
+                && (unlisted_pod(&key.0) || unlisted_pod(&key.1))
+                && self
+                    .pairs
+                    .get(&key)
+                    .is_some_and(|seconds| !seconds.is_empty())
+            {
+                self.touched.insert(key);
                 continue;
             }
             match self.pairs.get(&key) {
@@ -1605,6 +1610,19 @@ mod tests {
         }
         .read_again());
         assert!(!Owners::default().read_again());
+    }
+
+    /// A pod's pair held back before the first read, and emptied by the
+    /// window, is let go: kept, it takes a place under the cap with nothing
+    /// in it, and past the cap new flows are not held.
+    #[test]
+    fn a_held_pair_the_window_emptied_is_let_go() {
+        let mut fold = Fold::new(0);
+        fold.add(100, &from_pod("caller-649d545b48-c74f8"));
+        assert!(fold.tick(101).0.is_empty());
+        let (pairs, gone) = fold.tick(100 + WINDOW_SECS + 1);
+        assert!(pairs.is_empty() && gone.is_empty());
+        assert!(fold.pairs.is_empty());
     }
 
     /// A pod's pairs held as not listed while its namespace's pods could not
