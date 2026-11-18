@@ -6,6 +6,7 @@ import type { TopologyNode } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { Delivery, DeliveryQuery, ServiceRoute } from "@/integrations";
+import { TopologyStore, type TopologySnapshot } from "../-map/useTopology";
 import { layersOf, useVendorLayers } from "./vendor-layers";
 
 const asked = vi.hoisted(() => ({
@@ -82,6 +83,20 @@ const layers = (over: Partial<Parameters<typeof layersOf>[0]> = {}) =>
     ...over,
   });
 
+const cartNode = () =>
+  ({
+    id: "apps/Deployment/shop/cart",
+    ref: {
+      kind: "Deployment",
+      name: "cart",
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    },
+    labels: { app: "cart" },
+    annotations: {},
+  }) as unknown as TopologyNode;
+
 describe("what the integrations add to the map", () => {
   /** An Argo CD Application drawn beside what it delivers, outside every group where its namespace is not drawn. */
   it("draws who delivered an object, pointing at it", () => {
@@ -154,28 +169,46 @@ describe("asking the vendors about the map", () => {
   it("asks nothing until the map is drawn whole", () => {
     asked.deliveries.length = 0;
     asked.routes.length = 0;
-    const node = {
-      id: "apps/Deployment/shop/cart",
-      ref: {
-        kind: "Deployment",
-        name: "cart",
-        namespace: "shop",
-        existence: "present",
-        facts: null,
-      },
-      labels: { app: "cart" },
-      annotations: {},
-    } as unknown as TopologyNode;
+    const node = cartNode();
     const nodes = new Map([[node.id, node]]);
     const services = [{ namespace: "shop", name: "cart" }];
     const { rerender } = renderHook(
-      ({ whole }) => useVendorLayers(nodes, services, () => "shop", t, whole),
-      { initialProps: { whole: false } }
+      ({ phase }) =>
+        useVendorLayers({ nodes, phase }, services, () => "shop", t),
+      { initialProps: { phase: "drawing" as TopologySnapshot["phase"] } }
     );
     expect(asked.deliveries.flat()).toEqual([]);
     expect(asked.routes.flat()).toEqual([]);
-    rerender({ whole: true });
+    rerender({ phase: "ready" });
     expect(asked.deliveries.at(-1)).toHaveLength(1);
     expect(asked.routes.at(-1)).toEqual(services);
+  });
+
+  /**
+   * A reopened stream kept the first open's "drawn whole", so every batch
+   * of the redraw asked the vendors again about a map half drawn. Fails if
+   * a stream reopened and not yet whole asks anything.
+   */
+  it("asks nothing while a reopened map is drawn again", () => {
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const store = new TopologyStore();
+    store.apply([{ is: "kinds", kinds: [] }]);
+    store.ready();
+    store.reset();
+    store.apply([{ is: "node", node: cartNode() }]);
+    asked.deliveries.length = 0;
+    asked.routes.length = 0;
+    renderHook(() =>
+      useVendorLayers(
+        store.snapshot(),
+        [{ namespace: "shop", name: "cart" }],
+        () => "shop",
+        t
+      )
+    );
+    expect(store.snapshot().firstWhole).not.toBeNull();
+    expect(asked.deliveries.flat()).toEqual([]);
+    expect(asked.routes.flat()).toEqual([]);
+    vi.unstubAllGlobals();
   });
 });

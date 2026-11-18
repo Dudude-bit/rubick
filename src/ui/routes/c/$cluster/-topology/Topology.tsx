@@ -211,13 +211,7 @@ function TopologyMap() {
     [grouping, groupIds]
   );
   const whole = map.firstWhole !== null || map.phase === "ended";
-  const vendor = useVendorLayers(
-    map.nodes,
-    openServices,
-    vendorGroup,
-    t,
-    whole
-  );
+  const vendor = useVendorLayers(map, openServices, vendorGroup, t);
   const shownVendor = vendor.nodes.filter(
     (each) => !hidden.has(each.node.kind)
   );
