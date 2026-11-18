@@ -158,6 +158,9 @@ beforeEach(() => {
     }
     if (command === "get_replicaset") return REPLICA_SET;
     if (command === "open_pod_shell") return "term-1";
+    // A string, as the command answers: `undefined` is no answer, and the
+    // query it fails retries on this file's fake clock.
+    if (command === "cli_kubeconfig") return "/home/me/.kube/config";
     if (command === "check_access")
       return (args as { queries: AccessQuery[] }).queries.map((query) => ({
         ...query,
