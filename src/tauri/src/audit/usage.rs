@@ -65,6 +65,9 @@ pub enum UseVerdict {
     Within,
     /// The supplier holds no sample of its pods in the window.
     NoSamples,
+    /// Its average use was read and its peak was not: the peak query
+    /// answered with no series for its pods.
+    PeakUnread,
     /// Measured, but its youngest pod, started at `since` where that is
     /// known, has not been seen to run the whole window: a peak of fewer
     /// hours is not judged.
@@ -168,6 +171,7 @@ pub fn judge(
                 }
                 Some(UseVerdict::Within) => return (None, None),
                 Some(UseVerdict::NoSamples) => Why::NoSamples,
+                Some(UseVerdict::PeakUnread) => Why::PeakUnread,
                 Some(UseVerdict::Young { since }) => Why::Young {
                     since: since.clone(),
                 },
@@ -262,6 +266,8 @@ mod tests {
                 { "namespace": "shop", "kind": "CronJob", "name": "nightly", "verdict": { "says": "noSamples" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "fresh",
                   "verdict": { "says": "young", "since": "2026-11-15T10:00:00Z" } },
+                { "namespace": "shop", "kind": "Deployment", "name": "peakless",
+                  "verdict": { "says": "peakUnread" } },
                 { "namespace": "shop", "kind": "Deployment", "name": "half",
                   "verdict": { "says": "partial", "read": 1, "of": 2 } },
             ],
@@ -306,6 +312,8 @@ mod tests {
                 since: Some("2026-11-15T10:00:00Z".into())
             })
         );
+        let peakless = subject("Deployment", Some("shop"), "peakless");
+        assert_eq!(why(&peakless, Some(&usage)), Some(Why::PeakUnread));
         let half = subject("Deployment", Some("shop"), "half");
         assert_eq!(
             why(&half, Some(&usage)),

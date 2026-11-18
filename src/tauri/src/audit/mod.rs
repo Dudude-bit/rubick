@@ -268,6 +268,8 @@ pub enum Why {
     NoUsage,
     /// The usage supplier holds no sample of its pods in the window.
     NoSamples,
+    /// The supplier gave its average use in the window and no peak.
+    PeakUnread,
     /// Its youngest pod, started at `since` where known, has not been seen
     /// to run the usage window.
     Young {

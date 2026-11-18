@@ -1956,6 +1956,8 @@ export const en = {
       "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
     whyNoSamples:
       "the connected Prometheus holds no sample of its pods in the last day",
+    whyPeakUnread:
+      "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
     whyPartial: {

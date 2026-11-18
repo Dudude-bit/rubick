@@ -4014,6 +4014,7 @@ export type Why =
   | { says: "notScraped" }
   | { says: "noUsage" }
   | { says: "noSamples" }
+  | { says: "peakUnread" }
   | { says: "young"; since: string | null }
   | { says: "partial"; read: number; of: number }
   | { says: "folded" }
@@ -4194,6 +4195,7 @@ export type UseVerdict =
   | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
   | { says: "within" }
   | { says: "noSamples" }
+  | { says: "peakUnread" }
   | { says: "young"; since: string | null }
   | { says: "partial"; read: number; of: number };
 
