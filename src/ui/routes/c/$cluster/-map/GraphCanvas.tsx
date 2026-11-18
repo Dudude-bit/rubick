@@ -219,8 +219,10 @@ function Canvas({
     if (!focus || centred.current === focus) return;
     if (!placement.nodes.has(focus.id)) return;
     centred.current = focus;
-    // A pick is the reader's view: the group it opened is not fitted over it.
+    // A pick is the reader's view: the group it opened is not fitted over
+    // it, and a resize keeps it as it keeps a node they opened.
     moved.current = true;
+    acted.current = focus.id;
     centre(focus.id);
   }, [focus, placement, centre]);
   const fitted = useRef<{ key: string; groups: unknown } | null>(null);

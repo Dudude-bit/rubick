@@ -343,6 +343,42 @@ describe("the map's view", () => {
     expect(opened).not.toHaveBeenCalledWith(expect.anything(), "page");
   });
 
+  /**
+   * A node opened, then another picked from the search, and a narrower
+   * canvas brought the first back into view: the pick was not what the
+   * resize kept. Fails if a resize after a pick centres anything but it.
+   */
+  it("keeps the node last picked when the canvas narrows", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    setCenter.mockClear();
+    const draw = (focus: { id: string } | null) => (
+      <GraphCanvas
+        groups={[group("argo"), group("billing")]}
+        nodes={[node("argo/web", "argo"), node("billing/web", "billing")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        focus={focus}
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw(null));
+    const first = await screen.findByRole(
+      "button",
+      { name: /argo\/web/ },
+      SLOW
+    );
+    fireEvent.keyDown(first, { key: " " });
+    const pick = { id: "billing/web" };
+    rerender(draw(pick));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(1), SLOW);
+    const [x, y] = setCenter.mock.calls[0] as unknown as [number, number];
+    Object.assign(view, { width: 10 });
+    rerender(draw(pick));
+    expect(setCenter).toHaveBeenCalledTimes(2);
+    expect(setCenter.mock.calls[1].slice(0, 2)).toEqual([x, y]);
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();
