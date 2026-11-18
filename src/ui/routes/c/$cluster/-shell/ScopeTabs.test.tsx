@@ -142,7 +142,7 @@ beforeEach(() => {
   summary.namespaces = [];
   summary.podCount = 0;
   summary.namespaceList = "listed";
-  useNamespaceRecencyStore.setState({ recent: {} });
+  useNamespaceRecencyStore.setState({ recent: named({}) });
   nsAccess.answers = [];
   useClusterIdentityStore.setState({ marks: {} });
   useClusterStore.setState({
@@ -1270,7 +1270,7 @@ describe("a token that may not list namespaces", () => {
   it("offers the kubeconfig namespace and the recent ones", async () => {
     const user = userEvent.setup();
     useNamespaceRecencyStore.setState({
-      recent: { "k3d-dev": ["team-shared"] },
+      recent: named({ "k3d-dev": ["team-shared"] }),
     });
     await mount();
     const list = await openPicker(user);
@@ -1328,7 +1328,7 @@ describe("a token that may not list namespaces", () => {
       { namespace: "team-blind", allowed: false, otherLists: false },
     ];
     useNamespaceRecencyStore.setState({
-      recent: { "k3d-dev": ["team-blind"] },
+      recent: named({ "k3d-dev": ["team-blind"] }),
     });
     useClusterStore.setState({
       contexts: [],

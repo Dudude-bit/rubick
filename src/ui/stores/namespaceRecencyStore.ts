@@ -2,28 +2,40 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import { persistedByName } from "@/lib/kept-by-name";
+import {
+  entriesOf,
+  entryOf,
+  named,
+  withEntry,
+  withoutEntry,
+  type Named,
+} from "@/lib/named";
 
 const KEEP = 6;
 
 interface NamespaceRecencyState {
   /** Context name to the namespaces last scoped to there, newest first. */
-  recent: Record<string, string[]>;
+  recent: Named<string[]>;
   record: (context: string, namespaces: readonly string[]) => void;
 }
 
 export const useNamespaceRecencyStore = create<NamespaceRecencyState>()(
   persist(
     (set) => ({
-      recent: {},
+      recent: named(),
       record: (context, namespaces) => {
         if (namespaces.length === 0) return;
         set((state) => ({
-          recent: {
-            ...state.recent,
-            [context]: [
-              ...new Set([...namespaces, ...(state.recent[context] ?? [])]),
-            ].slice(0, KEEP),
-          },
+          recent: withEntry(
+            state.recent,
+            context,
+            [
+              ...new Set([
+                ...namespaces,
+                ...(entryOf(state.recent, context) ?? []),
+              ]),
+            ].slice(0, KEEP)
+          ),
         }));
       },
     }),
@@ -32,15 +44,20 @@ export const useNamespaceRecencyStore = create<NamespaceRecencyState>()(
       version: 1,
       migrate: (persisted) => {
         const stored = (persisted as { recent?: unknown } | undefined)?.recent;
-        const recent: Record<string, string[]> = {};
-        if (stored && typeof stored === "object") {
-          for (const [context, names] of Object.entries(stored)) {
-            if (Array.isArray(names))
-              recent[context] = names
-                .filter((name) => typeof name === "string")
-                .slice(0, KEEP);
-          }
-        }
+        const recent = named(
+          stored && typeof stored === "object"
+            ? entriesOf(named<unknown>(stored as Record<string, unknown>))
+                .filter((entry): entry is [string, unknown[]] =>
+                  Array.isArray(entry[1])
+                )
+                .map(([context, names]): [string, string[]] => [
+                  context,
+                  names
+                    .filter((name): name is string => typeof name === "string")
+                    .slice(0, KEEP),
+                ])
+            : []
+        );
         return { recent } as NamespaceRecencyState;
       },
     }
@@ -50,8 +67,6 @@ export const useNamespaceRecencyStore = create<NamespaceRecencyState>()(
 // The namespaces offered first are the last cluster's under this name.
 persistedByName((context) =>
   useNamespaceRecencyStore.setState((state) => ({
-    recent: Object.fromEntries(
-      Object.entries(state.recent).filter(([name]) => name !== context)
-    ),
+    recent: withoutEntry(state.recent, context),
   }))
 );
