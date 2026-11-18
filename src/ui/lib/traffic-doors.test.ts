@@ -949,6 +949,47 @@ describe("trafficDoors", () => {
     });
 
     /**
+     * A reader refused the Service's slices, its Endpoints and its pods
+     * has nothing the policies over the pods were put to, and the door
+     * drew as judged. Fails if a door into a Service nothing was read of
+     * is checked, or says nothing of the policies.
+     */
+    it("judges no door into a Service nothing it publishes was read of", () => {
+      const doors = trafficDoors(
+        conns({
+          published: [],
+          edges: [
+            edge(
+              ref("HTTPRoute", "front"),
+              service,
+              ruleRoutes(["shop.example.com"], "3000")
+            ),
+            edge(ref("HTTPRoute", "front"), gatewayRef("edge", "traefik"), {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            }),
+          ],
+        }),
+        [gateway("edge", [])],
+        t,
+        undefined,
+        {
+          controllerOf: () => undefined,
+          ask: Object.assign(() => traefik, {
+            classController: () => "traefik.io/gateway-controller",
+          }),
+        }
+      ).entries[0].doors;
+      expect(doors[0]).toMatchObject({
+        broken: null,
+        checked: false,
+        note: "NetworkPolicy not checked",
+      });
+    });
+
+    /**
      * A NetworkPolicy refusing every port to every client is said by the
      * Service's own stop and left out of the door's verdict, so a route
      * under a healthy Gateway drew as a judged, open door. Fails if that

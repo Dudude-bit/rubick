@@ -195,6 +195,9 @@ export function trafficDoors(
     // below leaves a stop already said to its sayer.
     const stop = published?.stop;
     if (isPolicyStop(stop)) return { shut: stop, doubt: null, unsure: false };
+    // Its slices, Endpoints and pods all unread: the policies over the
+    // pods were never put to the door.
+    if (!published) return { shut: null, doubt: null, unsure: true };
     // Asked about the policies, with no controller to ask them for: its
     // class unread, or not one the list holds. Nothing settled the door.
     if (!controller) return { shut: null, doubt: null, unsure: true };
