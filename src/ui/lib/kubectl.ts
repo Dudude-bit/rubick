@@ -86,7 +86,14 @@ export function cliPipe(
   // name gets the stand-in, which no kubeconfig resolves, never a neighbour.
   const carried = /"|\s.*\\$/.test(context) ? "CONTEXT" : context;
   const pipe = steps.map((step) => run(step, psWord(carried))).join(" | ");
-  return `& { $was = $env:KUBECONFIG; $env:KUBECONFIG = ${psWord(files)}; try { ${pipe} } finally { $env:KUBECONFIG = $was } }`;
+  if (steps.length === 1)
+    return `& { $was = $env:KUBECONFIG; $env:KUBECONFIG = ${psWord(files)}; try { ${pipe} } finally { $env:KUBECONFIG = $was } }`;
+  // Windows PowerShell 5.1 carries a pipe between two programs as text: it
+  // reads the first's bytes in the console's code page and writes them to
+  // the second as ASCII, so a café in an object read back is written to the
+  // cluster as caf?. UTF-8 both ways, inside the try so a host that refuses
+  // it runs nothing; the console's own is put back.
+  return `& { $was = $env:KUBECONFIG; $console = [Console]::OutputEncoding; try { $env:KUBECONFIG = ${psWord(files)}; $OutputEncoding = [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false; ${pipe} } finally { $env:KUBECONFIG = $was; [Console]::OutputEncoding = $console } }`;
 }
 
 /** The cluster on screen and the files it was read from, for {@link cliLine}. */

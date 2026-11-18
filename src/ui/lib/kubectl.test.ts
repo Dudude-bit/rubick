@@ -155,8 +155,17 @@ describe("a line for PowerShell", () => {
     ] as const;
     const shell = cliPipe(at, steps, "powershell");
     expect(shell.match(/\$env:KUBECONFIG = '/g)).toHaveLength(1);
+    // 5.1 hands the second program ASCII unless told otherwise: a café read
+    // back is written to the cluster as caf?. UTF-8 is set before the pipe,
+    // inside the try, and the console's own put back after it.
+    expect(shell).toMatch(
+      /try \{ \$env:KUBECONFIG = '[^']*'; \$OutputEncoding = \[Console\]::OutputEncoding = New-Object Text\.UTF8Encoding \$false; kubectl /
+    );
     expect(shell).toContain(
-      "try { kubectl --context 'default' get crontabs -o json | kubectl --context 'default' replace -f - }"
+      "finally { $env:KUBECONFIG = $was; [Console]::OutputEncoding = $console }"
+    );
+    expect(shell).toContain(
+      "kubectl --context 'default' get crontabs -o json | kubectl --context 'default' replace -f - }"
     );
     expect(cliPipe(at, steps, "posix")).toBe(
       `${on} get crontabs -o json | ${on} replace -f -`
