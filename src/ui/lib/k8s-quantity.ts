@@ -11,7 +11,7 @@
 
 import { translate, type Locale } from "@/i18n";
 import { currentLocale } from "@/stores/localeStore";
-import { formatDecimal } from "@/lib/utils";
+import { formatDecimal, type Rounding } from "@/lib/utils";
 
 // Binary unit multipliers (Ki, Mi, Gi, Ti, Pi, Ei)
 export const BINARY_UNITS: Record<string, number> = {
@@ -115,11 +115,18 @@ export function parseMemory(memStr: string | null | undefined): number {
  */
 export function formatCPU(
   millicores: number,
-  locale: Locale = currentLocale()
+  locale: Locale = currentLocale(),
+  rounding: Rounding = "nearest"
 ): string {
-  if (millicores < 1000) return `${Math.round(millicores)}m`;
-  return formatDecimal(millicores / 1000, 1, locale);
+  if (millicores < 1000) return `${ROUND[rounding](millicores)}m`;
+  return formatDecimal(millicores / 1000, 1, locale, false, rounding);
 }
+
+const ROUND: Record<Rounding, (value: number) => number> = {
+  nearest: Math.round,
+  up: Math.ceil,
+  down: Math.floor,
+};
 
 /** Whole cores to the millicore, so 465m reads 0,465 beside a 1,2 instead of changing unit. */
 export function formatCores(
@@ -155,6 +162,8 @@ export interface ByteFormat {
   /** Read in this scale rather than the count's own, so two numbers share a unit. */
   scale?: number;
   locale?: Locale;
+  /** Which way the last digit goes: a bound away from what it bounds. */
+  rounding?: Rounding;
 }
 
 /**
@@ -169,11 +178,12 @@ export function formatBytes(
     trim = false,
     scale = byteScale(bytes),
     locale = currentLocale(),
+    rounding = "nearest",
   }: ByteFormat = {}
 ): string {
   const n =
     scale === 0
-      ? formatDecimal(bytes, 0, locale)
-      : formatDecimal(bytes / 1024 ** scale, decimals, locale, trim);
+      ? formatDecimal(bytes, 0, locale, false, rounding)
+      : formatDecimal(bytes / 1024 ** scale, decimals, locale, trim, rounding);
   return translate(locale, "cluster", SIZE_KEYS[scale], { n });
 }
