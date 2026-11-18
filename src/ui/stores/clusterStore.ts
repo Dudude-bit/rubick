@@ -177,6 +177,8 @@ let releases = 0;
  * focus, whatever a release answers.
  */
 const outdated = new Set<string>();
+/** Each one let go, by the last release asked then: an answer to it may still name it. */
+const letGoAt = new Map<string, number>();
 
 /**
  * A cluster stops being in use when the reader leaves it, not when it was
@@ -582,7 +584,11 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       get().connectionAttemptId !== state.connectionAttemptId
     )
       return;
-    set({ live: live.filter((name) => !outdated.has(name)) });
+    set({
+      live: live.filter(
+        (name) => !outdated.has(name) && (letGoAt.get(name) ?? -1) < asked
+      ),
+    });
   },
 
   entriesChanged: async (changed: string[]) => {
@@ -611,7 +617,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       if (!outdated.has(name)) continue;
       await commands
         .disconnectCluster(name)
-        .then(() => outdated.delete(name))
+        .then(() => {
+          outdated.delete(name);
+          letGoAt.set(name, releases);
+        })
         .catch(() => null);
     }
     const now = get();
