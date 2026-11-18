@@ -1937,6 +1937,8 @@ export const ru: Catalogue = {
     edgesAbsent: "Связи с {kinds} здесь не нарисованы: они не прочитаны.",
     notLookedLine: "{state}: {kinds}",
     clusterSaid: "Что ответил кластер",
+    verdictsUnread:
+      "Не удалось прочитать {kinds}, поэтому маршруты и Gateway нарисованы непроверенными: {said}",
     otherEngines:
       "{kinds} здесь действует, но не нарисован: нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
     noMatch: "На карте нет ничего с таким именем",

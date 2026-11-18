@@ -1891,6 +1891,8 @@ export const en = {
       "No edges from or to {kinds} are drawn here: they were not read.",
     notLookedLine: "{state}: {kinds}",
     clusterSaid: "What the cluster said",
+    verdictsUnread:
+      "{kinds} could not be read, so routes and Gateways are drawn not checked: {said}",
     otherEngines:
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",

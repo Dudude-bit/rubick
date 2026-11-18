@@ -18,6 +18,7 @@ import {
 } from "@/lib/namespace-scope";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
+import { topologyRead } from "@/lib/route-trace";
 import {
   GATEWAY_ROUTE_KINDS,
   routesBoard,
@@ -179,9 +180,11 @@ export function useRoutesBoard(scope: readonly string[], enabled = true) {
   );
   const door = useDoorAsk(installed && routeKinds.length > 0 && !routesLock);
 
-  const classesSettled =
-    classes.data !== undefined || !served.has("GatewayClass");
-  const topologyKnown = gatewaysAll.data !== undefined && classesSettled;
+  const topologyKnown = topologyRead(
+    { data: gatewaysAll.data, error: gatewaysAll.error },
+    { data: classes.data, error: classes.error },
+    served.has("GatewayClass")
+  );
   // The count follows the scope; on a whole-cluster window the verdict read
   // already is that list, so reuse it and skip the second fetch.
   const counted: GatewayInfo[] | undefined =

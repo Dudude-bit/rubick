@@ -102,6 +102,16 @@ describe("what the layout worker is asked", () => {
     expect(grown?.request.groups[0].previous).toEqual(
       cache.get("shop")!.positions
     );
+    // Another edge between the same two nodes has no route laid out yet.
+    expect(
+      askFor(
+        [group],
+        [node("svc"), node("web")],
+        [{ ...edge, id: "e2" }],
+        cache,
+        packed
+      )
+    ).not.toBeNull();
   });
 
   /**
@@ -164,6 +174,16 @@ describe("what the layout worker is asked", () => {
     expect(
       askFor([shop, infra, quiet], nodes, [attach], cache, packed)
     ).toBeNull();
+    // Another edge between the same two groups' nodes is routed anew.
+    expect(
+      askFor(
+        [shop, infra, quiet],
+        nodes,
+        [{ ...attach, id: "web>gw:2" }],
+        cache,
+        packed
+      )
+    ).not.toBeNull();
 
     const moved = askFor(
       [shop, infra, quiet],

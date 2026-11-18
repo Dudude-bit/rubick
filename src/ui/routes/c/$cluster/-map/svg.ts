@@ -53,6 +53,7 @@ export function themeColours(
  */
 const MONO_CHAR = 11.5 * 0.6;
 const SANS_CHAR = 10 * 0.56;
+const NOTE_CHAR = 11 * 0.6;
 
 /** `text` cut to `room` pixels, an ellipsis where it was. */
 function cut(text: string, room: number, char: number): string {
@@ -95,7 +96,13 @@ export function mapSvg({
     ...groups.map(({ box }) => box),
     ...nodes.map(({ at, width, height }) => ({ ...at, width, height })),
   ];
-  const right = Math.max(0, ...boxes.map((b) => b.x + b.width)) + 24;
+  // As wide as the longest note too: one past the edge is cut off.
+  const right =
+    Math.max(
+      0,
+      ...boxes.map((b) => b.x + b.width),
+      ...notes.map((note) => note.length * NOTE_CHAR)
+    ) + 24;
   const bottom = Math.max(0, ...boxes.map((b) => b.y + b.height)) + 24;
   const top = -24 - notes.length * 16;
   const parts: string[] = [

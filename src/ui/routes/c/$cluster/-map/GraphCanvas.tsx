@@ -86,6 +86,9 @@ const EDGE_TYPES = { map: MapEdge };
 
 const FIT = { padding: 0.08 };
 
+/** Longer than any platform's double-click interval, as the tables' is. */
+const SECOND_CLICK_MS = 1500;
+
 /**
  * Nothing on the map is selectable or draggable, and React Flow then writes
  * `pointer-events: none` on every node's wrapper: no click, no double click,
@@ -206,17 +209,20 @@ function Canvas({
     [drawn.nodes, nodes, absolute, placement, flow]
   );
 
+  // Whether the reader moved the view themselves, and what they last opened.
+  const moved = useRef(false);
+  const acted = useRef<string | null>(null);
+  const pressed = useRef<{ node: GraphNode; at: number } | null>(null);
+
   const centred = useRef<{ id: string } | null>(null);
   useEffect(() => {
     if (!focus || centred.current === focus) return;
     if (!placement.nodes.has(focus.id)) return;
     centred.current = focus;
+    // A pick is the reader's view: the group it opened is not fitted over it.
+    moved.current = true;
     centre(focus.id);
   }, [focus, placement, centre]);
-
-  // Whether the reader moved the view themselves, and what they last opened.
-  const moved = useRef(false);
-  const acted = useRef<string | null>(null);
   const fitted = useRef<{ key: string; groups: unknown } | null>(null);
   useEffect(() => {
     if (fitKey === null) return;
@@ -238,9 +244,12 @@ function Canvas({
     now.current = { placement, nodes: drawn.nodes, absolute, fitKey };
   });
   useEffect(() => {
+    // A canvas hidden has no size; shown again, it is measured against the
+    // size it had before, not against nothing.
+    if (width === 0 || height === 0) return;
     const was = size.current;
     size.current = { width, height };
-    if (!was || width === 0 || height === 0) return;
+    if (!was) return;
     if (was.width === width && was.height === height) return;
     const { placement, nodes, absolute, fitKey } = now.current;
     if (!moved.current) {
@@ -302,6 +311,9 @@ function Canvas({
       open: (node, how) => {
         acted.current = node.id;
         latest.current.onOpen(node, how);
+      },
+      pressed: (node, at) => {
+        pressed.current = { node, at };
       },
       openEdge: edgesOpen
         ? (edge) => latest.current.onOpenEdge?.(edge)
@@ -469,6 +481,22 @@ function Canvas({
           role="group"
           aria-label={ariaLabel}
           data-paused={visible ? undefined : ""}
+          onClick={(event) => {
+            // A single click anywhere but a node lets the node's press go.
+            if (
+              event.detail === 1 &&
+              !(event.target as Element).closest("[data-node]")
+            )
+              pressed.current = null;
+          }}
+          onDoubleClick={(event) => {
+            // The page of the node the first click pressed, wherever the
+            // second landed: a peek opened between them moved the map.
+            const first = pressed.current;
+            pressed.current = null;
+            if (first && event.timeStamp - first.at < SECOND_CLICK_MS)
+              actions.open(first.node, "page");
+          }}
         >
           <ReactFlow
             nodes={flowNodes}

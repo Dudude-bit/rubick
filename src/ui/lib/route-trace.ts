@@ -142,6 +142,27 @@ export interface RouteTrace {
   probe: { host: string | null; address: string | null; port: number | null };
 }
 
+/** A list as a query holds it: its last answer, and whether a read failed since. */
+interface ListRead {
+  data: unknown;
+  error: unknown;
+}
+
+/**
+ * Whether the Gateways and classes a verdict is judged against are current.
+ * A list whose last read failed still holds what it said before, and a
+ * class deleted or a token refused since reads as the class it was.
+ */
+export function topologyRead(
+  gateways: ListRead,
+  classes: ListRead,
+  classesServed: boolean
+): boolean {
+  const current = (list: ListRead) =>
+    list.data !== undefined && list.error == null;
+  return current(gateways) && (current(classes) || !classesServed);
+}
+
 export interface TraceSources {
   gateways: GatewayInfo[];
   classes: GatewayClassInfo[];

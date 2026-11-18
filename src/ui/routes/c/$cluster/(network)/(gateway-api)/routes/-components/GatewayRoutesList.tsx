@@ -67,6 +67,7 @@ import {
   STEP_WORD,
   type RouteRow,
 } from "@/lib/route-rows";
+import { topologyRead } from "@/lib/route-trace";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -377,9 +378,11 @@ export function GatewayRoutesList() {
         {
           gateways: gateways.data ?? [],
           classes: classes.data ?? [],
-          topologyKnown:
-            gateways.data !== undefined &&
-            (classes.data !== undefined || !served.has("GatewayClass")),
+          topologyKnown: topologyRead(
+            { data: gateways.data, error: gateways.error },
+            { data: classes.data, error: classes.error },
+            served.has("GatewayClass")
+          ),
           listenerSets: sets.sets,
           listenerSetsSaid: sets.said,
           backing: backingFrom(backing.data, backing.error),
@@ -390,7 +393,9 @@ export function GatewayRoutesList() {
     [
       filtered,
       gateways.data,
+      gateways.error,
       classes.data,
+      classes.error,
       sets,
       backing.data,
       backing.error,
