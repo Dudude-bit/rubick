@@ -1384,9 +1384,9 @@ export const en = {
       "Not every pod is ready: {ready} of {desired}. A restart starts the same template again, so pods that crash or fail their probes will do so again. {pods}",
     restartSeeWhy: "See why on the Pods tab.",
     notPermitted:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
+      "Your access does not allow this: the cluster answers no to {check}.",
     notPermittedEither:
-      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+      "Your access does not allow this: the cluster answers no to {check} and to {other}.",
     notThroughKubectlProxy:
       "Not available in this session: it reaches the cluster through kubectl proxy, which refuses every exec and attach request whatever your access allows.",
     validationPassed: "Validation passed",
@@ -4377,7 +4377,7 @@ export const en = {
     traefikNoArgs:
       "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
-      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or let the app forward a port to it.",
     reachNoScheme:
       "{host} has no scheme: write http:// or https:// in front of it.",
     connReasonAndShape: "{said}. {shape}",

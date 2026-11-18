@@ -236,7 +236,7 @@ describe("a running container for a reader who may neither exec nor forward", ()
         namespace="team-checkout"
         podName={pod.name}
         onOpenShell={vi.fn()}
-        shellDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i create pods --subresource=exec -n team-checkout."
+        shellDenied="Your access does not allow this: the cluster answers no to KUBECONFIG=FILES kubectl --context CONTEXT auth can-i create pods --subresource=exec -n team-checkout."
       />
     );
 
@@ -330,7 +330,7 @@ describe("a Deployment's template for a reader who may not patch it", () => {
         }}
         namespace="shop"
         onUpdateImage={onUpdateImage}
-        imageDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch deployments.apps -n shop."
+        imageDenied="Your access does not allow this: the cluster answers no to KUBECONFIG=FILES kubectl --context CONTEXT auth can-i patch deployments.apps -n shop."
       />
     );
     const update = screen.getByRole("button", { name: "Update image" });

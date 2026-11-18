@@ -379,25 +379,27 @@ describe("the fix Audit offers to copy", () => {
     // context from go with its name.
     const files = "/home/me/.kube/k3s.yaml:/home/me/.kube/config";
     expect(
-      fixYaml("pss-privileged", "Pod", ephemeral, pod, "default", files)
+      fixYaml("pss-privileged", "Pod", ephemeral, pod, {
+        context: "default",
+        files,
+      })
     ).toBe(
       `KUBECONFIG=${files} kubectl --context default delete pod web-x --namespace shop`
     );
     expect(
-      fixYaml(
-        "pss-privileged",
-        "Pod",
-        ephemeral,
-        pod,
-        "my cluster's prod",
-        "/Users/me/My Files/config"
-      )
+      fixYaml("pss-privileged", "Pod", ephemeral, pod, {
+        context: "my cluster's prod",
+        files: "/Users/me/My Files/config",
+      })
     ).toBe(
       "KUBECONFIG='/Users/me/My Files/config' kubectl --context 'my cluster'\\''s prod' delete pod web-x --namespace shop"
     );
     const commands = (RULE_IDS as readonly RuleId[])
       .map((rule) =>
-        fixYaml(rule, "Deployment", undefined, undefined, "default", files)
+        fixYaml(rule, "Deployment", undefined, undefined, {
+          context: "default",
+          files,
+        })
       )
       .flatMap((text) => text.split("\n"))
       .filter((line) => /\b(kubectl|helm) /.test(line))

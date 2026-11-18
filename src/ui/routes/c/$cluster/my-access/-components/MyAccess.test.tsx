@@ -18,6 +18,8 @@ const answers = vi.hoisted(() => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    cliKubeconfig: (context: string) =>
+      Promise.resolve(`/home/me/.kube/${context}.yaml`),
     reviewOwnRules: (namespace: string) => {
       answers.asked.push(namespace);
       return answers.review(namespace);
@@ -65,14 +67,19 @@ describe("what the signed-in user may do", () => {
 
   /**
    * At 1024 wide Lena read "can-i -" on one line and "-list" on the next.
-   * Fails if the command may break inside, or the sentence loses it.
+   * Fails if the command may break inside, or the sentence loses it; or if
+   * it leaves out the cluster on screen, its files or the namespace this
+   * page answers for, which runs it against another cluster or namespace.
    */
-  it("keeps kubectl auth can-i --list whole in the description", async () => {
+  it("keeps the whole can-i --list line for this cluster in the description", async () => {
+    scoped(["team-checkout"]);
     await renderWithRouter(<MyAccess />);
-    const command = await screen.findByText("kubectl auth can-i --list");
+    const line =
+      "KUBECONFIG=/home/me/.kube/test.yaml kubectl --context test auth can-i --list -n team-checkout";
+    const command = await screen.findByText(line);
     expect(command).toHaveClass("whitespace-nowrap");
     expect(command.parentElement?.textContent).toBe(
-      "The rules the cluster says apply to you, ClusterRoleBindings included, as kubectl auth can-i --list prints them."
+      `The rules the cluster says apply to you, ClusterRoleBindings included, as ${line} prints them.`
     );
   });
 
