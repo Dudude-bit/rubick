@@ -14,7 +14,7 @@ use k8s_openapi::api::core::v1::{
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
-use super::names::{floats, is_literal, reaches_socket, suggests_secret};
+use super::names::{floats, holds_a_secret, reaches_socket};
 use super::{At, AuditFinding, AuditSeverity, ContainerList, RuleId, TokenBy, What};
 use crate::resources::shown_text;
 
@@ -322,8 +322,12 @@ pub fn judge(meta: Option<&ObjectMeta>, spec: &PodSpec, minor: Option<u32>) -> J
             );
         }
         for var in seat.env.into_iter().flatten() {
-            let literal = var.value_from.is_none() && var.value.as_deref().is_some_and(is_literal);
-            if literal && suggests_secret(&var.name) {
+            let secret = var.value_from.is_none()
+                && var
+                    .value
+                    .as_deref()
+                    .is_some_and(|value| holds_a_secret(&var.name, value));
+            if secret {
                 found.add(
                     RuleId::EnvSecretLiteral,
                     What::EnvLiteral {

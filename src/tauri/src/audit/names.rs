@@ -39,9 +39,16 @@ const ABOUT_A_SECRET: &[&str] = &[
     "ROTATION", "REF", "ID", "ISSUER", "AUDIENCE", "SECONDS", "MINUTES", "HOURS", "DAYS",
 ];
 
-/// Values that switch something on or off: `ALLOW_EMPTY_PASSWORD=yes` says
-/// there is no password, `OAUTH2_PROXY_PASS_ACCESS_TOKEN=true` passes one on.
+/// Values that switch something on or off.
 const SWITCHES: &[&str] = &["yes", "no", "true", "false", "on", "off", "y", "n"];
+
+/// Words that make a variable a switch about a secret rather than the
+/// secret: `ALLOW_EMPTY_PASSWORD=yes` says there is none,
+/// `MYSQL_RANDOM_ROOT_PASSWORD=yes` asks for one made up.
+const SWITCHING: &[&str] = &[
+    "ALLOW", "EMPTY", "RANDOM", "GENERATE", "ENABLE", "ENABLED", "DISABLE", "DISABLED", "SKIP",
+    "USE", "REQUIRE", "REQUIRED",
+];
 
 /// The words of a variable name: split at `_`, `-`, `.` and a lower-case
 /// letter followed by a capital, all upper-case.
@@ -85,14 +92,37 @@ pub fn suggests_secret(name: &str) -> bool {
     })
 }
 
-/// Whether an env value is a literal worth naming: not empty, not only a
-/// `$(VAR)` reference to another variable, and not a switch.
+/// Whether an env value is a literal worth naming: not empty, and not only
+/// a `$(VAR)` reference to another variable.
 #[must_use]
 pub fn is_literal(value: &str) -> bool {
     let value = value.trim();
     let reference = value.starts_with("$(") && value.ends_with(')') && !value[2..].contains("$(");
-    let switch = SWITCHES.iter().any(|word| value.eq_ignore_ascii_case(word));
-    !value.is_empty() && !reference && !switch
+    !value.is_empty() && !reference
+}
+
+/// Whether a variable's literal value is the secret its name suggests. A
+/// switch value counts unless the name says it switches something about a
+/// secret: `DB_PASSWORD=true` is a password, `ALLOW_EMPTY_PASSWORD=yes` and
+/// `OAUTH2_PROXY_PASS_ACCESS_TOKEN=true`, which passes a token on, are not.
+#[must_use]
+pub fn holds_a_secret(name: &str, value: &str) -> bool {
+    if !is_literal(value) || !suggests_secret(name) {
+        return false;
+    }
+    let switch = SWITCHES
+        .iter()
+        .any(|word| value.trim().eq_ignore_ascii_case(word));
+    if !switch {
+        return true;
+    }
+    let words = words(name);
+    // `PASS` before another word is the verb: pass something on.
+    let passes_on = words
+        .iter()
+        .take(words.len().saturating_sub(1))
+        .any(|word| word == "PASS");
+    !(passes_on || words.iter().any(|word| SWITCHING.contains(&word.as_str())))
 }
 
 /// Whether an image reference pins nothing: tagged `latest`, or neither
@@ -232,9 +262,8 @@ mod tests {
         }
     }
 
-    /// An empty value, a reference to another variable and a switch carry no
-    /// secret: `ALLOW_EMPTY_PASSWORD=yes` says there is none. Fails if any
-    /// is called a literal, or a real value is not.
+    /// An empty value and a reference to another variable carry no secret.
+    /// Fails if either is called a literal, or a real value is not.
     #[test]
     fn only_a_value_that_is_more_than_a_reference_is_a_literal() {
         assert!(!is_literal(""));
@@ -242,9 +271,31 @@ mod tests {
         assert!(!is_literal("$(DB_PASSWORD)"));
         assert!(is_literal("hunter2-but-longer"));
         assert!(is_literal("$(PREFIX)-$(SUFFIX)"));
-        for switch in ["yes", "True", "false", "on", " OFF "] {
-            assert!(!is_literal(switch), "{switch}");
+    }
+
+    /// A switch value is no secret where the name says it switches one, and
+    /// is one where the name is the secret's own. Fails if
+    /// `ALLOW_EMPTY_PASSWORD=yes` is a finding, or `DB_PASSWORD=true` is not.
+    #[test]
+    fn a_switch_is_a_secret_only_where_the_name_is_the_secrets_own() {
+        for (name, value) in [
+            ("ALLOW_EMPTY_PASSWORD", "yes"),
+            ("MYSQL_RANDOM_ROOT_PASSWORD", "yes"),
+            ("OAUTH2_PROXY_PASS_ACCESS_TOKEN", "true"),
+            ("SKIP_TOKEN_VERIFY", "True"),
+        ] {
+            assert!(!holds_a_secret(name, value), "{name}={value}");
         }
+        for (name, value) in [
+            ("DB_PASSWORD", "true"),
+            ("POSTGRES_PASSWORD", " OFF "),
+            ("REDIS_PASS", "yes"),
+            ("DB_PASSWORD", "hunter2-but-longer"),
+        ] {
+            assert!(holds_a_secret(name, value), "{name}={value}");
+        }
+        assert!(!holds_a_secret("DB_PASSWORD", "$(FROM_SECRET)"));
+        assert!(!holds_a_secret("LOG_LEVEL", "debug"));
     }
 
     /// `latest`, and no tag at all, pull whatever was pushed last. Fails if
