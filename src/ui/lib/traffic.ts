@@ -273,8 +273,14 @@ function errorShareOf(
 ): Cell {
   const flow = requests.flow;
   if (!flow) {
-    // A pair whose errors answered with no number is not "below HTTP".
-    const blank = flows.find((each) => each.unknown.includes("errors"));
+    // A pair whose errors could not be read, or answered with no number,
+    // is not "below HTTP": its source's errors are not known.
+    const blank = flows.find(
+      (each) =>
+        each.unknown.includes("errors") ||
+        (reading.sources[each.source]?.measures.includes("errors") &&
+          failed(each.source, "errors"))
+    );
     return blank
       ? {
           value: null,
