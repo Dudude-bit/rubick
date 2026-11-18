@@ -191,12 +191,14 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
-   * The requests list has no row in `vault` and the read of use was refused
-   * there: the refusal reached no row, so the backend passed every
-   * workload in it as one requesting nothing. Fails if a refusal is carried
-   * only through a row, or the list's own words are replaced.
+   * The requests list read `vault` and found no pod placed there, and the
+   * read of use was refused in it. Named, every workload in `vault` was
+   * "not checked: could not be read: pods is forbidden in vault" by a rule
+   * that never judges a workload with no row, refused or not. Fails if a
+   * refusal that reached no row is named, or the list's own words for a
+   * namespace it could not read (`bank`) are lost or replaced.
    */
-  it("names every namespace the read of use was refused, with or without a row", () => {
+  it("names a refusal of the read of use only where it took a row's verdict", () => {
     const one = basis([workload("api", 500, 256 * MI)]);
     const read = reading(one, [[300, 450, 150 * MI, 240 * MI]]);
     if (read.state !== "read") throw new Error(read.state);
@@ -221,7 +223,6 @@ describe("Audit's reading of requests against use", () => {
     ]);
     expect(audit.unread).toEqual([
       { namespace: "bank", message: "pods is forbidden" },
-      { namespace: "vault", message: "pods is forbidden in vault" },
     ]);
   });
 
