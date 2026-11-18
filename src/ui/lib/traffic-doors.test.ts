@@ -947,6 +947,67 @@ describe("trafficDoors", () => {
         note: "NetworkPolicy not checked",
       });
     });
+
+    /**
+     * A NetworkPolicy refusing every port to every client is said by the
+     * Service's own stop and left out of the door's verdict, so a route
+     * under a healthy Gateway drew as a judged, open door. Fails if that
+     * stop does not shut the doors into the Service.
+     */
+    it("shuts every door into a Service its own policy stop refuses to all", () => {
+      const refused: ServicePublished = {
+        ...published,
+        stop: {
+          reason: "policyRefuses",
+          service,
+          policies: ["deny-all"],
+          ports: [8080],
+          noRules: true,
+          client: null,
+        },
+      };
+      const { entries } = trafficDoors(
+        conns({
+          published: [refused],
+          edges: [
+            edge(
+              ref("HTTPRoute", "front"),
+              service,
+              ruleRoutes(["shop.example.com"], "3000")
+            ),
+            edge(ref("HTTPRoute", "front"), gatewayRef("edge", "traefik"), {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            }),
+            edge(ref("Ingress", "front"), service, {
+              verb: "routes",
+              host: "shop.example.com",
+              path: "/",
+              pathType: "Prefix",
+              port: "3000",
+              tls: false,
+            }),
+          ],
+        }),
+        [gateway("edge", [])],
+        t,
+        undefined,
+        {
+          controllerOf: () => "traefik.io/ingress-controller",
+          ask: Object.assign(() => traefik, {
+            classController: () => "traefik.io/gateway-controller",
+          }),
+        }
+      );
+      expect(
+        entries.map((entry) => [entry.object.kind, entry.doors[0].broken])
+      ).toEqual([
+        ["Gateway", "shut by NetworkPolicy"],
+        ["Ingress", "shut by NetworkPolicy"],
+      ]);
+    });
   });
 
   it("caps the doors and counts the rest", () => {
