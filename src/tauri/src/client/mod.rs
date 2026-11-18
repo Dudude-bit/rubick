@@ -236,16 +236,16 @@ type Wanted<'a> = (Option<&'a str>, fn(&FileNames) -> &[String]);
 /// context name from the window is checked by, since a name such as an EKS
 /// ARN is no DNS label.
 fn files_for(context: &str, loaded: &LoadedKubeconfig) -> Result<Vec<PathBuf>> {
-    let named = loaded
+    let found = loaded
         .kubeconfig
         .as_ref()
         .map(|merged| merged.contexts.iter().find(|c| c.name == context));
-    if let Some(None) = named {
+    if let Some(None) = found {
         return Err(Error::Config(format!(
             "No context named \"{context}\" in the kubeconfig the app read."
         )));
     }
-    let entry = named.flatten().and_then(|named| named.context.as_ref());
+    let entry = found.flatten().and_then(|named| named.context.as_ref());
     let Some(entry) = entry.filter(|_| !loaded.named.is_empty()) else {
         return Ok(loaded.files.clone());
     };
