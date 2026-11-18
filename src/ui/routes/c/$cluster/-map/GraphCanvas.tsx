@@ -211,7 +211,9 @@ function Canvas({
 
   // Whether the reader moved the view themselves, and what they last opened.
   const moved = useRef(false);
-  const acted = useRef<string | null>(null);
+  // Under the key it was opened in: a new key is another view, and a node
+  // from the one before is not what a resize keeps.
+  const acted = useRef<{ id: string; key: string | null } | null>(null);
   const pressed = useRef<{ node: GraphNode; at: number } | null>(null);
 
   const centred = useRef<{ id: string } | null>(null);
@@ -222,9 +224,9 @@ function Canvas({
     // A pick is the reader's view: the group it opened is not fitted over
     // it, and a resize keeps it as it keeps a node they opened.
     moved.current = true;
-    acted.current = focus.id;
+    acted.current = { id: focus.id, key: fitKey };
     centre(focus.id);
-  }, [focus, placement, centre]);
+  }, [focus, placement, centre, fitKey]);
   const fitted = useRef<{ key: string; groups: unknown } | null>(null);
   useEffect(() => {
     if (fitKey === null) return;
@@ -260,7 +262,10 @@ function Canvas({
       return;
     }
     const { x, y, zoom } = flow.getViewport();
-    const node = nodes.find((each) => each.id === acted.current);
+    const node =
+      acted.current?.key === fitKey
+        ? nodes.find((each) => each.id === acted.current?.id)
+        : undefined;
     const at = node && absolute(node);
     if (at) {
       const left = at.x * zoom + x;
@@ -311,7 +316,7 @@ function Canvas({
   const actions = useMemo<MapActions>(
     () => ({
       open: (node, how) => {
-        acted.current = node.id;
+        acted.current = { id: node.id, key: now.current.fitKey };
         latest.current.onOpen(node, how);
       },
       pressed: (node, at) => {
