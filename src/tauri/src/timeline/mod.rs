@@ -153,10 +153,11 @@ fn keeping_of(keep: bool, dir: Option<&PathBuf>) -> Keeping {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "says", rename_all = "camelCase")]
 pub enum Identity {
-    /// Nothing was kept from an earlier run, or the cluster was checked to
-    /// be the one it was kept for.
+    /// Checked through the client held now, or no cluster was ever named
+    /// under this name: what is held was all seen through this client.
     Known,
-    /// Kept from an earlier run, and not checked yet.
+    /// Kept from an earlier run, or held across a reconnect, and not checked
+    /// through the client held now.
     NotChecked,
     /// Kept from an earlier run, and `kube-system` could not be read: the
     /// rows may be another cluster's that had this name.
@@ -252,11 +253,6 @@ struct Inner {
 }
 
 impl Inner {
-    /// Whether anything is held to be another cluster's.
-    fn holds_any(&self) -> bool {
-        self.store.newest() > 0 || !self.spans.followed.is_empty() || !self.spans.meta.is_empty()
-    }
-
     /// A stretch whose rows were not written, joined to the one before where
     /// they meet: rows dropped every second for a day are one stretch, not
     /// eighty thousand walked on every flush.
@@ -373,11 +369,12 @@ impl ClusterTimeline {
     }
 
     /// The client behind the name was replaced, perhaps by another
-    /// cluster's: whether what is held is this cluster's is checked again.
-    /// Nothing is dropped; the next check decides.
+    /// cluster's: whether what is held is this cluster's is checked again,
+    /// and so is what is recorded next, held or not. Nothing is dropped; the
+    /// next check decides.
     fn unchecked(&self) {
         let mut inner = self.inner.lock();
-        if inner.holds_any() && inner.checked == Identity::Known {
+        if inner.checked == Identity::Known {
             inner.checked = Identity::NotChecked;
             inner.told.spans = true;
         }
@@ -390,7 +387,7 @@ impl ClusterTimeline {
     /// have unchecked it.
     pub fn unsettled(&self) {
         let mut inner = self.inner.lock();
-        if inner.holds_any() && inner.checked != Identity::Known {
+        if inner.checked != Identity::Known {
             inner.checked = Identity::Unsettled;
             inner.told.spans = true;
         }
@@ -546,6 +543,7 @@ impl Timelines {
         let kept = !loaded.rows.is_empty()
             || !loaded.spans.followed.is_empty()
             || !loaded.spans.meta.is_empty();
+        let named = loaded.identity.is_some();
         let mut store = Store::default();
         store.restore(loaded.rows, loaded.let_go, now);
         let disk_let_go = loaded.let_go;
@@ -563,7 +561,7 @@ impl Timelines {
                 keeping,
                 unreadable: loaded.unreadable,
                 identity: loaded.identity,
-                checked: if kept {
+                checked: if kept || named {
                     Identity::NotChecked
                 } else {
                     Identity::Known

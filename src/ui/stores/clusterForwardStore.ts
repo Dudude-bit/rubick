@@ -24,6 +24,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { persistedByName } from "@/lib/kept-by-name";
 import {
   entriesOf,
   entryOf,
@@ -125,6 +126,13 @@ export const useClusterForwardStore = create<ClusterForwardState>()(
     }),
     { name: "cluster-forwards" }
   )
+);
+
+// Another cluster's Services are not this one's to open a tunnel into.
+persistedByName((context) =>
+  useClusterForwardStore.setState((state) => ({
+    forwards: withoutEntry(state.forwards, context),
+  }))
 );
 
 /** What `context` forwards for that vendor in `forwards`, or `undefined`. */

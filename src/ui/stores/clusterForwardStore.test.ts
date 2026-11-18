@@ -5,6 +5,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { nameIsAnotherCluster } from "@/lib/kept-by-name";
 import { entryOf, named } from "@/lib/named";
 import { reload } from "@/test/reload";
 
@@ -124,5 +125,22 @@ describe("clusters named like what every object has", () => {
     const left = useClusterForwardStore.getState().forwards;
     expect(entryOf(left, "__proto__")).toBeUndefined();
     expect(forwardsFor(left, "constructor")).toHaveLength(1);
+  });
+});
+
+describe("a name that turned into another cluster", () => {
+  /**
+   * The Service a forward names was the old cluster's, and opening the
+   * cluster woke a tunnel into the new one with it. Fails if a forward saved
+   * for the old cluster outlives the turn, or another name's goes with it.
+   */
+  it("forgets what the old cluster forwarded and keeps the rest", () => {
+    const { remember } = useClusterForwardStore.getState();
+    remember("prod", "prometheus", preference({ autoStart: true }));
+    remember("staging", "prometheus", preference({ localPort: 20003 }));
+    nameIsAnotherCluster("prod");
+    const { forwards } = useClusterForwardStore.getState();
+    expect(forwardOf(forwards, "prod", "prometheus")).toBeUndefined();
+    expect(forwardOf(forwards, "staging", "prometheus")?.localPort).toBe(20003);
   });
 });
