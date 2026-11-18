@@ -586,6 +586,7 @@ describe("the last change a card names", () => {
       letGo: undefined,
       unreadable: 0,
       identity: { says: "unknown", message: "namespaces is forbidden" },
+      error: null,
     });
     const section = pinShare(
       pin,
@@ -612,6 +613,7 @@ describe("the last change a card names", () => {
       letGo: undefined,
       unreadable: 0,
       identity: { says: "unsettled" },
+      error: null,
     });
     const section = pinShare(
       pin,
@@ -629,6 +631,36 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * A refresh failed after the card had read the timeline: with no change
+   * held, it said "nothing seen while this app was watching" of a stretch it
+   * could not read. Fails if a failed read leaves the last change said to
+   * be none.
+   */
+  it("says the timeline could not be read rather than that nothing was seen", () => {
+    const latest = lastChangeOf({
+      read: true,
+      rows: [],
+      letGo: undefined,
+      unreadable: 0,
+      identity: undefined,
+      error: new Error("disk refused"),
+    });
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 1, total: 1 },
+      { entries: [], known: true },
+      [],
+      latest,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(
+      rows.find((row) => row.label === "Last change")?.values[0].text
+    ).toMatch(/^The timeline could not be read: .*disk refused/);
+  });
+
+  /**
    * Every kept row failed to parse, and the card said "nothing seen while
    * this app was watching". Fails if rows that could not be read leave the
    * last change said to be none.
@@ -640,6 +672,7 @@ describe("the last change a card names", () => {
       letGo: undefined,
       unreadable: 3,
       identity: undefined,
+      error: null,
     });
     const section = pinShare(
       pin,
@@ -690,7 +723,13 @@ describe("the last change a card names", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/while this app was watching/)).toBeNull();
-    const read = { read: true, rows: [], unreadable: 0, identity: undefined };
+    const read = {
+      read: true,
+      rows: [],
+      unreadable: 0,
+      identity: undefined,
+      error: null,
+    };
     const words = (letGo: { before: number; cleared: boolean }) => {
       const section = pinShare(
         pin,

@@ -3,6 +3,7 @@ import { Pin } from "lucide-react";
 import { isChange, rowWords, type ChangeRow } from "@/lib/changes";
 import type { TimelineRead } from "@/hooks/useTimeline";
 import type { LetGo } from "@/generated/types";
+import { errorToShow } from "@/lib/error-utils";
 import { iconSvg } from "@/lib/icon-svg";
 import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
@@ -36,6 +37,8 @@ export type LastChange =
   | LetGo
   /** Kept rows that could not be read: one of them may be the last change. */
   | { unreadable: number }
+  /** The last read failed: what changed since is not known. */
+  | { failed: string }
   /** Rows kept under the name, and which cluster this is could not be checked. */
   | { unchecked: string | null }
   | null
@@ -44,7 +47,7 @@ export type LastChange =
 export function lastChangeOf(
   read: Pick<
     TimelineRead,
-    "read" | "rows" | "letGo" | "unreadable" | "identity"
+    "read" | "rows" | "letGo" | "unreadable" | "identity" | "error"
   >
 ): LastChange {
   if (!read.read) return undefined;
@@ -55,6 +58,7 @@ export function lastChangeOf(
   if (read.identity?.says === "unsettled") return { unchecked: null };
   const latest = read.rows.find(isChange);
   if (latest) return latest;
+  if (read.error) return { failed: errorToShow(read.error) };
   if (read.unreadable > 0) return { unreadable: read.unreadable };
   return read.letGo?.changes ?? null;
 }
@@ -71,6 +75,8 @@ export function lastChangeWords(
     return latest.unchecked === null
       ? t("services", "lastChangeUnsettled")
       : t("services", "lastChangeUnchecked", { reason: latest.unchecked });
+  if ("failed" in latest)
+    return t("changes", "readFailed", { reason: latest.failed });
   if ("unreadable" in latest)
     return t("changes", "keptUnreadable", { n: latest.unreadable });
   if ("before" in latest)

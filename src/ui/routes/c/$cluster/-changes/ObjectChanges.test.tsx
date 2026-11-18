@@ -368,3 +368,38 @@ it("says nothing of the moment it was opened from when the timeline could not be
   ).toBeInTheDocument();
   expect(screen.queryByText(/^Nothing on this clock since/)).toBeNull();
 });
+
+/**
+ * Opened from a moment on, the tab read its timeline, and the catch-up after
+ * it failed: it said "Nothing on this clock since" beside the failure.
+ * Fails if a stretch a failed read could not cover is drawn as quiet from
+ * that moment.
+ */
+it("says nothing of the moment it was opened from when a read after the first failed", async () => {
+  // Watched all along, so a read that answered would draw no gap after the moment.
+  const watched = page({
+    spans: {
+      followed: [
+        span({
+          from: Date.parse("2026-11-17T09:00:00Z"),
+          seenAt: Date.now(),
+          to: null,
+        }),
+      ],
+      meta: [],
+    },
+  });
+  let reads = 0;
+  answering(watched, (command) => {
+    if (command !== "timeline_read") return undefined;
+    reads += 1;
+    return reads === 1 ? watched : Promise.reject(new Error("disk refused"));
+  });
+  await renderWithRouter(<ObjectChanges subject={LEDGER} />, {
+    at: "/c/prod?since=2026-11-17T10%3A00%3A00.000Z",
+  });
+  expect(
+    await screen.findByText(/^The timeline could not be read: /)
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/^Nothing on this clock since/)).toBeNull();
+});
