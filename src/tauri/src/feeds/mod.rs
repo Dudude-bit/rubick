@@ -1489,6 +1489,18 @@ impl ContextFeeds {
             for id in idle {
                 inner.leave(id);
             }
+            // A reader that read its queue empty after falling behind is
+            // caught up from here too, not only on the next change: there may
+            // be none.
+            let behind: Vec<u64> = inner
+                .subscribers
+                .iter()
+                .filter(|(_, sub)| sub.lagged)
+                .map(|(id, _)| *id)
+                .collect();
+            for id in behind {
+                inner.resync(id);
+            }
             let done: Vec<KindKey> = inner
                 .kinds
                 .iter()
@@ -2873,6 +2885,49 @@ mod tests {
                 &slot("a"),
                 deployment("a", "web", &version.to_string()),
             );
+        }
+        assert_eq!(sets.len(), 3, "sets handed: {sets:?}");
+        context.end();
+    }
+
+    /// A reader that read its queue empty after falling behind waited for
+    /// the next change to be handed the slots it was behind on, and a quiet
+    /// cluster sends none. Fails if a reader's slots are not all handed with
+    /// nothing changing after it fell behind.
+    #[tokio::test]
+    async fn a_reader_caught_up_on_a_quiet_cluster_is_handed_every_slot() {
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 4);
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(
+            &ask(Some(vec!["a", "b", "c"]), Binding::Session),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(&generation, &whole(&kind), "forbidden".to_string(), None);
+        let slot = |namespace: &str| SlotKey {
+            kind: kind.clone(),
+            namespace: Some(namespace.to_string()),
+        };
+        for namespace in ["a", "b", "c"] {
+            list(
+                &generation,
+                &slot(namespace),
+                vec![deployment(namespace, "web", "1")],
+            );
+        }
+        let mut sets = BTreeSet::new();
+        for _ in 0..10 {
+            for update in drain(&mut sub) {
+                if let Update::Whole { slot, .. } = update {
+                    sets.insert(slot.namespace);
+                }
+            }
+            if sets.len() == 3 {
+                break;
+            }
+            context.reap(Instant::now());
         }
         assert_eq!(sets.len(), 3, "sets handed: {sets:?}");
         context.end();
