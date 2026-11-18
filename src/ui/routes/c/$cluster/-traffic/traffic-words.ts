@@ -351,19 +351,27 @@ const policyNames = (namespace: string, names: readonly string[]) =>
   names.map((name) => `NetworkPolicy ${namespace}/${name}`).join(", ");
 
 /** The app's reading of the policies on a drop Hubble named none for, said as the app's. */
+/** One sentence of the reading, with whether it says what is, or that it could not be read. */
+export interface ReadingPart {
+  text: string;
+  known: boolean;
+}
+
 export function readingWords(
   reading: PolicyReading,
   others: Known<string[]>,
   from: WorkloadKey,
   to: WorkloadKey,
   t: T
-): string[] {
-  const out = [t("traffic", "readingByApp")];
+): ReadingPart[] {
+  const out: ReadingPart[] = [];
+  const say = (text: string, known = true) => out.push({ text, known });
+  say(t("traffic", "readingByApp"));
   switch (reading.says) {
     case "noRuleAdmits": {
       const ingress = reading.direction === "ingress";
       const held = ingress ? to : from;
-      out.push(
+      say(
         t("traffic", ingress ? "readingNoIngress" : "readingNoEgress", {
           n: reading.policies.length,
           held: held.name,
@@ -375,7 +383,7 @@ export function readingWords(
     }
     case "unsettled": {
       const held = reading.direction === "ingress" ? to : from;
-      out.push(
+      say(
         t("traffic", "readingUnsettled", {
           held: held.name,
           other: (reading.direction === "ingress" ? from : to).name,
@@ -385,20 +393,19 @@ export function readingWords(
       break;
     }
     case "notSelected":
-      out.push(
-        t("traffic", "readingNotSelected", { to: to.name, from: from.name })
-      );
+      say(t("traffic", "readingNotSelected", { to: to.name, from: from.name }));
       break;
     case "unread":
-      out.push(
+      say(
         reading.why === null
           ? t("traffic", "readingUnreadBare")
-          : t("traffic", "readingUnread", { why: reading.why })
+          : t("traffic", "readingUnread", { why: reading.why }),
+        false
       );
   }
   if (!others.known)
-    out.push(t("traffic", "readingOthersUnread", { why: others.why ?? "" }));
+    say(t("traffic", "readingOthersUnread", { why: others.why ?? "" }), false);
   else if (others.value.length > 0)
-    out.push(t("traffic", "readingOthers", { kinds: others.value.join(", ") }));
+    say(t("traffic", "readingOthers", { kinds: others.value.join(", ") }));
   return out;
 }

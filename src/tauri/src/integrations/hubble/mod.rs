@@ -476,14 +476,18 @@ fn words_of(error: &(dyn std::error::Error + 'static)) -> String {
 /// How soon pods are read again when a flow names one the last read did not have.
 const OWNERS_AGAIN: u64 = 15;
 
-/// The namespaces whose pods name the live ends: the scope, and each one a
-/// flow names a peer pod in. Read for this alone; the scope of anything
-/// else stays the page's. `None` is every namespace.
+/// The namespaces whose pods name the live ends: the scope, each one read
+/// before, and each one a flow names a peer pod in now. A read replaces the
+/// last, so one it leaves out forgets the owners learnt there. Read for
+/// this alone; the scope of anything else stays the page's. `None` is every
+/// namespace.
 fn owners_reach(
     scope: Option<&[String]>,
+    asked: &BTreeSet<String>,
     missing: &BTreeSet<(String, String)>,
 ) -> Option<Vec<String>> {
     let mut reach: BTreeSet<String> = scope?.iter().cloned().collect();
+    reach.extend(asked.iter().cloned());
     reach.extend(missing.iter().map(|(namespace, _)| namespace.clone()));
     Some(reach.into_iter().collect())
 }
@@ -583,7 +587,7 @@ async fn run(
             }
             _ = tick.tick() => {
                 let now = now_secs();
-                let reach = owners_reach(scope.as_deref(), &fold.owners.missing);
+                let reach = owners_reach(scope.as_deref(), &asked, &fold.owners.missing);
                 let new_namespace = reach
                     .as_ref()
                     .is_some_and(|reach| reach.iter().any(|ns| !asked.contains(ns)));
@@ -1566,6 +1570,24 @@ mod tests {
         )));
     }
 
+    /// A read replaces the last: one of shop and monitoring, after one of
+    /// shop and kube-system, forgot coredns, and its next flow made a pod's
+    /// pair beside its Deployment's. Every namespace read before is read
+    /// again with the new one.
+    #[test]
+    fn a_new_peer_namespace_is_read_with_every_one_read_before() {
+        let asked = BTreeSet::from(["kube-system".to_string(), "shop".to_string()]);
+        let missing = BTreeSet::from([("monitoring".to_string(), "prometheus-0".to_string())]);
+        assert_eq!(
+            owners_reach(Some(&["shop".to_string()]), &asked, &missing),
+            Some(vec![
+                "kube-system".to_string(),
+                "monitoring".to_string(),
+                "shop".to_string()
+            ])
+        );
+    }
+
     /// A read that failed, whole or for a namespace, is asked again as a pod
     /// missing from it is: the API may answer the next time. A whole read
     /// that held every pod a flow named is not.
@@ -1646,11 +1668,12 @@ mod tests {
             ),
             ("shop".to_string(), "caller-649d545b48-c74f8".to_string()),
         ]);
+        let asked = BTreeSet::from(["shop".to_string()]);
         assert_eq!(
-            owners_reach(Some(&["shop".to_string()]), &missing),
+            owners_reach(Some(&["shop".to_string()]), &asked, &missing),
             Some(vec!["kube-system".to_string(), "shop".to_string()])
         );
-        assert_eq!(owners_reach(None, &missing), None);
+        assert_eq!(owners_reach(None, &asked, &missing), None);
         let mut fold = Fold::new(0);
         fold.owners_read(Owners {
             of: HashMap::from([(

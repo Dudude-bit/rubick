@@ -494,7 +494,10 @@
    Traffic map: a moving SVG stroke repaints the map every frame it moves,
    and fifteen of them held WebKit near 40% of a core with nothing changing.
    Stepped, a third of a dash at a time; held still under reduced motion,
-   while the map is off screen and while the window is not focused. */
+   while the map is off screen and while the window is not focused. Set
+   in longhands: the shorthand resets the play state, and the hover rule
+   outranks the pause, so a hovered edge went on moving in a window that
+   had lost focus. */
 @keyframes map-flow {
   to {
     stroke-dashoffset: -12;
@@ -504,7 +507,10 @@
 .map-flow,
 .traffic-map .react-flow__edge:hover .react-flow__edge-path {
   stroke-dasharray: 6 6;
-  animation: map-flow 1.2s steps(3) infinite;
+  animation-name: map-flow;
+  animation-duration: 1.2s;
+  animation-timing-function: steps(3);
+  animation-iteration-count: infinite;
 }
 
 .map-canvas[data-paused] .react-flow__edge-path,

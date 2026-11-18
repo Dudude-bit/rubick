@@ -2462,7 +2462,7 @@ export const en = {
     readingUnsettled:
       "{held} is selected by {policies}, and a rule there may admit {other}: a port or an address decides, which the app does not read here.",
     readingNotSelected:
-      "No NetworkPolicy restricts {to}'s ingress or {from}'s egress; another engine's policy, or Hubble itself, dropped it.",
+      "No NetworkPolicy restricts {to}'s ingress or {from}'s egress; what Cilium dropped it by, a policy of another kind or its own enforcement mode, the app does not read.",
     readingUnread: "The NetworkPolicies on this path could not be read: {why}",
     readingUnreadBare: "The NetworkPolicies on this path could not be read.",
     readingOthers:
