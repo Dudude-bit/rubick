@@ -2740,11 +2740,11 @@ export const ru: Catalogue = {
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
     atMost: "не больше {value}",
-    fromPods: {
-      one: "{line}, по замерам {read} из {n} пода",
-      few: "{line}, по замерам {read} из {n} подов",
-      many: "{line}, по замерам {read} из {n} подов",
-      other: "{line}, по замерам {read} из {n} подов",
+    ofPods: {
+      one: "{value} (по замерам {read} из {n} пода)",
+      few: "{value} (по замерам {read} из {n} подов)",
+      many: "{value} (по замерам {read} из {n} подов)",
+      other: "{value} (по замерам {read} из {n} подов)",
     },
     notKnown: "Неизвестно",
     shareNoTotal: "неизвестна: нет итога",

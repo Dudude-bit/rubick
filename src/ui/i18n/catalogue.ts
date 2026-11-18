@@ -2605,9 +2605,9 @@ export const en = {
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
     atMost: "at most {value}",
-    fromPods: {
-      one: "{line}, from {read} of its {n} pod",
-      other: "{line}, from {read} of its {n} pods",
+    ofPods: {
+      one: "{value} (from {read} of its {n} pod)",
+      other: "{value} (from {read} of its {n} pods)",
     },
     notKnown: "Not known",
     shareNoTotal: "not known: no total",

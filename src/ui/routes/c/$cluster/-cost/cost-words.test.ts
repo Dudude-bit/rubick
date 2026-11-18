@@ -198,18 +198,35 @@ describe("a peak summed over several pods", () => {
 });
 
 describe("figures read from some of a workload's pods", () => {
-  /** A sum over two of three pods says so, and is not "at most". Fails if it reads as the workload's. */
-  it("says how many pods they were read from", () => {
+  /**
+   * A sum over two of three pods says so beside the figure it is, and is
+   * not "at most"; a figure over every pod says nothing. Fails if a count
+   * lands on the other figure, or a sum over some reads as the workload's.
+   */
+  it("says how many pods each figure was read from", () => {
     const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
-      podsRead: { read: 2, of: 3 },
+      avgPods: { read: 2, of: 3 },
     });
     expect(efficiencyWords(e, t)).toBe(
-      "20% average, 80% peak, from 2 of its 3 pods"
+      "20% (from 2 of its 3 pods) average, 80% peak"
     );
     expect(usedLines(e, "cpu", t)).toEqual([
-      "200m average",
-      "800m peak, from 2 of its 3 pods",
+      "200m (from 2 of its 3 pods) average",
+      "800m peak",
     ]);
+    const peak = efficiencyOf(
+      1000,
+      200,
+      800,
+      "2020-01-01T00:00:00Z",
+      Date.now(),
+      {
+        peakPods: { read: 1, of: 3 },
+      }
+    );
+    expect(usedWords(peak, "cpu", t)).toBe(
+      "200m average · 800m (from 1 of its 3 pods) peak"
+    );
   });
 });
 

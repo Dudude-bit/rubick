@@ -53,7 +53,8 @@ describe("efficiency", () => {
       avg: 20,
       peak: 40,
       peakAtMost: false,
-      podsRead: null,
+      avgPods: null,
+      peakPods: null,
       since: DAY_OLD,
       whole: true,
     });
@@ -227,14 +228,62 @@ describe("efficiency", () => {
     expect(some.cpu).toMatchObject({
       state: "measured",
       peakAtMost: false,
-      podsRead: { read: 2, of: 3 },
+      avgPods: { read: 2, of: 3 },
+      peakPods: { read: 2, of: 3 },
     });
-    expect(some.memory).toMatchObject({ podsRead: { read: 1, of: 3 } });
+    expect(some.memory).toMatchObject({
+      avgPods: { read: 2, of: 3 },
+      peakPods: { read: 1, of: 3 },
+    });
     expect(overRequested(some.cpu)).toBe(false);
 
     const one = workloadEfficiency(fold([1, 1, 1, 1], 1), key, requests, NOW);
-    expect(one.cpu).toMatchObject({ peakAtMost: false, podsRead: null });
+    expect(one.cpu).toMatchObject({
+      peakAtMost: false,
+      avgPods: null,
+      peakPods: null,
+    });
     expect(overRequested(one.cpu)).toBe(true);
+  });
+
+  /**
+   * The CPU average covered two of three pods and the peak all three: the
+   * one count, the smaller, was put on both, so the whole peak was
+   * neither "at most" nor judged. Fails if the average's count is the
+   * peak's, or the other way round.
+   */
+  it("counts the average's pods and the peak's apart", () => {
+    const reading: UsageReading = {
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[100, 400, 10, 20]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 3, 3, 2]],
+        pods: [3],
+        since: [DAY_OLD],
+      },
+    };
+    const of = workloadEfficiency(
+      reading,
+      key,
+      { cpu: 1000, memory: 100 },
+      NOW
+    );
+    expect(of.cpu).toMatchObject({
+      avgPods: { read: 2, of: 3 },
+      peakPods: null,
+      peakAtMost: true,
+    });
+    expect(overRequested(of.cpu)).toBe(true);
+    expect(of.memory).toMatchObject({
+      avgPods: null,
+      peakPods: { read: 2, of: 3 },
+      peakAtMost: false,
+    });
   });
 
   /** Where the reading itself is missing, both resources say why. */

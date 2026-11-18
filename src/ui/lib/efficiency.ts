@@ -91,10 +91,17 @@ interface Pods {
    */
   peakAtMost: boolean;
   /**
-   * Read from `read` of the `of` pods it runs; `null` where from every one.
-   * A sum over some of them is neither its figure nor a bound on it.
+   * The average read from `read` of the `of` pods it runs, and the peak:
+   * each `null` where from every one, each counted on its own query. A sum
+   * over some of them is neither its figure nor a bound on it.
    */
-  podsRead: { read: number; of: number } | null;
+  avgPods: PodsRead | null;
+  peakPods: PodsRead | null;
+}
+
+export interface PodsRead {
+  read: number;
+  of: number;
 }
 
 /**
@@ -126,7 +133,8 @@ export function efficiencyOf(
   const span = { since, whole: now - started >= WINDOW_MS };
   const from = {
     peakAtMost: pods.peakAtMost ?? false,
-    podsRead: pods.podsRead ?? null,
+    avgPods: pods.avgPods ?? null,
+    peakPods: pods.peakPods ?? null,
   };
   if (avg === null && peak === null) return { state: "noSamples", ...span };
   if (requested <= 0)
@@ -191,21 +199,28 @@ export function workloadEfficiency(
   const since = reading.fold.since[at] ?? null;
   const covered = reading.fold.covered[at] ?? [];
   const of = reading.fold.pods[at];
-  // A peak is read per pod: summed over every one it runs it is a bound,
-  // and over some of them it is neither.
+  // Each figure covers the pods its own query had a series for. A peak is
+  // read per pod: summed over every one it runs it is a bound, and over
+  // some of them it is neither.
   const podsOf = (
     avg: (typeof USAGE_QUERIES)[number],
     peak: (typeof USAGE_QUERIES)[number]
   ): Partial<Pods> => {
-    const counts = [avg, peak]
-      .map((query) => USAGE_QUERIES.indexOf(query))
-      .filter((query) => values[query] !== null && values[query] !== undefined)
-      .map((query) => covered[query] ?? 0);
-    if (of === undefined || counts.length === 0) return {};
-    const read = Math.min(...counts);
-    return read < of
-      ? { podsRead: { read, of } }
-      : { peakAtMost: (covered[USAGE_QUERIES.indexOf(peak)] ?? 0) > 1 };
+    if (of === undefined) return {};
+    const some = (query: (typeof USAGE_QUERIES)[number]): PodsRead | null => {
+      const at = USAGE_QUERIES.indexOf(query);
+      const read = covered[at] ?? 0;
+      return values[at] === null || values[at] === undefined || read >= of
+        ? null
+        : { read, of };
+    };
+    const peakPods = some(peak);
+    const peakRead = covered[USAGE_QUERIES.indexOf(peak)] ?? 0;
+    return {
+      avgPods: some(avg),
+      peakPods,
+      peakAtMost: peakPods === null && peakRead > 1,
+    };
   };
   return {
     cpu: efficiencyOf(
@@ -245,7 +260,7 @@ export function overRequested(efficiency: Efficiency): boolean {
   return (
     efficiency.state === "measured" &&
     efficiency.whole &&
-    efficiency.podsRead === null &&
+    efficiency.peakPods === null &&
     efficiency.peakRatio !== null &&
     efficiency.peakRatio < OVER_REQUESTED_BELOW
   );

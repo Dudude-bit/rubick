@@ -104,10 +104,11 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   if (peakless(e.cpu) || peakless(e.memory)) return { says: "peakUnread" };
   if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
     return { says: "noSamples" };
-  // Measured from some of its pods: neither its figure nor a bound on it.
+  // Its peak measured from some of its pods: neither its peak nor a bound
+  // on it. An average from some of them judges nothing either way.
   for (const one of [e.cpu, e.memory])
-    if (one.state === "measured" && one.podsRead)
-      return { says: "partial", ...one.podsRead };
+    if (one.state === "measured" && one.peakPods)
+      return { says: "partial", ...one.peakPods };
   return { says: "within" };
 }
 
