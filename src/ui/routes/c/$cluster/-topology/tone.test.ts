@@ -81,11 +81,38 @@ describe("a map node's colour", () => {
    */
   it("rings a node whose verdict was worked out from a read gone stale", () => {
     const stale = (kinds: string[]) => ({ ...inputs, stale: new Set(kinds) });
-    const service = node(ref("Service"), {
+    // Two ready endpoints, green while nothing it was read from is stale.
+    const serviceRef: ObjectRef = {
+      ...ref("Service"),
+      facts: {
+        kind: "service",
+        type: "ClusterIP",
+        clusterIp: "10.0.0.1",
+        externalName: null,
+        selector: "app=web",
+        ports: [],
+      },
+    };
+    const service = node(serviceRef, {
       says: "service",
-      published: null,
+      published: {
+        service: serviceRef,
+        source: "slices",
+        slices: 1,
+        ready: 2,
+        draining: 0,
+        notReady: 0,
+        unrouted: 0,
+        unroutedReady: 0,
+        ports: [],
+        endpoints: [],
+        whole: true,
+        unpublished: [],
+        stop: null,
+      },
       unread: null,
     });
+    expect(toneOf(service, stale([]))).toBe("ok");
     expect(toneOf(service, stale(["EndpointSlice"]))).toBe("unknown");
     const rollout = node(ref("Deployment"), {
       says: "rollout",

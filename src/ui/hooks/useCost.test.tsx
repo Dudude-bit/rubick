@@ -130,6 +130,23 @@ describe("which source a cost is read from", () => {
 
   /** OpenCost answering wins over entered prices: they are not mixed. */
   it("reads OpenCost's prices where its series answer, prices entered or not", async () => {
+    costBasis.mockResolvedValue({
+      ...BASIS,
+      nodes: [
+        {
+          name: "node-a",
+          instanceType: null,
+          cpuCapacity: 2000,
+          cpuAllocatable: 1900,
+          memoryCapacity: 8 * 1024 ** 3,
+          memoryAllocatable: 7 * 1024 ** 3,
+          gpus: 0,
+          cpuRequested: null,
+          memoryRequested: null,
+          gpusRequested: null,
+        },
+      ],
+    });
     capability.mockReturnValue(
       ready(async () => ({
         ...READING,
@@ -414,6 +431,8 @@ describe("a read that failed after one that answered", () => {
       wrapper,
     });
     await waitFor(() => expect(usage.result.current.state).toBe("read"));
+    // When it was read travels with it: what it covers is judged then.
+    expect(usage.result.current).toMatchObject({ at: expect.any(Number) });
     capability.mockReturnValue(
       ready(() => answer({ points: [], stepSeconds: 300 }) as never)
     );

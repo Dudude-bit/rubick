@@ -11,6 +11,7 @@ import { trafficDoors } from "./traffic-doors";
 import type { RouteTls } from "./ingress-tls";
 import type { DoorRead } from "./policy-door";
 import type {
+  ChainStop,
   GatewayInfo,
   ObjectRef,
   Relation,
@@ -123,6 +124,58 @@ describe("trafficDoors", () => {
     );
 
     expect(model.entries[0].doors[0].checked).toBe(true);
+  });
+
+  /**
+   * A door whose Gateway class could not be read, or whose Gateway was not,
+   * wore the green dot of a door judged and fine. Fails if either is
+   * marked checked while nothing broke.
+   */
+  it("leaves a door unjudged where its class or its Gateway was not read", () => {
+    const doorOf = (
+      existence: ObjectRef["existence"],
+      stops: ChainStop[] = []
+    ) =>
+      trafficDoors(
+        conns({
+          edges: [
+            edge(
+              ref("HTTPRoute", "web"),
+              ref("Service", "app"),
+              ruleRoutes(["web.example.com"])
+            ),
+            edge(
+              ref("HTTPRoute", "web"),
+              gatewayRef("edge", "envoy", existence),
+              {
+                verb: "attachesTo",
+                port: null,
+                listenerSet: null,
+                sectionName: "http",
+              }
+            ),
+          ],
+          stops,
+        }),
+        [gateway("edge", ["203.0.113.10"])],
+        t
+      ).entries[0].doors[0];
+    const classUnread: ChainStop = {
+      reason: "gatewayClassUnread",
+      route: ref("HTTPRoute", "web"),
+      gateway: gatewayRef("edge"),
+      class: "envoy",
+      said: "gatewayclasses is forbidden",
+    };
+    expect(doorOf("present", [classUnread])).toMatchObject({
+      broken: null,
+      checked: false,
+    });
+    expect(doorOf("notChecked")).toMatchObject({
+      broken: null,
+      checked: false,
+    });
+    expect(doorOf("present").checked).toBe(true);
   });
 
   /** A route whose parentRef names a ListenerSet the app could not read
@@ -849,6 +902,7 @@ describe("trafficDoors", () => {
       });
       expect(doorWith(null)).toMatchObject({
         broken: null,
+        checked: false,
         note: "NetworkPolicy not checked",
       });
     });

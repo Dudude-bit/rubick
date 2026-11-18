@@ -50,7 +50,13 @@ export type UsageReading =
   | { state: "noSupplier" }
   | { state: "reading" }
   | { state: "failed"; said: string }
-  | { state: "read"; keys: readonly WorkloadKey[]; fold: WorkloadFold };
+  | {
+      state: "read";
+      keys: readonly WorkloadKey[];
+      fold: WorkloadFold;
+      /** When it was read: what it covers is judged then, not at render. */
+      at?: number | null;
+    };
 
 export type Efficiency =
   /** Nothing keeps usage history for this cluster. */
@@ -141,9 +147,12 @@ export function workloadEfficiency(
   reading: UsageReading,
   key: WorkloadKey,
   requests: { cpu: number; memory: number },
-  now: number = Date.now()
+  asOf?: number
 ): WorkloadEfficiency {
   if (reading.state !== "read") return { cpu: reading, memory: reading };
+  // What a reading covers is judged when it was read: a day counted at
+  // render grew a few hours' reading into a whole one.
+  const now = asOf ?? reading.at ?? Date.now();
   // Its namespace's pods were refused to the read: no sample is not "none".
   const refused = reading.fold.unread.find(
     (u) => u.namespace === key.namespace

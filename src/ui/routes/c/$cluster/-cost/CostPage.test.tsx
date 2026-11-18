@@ -876,6 +876,11 @@ describe("one workload's cost", () => {
     expect(line).toHaveTextContent(
       `${formatMoney(withCron.workloads[0]!.perHour!, "")} per hour`
     );
+    // Efficiency is the CronJob's row too, every run's: said, not passed
+    // off as this one Job's.
+    expect(screen.getByTestId("workload-efficiency")).toHaveTextContent(
+      "Of CronJob backup, every run: CPU"
+    );
   });
 
   /** The line is drawn beside running pods: no row is never "nothing runs". */

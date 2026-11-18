@@ -8,7 +8,7 @@ import { useListenerSets } from "@/hooks/useListenerSets";
 import { ROUTING_STALE } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import type { TraceSources } from "@/lib/route-trace";
+import { topologyRead, type TraceSources } from "@/lib/route-trace";
 import { useRouteBacking } from "./useRouteBacking";
 
 /**
@@ -43,14 +43,25 @@ export function useTraceSources(route: RouteInfo): TraceSources {
     () => ({
       gateways: gateways.data ?? [],
       classes: classes.data ?? [],
-      topologyKnown:
-        gateways.data !== undefined &&
-        (classes.data !== undefined || !served.has("GatewayClass")),
+      topologyKnown: topologyRead(
+        { data: gateways.data, error: gateways.error },
+        { data: classes.data, error: classes.error },
+        served.has("GatewayClass")
+      ),
       listenerSets: sets.sets,
       listenerSetsSaid: sets.said,
       backing,
       door,
     }),
-    [gateways.data, classes.data, served, sets, backing, door]
+    [
+      gateways.data,
+      gateways.error,
+      classes.data,
+      classes.error,
+      served,
+      sets,
+      backing,
+      door,
+    ]
   );
 }

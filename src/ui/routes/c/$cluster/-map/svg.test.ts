@@ -141,6 +141,14 @@ describe("the map as an image", () => {
     const [, top] = doc.documentElement.getAttribute("viewBox")!.split(" ");
     expect(Number(note!.getAttribute("y"))).toBeGreaterThan(Number(top));
     expect(Number(note!.getAttribute("y"))).toBeLessThan(0);
+    // The whole note inside the image, at no narrower than half the font
+    // size a character, on a map with nothing else to widen it.
+    const [left, , width] = doc.documentElement
+      .getAttribute("viewBox")!
+      .split(" ")
+      .map(Number);
+    const text = note!.textContent!;
+    expect(left + width).toBeGreaterThanOrEqual(text.length * 11 * 0.55);
   });
 
   /**

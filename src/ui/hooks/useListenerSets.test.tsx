@@ -54,4 +54,23 @@ describe("the ListenerSets a route resolves through", () => {
     );
     expect(refused.result.current.sets).toBeNull();
   });
+
+  /**
+   * A list that answered once and failed on its next read kept its answer,
+   * and routes resolved through sets perhaps deleted since. Fails if a read
+   * that failed after an answer still gives that answer.
+   */
+  it("are unread again once a read after an answer fails", async () => {
+    detection.data = { kinds: [{ kind: "Gateway" }, { kind: "ListenerSet" }] };
+    vi.mocked(commands.listListenerSets).mockResolvedValueOnce([]);
+    const { result } = renderHook(() => useListenerSets(true), { wrapper });
+    await waitFor(() => expect(result.current.sets).toEqual([]));
+    await client.refetchQueries();
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        sets: null,
+        said: expect.stringContaining("listenersets is forbidden"),
+      })
+    );
+  });
 });

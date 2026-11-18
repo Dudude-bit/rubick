@@ -580,7 +580,7 @@ describe("CronJobDetail", () => {
     await renderPage();
     const last = (await screen.findByText("Last run")).parentElement!;
     // The run's minute began two to three minutes before the page draws.
-    await waitFor(() => expect(last).toHaveTextContent(/[23]m ago/));
+    await waitFor(() => expect(last).toHaveTextContent(/(?<!\d)[23]m ago/));
     expect(last).not.toHaveTextContent("1h ago");
   });
 

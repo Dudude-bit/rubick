@@ -234,10 +234,13 @@ export function watchedSection(
     | "error"
     | "letGo"
     | "readFrom"
-  >
+  >,
+  /** The span running whatever the filter, whose refusals are said even where it does not watch what the screen shows. */
+  running?: SpanLike
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
-  const refused = watching && unwatchedWords(watching, t);
+  const said = running ?? watching;
+  const refused = said && unwatchedWords(said, t);
   const earlier =
     watching && earlierRowsWords(spans, items, watching.from, t, clock);
   const since = watching

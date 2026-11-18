@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { FlowEnd } from "@/generated/types";
+import { translate } from "@/i18n";
 import {
   flowTone,
   liveRow,
@@ -129,9 +130,11 @@ describe("a flow opened from its edge", () => {
   });
 
   /**
-   * Calls that failed before reaching the server are in the caller's proxy's
+   * Calls the server's proxy did not report are in the caller's proxy's
    * report only: the row holds them and is not green, and the panel says
-   * which proxy each number came from, the server's alone where it alone spoke.
+   * which proxy each number came from, the server's alone where it alone
+   * spoke. Why the server's proxy is silent on them is not in the series, so
+   * neither language says they never reached it.
    */
   it("says which proxy the numbers came from, and keeps the caller's failures in the share", async () => {
     const istio: FlowSource = {
@@ -182,9 +185,13 @@ describe("a flow opened from its edge", () => {
     expect(screen.getByText(/of them errors/).className).toContain("text-err");
     expect(
       screen.getByText(
-        "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server."
+        "From the server's proxy, and the calls only the caller's proxy saw: the server's proxy did not report them."
       )
     ).toBeTruthy();
+    for (const locale of ["en", "ru"] as const)
+      expect(translate(locale, "traffic", "panelSideBoth")).not.toMatch(
+        /before reaching|не дошли/
+      );
     page.unmount();
     await renderWithRouter(
       <FlowPanel
@@ -225,6 +232,66 @@ describe("a flow opened from its edge", () => {
       )
     ).toBeTruthy();
     expect(screen.getByText("2 forwarded flows/s")).toBeTruthy();
+  });
+
+  /**
+   * Hubble's requests query failed while its flow events came back: the
+   * pair has no requests because they were not read, not because it is
+   * below HTTP, and the panel says the first.
+   */
+  it("says a pair's requests were not read, not that it is below HTTP, where their query failed", async () => {
+    const hubble: FlowSource = {
+      id: "hubble",
+      name: "Hubble",
+      state: { says: "present" },
+      measures: ["events", "requests", "errors"],
+      found: [],
+      need: "needHubble",
+      marks: false,
+      nodeAgent: true,
+      needsPods: false,
+      grpcErrors: false,
+    };
+    const [row] = pairRows({
+      sources: [hubble],
+      window: "5m",
+      answer: {
+        ends: [end("caller"), end("db")],
+        flows: [
+          {
+            source: 0,
+            from: 0,
+            to: 1,
+            protocols: [],
+            sides: [],
+            values: MEASURES.map((m) => (m === "events" ? 2 : null)),
+            reasons: [],
+          },
+        ],
+        reads: [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "failed", code: "PROMETHEUS", message: "timed out" },
+          },
+        ],
+        observed: null,
+        coverage: [],
+        podsUnread: [],
+        podsFailed: null,
+        cut: 0,
+      },
+    }).rows;
+    await renderWithRouter(
+      <FlowPanel row={row} window="last 5 minutes" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(
+      screen.getByText(
+        "Its requests could not be read, so whether this pair is seen above HTTP is not known."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Seen only below HTTP/)).toBeNull();
   });
 
   /**

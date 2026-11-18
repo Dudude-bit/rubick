@@ -5,6 +5,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import type { MapTone } from "@/integrations";
 import type { StatusRole } from "@/lib/status-role";
+import { mapStopped, type TopologySnapshot } from "../-map/useTopology";
 import type { Model } from "./model";
 
 const TONE_ROLE: Record<MapTone, StatusRole | undefined> = {
@@ -14,6 +15,27 @@ const TONE_ROLE: Record<MapTone, StatusRole | undefined> = {
   mute: undefined,
   unknown: undefined,
 };
+
+/**
+ * How much of the map a share holds: a map that stopped or is still opening
+ * is unread, and one still being drawn is the groups read so far.
+ */
+export function shareSaid(
+  map: Pick<TopologySnapshot, "phase" | "error" | "end">,
+  caveats: readonly string[],
+  t: T
+): { unread: string | null; notes: readonly string[] } {
+  const stopped = mapStopped(map, t);
+  if (stopped !== null) return { unread: stopped, notes: caveats };
+  if (map.phase === "opening")
+    return { unread: t("topology", "shareStillOpening"), notes: caveats };
+  if (map.phase === "drawing")
+    return {
+      unread: null,
+      notes: [t("topology", "shareStillDrawing"), ...caveats],
+    };
+  return { unread: null, notes: caveats };
+}
 
 /**
  * The map as one table: a row a group, what it holds and what was not read

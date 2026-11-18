@@ -46,7 +46,7 @@ use crate::ownership::{KindKey, SlotKey, SlotState, LISTED_FOR};
 /// again does not list the cluster twice.
 const LINGER: Duration = Duration::from_mins(1);
 /// How long a page-bound subscription lives without a `touch`.
-const PAGE_IDLE: Duration = Duration::from_mins(3);
+pub(crate) const PAGE_IDLE: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(5);
 /// How long a kind with no watch free waits for its next list.
 const RELIST_EVERY: Duration = Duration::from_secs(30);

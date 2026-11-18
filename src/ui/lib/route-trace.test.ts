@@ -12,6 +12,7 @@ import {
   candidateListeners,
   servingSay,
   routeBackingOf,
+  topologyRead,
 } from "./route-trace";
 import type { DoorRead } from "./policy-door";
 import { translate } from "@/i18n";
@@ -269,6 +270,25 @@ const ids = (trace: { steps: { id: string }[] }) =>
  * "no controller answered" about a gateway the map, the pulse and the peek
  * all called programmed — one cluster, two answers.
  */
+describe("whether the verdict sources are current", () => {
+  /**
+   * A GatewayClass list that failed on its next read kept its last answer,
+   * and every Gateway and route was judged by classes perhaps deleted since.
+   * Fails if a list with an answer and a failure since counts as read, or
+   * classes the cluster does not serve hold the Gateways back.
+   */
+  it("counts a list whose last read failed as not read, whatever it held", () => {
+    const read = { data: [], error: null };
+    const failed = { data: [], error: new Error("forbidden") };
+    const never = { data: undefined, error: null };
+    expect(topologyRead(read, read, true)).toBe(true);
+    expect(topologyRead(read, failed, true)).toBe(false);
+    expect(topologyRead(failed, read, true)).toBe(false);
+    expect(topologyRead(read, never, true)).toBe(false);
+    expect(topologyRead(read, failed, false)).toBe(true);
+  });
+});
+
 describe("gatewayProgrammed", () => {
   /** The connections graph reads the same corpus, so the chain and the trace stop at the same Gateways. */
   it("reads a Gateway as the shared corpus says", () => {

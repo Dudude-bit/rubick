@@ -1857,6 +1857,7 @@ export const en = {
     notRead: "not read",
     missing: "missing",
     noPolicyBadge: "no policy",
+    policyPartlyBadge: "no policy for {n} of {total}",
     policyUnknownBadge: "policies unknown",
     noAppLabel: "{namespace} · no app label",
     refusedWhole: "Refused: nothing in {namespace} could be read. {said}",
@@ -1890,6 +1891,8 @@ export const en = {
       "No edges from or to {kinds} are drawn here: they were not read.",
     notLookedLine: "{state}: {kinds}",
     clusterSaid: "What the cluster said",
+    verdictsUnread:
+      "{kinds} could not be read, so routes and Gateways are drawn not checked: {said}",
     otherEngines:
       "{kinds} in force here is not drawn: a workload no NetworkPolicy selects may still be held by it.",
     noMatch: "Nothing on the map is called that",
@@ -1900,6 +1903,8 @@ export const en = {
       "{namespaces} not read: outside the namespaces this map draws, so only what is named from them is here",
     shareStillOpening:
       "The map was still being opened: nothing in it had been read yet.",
+    shareStillDrawing:
+      "The map was still being drawn: these are the groups read so far.",
     shareGroup: "Group",
     shareHolds: "What it holds",
   },
@@ -2233,7 +2238,7 @@ export const en = {
       "Without a memory request the scheduler places the pod as if it needs no memory, and it is among the first evicted when the node runs short.",
     requestsAboveUsage: "Requests far above what it uses",
     requestsAboveUsageWhy:
-      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler keeps the whole request free for it on a node, so the rest is paid for and used by nothing. Lower the request toward the peak, keeping room for the peaks the day did not see.",
+      "Its peak over the last day stayed under half of what it requests, which is where the Cost page marks a workload over-requested. The scheduler sets the whole request aside for it on a node, so no other pod can be placed on the rest, though the rest is paid for either way; spare CPU may still be borrowed by another pod's bursts. Lower the request toward the peak, keeping room for the peaks the day did not see.",
     removedApiInHelmRelease:
       "Helm release stores an API version Kubernetes removes",
     removedApiInHelmReleaseWhy:
@@ -2383,7 +2388,7 @@ export const en = {
     olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
     identityUnknown:
-      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked ({reason}).",
+      "Rows kept under this name may be another cluster's that had it: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
   },
   traffic: {
@@ -2537,11 +2542,13 @@ export const en = {
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
     panelBelowHttp:
       "Seen only below HTTP: requests, errors and latency are not counted for this pair.",
+    panelRequestsUnread:
+      "Its requests could not be read, so whether this pair is seen above HTTP is not known.",
     panelSideServer: "From the server's proxy.",
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
     panelSideBoth:
-      "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
+      "From the server's proxy, and the calls only the caller's proxy saw: the server's proxy did not report them.",
     subRequests: "{v} req/s",
     subEvents: "{v} forwarded/s",
     subErrors: "{share} errors",
@@ -2762,6 +2769,7 @@ export const en = {
     lineCut:
       "Not among the {kept} workloads here that request most; the Cost page adds the rest up.",
     lineBilledTo: "Billed to {kind} {name}: {line}",
+    effBilledTo: "Of {kind} {name}, every run: {line}",
     lineNotRead: "Not in the cost read yet.",
     lineNoSeries: "No OpenCost series in this Prometheus; more on {page}.",
     lineCostPage: "the Cost page",
@@ -2940,6 +2948,8 @@ export const en = {
     noAddressPublished: "no address published",
     moreWays: "{n} more",
     lastChange: "Last change",
+    lastChangeUnchecked:
+      "not known: the rows kept under this name may be another cluster's ({reason})",
     nothingSeen: "nothing seen while this app was watching",
     nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
     nothingSeenSinceCleared:

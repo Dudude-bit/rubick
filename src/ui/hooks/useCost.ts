@@ -158,7 +158,11 @@ export function useCost(
     if (power.state === "ready") {
       // OpenCost found no price list for any node (kind, or a provider it
       // has none for): entered prices fill that in, saying why.
-      if (reading.data?.reading && prices && pricesNoNode(reading.data.reading))
+      if (
+        reading.data?.reading &&
+        prices &&
+        pricesNoNode(reading.data.reading, reading.data.basis)
+      )
         return {
           state: "picture",
           picture: estimatePicture(basis.data, prices, namespaces),
@@ -273,9 +277,14 @@ export function useWorkloadUsage(
     // A failed re-read is said, not hidden behind the read before it.
     if (usage.error) return { state: "failed", said: errorToShow(usage.error) };
     if (usage.data)
-      return { state: "read", keys: usage.data.keys, fold: usage.data.fold };
+      return {
+        state: "read",
+        keys: usage.data.keys,
+        fold: usage.data.fold,
+        at: usage.dataUpdatedAt || null,
+      };
     return { state: "reading", since };
-  }, [power, usage.data, usage.error, since]);
+  }, [power, usage.data, usage.error, usage.dataUpdatedAt, since]);
 }
 
 export type TrendState =

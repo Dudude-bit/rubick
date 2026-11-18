@@ -36,13 +36,22 @@ export type LastChange =
   | LetGo
   /** Kept rows that could not be read: one of them may be the last change. */
   | { unreadable: number }
+  /** Rows kept under the name, and which cluster this is could not be checked. */
+  | { unchecked: string }
   | null
   | undefined;
 
 export function lastChangeOf(
-  read: Pick<TimelineRead, "read" | "rows" | "letGo" | "unreadable">
+  read: Pick<
+    TimelineRead,
+    "read" | "rows" | "letGo" | "unreadable" | "identity"
+  >
 ): LastChange {
   if (!read.read) return undefined;
+  // The Changes page warns of it; the card does not name another cluster's
+  // row as this service's last change.
+  if (read.identity?.says === "unknown")
+    return { unchecked: read.identity.message };
   const latest = read.rows.find(isChange);
   if (latest) return latest;
   if (read.unreadable > 0) return { unreadable: read.unreadable };
@@ -57,6 +66,8 @@ export function lastChangeWords(
 ): string {
   if (latest === undefined) return t("services", "notReadYet");
   if (latest === null) return t("services", "nothingSeen");
+  if ("unchecked" in latest)
+    return t("services", "lastChangeUnchecked", { reason: latest.unchecked });
   if ("unreadable" in latest)
     return t("changes", "keptUnreadable", { n: latest.unreadable });
   if ("before" in latest)

@@ -218,9 +218,22 @@ function coverBadge(node: TopologyNode, t: T): GraphNode["badge"] | undefined {
       };
     case "none":
       return { text: t("topology", "noPolicyBadge"), tone: "warn" };
+    case "partly":
+      return {
+        text: t("topology", "policyPartlyBadge", {
+          n: cover.uncovered,
+          total: cover.total,
+        }),
+        tone: "warn",
+      };
     case "unknown":
     case "unread":
       return { text: t("topology", "policyUnknownBadge"), tone: "unknown" };
+    default: {
+      // A cover added on the Rust side and not drawn here is a compile error.
+      const undrawn: never = cover;
+      return undrawn;
+    }
   }
 }
 

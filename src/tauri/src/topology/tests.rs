@@ -321,6 +321,7 @@ fn opening(
             events: events.clone(),
             cancel: cancel.clone(),
             lease: None,
+            ask_at_most: stream::ASK_AT_MOST,
         },
         cancel,
     )
@@ -804,4 +805,29 @@ fn the_map_names_the_gateway_a_route_s_listener_set_leads_to() {
     assert_eq!(team(&stores), Some(Existence::Missing));
     stores.apply(read(Kind::ListenerSet, None, Reading::Synced));
     assert_eq!(public(&stores), Some(Existence::Missing));
+}
+
+/// A reread that never answered held the stream past the page's lease: the
+/// layer let the map's watches go, and the map stopped changing with nothing
+/// said. Fails if a tick waits on its asks for longer than its limit.
+#[tokio::test]
+async fn a_reread_that_never_answers_does_not_hold_the_map() {
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    map.feed([Feed::Applied(deployment("shop", "cart"))]);
+    let (events, mut rx) = broadcast::channel(64);
+    let (mut open, cancel) = opening(map.clone(), &events);
+    open.reread = Some(Arc::new(|| Box::pin(std::future::pending())));
+    open.ask_at_most = std::time::Duration::from_millis(50);
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+
+    map.feed([Feed::Applied(deployment("shop", "ledger"))]);
+    let drawn = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+        .await
+        .expect("drawn while the reread still waits")
+        .expect("open");
+    assert_eq!(pieces_of(&drawn), vec!["apps/Deployment/shop/ledger"]);
+    cancel.cancel();
+    task.await.expect("ends");
 }

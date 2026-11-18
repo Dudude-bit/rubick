@@ -187,6 +187,9 @@ describe("the map's view", () => {
     expect(setViewport).toHaveBeenCalledWith({ x: 150, y: 0, zoom: 1 });
     expect(fitView).toHaveBeenCalledTimes(2);
 
+    fireEvent.click(screen.getByRole("button", { name: /web/ }), {
+      detail: 1,
+    });
     fireEvent.doubleClick(screen.getByRole("button", { name: /web/ }));
     expect(opened).toHaveBeenCalledWith(
       expect.objectContaining({ id: "web" }),
@@ -223,6 +226,121 @@ describe("the map's view", () => {
     expect(setCenter).toHaveBeenCalledTimes(1);
     rerender(draw({ id: "web" }));
     await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(2), SLOW);
+  });
+
+  /**
+   * A layout that failed under a new key must not leave the next good one
+   * under that key unfitted. Fails if the view is not fitted to the layout
+   * that comes after the failure.
+   */
+  it("fits the layout that recovers from a failed one under the same key", async () => {
+    fits.length = 0;
+    const { rerender } = render(canvas(["argo"], "a"));
+    await waitFor(() => expect(fits).toEqual([2]), SLOW);
+    rerender(canvas(["argo", "broken"], "b"));
+    await screen.findByRole("alert", undefined, SLOW);
+    rerender(canvas(["argo", "billing"], "b"));
+    await waitFor(() => expect(fits.at(-1)).toBe(4), SLOW);
+  });
+
+  /**
+   * A search pick in a closed group opened it, centred the node, and the
+   * new layout of the opened group fitted the whole map over it. Fails if
+   * a layout after a pick is fitted over the node the pick centred.
+   */
+  it("keeps the node a pick centred rather than fitting the layout it opened", async () => {
+    fits.length = 0;
+    setCenter.mockClear();
+    const draw = (shown: string[], focus: { id: string } | null) => (
+      <GraphCanvas
+        groups={shown.map(group)}
+        nodes={shown.map((id) => node(`${id}/web`, id))}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        focus={focus}
+        fitKey="namespace"
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw(["argo"], null));
+    await waitFor(() => expect(fits).toEqual([2]), SLOW);
+    rerender(draw(["argo", "billing"], { id: "billing/web" }));
+    await waitFor(() => expect(setCenter).toHaveBeenCalledTimes(1), SLOW);
+    expect(fits).toEqual([2]);
+  });
+
+  /**
+   * A canvas hidden and shown again at the size it had moved a moved view
+   * by half that size: the hidden 0×0 was kept as the size before. Fails if
+   * a view comes back moved by a size that did not change.
+   */
+  it("keeps a moved view where it was when the canvas is hidden and shown again", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    setViewport.mockClear();
+    fitView.mockClear();
+    const draw = () => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw());
+    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1), SLOW);
+    handed.onMoveStart({} as MouseEvent);
+    Object.assign(view, { width: 0, height: 0 });
+    rerender(draw());
+    Object.assign(view, { width: 800, height: 600 });
+    rerender(draw());
+    expect(setViewport).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A double click slower than the peek's wait opened the peek, which moved
+   * the map, and the second click landed on empty canvas: the page never
+   * opened. Fails if a double click does not open the page of the node its
+   * first click landed on, wherever and however slowly its second lands, or
+   * if a click elsewhere in between does not let that node go.
+   */
+  it("opens the page of the node a double click began on, wherever its second click lands", async () => {
+    const opened = vi.fn();
+    const draw = () => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={opened}
+        ariaLabel="map"
+      />
+    );
+    render(draw());
+    const card = await screen.findByRole("button", { name: /web/ }, SLOW);
+    const canvas = screen.getByRole("group", { name: "map" });
+
+    fireEvent.click(card, { detail: 1 });
+    await waitFor(() =>
+      expect(opened).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "web" }),
+        "peek"
+      )
+    );
+    fireEvent.click(canvas, { detail: 2 });
+    fireEvent.doubleClick(canvas);
+    expect(opened).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "web" }),
+      "page"
+    );
+
+    opened.mockClear();
+    fireEvent.click(card, { detail: 1 });
+    fireEvent.click(canvas, { detail: 1 });
+    fireEvent.doubleClick(canvas);
+    expect(opened).not.toHaveBeenCalledWith(expect.anything(), "page");
   });
 
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */

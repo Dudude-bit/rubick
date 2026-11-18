@@ -247,11 +247,24 @@ struct Inner {
     told: Told,
 }
 
+impl Inner {
+    /// A stretch whose rows were not written, joined to the one before where
+    /// they meet: rows dropped every second for a day are one stretch, not
+    /// eighty thousand walked on every flush.
+    fn unkept_from(&mut self, since: i64, now: i64) {
+        match self.unkept.last_mut() {
+            Some(last) if since <= last.1 => last.1 = last.1.max(now),
+            _ => self.unkept.push((since, now)),
+        }
+    }
+}
+
 /// What one flush took of a cluster to write.
 struct Taken {
     pending: disk::Pending,
     told: Told,
-    state: disk::State,
+    /// What `state.json` is to say; `None` with keeping off, which writes none.
+    state: Option<disk::State>,
     since: i64,
     now: i64,
     epoch: u64,
@@ -347,6 +360,19 @@ impl ClusterTimeline {
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unknown { message };
             inner.told.spans = true;
+        }
+    }
+
+    /// The client behind the name was replaced, perhaps by another
+    /// cluster's: whether what is held is this cluster's is checked again.
+    /// Nothing is dropped; the next check decides.
+    fn unchecked(&self) {
+        let mut inner = self.inner.lock();
+        let held = inner.store.newest() > 0
+            || !inner.spans.followed.is_empty()
+            || !inner.spans.meta.is_empty();
+        if held && inner.checked == Identity::Known {
+            inner.checked = Identity::NotChecked;
         }
     }
 
@@ -453,6 +479,14 @@ impl Timelines {
             let mut inner = cluster.inner.lock();
             inner.keeping = keeping_of(keep, cluster.dir.as_ref());
             inner.told.spans = true;
+        }
+    }
+
+    /// A context's client was replaced by a connect or a disconnect, not a
+    /// renewal: the cluster behind the name may be another one now.
+    pub fn client_replaced(&self, context: &str) {
+        if let Some(cluster) = self.clusters.get(context) {
+            cluster.unchecked();
         }
     }
 
@@ -569,15 +603,15 @@ impl Timelines {
         let pending = std::mem::take(&mut inner.pending);
         let since = std::mem::replace(&mut inner.flushed_at, now);
         if !keep && cluster.dir.is_some() && !pending.rows.is_empty() {
-            inner.unkept.push((since, now));
+            inner.unkept_from(since, now);
         }
         inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
-        let state = disk::State {
+        let state = keep.then(|| disk::State {
             context: cluster.context.clone(),
             identity: inner.identity.clone(),
             spans: inner.spans.without(&inner.unkept),
             let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
-        };
+        });
         Taken {
             pending,
             told,
@@ -606,7 +640,7 @@ impl Timelines {
         let changed = told.rows || told.spans;
         let current = cluster.inner.lock().epoch == epoch;
         if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || pending.wipe)) {
-            let written = disk::write(dir, &pending, keep.then_some(&state), now);
+            let written = disk::write(dir, &pending, state.as_ref(), now);
             let mut inner = cluster.inner.lock();
             let next = match written {
                 Ok(let_go) => {
@@ -620,7 +654,7 @@ impl Timelines {
                         inner.pending.wipe = true;
                     }
                     if !pending.rows.is_empty() {
-                        inner.unkept.push((since, now));
+                        inner.unkept_from(since, now);
                         inner.told.spans = true;
                     }
                     Keeping::Failed {

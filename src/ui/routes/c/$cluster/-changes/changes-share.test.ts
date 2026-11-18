@@ -262,7 +262,7 @@ describe("what the shared Changes report says beyond the changes", () => {
       readFrom: null,
     });
     expect(section.body.type === "text" && section.body.text).toContain(
-      "Rows kept before this run may be another cluster's that had this name: which cluster this is could not be checked (namespaces is forbidden)."
+      "Rows kept under this name may be another cluster's that had it: which cluster this is could not be checked (namespaces is forbidden)."
     );
   });
 

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Sourced by the stands. kind rewrites the kubeconfig it is given (its
+# current-context too), so a path that is, or leads to, the home kubeconfig is
+# refused: by a link, a linked directory, a hard link, or a link to a file not
+# yet made. Run directly, it checks itself against a scratch home.
+
+refuse_home_kubeconfig() {
+  local path=$1 to dir home
+  while [ -L "$path" ]; do
+    to=$(readlink "$path")
+    case $to in /*) path=$to ;; *) path="$(dirname "$path")/$to" ;; esac
+  done
+  dir=$(cd "$(dirname "$path")" 2>/dev/null && pwd -P) || dir=$(dirname "$path")
+  home=$(cd "$HOME/.kube" 2>/dev/null && pwd -P) || home="$HOME/.kube"
+  if [ "$dir/$(basename "$path")" = "$home/config" ] || [ "$path" -ef "$HOME/.kube/config" ]; then
+    echo "refusing to write $HOME/.kube/config" >&2
+    exit 1
+  fi
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  set -u
+  scratch=$(mktemp -d)
+  trap 'rm -rf "$scratch"' EXIT
+  export HOME="$scratch/home"
+  mkdir -p "$HOME/.kube" "$scratch/sandbox"
+  touch "$HOME/.kube/config"
+  ln -s "$HOME/.kube/config" "$scratch/link"
+  ln -s "$HOME/.kube" "$scratch/kube"
+  ln "$HOME/.kube/config" "$scratch/hard"
+  ln -s "$HOME/.kube/later" "$scratch/dangling"
+  failed=0
+  expect() {
+    local want=$1 path=$2 got
+    if (refuse_home_kubeconfig "$path") 2>/dev/null; then got=allowed; else got=refused; fi
+    [ "$got" = "$want" ] || { echo "$path: $got, wanted $want" >&2; failed=1; }
+  }
+  expect refused "$HOME/.kube/config"
+  expect refused "$scratch/link"
+  expect refused "$scratch/kube/config"
+  expect refused "$scratch/hard"
+  expect allowed "$scratch/sandbox/config"
+  expect allowed "$scratch/sandbox/new/config"
+  rm "$HOME/.kube/config"
+  ln -s "$HOME/.kube/config" "$scratch/dangling-home"
+  expect refused "$scratch/dangling-home"
+  expect allowed "$scratch/dangling"
+  [ "$failed" = 0 ] && echo "sandbox guard: ok"
+  exit "$failed"
+fi

@@ -258,6 +258,17 @@ describe("the words Audit draws its rules and findings with", () => {
   });
 
   /**
+   * Its why said the rest of a request was "used by nothing", and spare CPU
+   * is borrowed by other pods' bursts: what a request takes from the node
+   * is room to place another pod. Fails if the rule gives the wrong reason.
+   */
+  it("says a request keeps other pods off the node, not that the rest is idle", () => {
+    const why = tIn("en")("audit", "requestsAboveUsageWhy");
+    expect(why).toContain("no other pod can be placed on the rest");
+    expect(why).not.toContain("used by nothing");
+  });
+
+  /**
    * A workload's peak is read per pod and summed: for several pods it is a
    * bound, and the finding says "no more than" rather than a peak it never
    * measured. Fails if a bound reads as the peak.

@@ -954,6 +954,27 @@ fn a_wipe_that_failed_is_done_on_the_next_write() {
     );
 }
 
+/// Keeping off on a busy cluster: every flush dropped rows, and each left a
+/// stretch of its own, eighty thousand a day walked on every flush. Fails if
+/// stretches that meet are not one.
+#[test]
+fn stretches_not_kept_that_meet_are_one() {
+    let root = tempfile::tempdir().unwrap();
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), false);
+    let cluster = timelines.cluster("kind");
+    for n in 0..50 {
+        cluster.change(change(
+            &n.to_string(),
+            ClusterTimeline::now(),
+            "Deployment",
+            Some("shop"),
+            "api",
+        ));
+        timelines.flush();
+    }
+    assert_eq!(cluster.inner.lock().unkept.len(), 1);
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {
@@ -1632,6 +1653,43 @@ mod recording {
         assert_eq!(span.to, None);
         assert_eq!(span.scope, ["audit-test"]);
         assert!(span.unwatched_in.is_empty(), "{:?}", span.unwatched_in);
+    }
+
+    /// `ops`, left by the window while it listed, is still fed for another
+    /// reader: its watch failing later re-entered it and shut the span over
+    /// `audit-test`. Fails if a state of a slot outside the window can shut
+    /// it again; one live there is still held, as `rescope` holds it.
+    #[test]
+    fn a_slot_the_window_left_does_not_shut_its_span_when_it_fails_later() {
+        let (_t, cluster, mut recorder) = recorder();
+        for (namespace, state) in [
+            (Some("audit-test"), SlotState::Live),
+            (Some("ops"), SlotState::Listing),
+        ] {
+            recorder.state(Source::Followed, slot("Deployment", namespace), state, None);
+        }
+        recorder.rescope(Some(&["audit-test".to_string()]));
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", Some("ops")),
+            SlotState::Blind,
+            None,
+        );
+        let span = followed_spans(&cluster).pop().expect("a span");
+        assert_eq!(
+            (span.to, span.scope),
+            (None, vec!["audit-test".to_string()])
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", Some("ops")),
+            SlotState::Live,
+            None,
+        );
+        assert_eq!(
+            recorder.slot_state(Source::Followed, &slot("Deployment", Some("ops"))),
+            Some(SlotState::Live)
+        );
     }
 
     /// A refusal that arrives while watching is a new stretch with its own

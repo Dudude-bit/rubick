@@ -74,7 +74,9 @@ const WIDE = 1e15;
 describe("one surface reading the timeline", () => {
   let announce: ((event: { payload: unknown }) => void) | null = null;
   let asked: TimelineQuery[] = [];
-  let answers: (TimelinePage | Promise<TimelinePage>)[] = [];
+  let answers: (TimelinePage | Promise<TimelinePage> | Error)[] = [];
+  /** What the backend's rows are numbered under when nothing else is queued. */
+  let epochNow = 0;
   const fresh = () =>
     new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapperOf =
@@ -102,6 +104,7 @@ describe("one surface reading the timeline", () => {
     announce = null;
     asked = [];
     answers = [];
+    epochNow = 0;
     useClusterStore.setState({ currentContext: "prod", isConnected: true });
     vi.mocked(listen).mockImplementation(async (event, handler) => {
       if (event === "timeline-changed") announce = handler as typeof announce;
@@ -110,7 +113,9 @@ describe("one surface reading the timeline", () => {
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command !== "timeline_read") return undefined;
       asked.push((args as { query: TimelineQuery }).query);
-      return answers.shift() ?? page([]);
+      const next = answers.shift();
+      if (next instanceof Error) throw next;
+      return next ?? page([], { epoch: epochNow });
     });
   });
 
@@ -194,6 +199,87 @@ describe("one surface reading the timeline", () => {
     act(() => result.current.loadOlder());
     await waitFor(() => expect(result.current.rows).toHaveLength(5));
     expect(asked[3].before).toEqual({ at: 10, seq: 10 });
+  });
+
+  /**
+   * An older page answered after the backend started over, for another
+   * cluster under the name: laid in, the old cluster's rows sat below the
+   * new one's. Fails if that page is laid in rather than the timeline read
+   * again from the top.
+   */
+  it("reads the timeline again from the top when an older page comes from rows that started over", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    epochNow = 1;
+    answers = [
+      page([row("x", 5)], { epoch: 1 }),
+      page([row("new", 30, 3)], { epoch: 1 }),
+    ];
+    act(() => result.current.loadOlder());
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
+  });
+
+  /**
+   * An older page asked before the backend started over came back after
+   * the window had read the new cluster's rows, numbered from the start so
+   * its last row matched. Fails if the old cluster's page is laid in below
+   * the new cluster's rows.
+   */
+  it("lays in no answer asked of rows that have since started over", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    let older: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (older = resolve))];
+    act(() => result.current.loadOlder());
+    epochNow = 1;
+    answers = [
+      page([], { epoch: 1, newest: 10 }),
+      page([row("new", 10, 10)], { epoch: 1, more: true }),
+    ];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
+    await act(async () => {
+      older(page([row("old", 5)]));
+      await new Promise((settle) => setTimeout(settle, 50));
+    });
+    expect(result.current.rows.map((each) => each.id)).toEqual(["new"]);
+  });
+
+  /**
+   * A catch-up that failed was swallowed: the rows held stayed, and the
+   * page went on calling the stretch since quiet. Fails if a failed
+   * catch-up is not the read's error until one answers again.
+   */
+  it("says a catch-up that failed, until one answers", async () => {
+    answers = [page([row("a", 10)])];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await settled();
+    answers = [new Error("disk refused")];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.error?.message).toContain("disk refused")
+    );
+    expect(result.current.rows).toHaveLength(1);
+    told("prod");
+    await waitFor(() => expect(result.current.error).toBeNull());
   });
 
   /**
