@@ -71,7 +71,7 @@ export type Efficiency =
       avg: number | null;
       peak: number | null;
     } & Span &
-      Peak)
+      Pods)
   | ({
       state: "measured";
       requested: number;
@@ -81,14 +81,20 @@ export type Efficiency =
       ratio: number | null;
       peakRatio: number | null;
     } & Span &
-      Peak);
+      Pods);
 
-interface Peak {
+/** Which of its pods the figures were read from. */
+interface Pods {
   /**
-   * Each pod's own peak, summed: the workload's was no higher, and may
-   * have been lower where they peaked apart.
+   * Each pod's own peak, summed over every pod it runs: the workload's was
+   * no higher, and may have been lower where they peaked apart.
    */
   peakAtMost: boolean;
+  /**
+   * Read from `read` of the `of` pods it runs; `null` where from every one.
+   * A sum over some of them is neither its figure nor a bound on it.
+   */
+  podsRead: { read: number; of: number } | null;
 }
 
 /**
@@ -114,13 +120,17 @@ export function efficiencyOf(
   peak: number | null,
   since: string | null,
   now: number = Date.now(),
-  peakAtMost = false
+  pods: Partial<Pods> = {}
 ): Efficiency {
   const started = since === null ? NaN : Date.parse(since);
   const span = { since, whole: now - started >= WINDOW_MS };
+  const from = {
+    peakAtMost: pods.peakAtMost ?? false,
+    podsRead: pods.podsRead ?? null,
+  };
   if (avg === null && peak === null) return { state: "noSamples", ...span };
   if (requested <= 0)
-    return { state: "unrequested", avg, peak, peakAtMost, ...span };
+    return { state: "unrequested", avg, peak, ...from, ...span };
   return {
     state: "measured",
     requested,
@@ -128,7 +138,7 @@ export function efficiencyOf(
     peak,
     ratio: avg === null ? null : avg / requested,
     peakRatio: peak === null ? null : peak / requested,
-    peakAtMost,
+    ...from,
     ...span,
   };
 }
@@ -179,9 +189,24 @@ export function workloadEfficiency(
   }
   const [cpuAvg, cpuPeak, memoryAvg, memoryPeak] = values;
   const since = reading.fold.since[at] ?? null;
-  // A peak is read per pod: summed over more than one it is a bound.
-  const summed = (query: number) =>
-    (reading.fold.covered[at]?.[query] ?? 0) > 1;
+  const covered = reading.fold.covered[at] ?? [];
+  const of = reading.fold.pods[at];
+  // A peak is read per pod: summed over every one it runs it is a bound,
+  // and over some of them it is neither.
+  const podsOf = (
+    avg: (typeof USAGE_QUERIES)[number],
+    peak: (typeof USAGE_QUERIES)[number]
+  ): Partial<Pods> => {
+    const counts = [avg, peak]
+      .map((query) => USAGE_QUERIES.indexOf(query))
+      .filter((query) => values[query] !== null && values[query] !== undefined)
+      .map((query) => covered[query] ?? 0);
+    if (of === undefined || counts.length === 0) return {};
+    const read = Math.min(...counts);
+    return read < of
+      ? { podsRead: { read, of } }
+      : { peakAtMost: (covered[USAGE_QUERIES.indexOf(peak)] ?? 0) > 1 };
+  };
   return {
     cpu: efficiencyOf(
       requests.cpu,
@@ -189,7 +214,7 @@ export function workloadEfficiency(
       cpuPeak ?? null,
       since,
       now,
-      summed(USAGE_QUERIES.indexOf("cpuPeak"))
+      podsOf("cpuAvg", "cpuPeak")
     ),
     memory: efficiencyOf(
       requests.memory,
@@ -197,7 +222,7 @@ export function workloadEfficiency(
       memoryPeak ?? null,
       since,
       now,
-      summed(USAGE_QUERIES.indexOf("memoryPeak"))
+      podsOf("memoryAvg", "memoryPeak")
     ),
   };
 }
@@ -213,13 +238,14 @@ export const OVER_REQUESTED_BELOW = 0.5;
  * Asked for far more than it ever used: its peak over the whole window
  * stayed under half the request. Only a measured peak can say so, and only
  * over a whole day of its pods: a peak from the hours since a rollout has
- * not met the day's busiest hour. A workload nobody measured, or one that
- * requests nothing, is never judged.
+ * not met the day's busiest hour, and only over every pod it runs. A
+ * workload nobody measured, or one that requests nothing, is never judged.
  */
 export function overRequested(efficiency: Efficiency): boolean {
   return (
     efficiency.state === "measured" &&
     efficiency.whole &&
+    efficiency.podsRead === null &&
     efficiency.peakRatio !== null &&
     efficiency.peakRatio < OVER_REQUESTED_BELOW
   );

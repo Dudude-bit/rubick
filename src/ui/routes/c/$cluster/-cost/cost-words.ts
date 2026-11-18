@@ -273,6 +273,16 @@ const peakSaid = (e: Efficiency, value: string, t: T) =>
     ? t("cost", "atMost", { value })
     : value;
 
+/** A line of figures read from some of its pods, saying which. */
+const fromPods = (e: Efficiency, line: string, t: T) =>
+  (e.state === "measured" || e.state === "unrequested") && e.podsRead
+    ? t("cost", "fromPods", {
+        line,
+        read: e.podsRead.read,
+        n: e.podsRead.of,
+      })
+    : line;
+
 /** One resource's efficiency, worded; never a 0% or a 100% it did not measure. */
 export function efficiencyWords(e: Efficiency, t: T): string {
   if (e.state !== "measured") return EFFICIENCY_WORDS[e.state](e, t);
@@ -284,9 +294,13 @@ export function efficiencyWords(e: Efficiency, t: T): string {
         : peakSaid(e, formatShare(e.peakRatio), t),
   };
   const age = youngFor(e, t);
-  return age === null
-    ? t("cost", "effMeasured", values)
-    : t("cost", "effMeasuredFor", { ...values, age });
+  return fromPods(
+    e,
+    age === null
+      ? t("cost", "effMeasured", values)
+      : t("cost", "effMeasuredFor", { ...values, age }),
+    t
+  );
 }
 
 /** What one resource used, in its own units, over the span the readings cover. */
@@ -302,9 +316,13 @@ export function usedWords(e: Efficiency, kind: "cpu" | "memory", t: T): string {
     peak: e.peak === null ? say(null) : peakSaid(e, say(e.peak), t),
   };
   const age = youngFor(e, t);
-  return age === null
-    ? t("cost", "usedAvgPeak", values)
-    : t("cost", "usedAvgPeakFor", { ...values, age });
+  return fromPods(
+    e,
+    age === null
+      ? t("cost", "usedAvgPeak", values)
+      : t("cost", "usedAvgPeakFor", { ...values, age }),
+    t
+  );
 }
 
 /**
@@ -326,9 +344,13 @@ export function usedLines(
   const peak = e.peak === null ? say(null) : peakSaid(e, say(e.peak), t);
   return [
     t("cost", "usedAvg", { avg: say(e.avg) }),
-    age === null
-      ? t("cost", "usedPeak", { peak })
-      : t("cost", "usedPeakFor", { peak, age }),
+    fromPods(
+      e,
+      age === null
+        ? t("cost", "usedPeak", { peak })
+        : t("cost", "usedPeakFor", { peak, age }),
+      t
+    ),
   ];
 }
 

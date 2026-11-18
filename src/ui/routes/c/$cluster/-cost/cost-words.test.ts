@@ -170,14 +170,9 @@ describe("a CronJob while the Jobs could not be listed", () => {
 describe("a peak summed over several pods", () => {
   /** A bound is said as one, as a percentage and as a quantity. Fails if it reads as the peak. */
   it("says at most beside it", () => {
-    const e = efficiencyOf(
-      1000,
-      200,
-      800,
-      "2020-01-01T00:00:00Z",
-      Date.now(),
-      true
-    );
+    const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      peakAtMost: true,
+    });
     expect(efficiencyWords(e, t)).toBe("20% average, at most 80% peak");
     expect(usedLines(e, "cpu", t)).toEqual([
       "200m average",
@@ -187,19 +182,30 @@ describe("a peak summed over several pods", () => {
 
   /** A workload that requests nothing still shows what it used. Fails if its summed peak reads as the peak. */
   it("says at most beside it where nothing was requested", () => {
-    const e = efficiencyOf(
-      0,
-      200,
-      800,
-      "2020-01-01T00:00:00Z",
-      Date.now(),
-      true
-    );
+    const e = efficiencyOf(0, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      peakAtMost: true,
+    });
     expect(usedLines(e, "cpu", t)).toEqual([
       "200m average",
       "at most 800m peak",
     ]);
     expect(usedWords(e, "cpu", t)).toBe("200m average · at most 800m peak");
+  });
+});
+
+describe("figures read from some of a workload's pods", () => {
+  /** A sum over two of three pods says so, and is not "at most". Fails if it reads as the workload's. */
+  it("says how many pods they were read from", () => {
+    const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      podsRead: { read: 2, of: 3 },
+    });
+    expect(efficiencyWords(e, t)).toBe(
+      "20% average, 80% peak, from 2 of its 3 pods"
+    );
+    expect(usedLines(e, "cpu", t)).toEqual([
+      "200m average",
+      "800m peak, from 2 of its 3 pods",
+    ]);
   });
 });
 

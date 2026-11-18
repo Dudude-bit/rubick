@@ -103,6 +103,10 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const peakless = (one: Efficiency) =>
     one.state === "measured" && one.peakRatio === null;
   if (peakless(e.cpu) || peakless(e.memory)) return { says: "noSamples" };
+  // Measured from some of its pods: neither its figure nor a bound on it.
+  for (const one of [e.cpu, e.memory])
+    if (one.state === "measured" && one.podsRead)
+      return { says: "partial", ...one.podsRead };
   return { says: "within" };
 }
 

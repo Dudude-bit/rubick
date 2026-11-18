@@ -255,6 +255,36 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * Two of three pods were read and their summed peak stayed low: Audit
+   * called the workload over-requested, or within. Fails if a workload
+   * measured from some of its pods is judged either way.
+   */
+  it("says from how many pods a workload was measured, rather than judging it", () => {
+    const one = basis([workload("web", 2000, 512 * MI)]);
+    const some: UsageReading = {
+      state: "read",
+      keys: one.workloads.map((w) => w.key),
+      fold: {
+        values: [[200, 300, 200 * MI, 300 * MI]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 2, 2]],
+        pods: [3],
+        since: [LONG_AGO],
+      },
+    };
+    const read = usageRead(one, null, some);
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "partial",
+      read: 2,
+      of: 3,
+    });
+  });
+
+  /**
    * Three minutes into a rollout Prometheus holds no sample yet; Audit says
    * the workload is young, as the Cost page does, not that its pods were
    * never sampled. Fails if a young workload with no samples read as

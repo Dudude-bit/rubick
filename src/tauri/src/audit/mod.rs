@@ -273,6 +273,11 @@ pub enum Why {
     Young {
         since: Option<String>,
     },
+    /// The usage supplier holds samples of `read` of the `of` pods it runs.
+    Partial {
+        read: u32,
+        of: u32,
+    },
     /// Past the row cap of the requests list, its usage was read only as a sum.
     Folded,
     /// Pods here pass these mutating webhooks, which may add containers

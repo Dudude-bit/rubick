@@ -1958,6 +1958,11 @@ export const en = {
       "the connected Prometheus holds no sample of its pods in the last day",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyPartial: {
+      one: "the connected Prometheus holds samples of {read} of its {n} pod in the last day, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds samples of {read} of its {n} pods in the last day, and a peak is judged over every one",
+    },
     whyYoungUndated:
       "when its pods started is not known, and a peak is judged over a whole day",
     whyFolded:
@@ -2597,6 +2602,10 @@ export const en = {
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
     atMost: "at most {value}",
+    fromPods: {
+      one: "{line}, from {read} of its {n} pod",
+      other: "{line}, from {read} of its {n} pods",
+    },
     notKnown: "Not known",
     notPriced: "not priced",
     notMeasured: "not measured",
