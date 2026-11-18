@@ -1191,3 +1191,56 @@ async fn a_kind_discovery_names_later_is_drawn_in_the_order_its_lists_came() {
         "infra's later list holds edge"
     );
 }
+
+/// Discovery answered the map from a cache older than the layer's, which
+/// had since found the kind: the map filed every list of it as not
+/// installed until it was opened again. Fails if a kind the layer reads is
+/// left not served without discovery being asked again.
+#[tokio::test]
+async fn a_kind_the_layer_reads_is_asked_about_again_where_discovery_said_it_was_not_served() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let resolve: Resolve = Arc::new(|_| {
+        Box::pin(async {
+            Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                &kube::core::GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "Gateway"),
+                "gateways",
+            )))
+        })
+    });
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::new(),
+        Some(resolve),
+        RESOLVE_AGAIN,
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a"), gateway_object("b")],
+    })
+    .await
+    .expect("sent");
+    let gateways = |map: &ClusterMap| {
+        map.stores()
+            .held("infra", OtherPolicies::none(), now())
+            .gateways_here
+            .map(|list| list.len())
+    };
+    assert!(
+        within_seconds(|| gateways(&map) == Some(2)).await,
+        "drew {:?}, read as {:?}",
+        gateways(&map),
+        reading_of(&map, "Gateway")
+    );
+    drop(tx);
+    pumping.await.expect("the pump ends");
+}

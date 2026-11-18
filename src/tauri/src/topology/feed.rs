@@ -330,6 +330,24 @@ pub async fn pump(
             }
             _ = retry.tick(), if !held.is_empty() => Vec::new(),
         };
+        // The layer reading a kind discovery said is not served is word that
+        // the answer was old: the kind is asked about again before its
+        // updates are judged.
+        for update in &batch {
+            let Some(kind) = kind_of(update).filter(|kind| unserved.contains(kind)) else {
+                continue;
+            };
+            if !matches!(
+                update,
+                Update::State {
+                    state: Reading::Unserved,
+                    ..
+                }
+            ) {
+                unserved.remove(&kind);
+                unresolved.insert(kind);
+            }
+        }
         let waiting: BTreeSet<Kind> = batch
             .iter()
             .filter_map(kind_of)
