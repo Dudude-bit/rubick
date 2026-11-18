@@ -2031,6 +2031,10 @@ export const en = {
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
+    patchOnceReplaced:
+      "Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first.",
+    cliFilesUnread:
+      "Which kubeconfig files hold this cluster could not be told, so the command says FILES: {why}",
     objectsOf: {
       one: "{n} object",
       other: "{n} objects",
@@ -2355,6 +2359,8 @@ export const en = {
     journalDeleted: "{kind} gone",
     journalSeenAtRelist:
       "Noticed when the list was read again: it changed some time before this moment, not at it.",
+    journalUnplaced:
+      "Recorded under this name while which cluster this is could not be checked: it may be another cluster's that had the name.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:
@@ -2992,6 +2998,8 @@ export const en = {
       "not known: the rows kept under this name may be another cluster's",
     lastChangeUnchecked:
       "not known: the rows kept under this name may be another cluster's ({reason})",
+    lastChangeUnplaced:
+      "{change}; recorded while which cluster this is could not be checked, so it may be another cluster's",
     nothingSeen: "nothing seen while this app was watching",
     nothingSeenSinceLetGo: "nothing seen since {at}: older changes were let go",
     nothingSeenSinceCleared:

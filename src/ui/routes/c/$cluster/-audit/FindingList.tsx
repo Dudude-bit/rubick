@@ -84,7 +84,7 @@ export function RuleExplained({
   const t = useT();
   const copy = useCopyToClipboard();
   const cli = useCliTarget();
-  const yaml = fixYaml(rule, kind, finding, subject, cli);
+  const yaml = fixYaml(rule, kind, finding, subject, cli, t);
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div>
@@ -108,6 +108,19 @@ export function RuleExplained({
         <pre className="overflow-x-auto rounded border border-hair bg-raise p-2 font-mono text-[11px] text-fg">
           {yaml}
         </pre>
+        {cli.why && yaml.includes("KUBECONFIG=") && (
+          <p className="mt-1 text-[11px] text-warn">
+            {t("audit", "cliFilesUnread", { why: cli.why })}{" "}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-1.5 text-[11px]"
+              onClick={() => cli.retry?.()}
+            >
+              {t("action", "askAgain")}
+            </Button>
+          </p>
+        )}
       </div>
     </div>
   );

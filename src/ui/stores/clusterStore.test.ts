@@ -1135,6 +1135,31 @@ describe("sessions made from a kubeconfig entry that has since changed", () => {
   });
 
   /**
+   * A release asked while stage still held its old session answered after
+   * the loop had let it go: stage read "live" in the cluster list and
+   * Settings with nothing behind it. Fails if an answer asked before a
+   * session was let go puts it back.
+   */
+  it("keeps a session let go out of live when a release asked before answers after", async () => {
+    const plain = vi.mocked(commands.releaseClusters).getMockImplementation();
+    const answered = gate();
+    vi.mocked(commands.releaseClusters).mockImplementationOnce(async (keep) => {
+      const said = (await plain?.(keep)) ?? [];
+      await answered.promise;
+      return said;
+    });
+    const changing = state().entriesChanged(["dev", "stage"]);
+    await settle();
+    const releasing = state().release();
+    await settle();
+    letGo.open();
+    await changing;
+    answered.open();
+    await releasing;
+    expect(state().live).toEqual(["prod"]);
+  });
+
+  /**
    * The reader connected stage afresh while dev was being let go, then went
    * to qa with stage's tab still open. Fails if the loop disconnects the new
    * session by the name it listed before.

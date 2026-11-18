@@ -62,6 +62,8 @@ function page(
     letGo: { changes: null, warnings: null, normal: null },
     keeping: { says: "kept" },
     identity: { says: "known" },
+    vouched: [{ first: 0, last: null }],
+    attribution: 0,
     epoch: 0,
     unreadable: 0,
     ...over,
@@ -356,6 +358,75 @@ describe("one surface reading the timeline", () => {
       await new Promise((settle) => setTimeout(settle, 50));
     });
     expect(result.current.rows.map((each) => each.id)).toEqual(["new"]);
+  });
+
+  /**
+   * An older page asked at the first numbering came back from a third while
+   * the rows held were of the second: nothing read the timeline again, and
+   * rows of a numbering the backend had left, a cleared one or another
+   * cluster's, stayed on screen. Fails if an answer from a later numbering
+   * than the rows held does not read them again.
+   */
+  it("reads again rows held of a numbering older than an answer's", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    let older: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (older = resolve))];
+    act(() => result.current.loadOlder());
+    epochNow = 1;
+    answers = [
+      page([], { epoch: 1, newest: 10 }),
+      page([row("one", 30, 3)], { epoch: 1 }),
+    ];
+    told("prod");
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["one"])
+    );
+    epochNow = 2;
+    answers = [page([row("two", 40, 1)], { epoch: 2 })];
+    act(() => older(page([row("x", 5)], { epoch: 2 })));
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["two"])
+    );
+  });
+
+  /**
+   * Two surfaces read one timeline. One's catch-up, asked before a
+   * reconnect, answered after the other's from after it, and put the old
+   * connection's range back: a row the later answer left unplaced read as
+   * this cluster's again. Fails if a late answer replaces a later word on
+   * which rows a read placed.
+   */
+  it("keeps the later word on which rows a read placed when an older answer lands last", async () => {
+    const before = [{ first: 0, last: null }];
+    const after = [{ first: 5, last: null }];
+    answers = [page([row("a", 10, 3)], { vouched: before, attribution: 1 })];
+    const { result } = renderHook(
+      () => [
+        useTimeline({ windowMs: WIDE, show: "all" }),
+        useTimeline({ windowMs: WIDE, show: "all" }),
+      ],
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current[0].rows).toHaveLength(1));
+    await waitFor(() => expect(asked.length).toBeGreaterThanOrEqual(3));
+    let late: (page: TimelinePage) => void = () => {};
+    answers = [
+      new Promise((resolve) => (late = resolve)),
+      page([], { newest: 3, vouched: after, attribution: 2 }),
+    ];
+    told("prod");
+    await waitFor(() => expect(result.current[0].vouched).toEqual(after));
+    await act(async () => {
+      late(page([], { newest: 3, vouched: before, attribution: 1 }));
+      await new Promise((settle) => setTimeout(settle, 50));
+    });
+    expect(result.current[0].vouched).toEqual(after);
   });
 
   /**

@@ -43,6 +43,42 @@ const CLASSES: [Class; 3] = [Class::Changes, Class::Warnings, Class::Normal];
 pub(super) struct Pending {
     pub rows: Vec<TimelineRow>,
     pub wipe: bool,
+    /// Rows by `seq` to take out of what is kept, another cluster's: done
+    /// again after a failure, and nothing in them is appended.
+    pub drop: Vec<(u64, u64)>,
+}
+
+fn dropped(drop: &[(u64, u64)], seq: u64) -> bool {
+    drop.iter()
+        .any(|(first, last)| (*first..=*last).contains(&seq))
+}
+
+/// The rows numbered inside `drop` taken out of every segment: what was
+/// kept and is not another cluster's stays, and nothing held only in
+/// memory is written by it.
+fn drop_rows(dir: &Path, drop: &[(u64, u64)]) -> std::io::Result<()> {
+    #[derive(Deserialize)]
+    struct Numbered {
+        seq: u64,
+    }
+    for (_, path) in segments(dir).into_values().flatten() {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
+        };
+        let mut kept = String::with_capacity(text.len());
+        for line in text.lines().filter(|line| {
+            serde_json::from_str::<Numbered>(line).map_or(true, |row| !dropped(drop, row.seq))
+        }) {
+            kept.push_str(line);
+            kept.push('\n');
+        }
+        if kept != text {
+            private_file::write(&path, kept.as_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -52,6 +88,30 @@ pub(super) struct State {
     pub identity: Option<String>,
     pub spans: SpanSets,
     pub let_go: LetGoes,
+    /// Read leniently: a list that does not parse vouches for nothing.
+    #[serde(default, deserialize_with = "lenient")]
+    pub lineages: Vec<Lineage>,
+}
+
+/// One stretch of recording through one connection, from a start or a
+/// reconnect to the next. The cluster read through it vouches for its rows
+/// and its watching; one never read vouches for nothing, in any later run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct Lineage {
+    /// The `kube-system` uid read through this connection.
+    #[serde(default)]
+    pub uid: Option<String>,
+    /// Its first and last row, by `seq`.
+    pub first: u64,
+    pub last: u64,
+    pub from: i64,
+    pub to: i64,
+}
+
+fn lenient<'de, D: serde::Deserializer<'de>>(read: D) -> Result<Vec<Lineage>, D::Error> {
+    let value = serde_json::Value::deserialize(read)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
 }
 
 /// What was read back from one cluster's folder.
@@ -61,6 +121,7 @@ pub(super) struct Loaded {
     pub spans: SpanSets,
     pub let_go: LetGoes,
     pub identity: Option<String>,
+    pub lineages: Vec<Lineage>,
     pub unreadable: usize,
 }
 
@@ -121,6 +182,7 @@ pub(super) fn load(dir: &Path, now: i64) -> Loaded {
                 loaded.spans = state.spans;
                 loaded.let_go = state.let_go;
                 loaded.identity = state.identity;
+                loaded.lineages = state.lineages;
             }
             Err(_) => loaded.unreadable += 1,
         }
@@ -160,6 +222,9 @@ pub(super) fn write(
             _ => {}
         }
     }
+    if !pending.drop.is_empty() {
+        drop_rows(dir, &pending.drop)?;
+    }
     let Some(state) = state else {
         return Ok(LetGoes::default());
     };
@@ -172,7 +237,7 @@ pub(super) fn write(
         for row in pending
             .rows
             .iter()
-            .filter(|row| Class::of(&row.what) == class)
+            .filter(|row| Class::of(&row.what) == class && !dropped(&pending.drop, row.seq))
         {
             serde_json::to_writer(&mut lines, row).map_err(std::io::Error::other)?;
             lines.push(b'\n');

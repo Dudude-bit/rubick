@@ -153,11 +153,11 @@ fn keeping_of(keep: bool, dir: Option<&PathBuf>) -> Keeping {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "says", rename_all = "camelCase")]
 pub enum Identity {
-    /// Checked through the client held now, or no cluster was ever named
-    /// under this name: what is held was all seen through this client.
+    /// Checked through the client held now, or nothing is held from before
+    /// it: what it recorded came through it.
     Known,
-    /// Kept from an earlier run, or held across a reconnect, and not checked
-    /// through the client held now.
+    /// Held from an earlier run or a connection before this one, and not
+    /// checked through the client held now.
     NotChecked,
     /// Kept from an earlier run, and `kube-system` could not be read: the
     /// rows may be another cluster's that had this name.
@@ -191,6 +191,16 @@ pub struct Cursor {
     pub seq: u64,
 }
 
+/// Rows by `seq` that a connection read to be this cluster recorded, or
+/// the connection held now: from `first` to `last`, or on while `last` is
+/// `None`. A row outside every one may be another cluster's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeqStretch {
+    pub first: u64,
+    pub last: Option<u64>,
+}
+
 /// One page of the timeline, newest first, and everything needed to say
 /// what the page cannot.
 #[derive(Debug, Clone, Serialize)]
@@ -212,6 +222,10 @@ pub struct TimelinePage {
     /// again, since `newest` numbers from the start once more.
     pub epoch: u64,
     pub identity: Identity,
+    pub vouched: Vec<SeqStretch>,
+    /// Moves each time `identity` or `vouched` may: of two answers of one
+    /// epoch, the higher is the later word on which rows are this cluster's.
+    pub attribution: u64,
 }
 
 /// What is kept on this machine, for Settings.
@@ -237,9 +251,20 @@ struct Inner {
     unreadable: usize,
     /// The cluster this name was last seen to be, by its `kube-system` uid.
     identity: Option<String>,
-    /// Whether what was read back from disk is this cluster's.
+    /// Whether this name was read through the client held now.
     checked: Identity,
+    /// The connections recording ended through, oldest first.
+    past: Vec<disk::Lineage>,
+    /// The connection recording now; its `last` and `to` are set as it ends.
+    current: disk::Lineage,
+    /// The client was replaced and the watches are not all handed over yet:
+    /// what is recorded may still come through the old one.
+    interim: bool,
+    /// See [`TimelinePage::attribution`].
+    attribution: u64,
     epoch: u64,
+    /// Moves with each clear: a write taken before one is not done after it.
+    cleared: u64,
     /// What the files' own bounds let go, kept apart from what memory did.
     disk_let_go: LetGoes,
     /// When rows were last taken to be written.
@@ -253,6 +278,27 @@ struct Inner {
 }
 
 impl Inner {
+    /// The connection recording ends here; the next numbers its rows after.
+    fn reconnected(&mut self, now: i64) {
+        self.attribution += 1;
+        let next = disk::Lineage {
+            uid: None,
+            first: self.store.newest() + 1,
+            last: 0,
+            from: now,
+            to: now,
+        };
+        let mut ended = std::mem::replace(&mut self.current, next);
+        ended.last = self.store.newest();
+        ended.to = now;
+        self.past.push(ended);
+    }
+
+    /// Whether `lineage` was read to be the cluster this name is held to be.
+    fn vouches(&self, lineage: &disk::Lineage) -> bool {
+        lineage.uid.is_some() && lineage.uid == self.identity
+    }
+
     /// A stretch whose rows were not written, joined to the one before where
     /// they meet: rows dropped every second for a day are one stretch, not
     /// eighty thousand walked on every flush.
@@ -272,7 +318,7 @@ struct Taken {
     state: Option<disk::State>,
     since: i64,
     now: i64,
-    epoch: u64,
+    cleared: u64,
 }
 
 #[derive(Default)]
@@ -339,22 +385,50 @@ impl ClusterTimeline {
             .identity
             .as_ref()
             .is_some_and(|known| *known != identity);
-        if another {
-            inner.store = Store::default();
+        // What a connection read to be another cluster recorded goes; what
+        // no connection could place stays, as perhaps anyone's.
+        let theirs =
+            |lineage: &disk::Lineage| lineage.uid.as_ref().is_some_and(|uid| *uid != identity);
+        let mut gone: Vec<(u64, u64)> = inner
+            .past
+            .iter()
+            .filter(|lineage| theirs(lineage))
+            .map(|lineage| (lineage.first, lineage.last))
+            .collect();
+        // Read through this very connection to be another: what it recorded
+        // so far goes, and it records from here on as the one read now.
+        if theirs(&inner.current) {
+            gone.push((inner.current.first, inner.store.newest()));
+            inner.current.first = inner.store.newest() + 1;
+        }
+        if another || !gone.is_empty() {
+            inner.past.retain(|lineage| !theirs(lineage));
+            inner.store.retain(|row| {
+                !gone
+                    .iter()
+                    .any(|(first, last)| (*first..=*last).contains(&row.seq))
+            });
+            inner.store.forget_let_go();
             inner.spans = SpanSets::default();
             inner.disk_let_go = LetGoes::default();
-            inner.pending = disk::Pending {
-                wipe: true,
-                ..disk::Pending::default()
-            };
+            inner.pending.rows.retain(|row| {
+                !gone
+                    .iter()
+                    .any(|(first, last)| (*first..=*last).contains(&row.seq))
+            });
+            inner.pending.drop.extend(gone);
             inner.epoch += 1;
             inner.told.rows = true;
+        }
+        if !inner.interim {
+            inner.current.uid = Some(identity.clone());
         }
         if inner.identity.as_deref() != Some(&identity) || inner.checked != Identity::Known {
             inner.identity = Some(identity);
             inner.checked = Identity::Known;
             inner.told.spans = true;
         }
+        inner.attribution += 1;
         another
     }
 
@@ -364,6 +438,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unknown { message };
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -374,10 +449,31 @@ impl ClusterTimeline {
     /// next check decides.
     fn unchecked(&self) {
         let mut inner = self.inner.lock();
+        inner.reconnected(Self::now());
+        inner.interim = true;
         if inner.checked == Identity::Known {
             inner.checked = Identity::NotChecked;
-            inner.told.spans = true;
         }
+        inner.told.spans = true;
+    }
+
+    /// Every watch is the new client's: what is recorded from here on came
+    /// through it. What was recorded since the reconnect may have come
+    /// through the old one, and is vouched for only where the cluster read
+    /// since is the one read before.
+    pub(crate) fn handed_over(&self) {
+        let mut inner = self.inner.lock();
+        if !std::mem::take(&mut inner.interim) {
+            return;
+        }
+        let read = (inner.checked == Identity::Known)
+            .then(|| inner.identity.clone())
+            .flatten();
+        let before = inner.past.last().and_then(|lineage| lineage.uid.clone());
+        inner.current.uid = read.clone().filter(|uid| Some(uid) == before.as_ref());
+        inner.reconnected(Self::now());
+        inner.current.uid = read;
+        inner.told.spans = true;
     }
 
     /// Which cluster this name is could not be settled: the client kept
@@ -389,6 +485,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unsettled;
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -398,16 +495,53 @@ impl ClusterTimeline {
     pub fn page(&self, query: &TimelineQuery) -> TimelinePage {
         let inner = self.inner.lock();
         let (rows, more) = inner.store.page(query);
+        let current = &inner.current;
+        let mut vouched: Vec<SeqStretch> = inner
+            .past
+            .iter()
+            .filter(|lineage| inner.vouches(lineage))
+            .map(|lineage| SeqStretch {
+                first: lineage.first,
+                last: Some(lineage.last),
+            })
+            .collect();
+        if !inner.interim {
+            vouched.push(SeqStretch {
+                first: current.first,
+                last: None,
+            });
+        }
+        let sure: Vec<(i64, i64)> = inner
+            .past
+            .iter()
+            .filter(|lineage| inner.vouches(lineage))
+            .map(|lineage| (lineage.from, lineage.to))
+            .collect();
+        // Nothing held from before this connection: there is nothing whose
+        // cluster is in doubt.
+        let before = inner.store.oldest().is_some_and(|seq| seq < current.first)
+            || inner
+                .spans
+                .followed
+                .iter()
+                .chain(&inner.spans.meta)
+                .any(|span| span.from <= current.from);
         TimelinePage {
             rows,
             more,
             newest: inner.store.newest(),
-            spans: inner.spans.clone(),
+            spans: inner.spans.without(&unvouched(sure, current.from)),
             let_go: inner.store.let_go(),
             keeping: inner.keeping.clone(),
             unreadable: inner.unreadable,
             epoch: inner.epoch,
-            identity: inner.checked.clone(),
+            identity: if before {
+                inner.checked.clone()
+            } else {
+                Identity::Known
+            },
+            vouched,
+            attribution: inner.attribution,
         }
     }
 
@@ -417,6 +551,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         inner.store.clear(Self::now());
         inner.epoch += 1;
+        inner.cleared += 1;
         inner.disk_let_go = LetGoes::default();
         inner.pending = disk::Pending {
             wipe: true,
@@ -464,6 +599,8 @@ impl Timelines {
     /// whatever was recorded before.
     pub(crate) fn follow(&self, context: String, subscription: crate::feeds::Subscription) {
         let cluster = self.cluster(&context);
+        // Subscribed now, through the client held now.
+        cluster.handed_over();
         *self.following.lock() = Some(follow::spawn(context, cluster, subscription));
     }
 
@@ -540,12 +677,23 @@ impl Timelines {
             .as_deref()
             .map(|dir| disk::load(dir, now))
             .unwrap_or_default();
-        let kept = !loaded.rows.is_empty()
-            || !loaded.spans.followed.is_empty()
-            || !loaded.spans.meta.is_empty();
-        let named = loaded.identity.is_some();
         let mut store = Store::default();
         store.restore(loaded.rows, loaded.let_go, now);
+        store.number_past(
+            loaded
+                .lineages
+                .iter()
+                .map(|lineage| lineage.last)
+                .max()
+                .unwrap_or(0),
+        );
+        let current = disk::Lineage {
+            uid: None,
+            first: store.newest() + 1,
+            last: 0,
+            from: now,
+            to: now,
+        };
         let disk_let_go = loaded.let_go;
         let mut spans = loaded.spans;
         spans.closed();
@@ -561,12 +709,13 @@ impl Timelines {
                 keeping,
                 unreadable: loaded.unreadable,
                 identity: loaded.identity,
-                checked: if kept || named {
-                    Identity::NotChecked
-                } else {
-                    Identity::Known
-                },
+                checked: Identity::NotChecked,
+                past: loaded.lineages,
+                current,
+                interim: false,
+                attribution: 0,
                 epoch: 0,
+                cleared: 0,
                 disk_let_go,
                 flushed_at: now,
                 unkept: Vec::new(),
@@ -627,11 +776,21 @@ impl Timelines {
             inner.unkept_from(since, now);
         }
         inner.unkept.retain(|(_, to)| now - to < KEEP_FOR_MS);
-        let state = keep.then(|| disk::State {
-            context: cluster.context.clone(),
-            identity: inner.identity.clone(),
-            spans: inner.spans.without(&inner.unkept),
-            let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
+        inner.past.retain(|lineage| now - lineage.to < KEEP_FOR_MS);
+        let state = keep.then(|| {
+            let mut lineages = inner.past.clone();
+            lineages.push(disk::Lineage {
+                last: inner.store.newest(),
+                to: now,
+                ..inner.current.clone()
+            });
+            disk::State {
+                context: cluster.context.clone(),
+                identity: inner.identity.clone(),
+                spans: inner.spans.without(&inner.unkept),
+                let_go: disk::merged(inner.store.let_go(), inner.disk_let_go),
+                lineages,
+            }
         });
         Taken {
             pending,
@@ -639,13 +798,12 @@ impl Timelines {
             state,
             since,
             now,
-            epoch: inner.epoch,
+            cleared: inner.cleared,
         }
     }
 
-    /// Writes what was taken, unless the rows started over since: a clear or
-    /// another cluster under the name between the two put back on disk what
-    /// was just let go of.
+    /// Writes what was taken, unless a clear came between the two: done
+    /// after it, it put back on disk what was just let go of.
     fn write(&self, cluster: &ClusterTimeline, keep: bool, taken: Taken) {
         let Taken {
             pending,
@@ -653,14 +811,15 @@ impl Timelines {
             state,
             since,
             now,
-            epoch,
+            cleared,
         } = taken;
         // A cluster with nothing new since is not written again: an idle
         // one was a full fsync a second, and a context merely read was a
         // folder in Settings.
         let changed = told.rows || told.spans;
-        let current = cluster.inner.lock().epoch == epoch;
-        if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || pending.wipe)) {
+        let current = cluster.inner.lock().cleared == cleared;
+        let deletes = pending.wipe || !pending.drop.is_empty();
+        if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || deletes)) {
             let written = disk::write(dir, &pending, state.as_ref(), now);
             let mut inner = cluster.inner.lock();
             let next = match written {
@@ -674,6 +833,7 @@ impl Timelines {
                     if pending.wipe {
                         inner.pending.wipe = true;
                     }
+                    inner.pending.drop.extend(pending.drop);
                     if !pending.rows.is_empty() {
                         inner.unkept_from(since, now);
                         inner.told.spans = true;
@@ -740,6 +900,25 @@ impl Timelines {
         }
         Ok(())
     }
+}
+
+/// The stretches before `from` that no connection in `sure` vouches for,
+/// oldest first: watching then may have been another cluster's.
+fn unvouched(mut sure: Vec<(i64, i64)>, from: i64) -> Vec<(i64, i64)> {
+    sure.sort_unstable();
+    let mut holes = Vec::new();
+    let mut at = i64::MIN;
+    for (start, end) in sure {
+        if start > at {
+            holes.push((at, start.min(from)));
+        }
+        at = at.max(end);
+    }
+    if at < from {
+        holes.push((at, from));
+    }
+    holes.retain(|(start, end)| start < end);
+    holes
 }
 
 #[cfg(test)]

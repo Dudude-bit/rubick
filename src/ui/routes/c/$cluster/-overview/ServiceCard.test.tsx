@@ -53,6 +53,9 @@ import { translate } from "@/i18n";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { T } from "@/i18n/useT";
 
+/** Every row placed by a read, for tests that are not about placing. */
+const PLACED = [{ first: 0, last: null }];
+
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const pin = {
@@ -569,6 +572,10 @@ describe("the last change a card names", () => {
    */
   it("does not name a row it cannot place as this service's last change", () => {
     const latest = lastChangeOf({
+      vouched: [
+        { first: 1, last: 1 },
+        { first: 2, last: null },
+      ],
       read: true,
       rows: [
         {
@@ -605,9 +612,57 @@ describe("the last change a card names", () => {
     );
   });
 
+  /**
+   * A restricted reader, restarted: the name could not be checked, and the
+   * card said "not known" of a change the connection held now had just
+   * recorded, which the Changes page drew as it is; and an older change no
+   * read placed lost its row for the same words. Fails if the card says of
+   * either row other than what the page says of it.
+   */
+  it("says of the newest change what the Changes page says of it, where the name could not be checked", () => {
+    const words = (seq: number) => {
+      const section = pinShare(
+        pin,
+        { state: "ready", ready: 1, total: 1 },
+        { entries: [], known: true },
+        [],
+        lastChangeOf({
+          read: true,
+          rows: [
+            {
+              id: "1",
+              seq,
+              at: 1,
+              kind: "Deployment",
+              group: "apps",
+              namespace: "shop",
+              name: "payments",
+              what: { says: "created" },
+              atRelist: false,
+            },
+          ],
+          letGo: undefined,
+          unreadable: 0,
+          identity: { says: "unknown", message: "namespaces is forbidden" },
+          error: null,
+          vouched: [{ first: 5, last: null }],
+        }),
+        [],
+        t
+      );
+      const rows = section.body.type === "facts" ? section.body.rows : [];
+      return rows.find((row) => row.label === "Last change")?.values[0].text;
+    };
+    expect(words(5)).toBe("Deployment appeared");
+    expect(words(4)).toMatch(
+      /^Deployment appeared; recorded while which cluster this is could not be checked/
+    );
+  });
+
   /** Where which cluster this is could not be settled: fails if the card names a row it cannot place. */
   it("does not name a row where which cluster this is could not be settled", () => {
     const latest = lastChangeOf({
+      vouched: PLACED,
       read: true,
       rows: [],
       letGo: undefined,
@@ -638,6 +693,7 @@ describe("the last change a card names", () => {
    */
   it("says the timeline could not be read rather than that nothing was seen", () => {
     const latest = lastChangeOf({
+      vouched: PLACED,
       read: true,
       rows: [],
       letGo: undefined,
@@ -673,6 +729,7 @@ describe("the last change a card names", () => {
         { entries: [], known: true },
         [],
         lastChangeOf({
+          vouched: PLACED,
           read: false,
           rows: [],
           letGo: undefined,
@@ -693,12 +750,58 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * The newest change was recorded by a connection no read placed, and the
+   * card named it as this service's last change. Fails if the card and its
+   * Share name such a row without saying it may be another cluster's.
+   */
+  it("names a last change no read placed with what it may be", () => {
+    const words = (vouched: { first: number; last: number | null }[]) => {
+      const section = pinShare(
+        pin,
+        { state: "ready", ready: 1, total: 1 },
+        { entries: [], known: true },
+        [],
+        lastChangeOf({
+          read: true,
+          rows: [
+            {
+              id: "1",
+              seq: 1,
+              at: 1,
+              kind: "Deployment",
+              group: "apps",
+              namespace: "shop",
+              name: "payments",
+              what: { says: "created" },
+              atRelist: false,
+            },
+          ],
+          letGo: undefined,
+          unreadable: 0,
+          identity: { says: "known" },
+          error: null,
+          vouched,
+        }),
+        [],
+        t
+      );
+      const rows = section.body.type === "facts" ? section.body.rows : [];
+      return rows.find((row) => row.label === "Last change")?.values[0].text;
+    };
+    const unplaced =
+      /; recorded while which cluster this is could not be checked, so it may be another cluster's$/;
+    expect(words([{ first: 2, last: null }])).toMatch(unplaced);
+    expect(words([{ first: 1, last: null }])).not.toMatch(unplaced);
+  });
+
+  /**
    * Every kept row failed to parse, and the card said "nothing seen while
    * this app was watching". Fails if rows that could not be read leave the
    * last change said to be none.
    */
   it("says kept rows could not be read rather than that nothing was seen", () => {
     const latest = lastChangeOf({
+      vouched: PLACED,
       read: true,
       rows: [],
       letGo: undefined,
@@ -719,6 +822,50 @@ describe("the last change a card names", () => {
     expect(
       rows.find((row) => row.label === "Last change")?.values[0].text
     ).toBe("3 kept rows could not be read and were skipped.");
+  });
+
+  /**
+   * A long change no read placed: the card cut the line at its width, and
+   * the doubt at its end went with it, so the row read as this service's
+   * own. Fails if the doubt is drawn inside the line the card cuts.
+   */
+  it("draws the doubt of a change no read placed apart from the line it cuts", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { useClusterStore } = await import("@/stores/clusterStore");
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "timeline_read"
+        ? {
+            rows: [
+              {
+                id: "1",
+                seq: 1,
+                at: Date.now() - 60_000,
+                kind: "Deployment",
+                group: "apps",
+                namespace: "shop",
+                name: "payments",
+                what: { says: "created" },
+                atRelist: false,
+              },
+            ],
+            more: false,
+            newest: 1,
+            spans: { followed: [], meta: [] },
+            letGo: { changes: null, warnings: null, normal: null },
+            keeping: { says: "kept" },
+            unreadable: 0,
+            epoch: 0,
+            identity: { says: "known" },
+            vouched: [{ first: 2, last: null }],
+          }
+        : undefined
+    );
+    await mount();
+    const doubt = await screen.findByText(
+      /^Recorded under this name while which cluster this is could not be checked/
+    );
+    expect(doubt.closest(".truncate")).toBeNull();
   });
 
   /**
@@ -769,6 +916,7 @@ describe("the last change a card names", () => {
         { entries: [], known: true },
         [],
         lastChangeOf({
+          vouched: PLACED,
           ...read,
           letGo: { changes: letGo, warnings: null, normal: null },
         }),

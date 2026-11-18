@@ -2,8 +2,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { kindFacts } from "@/lib/resource-registry";
+import { isWindows } from "@/lib/platform";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -14,11 +16,35 @@ import { useClusterStore } from "@/stores/clusterStore";
 export interface CliTarget {
   context: string | null;
   files: string | null;
+  /** Why the files could not be named, where the last ask failed. */
+  why?: string | null;
+  /** Asks for the files again. */
+  retry?: () => void;
 }
 
 /** A shell word as written, quoted where the shell would read it otherwise. */
 export const word = (text: string) =>
   /^[\w.:/@=+-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * A PowerShell literal: single-quoted, a quote inside written twice. Every
+ * character PowerShell takes for a single quote counts (U+0027 and U+2018
+ * to U+201B): an O’Brien left alone ends the literal, and what follows it
+ * is read as code.
+ */
+const psWord = (text: string) =>
+  `'${text.replace(/['\u2018\u2019\u201a\u201b]/g, (quote) => quote + quote)}'`;
+
+/** The shell a line is written for: Windows opens PowerShell. */
+export type Shell = "posix" | "powershell";
+const hostShell = (): Shell => (isWindows() ? "powershell" : "posix");
+
+type Step = readonly [tool: "kubectl" | "helm", args: string];
+
+const run = ([tool, args]: Step, context: string) =>
+  tool === "kubectl"
+    ? `kubectl --context ${context} ${args}`
+    : `helm ${args} --kube-context ${context}`;
 
 /**
  * Every kubectl or helm line the app gives the reader to copy or to run.
@@ -30,13 +56,44 @@ export const word = (text: string) =>
 export function cliLine(
   tool: "kubectl" | "helm",
   at: CliTarget,
-  args: string
+  args: string,
+  shell: Shell = hostShell()
 ): string {
-  const files = `KUBECONFIG=${word(at.files ?? "FILES")}`;
-  const context = word(at.context ?? "CONTEXT");
-  return tool === "kubectl"
-    ? `${files} kubectl --context ${context} ${args}`
-    : `${files} helm ${args} --kube-context ${context}`;
+  return cliPipe(at, [[tool, args]], shell);
+}
+
+/**
+ * Commands piped one into the next, each acting on `at`. A POSIX shell
+ * takes `KUBECONFIG=` before each command, for that command alone.
+ * PowerShell has no such form: the files are set once around the whole
+ * pipe and what was there put back, since a stage setting them for itself
+ * races the other stages over the one environment they share.
+ */
+export function cliPipe(
+  at: CliTarget,
+  steps: readonly Step[],
+  shell: Shell = hostShell()
+): string {
+  const files = at.files ?? "FILES";
+  const context = at.context ?? "CONTEXT";
+  if (shell === "posix")
+    return steps
+      .map((step) => `KUBECONFIG=${word(files)} ${run(step, word(context))}`)
+      .join(" | ");
+  // Windows PowerShell 5.1 drops a double quote inside an argument it hands
+  // a program, and one ending a spaced argument in a backslash is read as a
+  // quote: `ops"blue"` reaches kubectl as `opsblue`, another context. Such a
+  // name gets the stand-in, which no kubeconfig resolves, never a neighbour.
+  const carried = /"|\s.*\\$/.test(context) ? "CONTEXT" : context;
+  const pipe = steps.map((step) => run(step, psWord(carried))).join(" | ");
+  if (steps.length === 1)
+    return `& { $was = $env:KUBECONFIG; $env:KUBECONFIG = ${psWord(files)}; try { ${pipe} } finally { $env:KUBECONFIG = $was } }`;
+  // Windows PowerShell 5.1 carries a pipe between two programs as text: it
+  // reads the first's bytes in the console's code page and writes them to
+  // the second as ASCII, so a café in an object read back is written to the
+  // cluster as caf?. UTF-8 both ways, inside the try so a host that refuses
+  // it runs nothing; the console's own is put back.
+  return `& { $was = $env:KUBECONFIG; $console = [Console]::OutputEncoding; try { $env:KUBECONFIG = ${psWord(files)}; $OutputEncoding = [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false; ${pipe} } finally { $env:KUBECONFIG = $was; [Console]::OutputEncoding = $console } }`;
 }
 
 /** The cluster on screen and the files it was read from, for {@link cliLine}. */
@@ -48,8 +105,15 @@ export function useCliTarget(): CliTarget {
     enabled: context !== null,
     staleTime: Infinity,
   });
-  const read = files.data ?? null;
-  return useMemo(() => ({ context, files: read }), [context, read]);
+  // After a failed ask the last answer is held still, and may name files
+  // the app no longer reads the context from: no files, and why.
+  const read = files.isError ? null : (files.data ?? null);
+  const why = files.isError ? errorToShow(files.error) : null;
+  const { refetch } = files;
+  return useMemo(
+    () => ({ context, files: read, why, retry: () => void refetch() }),
+    [context, read, why, refetch]
+  );
 }
 
 /** Groups kubectl resolves by the bare kind; anything else could be two CRDs. */

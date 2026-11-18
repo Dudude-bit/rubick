@@ -945,71 +945,12 @@ async fn a_reread_slower_than_a_touch_does_not_hold_the_map_still() {
     task.await.expect("ends");
 }
 
-/// A kind discovery could not name for long kept every update for it: each
-/// relist on top of the last, each change to one object again, a bounded
-/// channel turned into a store that only grew. Fails if a newer set does
-/// not replace an older one with its changes, or a newer word on an object
-/// does not replace the older.
-#[test]
-fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
-    let gateways = slot(Kind::Gateway, None);
-    let object = |name: &str, version: u32| {
-        dynamic(json!({
-            "metadata": { "name": name, "namespace": "infra", "resourceVersion": version.to_string() },
-            "spec": { "gatewayClassName": "envoy", "listeners": [] },
-        }))
-    };
-    let mut kept = feed::Kept::default();
-    kept.keep(crate::feeds::Update::State {
-        slot: gateways.clone(),
-        state: Reading::Synced,
-    });
-    kept.keep(crate::feeds::Update::Whole {
-        slot: gateways.clone(),
-        why: crate::feeds::Whole::Fresh,
-        objects: vec![object("a", 1), object("b", 1)],
-    });
-    for version in 2..100 {
-        kept.keep(crate::feeds::Update::Applied {
-            slot: gateways.clone(),
-            object: object("c", version),
-        });
-    }
-    let replayed: Vec<String> = kept
-        .replay()
-        .map(|update| match update {
-            crate::feeds::Update::State { .. } => "state".to_string(),
-            crate::feeds::Update::Whole { objects, .. } => format!("whole {}", objects.len()),
-            crate::feeds::Update::Applied { object, .. } => format!(
-                "applied {}",
-                object.metadata.resource_version.clone().unwrap_or_default()
-            ),
-            other => format!("{other:?}"),
-        })
-        .collect();
-    assert_eq!(replayed, ["state", "whole 2", "applied 99"]);
-
-    let mut kept = feed::Kept::default();
-    kept.keep(crate::feeds::Update::Applied {
-        slot: gateways.clone(),
-        object: object("c", 1),
-    });
-    kept.keep(crate::feeds::Update::Whole {
-        slot: gateways.clone(),
-        why: crate::feeds::Whole::Relist,
-        objects: vec![object("a", 2)],
-    });
-    assert_eq!(
-        kept.replay().count(),
-        1,
-        "a newer set outdates what came before"
-    );
-}
-
 /// A kind discovery could not name stayed unread until the cluster sent
 /// something else for the pump to wake on, and a quiet cluster sends
 /// nothing. Fails if discovery is not asked again, with nothing arriving,
-/// until the kind is named and what was held for it is drawn.
+/// until the kind is named and what was held for it is drawn. Discovery
+/// answers only once its first ask is seen to fail: a slow pump would
+/// otherwise name the kind on its first ask, with no retry at all.
 #[tokio::test]
 async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
     let (tx, rx) = tokio::sync::mpsc::channel(8);
@@ -1061,7 +1002,13 @@ async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
             .gateways_here
             .map(|list| list.len())
     };
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert!(
+        within_seconds(|| matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        ))
+        .await
+    );
     assert_eq!(gateways(&map), None);
     answers.store(true, std::sync::atomic::Ordering::SeqCst);
     let drawn = tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -1074,6 +1021,225 @@ async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
         drawn.is_ok(),
         "still {:?} with nothing more sent",
         gateways(&map)
+    );
+    drop(tx);
+    pumping.await.expect("the pump ends");
+}
+
+fn reading_of(map: &ClusterMap, kind: &str) -> Option<MapKindReading> {
+    map.stores()
+        .kinds()
+        .into_iter()
+        .find(|state| state.kind == kind)
+        .map(|state| state.reading)
+}
+
+async fn within_seconds(what: impl Fn() -> bool) -> bool {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !what() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .is_ok()
+}
+
+/// A kind discovery could not name, then said the cluster does not serve:
+/// its held `Synced` was replayed and its set dropped for want of a type,
+/// so the map read the kind as installed and holding nothing. Fails if a
+/// kind discovery later says is not served is read as anything else.
+#[tokio::test]
+async fn a_kind_discovery_later_says_is_not_served_is_not_read_as_empty() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let answers = answers.clone();
+        Arc::new(move |_| {
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(None)
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+        std::time::Duration::from_millis(20),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a")],
+    })
+    .await
+    .expect("sent");
+    assert!(
+        within_seconds(|| matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        ))
+        .await
+    );
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(
+        within_seconds(|| reading_of(&map, "Gateway") == Some(MapKindReading::NotServed)).await,
+        "read as {:?} with nothing more sent",
+        reading_of(&map, "Gateway")
+    );
+    drop(tx);
+    pumping.await.expect("the pump ends");
+}
+
+/// Gateways in `infra` the map draws once discovery names the kind, with
+/// the cluster's state and then `sent` held for it until then.
+async fn gateways_drawn_after(sent: Vec<crate::feeds::Update>) -> Option<usize> {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let answers = answers.clone();
+        Arc::new(move |_| {
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )))
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+        std::time::Duration::from_millis(20),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    for update in sent {
+        tx.send(update).await.expect("sent");
+    }
+    let failed = || {
+        matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        )
+    };
+    assert!(within_seconds(failed).await);
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(within_seconds(|| !failed()).await);
+    let drawn = map
+        .stores()
+        .held("infra", OtherPolicies::none(), now())
+        .gateways_here
+        .map(|list| list.len());
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    drawn
+}
+
+/// What was held for a kind discovery could not name was drawn slot by
+/// slot, the cluster's list first, so a namespace's list that came before
+/// it put back a Gateway the cluster's had already left out. Fails if held
+/// lists are not drawn in the order they came, in either order.
+#[tokio::test]
+async fn a_kind_discovery_names_later_is_drawn_in_the_order_its_lists_came() {
+    let infra = |objects| crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, Some("infra")),
+        why: crate::feeds::Whole::Fresh,
+        objects,
+    };
+    let cluster = |objects| crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Relist,
+        objects,
+    };
+    assert_eq!(
+        gateways_drawn_after(vec![infra(vec![gateway_object("edge")]), cluster(vec![])]).await,
+        Some(0),
+        "the cluster's later list left edge out"
+    );
+    assert_eq!(
+        gateways_drawn_after(vec![cluster(vec![]), infra(vec![gateway_object("edge")])]).await,
+        Some(1),
+        "infra's later list holds edge"
+    );
+}
+
+/// Discovery answered the map from a cache older than the layer's, which
+/// had since found the kind: the map filed every list of it as not
+/// installed until it was opened again. Fails if a kind the layer reads is
+/// left not served without discovery being asked again.
+#[tokio::test]
+async fn a_kind_the_layer_reads_is_asked_about_again_where_discovery_said_it_was_not_served() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let resolve: Resolve = Arc::new(|_| {
+        Box::pin(async {
+            Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                &kube::core::GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "Gateway"),
+                "gateways",
+            )))
+        })
+    });
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::new(),
+        Some(resolve),
+        RESOLVE_AGAIN,
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a"), gateway_object("b")],
+    })
+    .await
+    .expect("sent");
+    let gateways = |map: &ClusterMap| {
+        map.stores()
+            .held("infra", OtherPolicies::none(), now())
+            .gateways_here
+            .map(|list| list.len())
+    };
+    assert!(
+        within_seconds(|| gateways(&map) == Some(2)).await,
+        "drew {:?}, read as {:?}",
+        gateways(&map),
+        reading_of(&map, "Gateway")
     );
     drop(tx);
     pumping.await.expect("the pump ends");

@@ -203,7 +203,7 @@ pub struct LoadedKubeconfig {
 
 /// What one merged file names: the merge keeps the first of each name and
 /// nothing of where the others stood.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileNames {
     contexts: Vec<String>,
     clusters: Vec<String>,
@@ -230,12 +230,22 @@ type Wanted<'a> = (Option<&'a str>, fn(&FileNames) -> &[String]);
 /// last's), so a CLI handed every file can act as another file's user under
 /// the name on screen. Where the files it needs disagree among themselves no
 /// list of them is safe, and that is an error rather than a guess.
+///
+/// A name the loaded kubeconfig does not hold is refused: every file handed
+/// out for it is one the CLI will not find it in. That lookup is also what a
+/// context name from the window is checked by, since a name such as an EKS
+/// ARN is no DNS label.
 fn files_for(context: &str, loaded: &LoadedKubeconfig) -> Result<Vec<PathBuf>> {
-    let entry = loaded
+    let found = loaded
         .kubeconfig
         .as_ref()
-        .and_then(|merged| merged.contexts.iter().find(|c| c.name == context))
-        .and_then(|named| named.context.as_ref());
+        .map(|merged| merged.contexts.iter().find(|c| c.name == context));
+    if let Some(None) = found {
+        return Err(Error::Config(format!(
+            "No context named \"{context}\" in the kubeconfig the app read."
+        )));
+    }
+    let entry = found.flatten().and_then(|named| named.context.as_ref());
     let Some(entry) = entry.filter(|_| !loaded.named.is_empty()) else {
         return Ok(loaded.files.clone());
     };
@@ -1620,6 +1630,23 @@ users:
 
         let target = manager.cli_target("prod").await.expect("target");
         assert_eq!(target.kubeconfig, good.canonicalize().unwrap().as_os_str());
+    }
+
+    /// A context gone from the kubeconfig, or never in it, is no target:
+    /// every loaded file was handed out for it, and the CLI found it in none.
+    #[tokio::test]
+    async fn a_context_the_kubeconfig_does_not_hold_is_no_cli_target() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let work = write_kubeconfig(dir.path(), "work.yaml", &["prod"]);
+        let home = write_kubeconfig(dir.path(), "home.yaml", &["lab"]);
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![work, home])
+            .await
+            .expect("merged");
+        let refused = manager.cli_target("default").await.expect_err("not there");
+        assert!(refused.to_string().contains("No context named \"default\""));
+        assert!(manager.cli_target("lab").await.is_ok());
     }
 
     /// With nothing loaded there are no files to name, and a CLI started

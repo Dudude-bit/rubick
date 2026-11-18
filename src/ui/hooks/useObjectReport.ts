@@ -171,6 +171,16 @@ export function useObjectReport(
   const readFroms = readings.flatMap((reading) =>
     reading.readFrom === null ? [] : [reading.readFrom]
   );
+  // One timeline, so the later word of the two reads on it is every row's:
+  // an answer from before a reconnect places rows it no longer does.
+  const placingRead =
+    (ownerChanges.attribution ?? -1) > (ownChanges.attribution ?? -1)
+      ? ownerChanges
+      : ownChanges;
+  const placing = useMemo(
+    () => ({ vouched: placingRead.vouched, identity: placingRead.identity }),
+    [placingRead.vouched, placingRead.identity]
+  );
   const changesReadFrom = readFroms.length > 0 ? Math.max(...readFroms) : null;
   const silent = useSilentNodes(capturing);
 
@@ -255,6 +265,8 @@ export function useObjectReport(
     const changes = changesSection(
       {
         rows: withNewer(ownChanges.rows, ownerChanges.rows),
+        vouched: placing.vouched,
+        identity: placing.identity,
         spans: ownChanges.spans,
         letGo: ownChanges.letGo,
         readFrom: changesReadFrom,
@@ -358,6 +370,7 @@ export function useObjectReport(
     resource,
     targets,
     ownChanges.rows,
+    placing,
     ownChanges.spans,
     ownChanges.letGo,
     ownerChanges.rows,

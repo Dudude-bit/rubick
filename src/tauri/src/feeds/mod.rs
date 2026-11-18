@@ -1469,14 +1469,14 @@ impl ContextFeeds {
 
     /// Lets go of page subscriptions nobody touched, and of kinds nobody
     /// has followed for the linger. `true` once nothing is left.
-    fn reap(&self, now: Instant) -> bool {
+    fn reap(self: &Arc<Self>, now: Instant) -> bool {
         let generations: Vec<Arc<Generation>> =
             self.inner.lock().generations.values().cloned().collect();
         for generation in generations {
             generation.overdue(chrono::Utc::now());
         }
         let mut stopping: Vec<(Arc<Generation>, KindKey)> = Vec::new();
-        let empty = {
+        let (empty, lists) = {
             let mut inner = self.inner.lock();
             let idle: Vec<u64> = inner
                 .subscribers
@@ -1518,10 +1518,18 @@ impl ContextFeeds {
                     stopping.push((generation.clone(), kind.clone()));
                 }
             }
-            inner.kinds.is_empty() && inner.subscribers.is_empty()
+            // A kind kept as nothing is caught up by listing it again: the
+            // lists a catch-up asked for are run here, or nothing would.
+            (
+                inner.kinds.is_empty() && inner.subscribers.is_empty(),
+                std::mem::take(&mut inner.to_list),
+            )
         };
         for (generation, kind) in stopping {
             generation.stop_kind(&kind);
+        }
+        for (id, slot) in lists {
+            self.spawn_list(id, slot);
         }
         empty
     }
@@ -3562,6 +3570,64 @@ mod tests {
             .filter_map(|sub| sub.pending.get(&slot).map(Vec::len))
             .collect();
         assert_eq!(waiting, vec![0], "what waited on the list is held");
+        context.end();
+    }
+
+    /// A reader behind on a kept kind and on one kept as nothing, its queue
+    /// too full to be handed the first: the reaper's catch-up reached the
+    /// second once the queue was read, asked for its list, and nothing ran
+    /// it. Fails if the set kept as nothing is not handed with no change
+    /// arriving after the reader fell behind.
+    #[tokio::test]
+    async fn a_reader_behind_on_a_kind_kept_as_nothing_is_listed_again_on_a_quiet_cluster() {
+        let (client, _) = answering(|path, _| {
+            if path == "/api/v1/secrets" {
+                let items = json!([{ "metadata": { "name": "tls", "namespace": "shop", "uid": "shop/tls", "resourceVersion": "450" } }]);
+                (200, json!({ "apiVersion": "v1", "kind": "SecretList", "metadata": { "resourceVersion": "900" }, "items": items }).to_string())
+            } else {
+                failure(404, "NotFound")
+            }
+        })
+        .await;
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 4);
+        let context = feeds.context_for("prod", client);
+        let pods = slot_of("", "pods");
+        let secrets = slot_of("", "secrets");
+        let mut sub = context.join(
+            &Ask {
+                kinds: vec![pods.kind.clone(), secrets.kind.clone()],
+                scope: None,
+                narrow: true,
+                binding: Binding::Session,
+            },
+            &[
+                (pods.kind.clone(), (ApiResource::erase::<Pod>(&()), true)),
+                (
+                    secrets.kind.clone(),
+                    (ApiResource::erase::<Secret>(&()), true),
+                ),
+            ],
+            &[],
+        );
+        let generation = context.serving();
+        list(&generation, &pods, vec![config_map("web", "100")]);
+        list(&generation, &secrets, vec![]);
+        for n in 0..6 {
+            apply(&generation, &pods, config_map(&format!("burst-{n}"), "200"));
+        }
+        drain(&mut sub);
+        context.reap(Instant::now());
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut handed = None;
+        while let Ok(Some(update)) = tokio::time::timeout_at(deadline, sub.updates.recv()).await {
+            if let Update::Whole { slot, objects, .. } = update {
+                if slot == secrets {
+                    handed = Some(names(&objects));
+                    break;
+                }
+            }
+        }
+        assert_eq!(handed, Some(vec!["tls".to_string()]));
         context.end();
     }
 

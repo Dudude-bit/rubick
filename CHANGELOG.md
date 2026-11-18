@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.1.0] - 2026-11-17
+## [5.1.0] - 2026-11-18
 
 Five pages asked for in #331: a map of the cluster, who talks to whom, what
 the workloads are configured to risk, what the cluster costs, and a history
@@ -52,8 +52,11 @@ each says which of its sources it could not read.
   restart; a stretch the app was not watching is drawn as one, and rows let
   go early are said to be. Events stand beside changes on one clock, and every object
   has a Changes tab. Values of Secrets, ConfigMaps and environment
-  variables are never kept, only that they changed. Settings › Diagnostics
-  shows what is kept and clears it.
+  variables are never kept, only that they changed. What was recorded
+  while the app could not tell which cluster a context names (a reader who
+  cannot read `kube-system`) is kept and says so, since another cluster may
+  have had the name. Settings › Diagnostics shows what is kept and clears
+  it.
 
 - **Wide tables open faster.** Column widths are measured in one pass
   rather than once per value.

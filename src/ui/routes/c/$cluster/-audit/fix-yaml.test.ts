@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { AuditFinding, RuleId } from "@/generated/types";
+import { setHostOs } from "@/lib/platform";
+
 import { fixYaml } from "./fix-yaml";
 import { RULE_IDS } from "./rules";
 
@@ -226,7 +228,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\n# Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first.\n# KUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -245,6 +247,120 @@ describe("the fix Audit offers to copy", () => {
     expect(fixYaml(loose.rule, crd.kind, loose, crd)).toBe(
       "apiVersion: example.com/v1\nkind: CronTab"
     );
+  });
+
+  /**
+   * The migration pipes one kubectl into another and patches with a third:
+   * each of the three runs on its own, so each names the files and the
+   * context. Fails if either side of the pipe, or the patch, is left to the
+   * terminal's own kubeconfig, which a check on the start of the line misses.
+   */
+  it("names the files and the context on each side of the CRD migration's pipe and on its patch", () => {
+    const files = "/home/me/.kube/k3s.yaml:/home/me/.kube/config";
+    const finding: AuditFinding = {
+      rule: "crd-version-deprecated",
+      severity: "medium",
+      what: [
+        {
+          says: "deprecated",
+          version: "v1alpha1",
+          warning: null,
+          stored: true,
+          storage: false,
+        },
+        {
+          says: "storedAs",
+          group: "example.com",
+          kind: "CronTab",
+          storage: "v1",
+          stored: ["v1alpha1", "v1"],
+          current: ["v1"],
+        },
+      ],
+    };
+    const commands = fixYaml(
+      finding.rule,
+      "CustomResourceDefinition",
+      finding,
+      {
+        kind: "CustomResourceDefinition",
+        namespace: null,
+        name: "crontabs.example.com",
+      },
+      { context: "default", files }
+    )
+      .split(/\n| \| /)
+      .map((command) => command.replace(/^# /, ""))
+      .filter((line) => line.includes("kubectl"));
+    expect(commands.map((command) => command.split(" ")[4])).toEqual([
+      "get",
+      "replace",
+      "patch",
+    ]);
+    for (const command of commands)
+      expect(command).toMatch(
+        new RegExp(`^KUBECONFIG=${files} kubectl --context default \\w`)
+      );
+  });
+
+  /**
+   * The rewrite and the patch that drops the old version from
+   * storedVersions were pasted as one block: a replace that hit a conflict
+   * on one object, or a get that answered nothing (replace exits 0 on no
+   * input), still let the patch run, and that object stayed stored at a
+   * version the CRD no longer records. Fails if the patch runs with the
+   * rewrite in either shell, or stands without the line before it that says
+   * when it may be run: only once every object was written back.
+   */
+  it("hands out the storedVersions patch as a step of its own, in either shell", () => {
+    const finding: AuditFinding = {
+      rule: "crd-version-deprecated",
+      severity: "medium",
+      what: [
+        {
+          says: "deprecated",
+          version: "v1alpha1",
+          warning: null,
+          stored: true,
+          storage: false,
+        },
+        {
+          says: "storedAs",
+          group: "example.com",
+          kind: "CronTab",
+          storage: "v1",
+          stored: ["v1alpha1", "v1"],
+          current: ["v1"],
+        },
+      ],
+    };
+    const crd = {
+      kind: "CustomResourceDefinition",
+      namespace: null,
+      name: "crontabs.example.com",
+    };
+    const lines = (os: string) => {
+      setHostOs(os);
+      try {
+        return fixYaml(finding.rule, crd.kind, finding, crd, {
+          context: "default",
+          files: "/home/me/.kube/config",
+        }).split("\n");
+      } finally {
+        setHostOs("linux");
+      }
+    };
+    for (const os of ["linux", "windows"]) {
+      const [rewrite, when, patch, ...rest] = lines(os);
+      expect(rest).toEqual([]);
+      expect(rewrite).toContain("replace -f -");
+      expect(rewrite).not.toContain("storedVersions");
+      // What the comment alone does not say: when it may be run.
+      expect(when).toBe(
+        "# Run the line below only once the replace above has written back every object without an error; where it failed on one, run the replace again first."
+      );
+      expect(patch).toMatch(/^# .*patch customresourcedefinitions/);
+    }
   });
 
   /** A client asking for a deprecated API moves to its replacement where the guide names one. */

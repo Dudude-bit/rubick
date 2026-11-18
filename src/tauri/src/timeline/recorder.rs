@@ -525,6 +525,11 @@ impl Recorder {
             .spans(|spans, now| spans.end(Source::Meta, now));
     }
 
+    /// Every watch is the new client's: see [`ClusterTimeline::handed_over`].
+    pub fn handed_over(&self) {
+        self.timeline.handed_over();
+    }
+
     /// The watches stopped: every span ends now.
     pub fn stop(&mut self) {
         self.slots.clear();

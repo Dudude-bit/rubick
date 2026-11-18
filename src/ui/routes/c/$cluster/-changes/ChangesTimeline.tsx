@@ -332,6 +332,7 @@ const Row = memo(function Row({
       return (
         <ChangeLine
           row={item.row}
+          unplaced={item.unplaced}
           showObject={showObject}
           onRollback={onRollback}
           rollbackDenied={rollbackDenied}
@@ -339,18 +340,26 @@ const Row = memo(function Row({
         />
       );
     case "event":
-      return <EventLine event={item.event} showObject={showObject} />;
+      return (
+        <EventLine
+          event={item.event}
+          unplaced={item.unplaced}
+          showObject={showObject}
+        />
+      );
   }
 });
 
 function ChangeLine({
   row,
+  unplaced,
   showObject,
   onRollback,
   rollbackDenied,
   revisions,
 }: {
   row: ChangeRow;
+  unplaced: boolean;
   showObject: boolean;
   onRollback?: (revision: Revision) => void;
   rollbackDenied?: string;
@@ -420,7 +429,16 @@ function ChangeLine({
           {t("changes", "journalSeenAtRelist")}
         </p>
       ) : null}
+      {unplaced ? <UnplacedLine /> : null}
     </div>
+  );
+}
+
+/** A row no read placed: it may be another cluster's that had the name. */
+function UnplacedLine() {
+  const t = useT();
+  return (
+    <p className="text-[11px] text-warn">{t("changes", "journalUnplaced")}</p>
   );
 }
 
@@ -475,9 +493,11 @@ function FieldLine({ field }: { field: FieldMove }) {
 /** One series of the cluster's events, in the cluster's own words. */
 function EventLine({
   event,
+  unplaced,
   showObject,
 }: {
   event: EventInfo;
+  unplaced: boolean;
   showObject: boolean;
 }) {
   const t = useT();
@@ -524,6 +544,7 @@ function EventLine({
           {event.message}
         </p>
       ) : null}
+      {unplaced ? <UnplacedLine /> : null}
     </div>
   );
 }

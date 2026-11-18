@@ -33,6 +33,9 @@ import {
   type SpanLike as ObservedSpan,
 } from "./changes";
 
+/** Every row placed by a read, for tests that are not about placing. */
+const PLACED = [{ first: 0, last: null }];
+
 const T0 = Date.parse("2026-09-08T00:00:00Z");
 const HOUR = 60 * 60_000;
 
@@ -407,6 +410,7 @@ describe("a revision that changed only what the named fields do not cover", () =
   /** A field the named comparison does not read is still a difference, said as one. */
   it("reports every other differing field rather than calling the templates the same", () => {
     const items = timelineOf({
+      vouched: PLACED,
       revisions: [
         search(1, "/", ["nginx"]),
         search(2, "/", ["nginx", "-g", "daemon off;"]),
@@ -460,6 +464,7 @@ describe("a timeline that starts where its object does", () => {
   const born = new Date(NOW - 16 * 60_000).toISOString();
   const timeline = (createdAt: string | null, journal: TimelineRow[] = []) =>
     timelineOf({
+      vouched: PLACED,
       revisions: [],
       deliveries: [],
       helm: [],
@@ -856,6 +861,7 @@ describe("timelineOf", () => {
   /** The gap sits on the clock among the entries, dated by its end, so a reader scrolling down meets it where it happened. */
   it("puts a gap between the entries on either side of it", () => {
     const items = timelineOf({
+      vouched: PLACED,
       revisions: [
         revision(1, [container("app", "app:1")]),
         revision(2, [container("app", "app:2")]),
@@ -901,6 +907,7 @@ describe("timelineOf", () => {
    */
   it("counts the revisions the cluster no longer holds between two it does", () => {
     const items = timelineOf({
+      vouched: PLACED,
       revisions: [
         revision(4, [container("app", "app:1")]),
         revision(9, [container("app", "app:4")]),
@@ -928,6 +935,7 @@ describe("timelineOf", () => {
    */
   it("marks a revision whose object predates the revision before it", () => {
     const items = timelineOf({
+      vouched: PLACED,
       revisions: [
         revision(2, [container("app", "app:2")]),
         {
@@ -958,6 +966,7 @@ describe("timelineOf", () => {
    */
   it("says nothing about a revision whose template was not read", () => {
     const items = timelineOf({
+      vouched: PLACED,
       revisions: [
         revision(1, [container("app", "app:1")]),
         revision(2, [], { templateKnown: false }),
@@ -1120,6 +1129,7 @@ describe("a stretch watched with nothing recorded", () => {
   const recorded = (at: number) => ({
     kind: "journal" as const,
     at,
+    unplaced: false,
     row: changeRow(at, { namespace: "lena-sandbox", name: "hello-web" }),
   });
 
@@ -1353,6 +1363,7 @@ describe("where the rows before the running watch came from", () => {
   const row = (at: number) => ({
     kind: "journal" as const,
     at,
+    unplaced: false,
     row: changeRow(at, { name: "web" }),
   });
 
@@ -1416,6 +1427,7 @@ describe("the cluster's events and the recorded changes on one clock", () => {
   const span: ObservedSpan = { from: T0, seenAt: NOW, to: null };
   const items = (over: Partial<Parameters<typeof timelineOf>[0]> = {}) =>
     timelineOf({
+      vouched: PLACED,
       revisions: [revision(1, [container("app", "app:1")])],
       deliveries: [],
       helm: [],
@@ -1424,6 +1436,25 @@ describe("the cluster's events and the recorded changes on one clock", () => {
       window,
       ...over,
     });
+
+  /**
+   * A change or an event no read placed may be another cluster's. Fails if
+   * either is marked otherwise, or a timeline with no word of what was
+   * vouched for draws any row as placed.
+   */
+  it("marks each row no read placed, and every row where nothing says", () => {
+    const marked = (vouched: Parameters<typeof timelineOf>[0]["vouched"]) =>
+      items({ vouched }).flatMap((item) =>
+        item.kind === "journal" || item.kind === "event" ? [item.unplaced] : []
+      );
+    expect(marked([{ first: T0 + 4 * HOUR, last: null }])).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ]);
+    expect(marked(undefined)).toEqual([true, true, true, true]);
+  });
 
   /** Fails if an event is not laid among the changes by its last time, or a filter keeps what it was asked to leave out. */
   it("lays each event among the changes and draws what each filter asks for", () => {

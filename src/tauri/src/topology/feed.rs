@@ -116,36 +116,36 @@ pub type Resolve = Arc<
 
 /// What a slot of a kind discovery cannot name yet is held as: its last
 /// state, its last whole set, and since that set the last word on each
-/// object. A new set or a change to one object replaces what it outdates,
-/// so a kind discovery never names holds no more than one copy of its list.
+/// object, each with the place it arrived in. A new set or a change to one
+/// object replaces what it outdates, so a slot of a kind discovery never
+/// names holds no more than one copy of its list.
 #[derive(Default)]
-pub(super) struct Kept {
-    state: Option<Update>,
-    whole: Option<Update>,
-    since: BTreeMap<(String, String), Update>,
+struct Kept {
+    state: Option<(u64, Update)>,
+    whole: Option<(u64, Update)>,
+    since: BTreeMap<(String, String), (u64, Update)>,
 }
 
 impl Kept {
-    pub(super) fn keep(&mut self, update: Update) {
+    fn keep(&mut self, at: u64, update: Update) {
         match &update {
-            Update::State { .. } => self.state = Some(update),
+            Update::State { .. } => self.state = Some((at, update)),
             Update::Whole { .. } => {
                 self.since.clear();
-                self.whole = Some(update);
+                self.whole = Some((at, update));
             }
             Update::Applied { object, .. } | Update::Deleted { object, .. } => {
                 let key = (
                     object.metadata.namespace.clone().unwrap_or_default(),
                     object.metadata.name.clone().unwrap_or_default(),
                 );
-                self.since.insert(key, update);
+                self.since.insert(key, (at, update));
             }
             Update::HandedOver => {}
         }
     }
 
-    /// In the order the map reads them: the state, the set, the changes.
-    pub(super) fn replay(self) -> impl Iterator<Item = Update> {
+    fn replay(self) -> impl Iterator<Item = (u64, Update)> {
         self.state
             .into_iter()
             .chain(self.whole)
@@ -304,10 +304,18 @@ pub async fn pump(
     let Some(resolve) = resolve else {
         return pump_resolved(updates, map, types).await;
     };
-    // What arrived for a kind discovery could not name, in the order it came:
-    // parsed without its type it would be dropped, and its list read as empty.
+    // What arrived for a kind discovery could not name: parsed without its
+    // type it would be dropped, and its list read as empty.
     let mut held: BTreeMap<Kind, BTreeMap<crate::ownership::SlotKey, Kept>> = BTreeMap::new();
     let mut said: BTreeMap<Kind, String> = BTreeMap::new();
+    let mut arrived: u64 = 0;
+    // A kind discovery says is not served is not a kind read and empty, whatever
+    // the layer last said of it: its objects cannot be parsed without a type.
+    let mut unserved: BTreeSet<Kind> = Kind::ALL
+        .iter()
+        .copied()
+        .filter(|kind| kind.optional() && !types.contains_key(kind) && !unresolved.contains(kind))
+        .collect();
     let mut retry = tokio::time::interval_at(tokio::time::Instant::now() + again, again);
     retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -322,6 +330,24 @@ pub async fn pump(
             }
             _ = retry.tick(), if !held.is_empty() => Vec::new(),
         };
+        // The layer reading a kind discovery said is not served is word that
+        // the answer was old: the kind is asked about again before its
+        // updates are judged.
+        for update in &batch {
+            let Some(kind) = kind_of(update).filter(|kind| unserved.contains(kind)) else {
+                continue;
+            };
+            if !matches!(
+                update,
+                Update::State {
+                    state: Reading::Unserved,
+                    ..
+                }
+            ) {
+                unserved.remove(&kind);
+                unresolved.insert(kind);
+            }
+        }
         let waiting: BTreeSet<Kind> = batch
             .iter()
             .filter_map(kind_of)
@@ -330,10 +356,13 @@ pub async fn pump(
             .collect();
         for kind in waiting {
             match resolve(kind).await {
-                Ok(resource) => {
-                    if let Some(resource) = resource {
-                        types.insert(kind, resource);
-                    }
+                Ok(Some(resource)) => {
+                    types.insert(kind, resource);
+                    unresolved.remove(&kind);
+                    said.remove(&kind);
+                }
+                Ok(None) => {
+                    unserved.insert(kind);
                     unresolved.remove(&kind);
                     said.remove(&kind);
                 }
@@ -347,13 +376,25 @@ pub async fn pump(
             .copied()
             .filter(|kind| !unresolved.contains(kind))
             .collect();
-        let mut ready: Vec<Update> = named
+        let mut replayed: Vec<(u64, Update)> = named
             .iter()
             .flat_map(|kind| held.remove(kind).unwrap_or_default().into_values())
             .flat_map(Kept::replay)
             .collect();
-        for update in batch {
+        // In the order it came: the cluster's list and a namespace's overlap,
+        // and the later replaces the earlier.
+        replayed.sort_by_key(|(at, _)| *at);
+        let mut ready = Vec::new();
+        for update in replayed.into_iter().map(|(_, update)| update).chain(batch) {
             match kind_of(&update) {
+                Some(kind) if unserved.contains(&kind) => {
+                    if let Update::State { slot, .. } = update {
+                        ready.push(Update::State {
+                            slot,
+                            state: Reading::Unserved,
+                        });
+                    }
+                }
                 Some(kind) if unresolved.contains(&kind) => {
                     // The map is told the kind was not read, in discovery's
                     // words, never that it was read and holds nothing.
@@ -366,11 +407,12 @@ pub async fn pump(
                         });
                     }
                     if let Some(slot) = slot_of(&update).cloned() {
+                        arrived += 1;
                         held.entry(kind)
                             .or_default()
                             .entry(slot)
                             .or_default()
-                            .keep(update);
+                            .keep(arrived, update);
                     }
                 }
                 _ => ready.push(update),
@@ -424,4 +466,93 @@ async fn feed_batch(
     };
     map.feed(feeds);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// A kind discovery could not name for long kept every update for it: each
+    /// relist on top of the last, each change to one object again, a bounded
+    /// channel turned into a store that only grew. Fails if a newer set does
+    /// not replace an older one with its changes, or a newer word on an object
+    /// does not replace the older.
+    #[test]
+    fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
+        let gateways = crate::ownership::SlotKey {
+            kind: Kind::Gateway.key(),
+            namespace: None,
+        };
+        let object = |name: &str, version: u32| {
+            Arc::new(
+                serde_json::from_value::<DynamicObject>(json!({
+                    "metadata": { "name": name, "namespace": "infra", "resourceVersion": version.to_string() },
+                    "spec": { "gatewayClassName": "envoy", "listeners": [] },
+                }))
+                .expect("a dynamic object"),
+            )
+        };
+        let mut kept = Kept::default();
+        kept.keep(
+            1,
+            Update::State {
+                slot: gateways.clone(),
+                state: Reading::Synced,
+            },
+        );
+        kept.keep(
+            2,
+            Update::Whole {
+                slot: gateways.clone(),
+                why: crate::feeds::Whole::Fresh,
+                objects: vec![object("a", 1), object("b", 1)],
+            },
+        );
+        for version in 2..100 {
+            kept.keep(
+                u64::from(version) + 1,
+                Update::Applied {
+                    slot: gateways.clone(),
+                    object: object("c", version),
+                },
+            );
+        }
+        let replayed: Vec<String> = kept
+            .replay()
+            .map(|(_, update)| match update {
+                Update::State { .. } => "state".to_string(),
+                Update::Whole { objects, .. } => format!("whole {}", objects.len()),
+                Update::Applied { object, .. } => format!(
+                    "applied {}",
+                    object.metadata.resource_version.clone().unwrap_or_default()
+                ),
+                other => format!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(replayed, ["state", "whole 2", "applied 99"]);
+
+        let mut kept = Kept::default();
+        kept.keep(
+            1,
+            Update::Applied {
+                slot: gateways.clone(),
+                object: object("c", 1),
+            },
+        );
+        kept.keep(
+            2,
+            Update::Whole {
+                slot: gateways.clone(),
+                why: crate::feeds::Whole::Relist,
+                objects: vec![object("a", 2)],
+            },
+        );
+        assert_eq!(
+            kept.replay().count(),
+            1,
+            "a newer set outdates what came before"
+        );
+    }
 }

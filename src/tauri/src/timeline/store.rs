@@ -104,6 +104,39 @@ impl Store {
         self.seq
     }
 
+    /// The oldest row's number, `None` where nothing is held.
+    pub(super) fn oldest(&self) -> Option<u64> {
+        self.by_seq.keys().next().copied()
+    }
+
+    /// Numbers the next row past `seq` too: one read back must not fall
+    /// inside a stretch a connection vouched for.
+    pub(super) fn number_past(&mut self, seq: u64) {
+        self.seq = self.seq.max(seq);
+    }
+
+    /// Lets go of the rows `keep` refuses, saying nothing of them: they were
+    /// another cluster's, not this one's history cut short.
+    pub(super) fn retain(&mut self, keep: impl Fn(&TimelineRow) -> bool) {
+        let gone: Vec<(Class, Key)> = self
+            .rows
+            .iter()
+            .flat_map(|(class, map)| {
+                map.iter()
+                    .filter(|(_, held)| !keep(&held.row))
+                    .map(|(key, _)| (*class, *key))
+            })
+            .collect();
+        for (class, key) in gone {
+            if let Some(held) = self.map(class).remove(&key) {
+                self.by_seq.remove(&held.row.seq);
+                if matches!(held.row.what, RowSays::Event { .. }) {
+                    self.series.remove(&held.row.id);
+                }
+            }
+        }
+    }
+
     pub(super) fn let_go(&self) -> LetGoes {
         let of = |class| self.let_go.get(&class).copied();
         LetGoes {
@@ -203,6 +236,11 @@ impl Store {
             self.seq = self.seq.max(row.seq);
             self.put(row, now);
         }
+    }
+
+    /// Forgets what each class let go: it was another cluster's history.
+    pub(super) fn forget_let_go(&mut self) {
+        self.let_go.clear();
     }
 
     /// Forgets every row and says they were cleared, now.

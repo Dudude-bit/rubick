@@ -796,6 +796,7 @@ fn a_restart_reads_back_the_rows_and_ends_the_open_span() {
     {
         let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
         let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
         cluster.change(change("1", now, "Deployment", Some("shop"), "api"));
         cluster.event(event("e1", "Warning", 3, now), now);
         cluster.spans(|spans, at| spans.begin(Source::Followed, at, Cover::default()));
@@ -986,6 +987,7 @@ fn rows_held_when_the_cluster_could_not_be_settled_are_said_to_be() {
     cluster.seen_cluster("uid-a".into());
     cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
     timelines.client_replaced("kind");
+    cluster.handed_over();
     cluster.unsettled();
     assert_eq!(
         cluster.page(&query(Show::All)).identity,
@@ -1004,58 +1006,346 @@ fn a_check_through_the_client_held_outlasts_another_call_that_could_not_settle()
     let cluster = timelines.cluster("kind");
     cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
     timelines.client_replaced("kind");
+    cluster.handed_over();
     cluster.seen_cluster("uid-a".into());
     cluster.unsettled();
     assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
 }
 
-/// A reconnect found nothing held, so the name stayed "checked" for the
-/// next client; what that client recorded was then called this cluster's
-/// though `kube-system` was never read through it. Fails if rows recorded
-/// after a reconnect are called checked before a read settles it.
-#[test]
-fn rows_recorded_after_a_reconnect_that_found_nothing_held_wait_for_a_check() {
-    let (timelines, _rx) = holder(None, false);
-    let cluster = timelines.cluster("kind");
-    cluster.seen_cluster("uid-a".into());
-    timelines.client_replaced("kind");
+/// The ids of a page's rows a connection read to be this cluster recorded,
+/// and of the rest, each sorted.
+fn placed(page: &TimelinePage) -> (Vec<String>, Vec<String>) {
+    let vouched = |seq: u64| {
+        page.vouched
+            .iter()
+            .any(|stretch| seq >= stretch.first && stretch.last.is_none_or(|last| seq <= last))
+    };
+    let (mut sure, mut unsure): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+    for row in &page.rows {
+        if vouched(row.seq) {
+            sure.push(row.id.clone());
+        } else {
+            unsure.push(row.id.clone());
+        }
+    }
+    sure.sort();
+    unsure.sort();
+    (sure, unsure)
+}
+
+fn recorded(cluster: &ClusterTimeline, id: &str) {
     cluster.change(change(
-        "1",
+        id,
         ClusterTimeline::now(),
         "Deployment",
         Some("shop"),
         "api",
     ));
-    cluster.unsettled();
-    assert_eq!(
-        cluster.page(&query(Show::All)).identity,
-        Identity::Unsettled
-    );
 }
 
-/// A cluster named in an earlier run, with nothing kept from it: the name
-/// read as checked, and a reader who may not read `kube-system` saw the
-/// next cluster's rows called the named one's. Fails if a name read before
-/// is called checked before this run reads it.
+/// Reconnected to a cluster whose `kube-system` was refused, recorded, and
+/// restarted on the old cluster: the rows the refused connection recorded
+/// were written under the old uid and read back as its history. Fails if a
+/// later run vouches for rows no read placed.
 #[test]
-fn a_name_read_in_an_earlier_run_is_checked_again_though_nothing_was_kept() {
+fn rows_a_refused_connection_recorded_are_not_the_old_clusters_in_a_later_run() {
     let root = tempfile::tempdir().unwrap();
     {
         let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
-        timelines.cluster("kind").seen_cluster("uid-a".into());
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "before");
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "after");
         timelines.flush();
     }
     let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
     let cluster = timelines.cluster("kind");
+    assert!(!cluster.seen_cluster("uid-a".into()));
     assert_eq!(
-        cluster.page(&query(Show::All)).identity,
-        Identity::NotChecked
+        placed(&cluster.page(&query(Show::All))),
+        (vec!["before".to_string()], vec!["after".to_string()])
     );
+}
+
+/// A reader who never could read `kube-system`, restarted where it can:
+/// every row was adopted as the first cluster read's. Fails if they are
+/// called its, or let go.
+#[test]
+fn rows_no_read_ever_placed_are_kept_and_not_adopted_by_the_first_cluster_read() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "kept");
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    assert!(!cluster.seen_cluster("uid-a".into()));
+    assert_eq!(
+        placed(&cluster.page(&query(Show::All))),
+        (vec![], vec!["kept".to_string()])
+    );
+}
+
+/// Read, then a connection that could not read, then read again: fails if
+/// the stretch in between is vouched for, or either read stretch is not,
+/// in this run or the next.
+#[test]
+fn a_connection_that_could_not_read_leaves_the_read_ones_around_it_placed() {
+    let root = tempfile::tempdir().unwrap();
+    let expected = (
+        vec!["one".to_string(), "three".to_string()],
+        vec!["two".to_string()],
+    );
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "one");
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "two");
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "three");
+        assert_eq!(placed(&cluster.page(&query(Show::All))), expected);
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    assert_eq!(placed(&cluster.page(&query(Show::All))), expected);
+}
+
+/// Another cluster under the name: what was read to be the old one goes,
+/// and what no read placed stays. Fails if the old cluster's rows outlive
+/// the turn, or the unplaced ones are let go or called the new one's.
+#[test]
+fn another_cluster_lets_go_of_the_old_ones_rows_and_keeps_the_unplaced() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    recorded(&cluster, "one");
+    timelines.client_replaced("kind");
+    cluster.handed_over();
     cluster.not_identified("forbidden".into());
-    assert!(matches!(
-        cluster.page(&query(Show::All)).identity,
-        Identity::Unknown { .. }
-    ));
+    recorded(&cluster, "two");
+    timelines.client_replaced("kind");
+    cluster.handed_over();
+    assert!(cluster.seen_cluster("uid-b".into()));
+    assert_eq!(
+        placed(&cluster.page(&query(Show::All))),
+        (vec![], vec!["two".to_string()])
+    );
+}
+
+/// The cluster under the name before this one let rows go at a bound, and
+/// this one's page said its own history was let go. Fails if what the old
+/// cluster let go is said of the new one, or a check of the same cluster
+/// again forgets what it let go.
+#[test]
+fn another_cluster_does_not_inherit_what_the_old_one_let_go() {
+    let (timelines, _rx) = holder(None, false);
+    let let_go = LetGoes {
+        changes: Some(LetGo {
+            before: ClusterTimeline::now(),
+            cleared: false,
+        }),
+        ..LetGoes::default()
+    };
+    for (context, again, said) in [("kind", "uid-b", None), ("same", "uid-a", let_go.changes)] {
+        let cluster = timelines.cluster(context);
+        cluster.seen_cluster("uid-a".into());
+        cluster
+            .inner
+            .lock()
+            .store
+            .restore(Vec::new(), let_go, ClusterTimeline::now());
+        timelines.client_replaced(context);
+        cluster.handed_over();
+        cluster.seen_cluster(again.into());
+        assert_eq!(cluster.page(&query(Show::All)).let_go.changes, said);
+    }
+}
+
+/// Keeping was off while a row was recorded; back on, another cluster
+/// under the name rewrote what was held from memory, and that row reached
+/// the disk. Fails if a row recorded while keeping was off is kept.
+#[test]
+fn a_row_recorded_while_keeping_was_off_is_not_kept_when_the_cluster_turns() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "a-row");
+        timelines.flush();
+        timelines.set_keep(false);
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "off-row");
+        timelines.flush();
+        timelines.set_keep(true);
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        assert!(cluster.seen_cluster("uid-b".into()));
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let page = timelines.cluster("kind").page(&query(Show::All));
+    let ids: Vec<&str> = page.rows.iter().map(|row| row.id.as_str()).collect();
+    assert!(ids.is_empty(), "kept {ids:?}");
+}
+
+/// The turn to another cluster wiped the files and queued what was kept to
+/// be written again; the wipe failed once, and the retry wiped without the
+/// rows. Fails if a row kept and not the old cluster's is lost to a write
+/// that failed once.
+#[cfg(unix)]
+#[test]
+fn rows_kept_survive_a_turn_whose_first_write_fails() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "kept");
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "a-row");
+        timelines.flush();
+        timelines.client_replaced("kind");
+        cluster.handed_over();
+        let dir = disk::dir_of(root.path(), "kind");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        assert!(cluster.seen_cluster("uid-b".into()));
+        timelines.flush();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let page = timelines.cluster("kind").page(&query(Show::All));
+    let ids: Vec<&str> = page.rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids, ["kept"]);
+}
+
+/// The new client's watches take over one kind at a time, and until they
+/// all have, the old client's go on feeding the recorder: its rows took the
+/// new connection's numbers and were called the cluster read since. Fails
+/// if a row recorded before the handover is vouched for by another cluster
+/// read since, is not where the same cluster is read again, or a row
+/// recorded after it is not.
+#[test]
+fn rows_recorded_before_the_watches_are_handed_over_are_not_another_clusters() {
+    let (timelines, _rx) = holder(None, false);
+    for (context, again, expected) in [
+        ("kind", "uid-b", (vec!["after"], vec!["during"])),
+        ("same", "uid-a", (vec!["after", "before", "during"], vec![])),
+    ] {
+        let cluster = timelines.cluster(context);
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "before");
+        timelines.client_replaced(context);
+        recorded(&cluster, "during");
+        cluster.seen_cluster(again.into());
+        cluster.handed_over();
+        recorded(&cluster, "after");
+        let page = cluster.page(&TimelineQuery {
+            context: context.into(),
+            ..query(Show::All)
+        });
+        let (sure, unsure) = placed(&page);
+        let expected = (
+            expected.0.into_iter().map(String::from).collect::<Vec<_>>(),
+            expected.1.into_iter().map(String::from).collect::<Vec<_>>(),
+        );
+        assert_eq!((sure, unsure), expected, "{context}");
+    }
+}
+
+/// Two answers of one epoch, one asked before a reconnect: the window could
+/// not tell which said the later word on which rows are this cluster's.
+/// Fails if a reconnect, a handover or a check leaves the attribution where
+/// it was.
+#[test]
+fn the_word_on_which_rows_are_this_clusters_moves_with_every_change_to_it() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    let mut said = cluster.page(&query(Show::All)).attribution;
+    let mut moved = |step: &str| {
+        let now = cluster.page(&query(Show::All)).attribution;
+        assert!(now > said, "{step} left it at {now}");
+        said = now;
+    };
+    cluster.seen_cluster("uid-a".into());
+    moved("a check");
+    timelines.client_replaced("kind");
+    moved("a reconnect");
+    cluster.not_identified("forbidden".into());
+    moved("a refused check");
+    cluster.handed_over();
+    moved("a handover");
+}
+
+/// A kept file that says nothing of its connections, as a build before
+/// them wrote it, or says it unreadably: fails if anything in it is
+/// vouched for, its watching drawn, or the rest of the file is lost.
+#[test]
+fn a_kept_file_without_a_word_of_its_connections_vouches_for_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "one");
+        cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+        timelines.flush();
+    }
+    let path = disk::dir_of(root.path(), "kind").join("state.json");
+    let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let read_back = |state: &Value| {
+        std::fs::write(&path, serde_json::to_vec(state).unwrap()).unwrap();
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        cluster.page(&query(Show::All))
+    };
+    let page = read_back(&written);
+    assert_eq!(placed(&page), (vec!["one".to_string()], vec![]));
+    assert_eq!(page.spans.followed.len(), 1);
+    let mut without = written.clone();
+    without.as_object_mut().unwrap().remove("lineages");
+    let mut garbled = written.clone();
+    garbled["lineages"] = json!("garbled");
+    for state in [without, garbled] {
+        let page = read_back(&state);
+        assert_eq!(placed(&page), (vec![], vec!["one".to_string()]));
+        assert!(page.spans.followed.is_empty());
+        assert_eq!(page.unreadable, 0);
+    }
+}
+
+/// What no connection vouched for before the one held now is cut out of
+/// what was watched. Fails if a stretch between, before or after the
+/// vouched ones is drawn watched.
+#[test]
+fn watching_no_connection_vouched_for_is_cut_out() {
+    assert_eq!(
+        unvouched(vec![(30, 40), (10, 20)], 50),
+        vec![(i64::MIN, 10), (20, 30), (40, 50)]
+    );
+    assert_eq!(unvouched(vec![(10, 60)], 50), vec![(i64::MIN, 10)]);
+    assert_eq!(unvouched(vec![], 50), vec![(i64::MIN, 50)]);
 }
 
 /// A switch of keeping waits for the flush under way: one that read
@@ -1110,6 +1400,7 @@ fn a_replaced_client_is_told_to_the_window() {
     timelines.flush();
     while rx.try_recv().is_ok() {}
     timelines.client_replaced("kind");
+    cluster.handed_over();
     timelines.flush();
     assert!(matches!(
         rx.try_recv(),
