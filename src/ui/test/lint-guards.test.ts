@@ -38,6 +38,18 @@ const STORE_SHAPES: Record<string, [string, number]> = {
     "export type Saved = Record<string, number>;",
     1,
   ],
+  "stores/union-index.ts": [
+    "export interface S { marks: { [context: string | symbol]: number } }",
+    1,
+  ],
+  "stores/union-record.ts": [
+    "export type Saved = Record<string | symbol, number>;",
+    1,
+  ],
+  "stores/symbol-index.ts": [
+    "export interface S { tags: { [tag: symbol]: number } }",
+    0,
+  ],
   "stores/forwards/nested.test.ts": [
     "export type Fixture = Record<string, number>;",
     0,

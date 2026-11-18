@@ -42,13 +42,16 @@ const overlayScrollbar = (node) => {
 const sourceMatching = (pattern) => (node) =>
   node.source?.type === "Literal" && stringMatching(pattern)(node.source);
 
+/** A key type any string gets through: `string`, or a union holding it. */
+const takesString = (type) =>
+  type?.type === "TSStringKeyword" ||
+  (type?.type === "TSUnionType" && type.types.some(takesString));
+
 const keyedByString = (node) =>
   node.type === "TSIndexSignature"
-    ? node.parameters?.[0]?.typeAnnotation?.typeAnnotation?.type ===
-      "TSStringKeyword"
+    ? takesString(node.parameters?.[0]?.typeAnnotation?.typeAnnotation)
     : node.typeName?.name === "Record" &&
-      (node.typeArguments ?? node.typeParameters)?.params?.[0]?.type ===
-        "TSStringKeyword";
+      takesString((node.typeArguments ?? node.typeParameters)?.params?.[0]);
 
 export default {
   meta: { name: "rubick" },
