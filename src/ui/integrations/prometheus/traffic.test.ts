@@ -303,11 +303,12 @@ describe("which sources a Prometheus holds", () => {
   });
 
   /**
-   * A source whose ends only the pods resolve must say so, or a subject in a
+   * A source whose ends the pods resolve must say so, or a subject in a
    * namespace whose pods were not read is called quiet: Istio always (a pod
-   * label), Hubble by pod, never one that writes the workload's kind.
+   * label), Hubble by pod, Beyla and Caretta for an end they name as a bare
+   * pod; only Hubble writing every metric's workload kind needs none.
    */
-  it("says which sources name workloads only through their pods", async () => {
+  it("says which sources need the pods to name some of their ends", async () => {
     const hubbleBy = async (label: "workload" | "pod") => {
       prometheusQuery.mockImplementation(async (query) => {
         if (query.includes("istio_requests_total"))
@@ -327,8 +328,8 @@ describe("which sources a Prometheus holds", () => {
     expect(await hubbleBy("workload")).toEqual({
       istio: true,
       hubble: false,
-      beyla: false,
-      caretta: false,
+      beyla: true,
+      caretta: true,
     });
     expect((await hubbleBy("pod")).hubble).toBe(true);
   });

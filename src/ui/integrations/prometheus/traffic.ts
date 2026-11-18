@@ -593,7 +593,8 @@ export const DEFINITIONS: readonly Definition[] = [
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
-      needsPods: false,
+      // An end it names as a bare pod is a workload only through the pods.
+      needsPods: true,
     }),
     queries: beylaQueries,
   },
@@ -609,7 +610,8 @@ export const DEFINITIONS: readonly Definition[] = [
       state: { says: names.length > 0 ? "present" : "absent" },
       measures: ["bytes"],
       found: names,
-      needsPods: false,
+      // An end it names as a bare pod is a workload only through the pods.
+      needsPods: true,
     }),
     queries: carettaQueries,
   },
