@@ -44,7 +44,7 @@ import {
   type Grouping,
 } from "./model";
 import { toneOf, type ToneInputs } from "./tone";
-import { topologySection } from "./topology-share";
+import { shareSaid, topologySection } from "./topology-share";
 import { useVendorLayers } from "./vendor-layers";
 import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
 
@@ -377,20 +377,7 @@ function TopologyMap() {
     .filter(Boolean)
     .join(" · ");
   useShareSection("topology", () =>
-    topologySection(
-      model,
-      {
-        unread:
-          stopped !== null
-            ? stopped
-            : map.phase === "opening"
-              ? t("topology", "shareStillOpening")
-              : null,
-        notes: caveats,
-      },
-      t,
-      caption
-    )
+    topologySection(model, shareSaid(map, caveats, t), t, caption)
   );
 
   const exportImage = async () => {
