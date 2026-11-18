@@ -235,6 +235,38 @@ async fn listener_sets(state: &AppState) -> Option<Vec<ListenerSetInfo>> {
     )
 }
 
+/// Every `ListenerSet` in the cluster, for a route that names one: the set's
+/// own parentRef says which Gateway it belongs to, and a Gateway's list
+/// keeps only the sets whose Gateway is there. None where the cluster does
+/// not serve the kind, and the cluster's refusal where it would not list them.
+#[tauri::command]
+pub async fn list_listener_sets(state: State<'_, AppState>) -> Result<Vec<ListenerSetInfo>> {
+    every_listener_set(&state).await
+}
+
+async fn every_listener_set(state: &AppState) -> Result<Vec<ListenerSetInfo>> {
+    crate::client::clock::timed(&state.perf, "listListenerSets", async {
+        let here = state.here()?;
+        if here
+            .served_kind(GATEWAY_API_GROUP, "listenersets")
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let (list, api_resource) = on_served(state, "ListenerSet", None, true, |api| async move {
+            api.list(&build_list_params(None, None, None)).await
+        })
+        .await?;
+        Ok(list
+            .items
+            .into_iter()
+            .map(|obj| ListenerSetInfo::read(&with_types(obj, &api_resource)))
+            .collect())
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn list_gateways(
     namespace: Option<String>,
@@ -635,6 +667,41 @@ mod tests {
             super::listener_sets(&state).await.map(|sets| sets.len()),
             Some(0)
         );
+    }
+
+    /// A route naming a set reads "does not exist" only against a list the
+    /// cluster gave. Fails if a cluster that does not serve the kind gives
+    /// anything but none, or a refused list reads as an empty one rather
+    /// than the refusal.
+    #[tokio::test]
+    async fn the_listener_sets_are_none_where_unserved_and_the_refusal_where_refused() {
+        let (unserved, _) = connected(ServedIndex::scaled(300), |path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            V1 => (200, resources("v1", &[("gateways", "Gateway", true)])),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        assert_eq!(
+            super::every_listener_set(&unserved)
+                .await
+                .map(|sets| sets.len())
+                .ok(),
+            Some(0)
+        );
+
+        let (refused, _) = connected(ServedIndex::scaled(300), |path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            V1 => (
+                200,
+                resources("v1", &[("listenersets", "ListenerSet", true)]),
+            ),
+            _ => failure(403, "Forbidden"),
+        })
+        .await;
+        let refusal = super::every_listener_set(&refused)
+            .await
+            .expect_err("a refused list is not an empty one");
+        assert!(refusal.is_refusal(), "{refusal:?}");
     }
 
     /// Would re-read Gateway API discovery on every Gateway poll of a

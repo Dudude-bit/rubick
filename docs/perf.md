@@ -87,7 +87,8 @@ Record each one on the rig, before and after a change, from a release build
    then Topology over every namespace: the first batches
    (`topologyBatch (apply)`), `topologyLayout (worker)` with the groups
    collapsed and again after expanding them, a pan of five seconds, and the
-   batch after `kubectl -n perf-map-3 delete pod -l app=d-003 --wait=false`.
+   batch after `kubectl --context kind-rubick-perf -n perf-map-3 delete pod -l app=d-003 --wait=false`
+   (the context `up` printed: `k3d-rubick-perf` on k3d, or the one you passed).
 
 Quote p95 and max per command, the long-task count, the largest IPC
 message, and the achieved churn rate.

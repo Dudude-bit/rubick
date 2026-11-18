@@ -133,7 +133,10 @@ function objectColumns(t: T): ColumnDef<ObjectRow>[] {
         row.original.worst ? (
           <SeverityBadge severity={row.original.worst} />
         ) : (
-          <EyeOff className="h-3 w-3 text-fg-fnt" aria-hidden />
+          <EyeOff
+            className="h-3 w-3 text-fg-fnt"
+            aria-label={t("audit", "notCheckedHere")}
+          />
         ),
     },
     {

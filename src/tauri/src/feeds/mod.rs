@@ -213,7 +213,15 @@ impl Lease {
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(context) = self.context.upgrade() {
-            context.inner.lock().leave(self.id);
+            let kinds = {
+                let mut inner = context.inner.lock();
+                let kinds = inner.subscribers.get(&self.id).map(|sub| sub.kinds.clone());
+                inner.leave(self.id);
+                kinds
+            };
+            for kind in kinds.iter().flatten() {
+                context.fall_back_all(kind);
+            }
         }
     }
 }
@@ -1293,7 +1301,9 @@ impl ContextFeeds {
     }
 
     /// Reads a kind refused across the cluster in every namespace a
-    /// subscriber's scope names, in each generation that refused it.
+    /// subscriber's scope names, in each generation that refused it, and
+    /// lets go of a namespace no subscriber names any longer: a reader moving
+    /// through namespaces would otherwise hold a watch in each it ever saw.
     fn fall_back_all(&self, kind: &KindKey) {
         let (generations, namespaces, resource) = {
             let inner = self.inner.lock();
@@ -1314,6 +1324,22 @@ impl ContextFeeds {
             )
         };
         for generation in generations {
+            let unasked: Vec<SlotKey> = generation
+                .slots
+                .lock()
+                .keys()
+                .filter(|slot| {
+                    slot.kind == *kind
+                        && slot
+                            .namespace
+                            .as_ref()
+                            .is_some_and(|namespace| !namespaces.contains(namespace))
+                })
+                .cloned()
+                .collect();
+            for slot in &unasked {
+                generation.stop_slot(slot);
+            }
             let whole = SlotKey {
                 kind: kind.clone(),
                 namespace: None,
@@ -1548,6 +1574,21 @@ impl Generation {
                 });
             }
         }
+    }
+
+    /// Stops one slot and lets go of what it held.
+    fn stop_slot(&self, slot: &SlotKey) {
+        let mut slots = self.slots.lock();
+        if let Some(stop) = self.stops.lock().remove(slot) {
+            stop.cancel();
+        }
+        slots.remove(slot);
+        let id = self.id;
+        self.tell(|inner| {
+            inner.stores.remove(&(id, slot.clone()));
+            inner.states.remove(&(id, slot.clone()));
+            Vec::new()
+        });
     }
 
     fn stop_kind(&self, kind: &KindKey) {
@@ -2228,7 +2269,7 @@ mod tests {
             u,
             Update::State { state: FeedState::Refused { message }, .. } if message == "deployments is forbidden"
         )));
-        let _other = context.join(
+        let other = context.join(
             &ask(Some(vec!["ops"]), Binding::Page),
             &[deployments()],
             &[],
@@ -2237,6 +2278,50 @@ mod tests {
             kind,
             namespace: Some("ops".to_string()),
         }));
+        drop(other);
+        context.end();
+    }
+
+    /// A namespace no reader asks for any longer stops being read on its
+    /// own. Fails if a reader moving through namespaces keeps a watch in
+    /// each it ever looked at, which spent the shared budget in twenty moves.
+    #[tokio::test]
+    async fn a_namespace_no_reader_asks_for_is_let_go() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let sub = context.join(
+            &ask(Some(vec!["shop", "billing"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(
+            &generation,
+            &whole(&kind),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        let held = |namespace: &str| {
+            generation.holds(&SlotKey {
+                kind: kind.clone(),
+                namespace: Some(namespace.to_string()),
+            })
+        };
+        let other = context.join(
+            &ask(Some(vec!["ops"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        assert!(held("shop") && held("billing") && held("ops"));
+
+        sub.lease.rescope(Some(vec!["shop".to_string()]));
+        assert!(held("shop") && !held("billing") && held("ops"));
+        drop(other);
+        assert!(
+            held("shop") && !held("ops"),
+            "a reader that left kept its namespace read"
+        );
         context.end();
     }
 

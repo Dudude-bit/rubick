@@ -38,7 +38,7 @@ import {
   type GraphEdge,
   type GraphNode,
 } from "../-map/GraphCanvas";
-import { useTopology } from "../-map/useTopology";
+import { mapStopped, useTopology } from "../-map/useTopology";
 import { newMemo } from "../-topology/model";
 import { toneOf } from "../-topology/tone";
 import { COLLAPSE_ABOVE } from "../-topology/Topology";
@@ -284,6 +284,7 @@ function FlowsView({
   const search = useAppSearch();
   const canvas = useRef<GraphCanvasHandle>(null);
   const map = useTopology(scope);
+  const stopped = mapStopped(map, t);
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
@@ -399,8 +400,9 @@ function FlowsView({
 
   return (
     <>
-      {notes.length > 0 && (
+      {(notes.length > 0 || stopped !== null) && (
         <div className="flex flex-col gap-0.5 px-1 text-[11.5px]">
+          {stopped !== null && <p className="text-err">{stopped}</p>}
           {notes.map((note) => (
             <p key={note.text} className={NOTE_TONE[note.tone]}>
               {note.text}

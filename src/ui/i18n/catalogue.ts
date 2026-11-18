@@ -219,9 +219,6 @@ export const en = {
     stopRefUnresolvedTitle: "A reference this route makes did not resolve",
     stopRefsUnresolvedNote:
       "The controller answered ResolvedRefs: False{said}. The spec obliges the implementation to fail the affected traffic rather than route around it.",
-    stopGatewayMissingTitle: "Names a Gateway that does not exist",
-    stopGatewayMissingNote:
-      "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
     stopGatewayNotProgrammedTitle: "{gateway} is not programmed",
     stopGatewayNotProgrammedNote:
       "The controller answered {condition}: False{said}.",
@@ -1888,6 +1885,7 @@ export const en = {
     exported: "Map saved to {path}",
     exportFailed: "Could not save the map",
     failed: "The map could not be read: {said}",
+    stopped: "The map stopped updating and shows what it last read: {said}",
     edgesAbsent:
       "No edges from or to {kinds} are drawn here: they were not read.",
     notLookedLine: "{state}: {kinds}",
@@ -1985,6 +1983,7 @@ export const en = {
     systemShown: "Showing the system's namespaces and roles",
     systemBack: "Back to the rest",
     enforced: "{namespace} enforces Pod Security {level}",
+    enforcedUnread: "Which namespaces enforce Pod Security was not read: {why}",
     upgradeReading:
       "Upgrade: still reading Helm releases, and who writes through versions a later Kubernetes removes",
     upgradeRead: "Upgrade: read at {time}, against Kubernetes {server}",
@@ -8035,12 +8034,24 @@ export const en = {
     gwSetsUnreadSay: "Cannot tell which Gateway {name} belongs to",
     gwSetsUnreadTitle: "The ListenerSets could not be read",
     gwSetsUnreadBody:
-      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here, which is not the same as there being none.",
+      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or failed, so the Gateway cannot be named from here, which is not the same as there being none.",
+    gwClusterSaid: "The cluster said: {said}",
     gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
     gwGatewayMissingShort: "{name} does not exist",
     gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
     gwGatewayMissingBody:
       "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
+    gwSetMissingSay: "ListenerSet {name} does not exist in {namespace}",
+    gwSetMissingWord: "ListenerSet missing",
+    gwSetMissingTitle: "The parentRef names a ListenerSet that is not there",
+    gwSetMissingBody:
+      "Nothing can accept this route. Usually a typo in the name or namespace, or the ListenerSet was deleted after the route was written.",
+    gwSetGatewayMissingSay:
+      "ListenerSet {set} names Gateway {name}, which does not exist in {namespace}",
+    gwSetGatewayMissingTitle:
+      "The ListenerSet names a Gateway that is not there",
+    gwSetGatewayMissingBody:
+      "The route reaches its Gateway through this ListenerSet, and the set's own parentRef names a Gateway the cluster does not have. Usually a typo in the set's parentRef, or the Gateway was deleted after the set was written.",
     gwNotProgrammedSay: "Gateway {name} is not programmed",
     gwNotProgrammedShort: "{name} is not programmed",
     gwNotProgrammedTitle: "The controller refuses this Gateway",

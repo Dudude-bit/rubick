@@ -4,6 +4,7 @@ import {
   LAG_QUIET_MS,
   LAG_WAIT_MAX_MS,
   LAG_WAIT_MS,
+  listenAll,
   listenBridgeLag,
   listenEvent,
   listenResourceEvents,
@@ -276,6 +277,36 @@ describe("watches coming and going on the shared channel", () => {
       setTransport(real);
     }
   });
+  /**
+   * A map whose second listener failed to register kept the first one's
+   * handler, hearing every batch with nothing left to take it down. Fails
+   * if a set keeps any registration once another in it failed.
+   */
+  it("takes down every listener of a set when one of them failed to register", async () => {
+    const real = transport();
+    const { fake, emit } = tauriLike();
+    setTransport({
+      ...fake,
+      listen: (channel, onEvent) =>
+        channel === "log-batch"
+          ? Promise.reject(new Error("not ready"))
+          : fake.listen(channel, onEvent),
+    });
+    try {
+      const heard: string[] = [];
+      await expect(
+        listenAll([
+          listenResourceEvents((event) => heard.push(event.payload.stream_id)),
+          listenEvent("log-batch", () => {}),
+        ])
+      ).rejects.toThrow("not ready");
+      emit(batch("a"));
+      expect(heard).toEqual([]);
+    } finally {
+      setTransport(real);
+    }
+  });
+
   /** A listener that failed to register must not stay the shared one. */
   it("asks again for the shared listener after one failed to register", async () => {
     const real = transport();

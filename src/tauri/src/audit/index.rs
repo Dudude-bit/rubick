@@ -32,7 +32,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::context::{beside, Beside, Defaults, Replicated, Scales};
 use super::template::{judge, TemplateFacts};
-use super::{is_system, objects, AuditFinding, Subject, Unchecked, Why};
+use super::{is_system, objects, AuditFinding, RuleId, Subject, Unchecked, Why};
 use crate::error::Result;
 use crate::feeds::{Ask, Binding, FeedState, Lease, Update};
 use crate::ownership::{KindKey, SlotKey};
@@ -115,6 +115,8 @@ pub(super) struct Entry {
     pub version: String,
     pub system: bool,
     pub own: Vec<AuditFinding>,
+    /// Its own rules that could not answer from what it holds.
+    pub unread: Vec<Unchecked>,
     pub body: Body,
 }
 
@@ -260,6 +262,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
     let version = meta.resource_version.clone().unwrap_or_default();
     let subject = meta_subject(kind, &meta);
     let mut installers = false;
+    let mut unread = Vec::new();
     let (own, body) = match kind {
         "Deployment" => {
             let it: Deployment = object.try_parse().ok()?;
@@ -309,6 +312,16 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         "PodDisruptionBudget" => {
             let it: PodDisruptionBudget = object.try_parse().ok()?;
             let selector = it.spec.as_ref().and_then(|s| s.selector.clone());
+            // Its controller has not written a status: how many it needs
+            // healthy is not known yet, which is not "allows an eviction".
+            if it.status.is_none() {
+                unread.push(Unchecked {
+                    rule: RuleId::BudgetBlocksDisruption,
+                    kind: "PodDisruptionBudget".to_string(),
+                    namespace: meta.namespace.clone(),
+                    why: Why::Reading,
+                });
+            }
             (objects::budget(&it), Body::Budget(selector))
         }
         "HorizontalPodAutoscaler" => {
@@ -378,6 +391,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
         subject,
         version,
         own,
+        unread,
         body,
     })
 }
@@ -716,6 +730,10 @@ pub struct AuditIndexes {
     /// What the upgrade rules decoded per cluster, kept across visits so a
     /// return to the page fetches only what changed.
     decoded: DashMap<String, Arc<tokio::sync::Mutex<super::upgrade::Decoded>>>,
+    /// How many times each context's client was let go, and all of them:
+    /// a read that began before is not kept after.
+    eras: DashMap<String, u64>,
+    all_eras: std::sync::atomic::AtomicU64,
 }
 
 impl AuditIndexes {
@@ -727,6 +745,33 @@ impl AuditIndexes {
             besides: DashMap::new(),
             enforced: DashMap::new(),
             decoded: DashMap::new(),
+            eras: DashMap::new(),
+            all_eras: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// Which of `context`'s clients a read begins on, to be asked again
+    /// before what it found is kept.
+    pub(super) fn era(&self, context: &str) -> (u64, u64) {
+        (
+            self.all_eras.load(Ordering::SeqCst),
+            self.eras.get(context).map_or(0, |era| *era),
+        )
+    }
+
+    /// Keeps what a read of `context`'s namespace that began at `era` found,
+    /// unless the client it read through was let go meanwhile.
+    pub(super) fn keep_beside(&self, era: (u64, u64), key: (String, String), read: Arc<Beside>) {
+        if self.era(&key.0) == era {
+            self.besides.insert(key, (Instant::now(), read));
+        }
+    }
+
+    /// Keeps the Pod Security labels read of `context` at `era`, as above.
+    pub(super) fn keep_enforced(&self, era: (u64, u64), context: &str, read: Vec<super::Enforced>) {
+        if self.era(context) == era {
+            self.enforced
+                .insert(context.to_string(), (Instant::now(), read));
         }
     }
 
@@ -799,6 +844,7 @@ impl AuditIndexes {
     /// the releases decoded, which hold no client and are kept by each
     /// Secret's `resourceVersion`, are kept for the next.
     pub fn renewed(&self, context: &str) {
+        *self.eras.entry(context.to_string()).or_default() += 1;
         self.besides.retain(|(held, _), _| held != context);
         self.enforced.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
@@ -808,6 +854,7 @@ impl AuditIndexes {
     }
 
     pub fn forget_all(&self) {
+        self.all_eras.fetch_add(1, Ordering::SeqCst);
         self.besides.clear();
         self.enforced.clear();
         self.decoded.clear();
@@ -1497,6 +1544,37 @@ pub(super) mod tests {
         index.asked_again(Some(vec!["payments".to_string()])).await;
         assert_eq!(held(&index), vec!["api"]);
         index.stop.cancel();
+    }
+
+    /// A read that began on a client let go meanwhile is not kept: every
+    /// later read of the namespace would take the old client's answer.
+    /// Fails if a neighbour read in flight across a reconnect is kept.
+    #[test]
+    fn a_read_begun_before_the_client_was_let_go_is_not_kept() {
+        let (events, _) = broadcast::channel(4);
+        let indexes = AuditIndexes::new(events);
+        let key = ("prod".to_string(), "shop".to_string());
+        let unread = || {
+            Arc::new(Beside {
+                namespace: "shop".to_string(),
+                services: Err(Why::Reading),
+                budgets: Err(Why::Reading),
+                autoscalers: Err(Why::Reading),
+                limits: Err(Why::Reading),
+                account: Err(Why::Reading),
+            })
+        };
+        let before = indexes.era("prod");
+        indexes.forget("prod");
+        indexes.keep_beside(before, key.clone(), unread());
+        indexes.keep_enforced(before, "prod", Vec::new());
+        assert!(indexes.besides.is_empty() && indexes.enforced.is_empty());
+        let other = indexes.era("staging");
+        indexes.forget_all();
+        indexes.keep_enforced(other, "staging", Vec::new());
+        assert!(indexes.enforced.is_empty());
+        indexes.keep_beside(indexes.era("prod"), key, unread());
+        assert_eq!(indexes.besides.len(), 1);
     }
 
     /// A renewal keeps the releases Audit decoded; a reconnect, which may put

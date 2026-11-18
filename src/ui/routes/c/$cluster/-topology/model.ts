@@ -50,6 +50,11 @@ export const MAP_KINDS = [
   "ServiceAccount",
 ] as const;
 
+const railAt = (kind: string) => {
+  const at = (MAP_KINDS as readonly string[]).indexOf(kind);
+  return at === -1 ? MAP_KINDS.length : at;
+};
+
 /** Where a kind sits left to right inside a group: a way in before what it reaches. */
 const RANK: Record<string, number> = {
   Gateway: 0,
@@ -412,7 +417,10 @@ export function modelOf(
             }),
           ]
         : [
-            MAP_KINDS.filter((kind) => counts.has(kind))
+            // Every kind drawn, the rail's in its order and then the rest:
+            // pods with no owner, a custom resource.
+            [...counts.keys()]
+              .sort((a, b) => railAt(a) - railAt(b) || byName(a, b))
               .map((kind) => `${kind} ${counts.get(kind)}`)
               .join(" · ") || t("topology", "nothingDrawn"),
             [

@@ -515,6 +515,7 @@ fn main() {
             commands::gateway::delete_gateway_class,
             commands::gateway::list_gateways,
             commands::gateway::list_gateways_in,
+            commands::gateway::list_listener_sets,
             commands::gateway::get_gateway,
             commands::gateway::delete_gateway,
             commands::gateway::list_gateway_routes,

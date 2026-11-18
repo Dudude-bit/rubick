@@ -1,7 +1,7 @@
 //! The map's lists from the shared watch layer: each update parsed, as it
 //! arrives, into the stripped form the map keeps, and nothing else kept.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
@@ -80,16 +80,34 @@ pub fn ask(scope: Option<Vec<String>>) -> Ask {
 /// The resources the Gateway API kinds are served as, for the types their
 /// objects are read with. A kind the cluster does not serve is absent here,
 /// and the layer says `Unserved` of it.
-pub async fn types_of(here: &crate::state::Here<'_>) -> BTreeMap<Kind, ApiResource> {
+pub async fn types_of(
+    here: &crate::state::Here<'_>,
+) -> (BTreeMap<Kind, ApiResource>, BTreeSet<Kind>) {
     let mut types = BTreeMap::new();
+    // A kind discovery could not answer for is not a kind the cluster does
+    // not serve: it is asked again when its objects arrive.
+    let mut unresolved = BTreeSet::new();
     for &kind in Kind::ALL.iter().filter(|kind| kind.optional()) {
         let key = kind.key();
-        if let Ok(Some(served)) = here.served(&key.group, &key.plural).await {
-            types.insert(kind, served.resource);
+        match here.served(&key.group, &key.plural).await {
+            Ok(Some(served)) => {
+                types.insert(kind, served.resource);
+            }
+            Ok(None) => {}
+            Err(_) => {
+                unresolved.insert(kind);
+            }
         }
     }
-    types
+    (types, unresolved)
 }
+
+/// Asks discovery again what a Gateway API kind is served as.
+pub type Resolve = Arc<
+    dyn Fn(Kind) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<ApiResource>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// A built-in kind out of a dynamic object.
 fn typed<K: DeserializeOwned>(object: &DynamicObject) -> Option<K> {
@@ -210,15 +228,37 @@ pub(super) fn feeds_of(update: Update, types: &BTreeMap<Kind, ApiResource>) -> V
 pub async fn pump(
     mut updates: mpsc::Receiver<Update>,
     map: Arc<ClusterMap>,
-    types: BTreeMap<Kind, ApiResource>,
+    mut types: BTreeMap<Kind, ApiResource>,
+    mut unresolved: BTreeSet<Kind>,
+    resolve: Option<Resolve>,
 ) {
-    let types = Arc::new(types);
     while let Some(first) = updates.recv().await {
         let mut batch = vec![first];
         while let Ok(more) = updates.try_recv() {
             batch.push(more);
         }
-        let types = types.clone();
+        // A kind discovery failed for at the open is asked about again
+        // before its objects are read, or they would be dropped for as long
+        // as the map is open.
+        if let Some(resolve) = &resolve {
+            let waiting: BTreeSet<Kind> = batch
+                .iter()
+                .filter_map(|update| match update {
+                    Update::Whole { slot, .. }
+                    | Update::Applied { slot, .. }
+                    | Update::Deleted { slot, .. } => Kind::of(&slot.kind),
+                    _ => None,
+                })
+                .filter(|kind| unresolved.contains(kind))
+                .collect();
+            for kind in waiting {
+                if let Some(resource) = resolve(kind).await {
+                    types.insert(kind, resource);
+                    unresolved.remove(&kind);
+                }
+            }
+        }
+        let types = Arc::new(types.clone());
         let Ok(feeds) = tokio::task::spawn_blocking(move || {
             batch
                 .into_iter()

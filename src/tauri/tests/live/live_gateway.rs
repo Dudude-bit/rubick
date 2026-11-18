@@ -189,7 +189,7 @@ async fn the_gateway_chain_arrives_and_the_stops_are_named() {
     assert!(
         answer.stops.iter().any(|stop| matches!(
             stop,
-            ChainStop::GatewayMissing { route, gateway }
+            ChainStop::GatewayMissing { route, gateway, .. }
                 if route.name == "gwtest-ghost-parent" && gateway.name == "gwtest-ghost"
         )),
         "the ghost parent is a stop"

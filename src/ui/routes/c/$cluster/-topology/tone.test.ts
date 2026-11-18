@@ -250,6 +250,33 @@ describe("a map node's colour", () => {
       ).toBe(ROLE_TONE[statusRole(phase)]);
   });
 
+  /**
+   * A budget whose controller has not written a status has no counts to
+   * judge. Fails if the map draws it as a quiet budget.
+   */
+  it("is unknown for a budget with no status yet, and quiet for one with room", () => {
+    const budget = (cannotAllow: boolean | null): TopologyNode =>
+      node(
+        {
+          ...ref("PodDisruptionBudget"),
+          facts: {
+            kind: "budget",
+            minAvailable: "1",
+            maxUnavailable: null,
+            disruptionsAllowed: cannotAllow === null ? 0 : 1,
+            currentHealthy: cannotAllow === null ? 0 : 2,
+            desiredHealthy: cannotAllow === null ? 0 : 1,
+            expectedPods: cannotAllow === null ? 0 : 2,
+            cannotAllow,
+            conditions: [],
+          },
+        },
+        { says: "budget" } as NodeVerdict
+      );
+    expect(toneOf(budget(null), inputs)).toBe("unknown");
+    expect(toneOf(budget(false), inputs)).toBe("ok");
+  });
+
   /** An Ingress is coloured by the Ingresses list's own hook; until it answers, nothing is claimed. */
   it("is an Ingress's verdict from the list's hook, and unknown until it has one", () => {
     const row = { name: "web", namespace: "shop" } as never;
@@ -265,6 +292,26 @@ describe("a map node's colour", () => {
         ingress: () => health,
       })
     ).toBe(ROLE_TONE[ingressHealthWords(health, t).role]);
+  });
+
+  /**
+   * An Ingress whose Services the hook could not read lost its ring once
+   * the hook answered: "not checked" is a neutral role, and neutral was
+   * drawn as quiet grey. Fails if an answer with inputs unread, refused or
+   * still loading, is drawn as anything but unknown.
+   */
+  it("rings an Ingress whose hook answered with inputs it could not read", () => {
+    const row = { name: "web", namespace: "shop" } as never;
+    const tone = (unread: IngressHealth["unread"]) =>
+      toneOf(node(ref("Ingress"), { says: "ingress", row }), {
+        ...inputs,
+        ingress: () => ({ problems: [], unread, backends: 1, addressed: true }),
+      });
+    expect(tone([{ code: "FORBIDDEN", said: "services is forbidden" }])).toBe(
+      "unknown"
+    );
+    expect(tone([null])).toBe("unknown");
+    expect(tone([])).toBe("ok");
   });
 
   /** What nobody read earns no colour, whatever its verdict says, and a kind whose read broke is not drawn as current. */

@@ -762,7 +762,7 @@ describe("the traffic chain", () => {
             },
           },
         ],
-        [{ reason: "gatewayMissing", route, gateway: ghost }]
+        [{ reason: "gatewayMissing", route, gateway: ghost, listenerSet: null }]
       ),
       t
     )[0];
@@ -772,7 +772,7 @@ describe("the traffic chain", () => {
     expect(gatewayHop.object.existence).toBe("missing");
     const stop = path.hops.find((hop) => hop.at === "stop");
     if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
-    expect(stop.title).toBe("Names a Gateway that does not exist");
+    expect(stop.title).toBe("The parentRef names a Gateway that is not there");
     expect(path.broken).toBe(true);
   });
 
@@ -3043,12 +3043,15 @@ describe("what the Service publishes", () => {
         reason: "gatewayMissing",
         route: ref("HTTPRoute", "r"),
         gateway: ref("Gateway", "g"),
+        listenerSet: null,
       },
     ];
+    // A missing parent is worded by the one function the Routes trace
+    // words it with, from that catalogue section.
     for (const stop of stops) {
       const said = describeStop(stop, keyed);
-      expect(said.title).toMatch(/^nav\.stop/);
-      expect(said.note).toMatch(/^nav\.stop/);
+      expect(said.title).toMatch(/^(nav\.stop|empty\.gw)/);
+      expect(said.note).toMatch(/^(nav\.stop|empty\.gw)/);
     }
     expect(describeStop(stops[1], keyed).title).toBe(
       "nav.stopRefNotPermittedTitle"

@@ -1499,6 +1499,16 @@ export interface GatewayInfo {
   createdAt: string | null;
 }
 
+export interface ListenerSetInfo {
+  name: string;
+  namespace: string;
+  gatewayName: string;
+  gatewayNamespace: string;
+  listeners: ListenerInfo[];
+  conditions: ConditionInfo[];
+  createdAt: string | null;
+}
+
 export interface BackendTlsPolicyInfo {
   name: string;
   namespace: string;
@@ -2048,6 +2058,7 @@ export interface AuditSummary {
   reading: number;
   unattributed: number;
   enforced: Enforced[];
+  enforcedUnread: Why | null;
   upgrade: UpgradeRead;
   usage: UsageState | null;
 }
@@ -3070,7 +3081,7 @@ export type ObjectFacts =
       currentHealthy: number;
       desiredHealthy: number;
       expectedPods: number;
-      cannotAllow: boolean;
+      cannotAllow: boolean | null;
       conditions: ConditionInfo[];
     };
 
@@ -3421,7 +3432,12 @@ export type ChainStop =
       conditionReason: string | null;
       message: string | null;
     }
-  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
+  | {
+      reason: "gatewayMissing";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      listenerSet: ObjectName | null;
+    }
   | {
       reason: "gatewayNotProgrammed";
       route: ObjectRef;

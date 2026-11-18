@@ -129,9 +129,10 @@ fn needs_group<'a>(api: &'a str, kind: &str, now: Option<u32>) -> Option<&'a str
     (!gone_by_version(api, kind, now)).then(|| group_of(api))
 }
 
-/// Whether this cluster serves `kind` at `api`: discovery's answer, or,
-/// where discovery failed, the guide's for a version it lists against the
-/// cluster's minor version. `Err` where neither can tell.
+/// Whether this cluster serves `kind` at `api`: discovery's answer, or the
+/// guide's where the cluster's version is past the version's removal. A
+/// version not yet removed may still be switched off with
+/// `--runtime-config`, so a failed discovery tells nothing of it: `Err`.
 ///
 /// # Errors
 ///
@@ -148,10 +149,7 @@ pub fn served(groups: &Groups, api: &str, kind: &str, now: Option<u32>) -> Resul
                 .any(|k| k.kind == kind && k.versions.iter().any(|v| v == version)))
         }
         Some(Group::Absent) => Ok(false),
-        Some(Group::Failed(why)) => match removal(api, kind) {
-            Some(_) if now.is_some() => Ok(true),
-            _ => Err(why.clone()),
-        },
+        Some(Group::Failed(why)) => Err(why.clone()),
         None => Err(Why::Reading),
     }
 }
@@ -580,11 +578,15 @@ pub async fn read(
             read.not_checked.push(blind(Why::NotAudited));
             continue;
         }
-        let Some((resource, namespaced)) =
-            served_resource(served, context, client, kind, &pending).await
-        else {
-            continue;
-        };
+        let (resource, namespaced) =
+            match served_resource(served, context, client, kind, &pending).await {
+                Ok(Some(found)) => found,
+                Ok(None) => continue,
+                Err(why) => {
+                    read.not_checked.push(blind(why));
+                    continue;
+                }
+            };
         for reach in reaches(scope, namespaced) {
             let api: Api<DynamicObject> = match &reach {
                 Some(namespace) => Api::namespaced_with(client.clone(), namespace, &resource),
@@ -606,20 +608,34 @@ pub async fn read(
 /// Where `kind` is listed from, at the version kubectl would use, and
 /// whether it lives in a namespace; `None` for a kind that cannot be listed,
 /// such as a review nobody stores.
+///
+/// # Errors
+///
+/// Discovery of the kind's group was not read: its writers are not checked.
 async fn served_resource(
     served: &ServedIndex,
     context: &str,
     client: &Client,
     kind: &str,
     pending: &[(String, Removal)],
-) -> Option<(ApiResource, bool)> {
-    let group = group_of(&pending.first()?.0);
-    let found = served.recommended(context, client, group).await.ok()??;
-    let (resource, caps) = found
+) -> Result<Option<(ApiResource, bool)>, Why> {
+    let Some((api, _)) = pending.first() else {
+        return Ok(None);
+    };
+    let Some(found) = served
+        .recommended(context, client, group_of(api))
+        .await
+        .map_err(|error| super::why_of(&error))?
+    else {
+        return Ok(None);
+    };
+    Ok(found
         .into_iter()
-        .find(|(resource, _)| resource.kind == kind)?;
-    caps.supports_operation(kube::discovery::verbs::LIST)
-        .then_some((resource, caps.scope == kube::discovery::Scope::Namespaced))
+        .find(|(resource, _)| resource.kind == kind)
+        .and_then(|(resource, caps)| {
+            caps.supports_operation(kube::discovery::verbs::LIST)
+                .then_some((resource, caps.scope == kube::discovery::Scope::Namespaced))
+        }))
 }
 
 /// Whether a pass read for `held` answers for `scope`.
@@ -900,16 +916,12 @@ mod tests {
             vec![
                 ("cert-manager.io/v1alpha2".to_string(), false, None),
                 ("gone.example.com/v1".to_string(), false, None),
-                (
-                    "flowcontrol.apiserver.k8s.io/v1beta3".to_string(),
-                    true,
-                    Some("1.32".to_string())
-                ),
             ]
         );
-        assert_eq!(blind.len(), 1);
-        assert_eq!(blind[0].kind, "Gadget");
-        assert_eq!(blind[0].why, refused);
+        // Not yet removed in 1.31, and perhaps switched off: unread, not served.
+        let kinds: Vec<&str> = blind.iter().map(|u| u.kind.as_str()).collect();
+        assert_eq!(kinds, vec!["Gadget", "FlowSchema"]);
+        assert!(blind.iter().all(|u| u.why == refused));
 
         let (unknown, blind) = judge_release(
             &web(),
@@ -919,6 +931,25 @@ mod tests {
         );
         assert!(unknown.is_none());
         assert_eq!(blind[0].kind, "FlowSchema");
+    }
+
+    /// A writer kind whose group discovery would not read is not checked,
+    /// with the cluster's words. Would break if the failed read skipped the
+    /// kind as one nothing can list, leaving its writers unjudged unsaid.
+    #[tokio::test]
+    async fn a_writer_kind_whose_group_would_not_be_read_is_not_checked() {
+        let (client, _) = answering(|_, _| failure(403, "Forbidden")).await;
+        let api = "flowcontrol.apiserver.k8s.io/v1beta3";
+        let due = removal(api, "FlowSchema").expect("listed").clone();
+        let found = served_resource(
+            &ServedIndex::default(),
+            "fake",
+            &client,
+            "FlowSchema",
+            &[(api.to_string(), due)],
+        )
+        .await;
+        assert!(matches!(found, Err(Why::Refused { .. })), "{found:?}");
     }
 
     fn entry(manager: &str, api: &str) -> ManagedFieldsEntry {

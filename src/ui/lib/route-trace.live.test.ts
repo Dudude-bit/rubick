@@ -41,6 +41,8 @@ describe("the Netbird shape, as the cluster really reports it", () => {
         gateways: scene.gateways,
         classes: scene.classes,
         topologyKnown: true,
+        listenerSets: null,
+        listenerSetsSaid: null,
         backing: {
           services: [],
           published: [],

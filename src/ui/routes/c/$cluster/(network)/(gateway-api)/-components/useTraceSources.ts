@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RouteInfo } from "@/generated/types";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { useListenerSets } from "@/hooks/useListenerSets";
 import { ROUTING_STALE } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -35,6 +36,7 @@ export function useTraceSources(route: RouteInfo): TraceSources {
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
   });
+  const sets = useListenerSets(true);
   const backing = useRouteBacking(route, false).sources;
   const door = useDoorAsk();
   return useMemo(
@@ -44,9 +46,11 @@ export function useTraceSources(route: RouteInfo): TraceSources {
       topologyKnown:
         gateways.data !== undefined &&
         (classes.data !== undefined || !served.has("GatewayClass")),
+      listenerSets: sets.sets,
+      listenerSetsSaid: sets.said,
       backing,
       door,
     }),
-    [gateways.data, classes.data, served, backing, door]
+    [gateways.data, classes.data, served, sets, backing, door]
   );
 }

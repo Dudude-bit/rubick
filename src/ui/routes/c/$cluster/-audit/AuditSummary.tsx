@@ -6,7 +6,7 @@ import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { AskAgain } from "../-supplier/AskAgain";
 import { formatWhen } from "@/lib/utils";
-import { CATEGORY_WORDS, RULE_IDS, ruleTitle } from "./rules";
+import { CATEGORY_WORDS, RULE_IDS, ruleTitle, whyWords } from "./rules";
 import {
   anythingUnread,
   checkedWords,
@@ -152,6 +152,17 @@ export function AuditSummaryBlock({
       {summary.unattributed > 0 && (
         <p className="text-warn">
           {t("audit", "unattributed", { n: summary.unattributed })}
+        </p>
+      )}
+      {summary.enforcedUnread && (
+        <p
+          className="flex items-center gap-1 text-fg-fnt"
+          data-testid="audit-enforced-unread"
+        >
+          <EyeOff className="h-3 w-3" aria-hidden />
+          {t("audit", "enforcedUnread", {
+            why: whyWords(summary.enforcedUnread, t),
+          })}
         </p>
       )}
       {summary.enforced.map((each) => (
