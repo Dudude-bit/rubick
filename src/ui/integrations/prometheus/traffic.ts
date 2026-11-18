@@ -368,12 +368,20 @@ export function hubbleQueries(
     ? "hubble_http_responses_total"
     : "hubble_http_requests_total";
   const pairs = hubblePairs(found, answered);
+  // httpV2 writes a response's ends as the call went (it inverts them);
+  // HTTP v1 writes them as the response went, the server first, on its
+  // responses and its latency alike (pkg/hubble/metrics/http/handler.go).
+  const v1 = answered === "hubble_http_responses_total";
+  const ends = {
+    from: hubbleEnd(v1 ? "destination" : "source"),
+    to: hubbleEnd(v1 ? "source" : "destination"),
+  };
   if (pairs) {
     const reporters = ['reporter!="client"', 'reporter="client"'];
     const requests = reporters.map((r) =>
       sum([...pairs, "protocol"], scoped(answered, [r], HUBBLE_SCOPE, ask))
     );
-    pair("requests", first(...requests), { protocol: "protocol" });
+    pair("requests", first(...requests), { ...ends, protocol: "protocol" });
     // Requests take the client's report per protocol the server's lacks, so
     // errors are chosen by protocol too: the server's HTTP/1.1 must not hide
     // the client's failed HTTP/2 that the requests already count.
@@ -386,7 +394,8 @@ export function hubbleQueries(
         reporters.map((r) =>
           sum(call, scoped(answered, [r, 'status=~"5.."'], HUBBLE_SCOPE, ask))
         )
-      )
+      ),
+      ends
     );
     for (const [measure, q] of QUANTILES)
       pair(
@@ -404,7 +413,8 @@ export function hubbleQueries(
                 )
               )}) * 1000`
           )
-        )
+        ),
+        ends
       );
   }
   return out;

@@ -81,4 +81,32 @@ describe("the width text is drawn at", () => {
     );
     expect(probes()).toHaveLength(1);
   });
+
+  /**
+   * The cache starts again past its size, and a call that asks for a
+   * width it held and one it did not still gets both. Fails if the held
+   * one comes back unknown, which shrinks its column to a guess per glyph.
+   */
+  it("keeps the widths a call already knew when the cache starts again", () => {
+    layOut(5);
+    Object.defineProperty(document, "fonts", {
+      value: { status: "loaded" },
+      configurable: true,
+    });
+    try {
+      // Letters only: digits are one shape.
+      const word = (i: number) =>
+        [...i.toString(26)]
+          .map((c) => String.fromCharCode(97 + parseInt(c, 26)))
+          .join("");
+      const held = Array.from({ length: 4096 }, (_, i) => `w${word(i)}`);
+      textWidths(held, "sans");
+      expect(textWidths([held[0]!, "a new label"], "sans")).toEqual([
+        held[0]!.length * 5,
+        "a new label".length * 5,
+      ]);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
 });

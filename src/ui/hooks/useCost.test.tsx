@@ -399,6 +399,49 @@ describe("a read that failed after one that answered", () => {
     });
   });
 
+  /**
+   * A day of a young pod is judged when the reading was taken, and the
+   * reading is taken again on its poll even when Prometheus answers the
+   * same: Audit's "young" turns into a verdict on the first read past the
+   * day. Fails if `at` stays at the first read while the answer repeats.
+   */
+  it("moves when it was read on a re-read that answers the same", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const key = {
+      namespace: "shop",
+      group: "apps",
+      kind: "Deployment",
+      name: "web",
+    };
+    capability.mockReturnValue(
+      ready(
+        async () =>
+          ({
+            ...READING.workloads,
+            values: [[1, 2, 3, 4]],
+            since: [null],
+          }) as never
+      )
+    );
+    const usage = renderHook(() => useWorkloadUsage(["shop"], [key]), {
+      wrapper,
+    });
+    await waitFor(() => expect(usage.result.current.state).toBe("read"));
+    const first = (usage.result.current as { at: number }).at;
+    const later = first + 25 * 3_600_000;
+    const now = vi.spyOn(Date, "now").mockReturnValue(later);
+    await act(() => client.refetchQueries());
+    await waitFor(() =>
+      expect(usage.result.current).toMatchObject({ at: later })
+    );
+    now.mockRestore();
+  });
+
   it("says use and the trend failed rather than showing the read before", async () => {
     let answers = true;
     const answer = async (value: unknown) => {

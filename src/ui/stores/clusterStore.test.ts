@@ -287,6 +287,56 @@ describe("a kubeconfig entry that changed on disk", () => {
   });
 });
 
+describe("a context added to the kubeconfig", () => {
+  /**
+   * A context added, none changed: the list is read again and nothing else
+   * moves. Fails if what the window keeps under every name is let go, or a
+   * cluster is connected again, for a context someone added.
+   */
+  it("reads the list again and keeps what is kept by name", async () => {
+    const list = vi.mocked(commands.listContexts);
+    const connect = vi.mocked(commands.connectCluster);
+    list.mockClear();
+    connect.mockClear();
+    let forgotten = 0;
+    const release = keptByName(() => {
+      forgotten += 1;
+    });
+    await state().entriesChanged([]);
+    release();
+    expect(list).toHaveBeenCalled();
+    expect(forgotten).toBe(0);
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
+
+describe("a changed kubeconfig entry while the reader moves", () => {
+  /**
+   * The held cluster's disconnect takes a moment, and the reader connects
+   * to another meanwhile. Fails if the window is then sent back to the
+   * cluster it showed when the file changed, or the one the reader went to
+   * is disconnected as a held one.
+   */
+  it("follows the reader to the cluster it went to", async () => {
+    const connect = vi.mocked(commands.connectCluster);
+    const disconnect = vi.mocked(commands.disconnectCluster);
+    vi.mocked(commands.releaseClusters).mockResolvedValue(["prod", "dev"]);
+    await state().connect("prod");
+    await vi.waitFor(() => expect(state().live).toEqual(["prod", "dev"]));
+    connect.mockClear();
+    disconnect.mockClear();
+    disconnect.mockImplementationOnce(async () => {
+      await state().connect("stage");
+      return undefined;
+    });
+
+    await state().entriesChanged(["prod", "dev"]);
+    expect(connect.mock.calls.map(([name]) => name)).toEqual(["stage"]);
+    expect(state().currentContext).toBe("stage");
+    vi.mocked(commands.releaseClusters).mockResolvedValue([]);
+  });
+});
+
 describe("a connect that failed", () => {
   /**
    * The field is read by the cluster door, its toast and the alert panel.

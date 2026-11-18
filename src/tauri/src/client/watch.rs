@@ -137,7 +137,28 @@ pub(crate) async fn look(
     manager: &K8sClientManager,
     seen: &mut Seen,
     overrides: Vec<PathBuf>,
-) -> Option<Vec<String>> {
+) -> Option<Looked> {
+    look_then(manager, seen, overrides, || {}).await
+}
+
+/// What a look found on disk: the contexts whose entry changed or went, and
+/// whether any context was added or went, which the window's list shows.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Looked {
+    pub changed: Vec<String>,
+    pub named: bool,
+}
+
+/// [`look`], with `read` run once the files are read: where a test writes
+/// the file again in between.
+async fn look_then(
+    manager: &K8sClientManager,
+    seen: &mut Seen,
+    overrides: Vec<PathBuf>,
+    read: impl FnOnce(),
+) -> Option<Looked> {
+    // Stated before the read and kept: a file written again after it reads
+    // as moved at the next look, not as the one read.
     let now = stamp(&manager.loaded_files().await);
     if now == seen.stamp {
         return None;
@@ -152,6 +173,7 @@ pub(crate) async fn look(
     }
     // A file caught half written does not parse: looked at again next time.
     manager.load_kubeconfig_resolved(overrides).await.ok()?;
+    read();
     let prints = manager.loaded_prints().await;
     let changed = seen
         .prints
@@ -159,11 +181,12 @@ pub(crate) async fn look(
         .filter(|(context, print)| prints.get(*context) != Some(*print))
         .map(|(context, _)| context.clone())
         .collect();
-    *seen = Seen {
-        stamp: stamp(&manager.loaded_files().await),
-        prints,
-    };
-    Some(changed)
+    let named = prints.len() != seen.prints.len()
+        || prints
+            .keys()
+            .any(|context| !seen.prints.contains_key(context));
+    *seen = Seen { stamp: now, prints };
+    Some(Looked { changed, named })
 }
 
 /// Looks every two seconds for as long as the app runs, and tells the
@@ -174,8 +197,8 @@ pub async fn run(manager: Arc<K8sClientManager>, events: broadcast::Sender<AppEv
     loop {
         tokio::time::sleep(LOOK_EVERY).await;
         let overrides = crate::commands::cluster::read_kubeconfig_overrides();
-        if let Some(changed) = look(&manager, &mut seen, overrides).await {
-            if !changed.is_empty() {
+        if let Some(Looked { changed, named }) = look(&manager, &mut seen, overrides).await {
+            if !changed.is_empty() || named {
                 let _ = events.send(AppEvent::KubeconfigChanged { changed });
             }
         }
@@ -223,9 +246,72 @@ mod tests {
         replace(&path, &config("https://127.0.0.1:41002", &token()));
         assert_eq!(
             look(&manager, &mut seen, pinned.clone()).await,
-            Some(vec!["kind-x".to_string()])
+            Some(Looked {
+                changed: vec!["kind-x".to_string()],
+                named: false
+            })
         );
         assert_eq!(look(&manager, &mut seen, pinned).await, None);
+    }
+
+    /// A context added to the file is said, so the window's list shows it,
+    /// with no entry changed. Fails if a CLI's new context waits for a
+    /// restart to appear.
+    #[tokio::test]
+    async fn a_context_added_to_the_file_is_said() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("config");
+        let token = format!("t{}", "1".repeat(12));
+        std::fs::write(&path, config("https://127.0.0.1:41001", &token)).expect("write");
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_from_path(path.clone())
+            .await
+            .expect("load");
+        let mut seen = manager.seen().await;
+        let added = config("https://127.0.0.1:41001", &token).replace(
+            "contexts: [",
+            "contexts: [{name: dev, context: {cluster: other, user: kind-x}}, ",
+        );
+        replace(&path, &added);
+        assert_eq!(
+            look(&manager, &mut seen, vec![path]).await,
+            Some(Looked {
+                changed: Vec::new(),
+                named: true
+            })
+        );
+    }
+
+    /// A file written again while the last version was being read is looked
+    /// at again. Fails if the stamp kept is the newer file's beside the older
+    /// file's entries, which left the client on the old entry for good.
+    #[tokio::test]
+    async fn a_file_written_again_during_a_read_is_read_again() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("config");
+        let token = format!("t{}", "1".repeat(12));
+        std::fs::write(&path, config("https://127.0.0.1:41001", &token)).expect("write");
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_from_path(path.clone())
+            .await
+            .expect("load");
+        let mut seen = manager.seen().await;
+        replace(&path, &config("https://127.0.0.1:41002", &token));
+        let again = config("https://127.0.0.1:41003", &token);
+        let looked = look_then(&manager, &mut seen, vec![path.clone()], || {
+            replace(&path, &again);
+        })
+        .await;
+        assert!(looked.is_some_and(|looked| looked.changed == vec!["kind-x".to_string()]));
+        assert_eq!(
+            look(&manager, &mut seen, vec![path]).await,
+            Some(Looked {
+                changed: vec!["kind-x".to_string()],
+                named: false
+            })
+        );
     }
 
     /// A token an auth provider refreshed in place changes the file and no
@@ -252,7 +338,10 @@ mod tests {
         );
         assert_eq!(
             look(&manager, &mut seen, vec![path]).await,
-            Some(Vec::new())
+            Some(Looked {
+                changed: Vec::new(),
+                named: false
+            })
         );
     }
 }

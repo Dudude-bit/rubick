@@ -74,7 +74,14 @@ export function textWidths(
     at.append(...probes);
     // A width taken in the fallback font would stay after the real one loads.
     const keep = document.fonts?.status === "loaded";
-    if (keep && measured.size + unknown.length > KEPT) measured.clear();
+    if (keep && measured.size + unknown.length > KEPT) {
+      // What this call already knew is answered from before the cache starts again.
+      for (const shape of shapes) {
+        const known = measured.get(keyOf(shape));
+        if (known !== undefined) fresh.set(shape, known);
+      }
+      measured.clear();
+    }
     probes.forEach((probe, i) => {
       const width = probe.getBoundingClientRect().width;
       fresh.set(unknown[i]!, width > 0 ? width : null);

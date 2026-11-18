@@ -39,15 +39,17 @@ pub async fn open_topology(
             let manager = manager.clone();
             let context = context.clone();
             Box::pin(async move {
-                let client = manager.get_client(&context)?;
+                let client = manager.get_client(&context).ok_or_else(|| {
+                    crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+                        .said()
+                })?;
                 let key = kind.key();
                 manager
                     .served()
                     .resource(&context, &client, &key.group, &key.plural)
                     .await
-                    .ok()
-                    .flatten()
-                    .map(|served| served.resource)
+                    .map(|served| served.map(|served| served.resource))
+                    .map_err(|error| error.said())
             })
         })
     };

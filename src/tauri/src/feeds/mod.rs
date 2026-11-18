@@ -619,6 +619,8 @@ struct Subscriber {
     seen: BTreeSet<SlotKey>,
     /// Its queue filled: it is resent every whole set once there is room.
     lagged: bool,
+    /// While lagged, the slots not yet handed whole again.
+    behind: BTreeSet<SlotKey>,
     /// Slots of a kind kept as nothing whose set is being listed for it,
     /// and the changes that arrived meanwhile.
     pending: BTreeMap<SlotKey, Vec<Update>>,
@@ -685,6 +687,17 @@ fn keeps(kind: &KindKey) -> bool {
 }
 
 /// A resourceVersion as the number etcd writes, where it is one.
+/// The slot an update is about; `None` for one about every slot.
+fn slot_of(update: &Update) -> Option<&SlotKey> {
+    match update {
+        Update::Whole { slot, .. }
+        | Update::Applied { slot, .. }
+        | Update::Deleted { slot, .. }
+        | Update::State { slot, .. } => Some(slot),
+        Update::HandedOver => None,
+    }
+}
+
 fn version_of(object: &DynamicObject) -> Option<u64> {
     object.metadata.resource_version.as_deref()?.parse().ok()
 }
@@ -701,6 +714,17 @@ fn in_scope(scope: Option<&[String]>, object: &DynamicObject) -> bool {
 }
 
 impl Inner {
+    /// Every namespace a subscriber to `kind` names, read in when it is
+    /// refused across the cluster.
+    fn fallen_back(&self, kind: &KindKey) -> BTreeSet<String> {
+        self.subscribers
+            .values()
+            .filter(|sub| sub.kinds.contains(kind))
+            .filter_map(|sub| sub.fallback.clone())
+            .flatten()
+            .collect()
+    }
+
     fn leave(&mut self, id: u64) {
         let Some(sub) = self.subscribers.remove(&id) else {
             return;
@@ -769,91 +793,124 @@ impl Inner {
     }
 
     fn send(&mut self, id: u64, update: Update) {
-        let resync = self.subscribers.get(&id).is_some_and(|sub| sub.lagged);
-        if resync {
-            self.resync(id);
-            return;
-        }
-        let Some(sub) = self.subscribers.get_mut(&id) else {
-            return;
-        };
-        // A set it never received is not one it has seen.
-        let whole = match &update {
-            Update::Whole { slot, .. } => Some(slot.clone()),
-            _ => None,
-        };
-        match sub.tx.try_send(update) {
-            Ok(()) => sub.seen.extend(whole),
-            Err(mpsc::error::TrySendError::Full(_)) => sub.lagged = true,
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                self.leave(id);
-            }
-        }
-    }
-
-    /// A subscriber that fell behind is handed each slot it follows as it
-    /// stands, its state and then its set, and is caught up when all of
-    /// them fit. What it lost meanwhile, a state among them, is in these.
-    fn resync(&mut self, id: u64) {
         let Some(sub) = self.subscribers.get(&id) else {
             return;
         };
-        let serving = |generation: u64, slot: &SlotKey| {
-            sub.kinds.contains(&slot.kind)
-                && self
-                    .kinds
-                    .get(&slot.kind)
-                    .is_some_and(|f| f.serving == generation)
-        };
-        let mut unkept: Vec<SlotKey> = Vec::new();
-        let mut updates: Vec<Update> = Vec::new();
-        for ((generation, slot), state) in &self.states {
-            if !serving(*generation, slot) {
-                continue;
-            }
-            let store = self
-                .stores
-                .get(&(*generation, slot.clone()))
-                .filter(|store| store.synced);
-            if store.is_some() && !keeps(&slot.kind) {
-                // Listed for it, which says its own states.
-                unkept.push(slot.clone());
-                continue;
-            }
-            updates.push(Update::State {
-                slot: slot.clone(),
-                state: state.clone(),
-            });
-            if let Some(store) = store {
-                updates.push(Update::Whole {
-                    slot: slot.clone(),
-                    why: if sub.seen.contains(slot) {
-                        Whole::Relist
-                    } else {
-                        Whole::Fresh
-                    },
-                    objects: unpacked(store.objects.values())
-                        .into_iter()
-                        .filter(|o| in_scope(sub.scope.as_deref(), o))
-                        .collect(),
-                });
-            }
+        let slot = slot_of(&update).cloned();
+        // A slot still to be handed whole again has this change in that set.
+        if sub.lagged && slot.as_ref().is_some_and(|slot| sub.behind.contains(slot)) {
+            self.resync(id);
+            return;
         }
+        let whole = matches!(update, Update::Whole { .. });
         let Some(sub) = self.subscribers.get_mut(&id) else {
             return;
         };
-        if sub.tx.capacity() < updates.len() {
-            return;
-        }
-        for update in updates {
-            if let Update::Whole { slot, .. } = &update {
-                sub.seen.insert(slot.clone());
+        match sub.tx.try_send(update) {
+            // A set it never received is not one it has seen.
+            Ok(()) if whole => sub.seen.extend(slot),
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) if sub.lagged => sub.behind.extend(slot),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                sub.lagged = true;
+                let behind = self.followed_slots(id);
+                if let Some(sub) = self.subscribers.get_mut(&id) {
+                    sub.behind = behind;
+                }
             }
-            let _ = sub.tx.try_send(update);
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                self.leave(id);
+                return;
+            }
         }
-        sub.lagged = false;
-        for slot in unkept {
-            self.list_for(id, slot);
+        if self.subscribers.get(&id).is_some_and(|sub| sub.lagged) {
+            self.resync(id);
+        }
+    }
+
+    /// Every slot subscriber `id` follows, where the generation serving its
+    /// kind holds a state for it.
+    fn followed_slots(&self, id: u64) -> BTreeSet<SlotKey> {
+        let Some(sub) = self.subscribers.get(&id) else {
+            return BTreeSet::new();
+        };
+        self.states
+            .keys()
+            .filter(|(generation, slot)| {
+                sub.kinds.contains(&slot.kind) && self.serves(*generation, &slot.kind)
+            })
+            .map(|(_, slot)| slot.clone())
+            .collect()
+    }
+
+    /// A subscriber that fell behind is handed each slot it follows as it
+    /// stands, its state and then its set, a slot at a time as its queue
+    /// has room, and is caught up once every one has been. What it lost
+    /// meanwhile, a state among them, is in these; a change to a slot
+    /// already handed again reaches it as any change does.
+    fn resync(&mut self, id: u64) {
+        loop {
+            let Some(sub) = self.subscribers.get(&id) else {
+                return;
+            };
+            let Some(slot) = sub.behind.first().cloned() else {
+                break;
+            };
+            let serving = self
+                .kinds
+                .get(&slot.kind)
+                .map(|feed| feed.serving)
+                .filter(|_| sub.kinds.contains(&slot.kind));
+            let state = serving.and_then(|g| self.states.get(&(g, slot.clone())).cloned());
+            let store = serving
+                .and_then(|g| self.stores.get(&(g, slot.clone())))
+                .filter(|store| store.synced);
+            let Some(state) = state else {
+                // Let go of meanwhile: nothing to hand.
+                if let Some(sub) = self.subscribers.get_mut(&id) {
+                    sub.behind.remove(&slot);
+                }
+                continue;
+            };
+            if store.is_some() && !keeps(&slot.kind) {
+                // Listed for it, which says its own states.
+                if let Some(sub) = self.subscribers.get_mut(&id) {
+                    sub.behind.remove(&slot);
+                }
+                self.list_for(id, slot);
+                continue;
+            }
+            let whole = store.map(|store| Update::Whole {
+                slot: slot.clone(),
+                why: if sub.seen.contains(&slot) {
+                    Whole::Relist
+                } else {
+                    Whole::Fresh
+                },
+                objects: unpacked(store.objects.values())
+                    .into_iter()
+                    .filter(|o| in_scope(sub.scope.as_deref(), o))
+                    .collect(),
+            });
+            let Some(sub) = self.subscribers.get_mut(&id) else {
+                return;
+            };
+            let needs = 1 + usize::from(whole.is_some());
+            if sub.tx.capacity() < needs {
+                return;
+            }
+            let _ = sub.tx.try_send(Update::State {
+                slot: slot.clone(),
+                state,
+            });
+            if let Some(whole) = whole {
+                sub.seen.insert(slot.clone());
+                let _ = sub.tx.try_send(whole);
+            }
+            sub.behind.remove(&slot);
+        }
+        if let Some(sub) = self.subscribers.get_mut(&id) {
+            sub.lagged = false;
         }
     }
 
@@ -1149,6 +1206,7 @@ impl ContextFeeds {
                     tx,
                     seen: BTreeSet::new(),
                     lagged: false,
+                    behind: BTreeSet::new(),
                     pending: BTreeMap::new(),
                 },
             );
@@ -1305,49 +1363,52 @@ impl ContextFeeds {
     /// lets go of a namespace no subscriber names any longer: a reader moving
     /// through namespaces would otherwise hold a watch in each it ever saw.
     fn fall_back_all(&self, kind: &KindKey) {
-        let (generations, namespaces, resource) = {
+        self.fall_back_all_then(kind, || {});
+    }
+
+    /// [`Self::fall_back_all`], with `between` run once the namespaces asked
+    /// for are read and before a slot is stopped: where a test has a reader
+    /// join in between.
+    fn fall_back_all_then(&self, kind: &KindKey, mut between: impl FnMut()) {
+        let (generations, resource) = {
             let inner = self.inner.lock();
             let Some(feed) = inner.kinds.get(kind).filter(|feed| feed.namespaced) else {
                 return;
             };
-            let namespaces: BTreeSet<String> = inner
-                .subscribers
-                .values()
-                .filter(|sub| sub.kinds.contains(kind))
-                .filter_map(|sub| sub.fallback.clone())
-                .flatten()
-                .collect();
             (
                 inner.generations.values().cloned().collect::<Vec<_>>(),
-                namespaces,
                 feed.resource.clone(),
             )
         };
+        let whole = SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        };
         for generation in generations {
-            let unasked: Vec<SlotKey> = generation
-                .slots
-                .lock()
-                .keys()
-                .filter(|slot| {
-                    slot.kind == *kind
-                        && slot
-                            .namespace
-                            .as_ref()
-                            .is_some_and(|namespace| !namespaces.contains(namespace))
-                })
-                .cloned()
-                .collect();
-            for slot in &unasked {
-                generation.stop_slot(slot);
-            }
-            let whole = SlotKey {
-                kind: kind.clone(),
-                namespace: None,
+            // Read under the slots and stopped before they are let go: a
+            // reader that joins after the read waits for them, then finds its
+            // slot gone and starts it, rather than finding it held and losing it.
+            let (namespaces, refused) = {
+                let mut slots = generation.slots.lock();
+                let namespaces = self.inner.lock().fallen_back(kind);
+                between();
+                let unasked: Vec<SlotKey> = slots
+                    .keys()
+                    .filter(|slot| {
+                        slot.kind == *kind
+                            && slot
+                                .namespace
+                                .as_ref()
+                                .is_some_and(|namespace| !namespaces.contains(namespace))
+                    })
+                    .cloned()
+                    .collect();
+                for slot in &unasked {
+                    generation.stop_slot(&mut slots, slot);
+                }
+                let refused = matches!(slots.get(&whole), Some(SlotState::Refused { .. }));
+                (namespaces, refused)
             };
-            let refused = matches!(
-                generation.slots.lock().get(&whole),
-                Some(SlotState::Refused { .. })
-            );
             if !refused {
                 continue;
             }
@@ -1576,9 +1637,9 @@ impl Generation {
         }
     }
 
-    /// Stops one slot and lets go of what it held.
-    fn stop_slot(&self, slot: &SlotKey) {
-        let mut slots = self.slots.lock();
+    /// Stops one slot and lets go of what it held, under the slots' lock the
+    /// caller holds.
+    fn stop_slot(&self, slots: &mut BTreeMap<SlotKey, SlotState>, slot: &SlotKey) {
         if let Some(stop) = self.stops.lock().remove(slot) {
             stop.cancel();
         }
@@ -2282,6 +2343,82 @@ mod tests {
         context.end();
     }
 
+    /// A reader that joins on a namespace while the last reader of it leaves
+    /// keeps it read: the leaver's fall-back read who asks for what before
+    /// the joiner was there. Fails if the leaver stops the slot the joiner
+    /// found held, which left the joiner registered and handed nothing of
+    /// that namespace again.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_reader_joining_as_the_last_reader_of_its_namespace_leaves_keeps_it_read() {
+        let feeds = feeds();
+        let context = feeds.context_for("prod", client().await);
+        let leaving = context.join(
+            &ask(Some(vec!["billing"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let staying = context.join(
+            &ask(Some(vec!["shop"]), Binding::Page),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(
+            &generation,
+            &whole(&kind),
+            "deployments is forbidden".to_string(),
+            None,
+        );
+        let billing = SlotKey {
+            kind: kind.clone(),
+            namespace: Some("billing".to_string()),
+        };
+        assert!(generation.holds(&billing));
+
+        // The leaver's drop, with a reader of billing joining in between.
+        context.inner.lock().leave(leaving.lease.id);
+        let (hand, arrived) = std::sync::mpsc::channel();
+        let mut joiner = Some((context.clone(), tokio::runtime::Handle::current()));
+        let mut kept = None;
+        context.fall_back_all_then(&kind, || {
+            let Some((on, runtime)) = joiner.take() else {
+                return;
+            };
+            let hand = hand.clone();
+            std::thread::spawn(move || {
+                let _entered = runtime.enter();
+                let sub = on.join(
+                    &ask(Some(vec!["billing"]), Binding::Page),
+                    &[deployments()],
+                    &[],
+                );
+                let _ = hand.send(sub);
+            });
+            let asked = Instant::now();
+            while context.inner.lock().subscribers.len() < 2 {
+                assert!(
+                    asked.elapsed() < Duration::from_secs(5),
+                    "the reader never joined"
+                );
+                std::thread::yield_now();
+            }
+            // Given its time to finish, where nothing holds it back.
+            kept = arrived.recv_timeout(Duration::from_millis(200)).ok();
+        });
+        let joiner = kept.unwrap_or_else(|| {
+            arrived
+                .recv_timeout(Duration::from_secs(5))
+                .expect("the reader joined")
+        });
+        assert!(
+            generation.holds(&billing),
+            "the joiner's namespace was stopped under it"
+        );
+        drop((joiner, staying, leaving));
+        context.end();
+    }
+
     /// A namespace no reader asks for any longer stops being read on its
     /// own. Fails if a reader moving through namespaces keeps a watch in
     /// each it ever looked at, which spent the shared budget in twenty moves.
@@ -2682,6 +2819,53 @@ mod tests {
             drain(&mut sub).as_slice(),
             [Update::Applied { .. }]
         ));
+        context.end();
+    }
+
+    /// A reader too far behind for every slot to fit its queue at once is
+    /// caught up a slot at a time as it reads. Fails if catching up waits
+    /// for room for every slot together, which a reader of more slots than
+    /// half its queue never has, and it is then handed nothing again.
+    #[tokio::test]
+    async fn a_reader_of_more_slots_than_its_queue_holds_is_caught_up_a_slot_at_a_time() {
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 4);
+        let context = feeds.context_for("prod", client().await);
+        let mut sub = context.join(
+            &ask(Some(vec!["a", "b", "c"]), Binding::Session),
+            &[deployments()],
+            &[],
+        );
+        let generation = context.serving();
+        let kind = deployments().0;
+        SlotHost::refused(&generation, &whole(&kind), "forbidden".to_string(), None);
+        let slot = |namespace: &str| SlotKey {
+            kind: kind.clone(),
+            namespace: Some(namespace.to_string()),
+        };
+        for namespace in ["a", "b", "c"] {
+            list(
+                &generation,
+                &slot(namespace),
+                vec![deployment(namespace, "web", "1")],
+            );
+        }
+        let mut sets = BTreeSet::new();
+        for version in 2..30 {
+            for update in drain(&mut sub) {
+                if let Update::Whole { slot, .. } = update {
+                    sets.insert(slot.namespace);
+                }
+            }
+            if sets.len() == 3 {
+                break;
+            }
+            apply(
+                &generation,
+                &slot("a"),
+                deployment("a", "web", &version.to_string()),
+            );
+        }
+        assert_eq!(sets.len(), 3, "sets handed: {sets:?}");
         context.end();
     }
 

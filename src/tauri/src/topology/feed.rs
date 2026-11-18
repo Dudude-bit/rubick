@@ -16,7 +16,7 @@ use kube::discovery::ApiResource;
 use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
 
-use super::{named, ClusterMap, Feed, Kind, Object, HELM_RELEASE};
+use super::{named, ClusterMap, Feed, Kind, Object, Reading, HELM_RELEASE};
 use crate::feeds::{Ask, Binding, Update};
 use crate::ownership::KindKey;
 use crate::resources::{GatewayInfo, ListenerSetInfo, RouteInfo};
@@ -103,11 +103,27 @@ pub async fn types_of(
 }
 
 /// Asks discovery again what a Gateway API kind is served as.
+/// The resource, `None` where the kind is not served, and discovery's words
+/// where it could not say.
 pub type Resolve = Arc<
-    dyn Fn(Kind) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<ApiResource>> + Send>>
-        + Send
+    dyn Fn(
+            Kind,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<Option<ApiResource>, String>> + Send>,
+        > + Send
         + Sync,
 >;
+
+/// The kind an update is about, where it is about one.
+fn kind_of(update: &Update) -> Option<Kind> {
+    match update {
+        Update::Whole { slot, .. }
+        | Update::Applied { slot, .. }
+        | Update::Deleted { slot, .. }
+        | Update::State { slot, .. } => Kind::of(&slot.kind),
+        Update::HandedOver => None,
+    }
+}
 
 /// A built-in kind out of a dynamic object.
 fn typed<K: DeserializeOwned>(object: &DynamicObject) -> Option<K> {
@@ -232,44 +248,108 @@ pub async fn pump(
     mut unresolved: BTreeSet<Kind>,
     resolve: Option<Resolve>,
 ) {
+    let Some(resolve) = resolve else {
+        return pump_resolved(updates, map, types).await;
+    };
+    // What arrived for a kind discovery could not name, in the order it came:
+    // parsed without its type it would be dropped, and its list read as empty.
+    let mut held: BTreeMap<Kind, Vec<Update>> = BTreeMap::new();
+    let mut said: BTreeMap<Kind, String> = BTreeMap::new();
     while let Some(first) = updates.recv().await {
         let mut batch = vec![first];
         while let Ok(more) = updates.try_recv() {
             batch.push(more);
         }
-        // A kind discovery failed for at the open is asked about again
-        // before its objects are read, or they would be dropped for as long
-        // as the map is open.
-        if let Some(resolve) = &resolve {
-            let waiting: BTreeSet<Kind> = batch
-                .iter()
-                .filter_map(|update| match update {
-                    Update::Whole { slot, .. }
-                    | Update::Applied { slot, .. }
-                    | Update::Deleted { slot, .. } => Kind::of(&slot.kind),
-                    _ => None,
-                })
-                .filter(|kind| unresolved.contains(kind))
-                .collect();
-            for kind in waiting {
-                if let Some(resource) = resolve(kind).await {
-                    types.insert(kind, resource);
+        let waiting: BTreeSet<Kind> = batch
+            .iter()
+            .filter_map(kind_of)
+            .chain(held.keys().copied())
+            .filter(|kind| unresolved.contains(kind))
+            .collect();
+        for kind in waiting {
+            match resolve(kind).await {
+                Ok(resource) => {
+                    if let Some(resource) = resource {
+                        types.insert(kind, resource);
+                    }
                     unresolved.remove(&kind);
+                    said.remove(&kind);
+                }
+                Err(why) => {
+                    said.insert(kind, why);
                 }
             }
         }
-        let types = Arc::new(types.clone());
-        let Ok(feeds) = tokio::task::spawn_blocking(move || {
-            batch
-                .into_iter()
-                .flat_map(|update| feeds_of(update, &types))
-                .collect::<Vec<_>>()
-        })
-        .await
-        else {
+        let named: Vec<Kind> = held
+            .keys()
+            .copied()
+            .filter(|kind| !unresolved.contains(kind))
+            .collect();
+        let mut ready: Vec<Update> = named
+            .iter()
+            .flat_map(|kind| held.remove(kind).unwrap_or_default())
+            .collect();
+        for update in batch {
+            match kind_of(&update) {
+                Some(kind) if unresolved.contains(&kind) => {
+                    // The map is told the kind was not read, in discovery's
+                    // words, never that it was read and holds nothing.
+                    if let Update::State { slot, .. } = &update {
+                        ready.push(Update::State {
+                            slot: slot.clone(),
+                            state: Reading::Failed {
+                                message: said.get(&kind).cloned().unwrap_or_default(),
+                            },
+                        });
+                    }
+                    held.entry(kind).or_default().push(update);
+                }
+                _ => ready.push(update),
+            }
+        }
+        if !feed_batch(ready, &map, &types).await {
             break;
-        };
-        map.feed(feeds);
+        }
     }
     map.end();
+}
+
+/// The pump where every kind's type is known from the open.
+async fn pump_resolved(
+    mut updates: mpsc::Receiver<Update>,
+    map: Arc<ClusterMap>,
+    types: BTreeMap<Kind, ApiResource>,
+) {
+    while let Some(first) = updates.recv().await {
+        let mut batch = vec![first];
+        while let Ok(more) = updates.try_recv() {
+            batch.push(more);
+        }
+        if !feed_batch(batch, &map, &types).await {
+            break;
+        }
+    }
+    map.end();
+}
+
+/// Parses a batch off the reactor and feeds it to the map; `false` where the
+/// parse could not run.
+async fn feed_batch(
+    batch: Vec<Update>,
+    map: &ClusterMap,
+    types: &BTreeMap<Kind, ApiResource>,
+) -> bool {
+    let types = Arc::new(types.clone());
+    let Ok(feeds) = tokio::task::spawn_blocking(move || {
+        batch
+            .into_iter()
+            .flat_map(|update| feeds_of(update, &types))
+            .collect::<Vec<_>>()
+    })
+    .await
+    else {
+        return false;
+    };
+    map.feed(feeds);
+    true
 }

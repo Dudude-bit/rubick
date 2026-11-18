@@ -712,7 +712,7 @@ async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
     let map = Arc::new(ClusterMap::default());
     let resolve: Resolve = Arc::new(|kind| {
         Box::pin(async move {
-            (kind == Kind::Gateway).then(|| {
+            Ok((kind == Kind::Gateway).then(|| {
                 kube::discovery::ApiResource::from_gvk_with_plural(
                     &kube::core::GroupVersionKind::gvk(
                         "gateway.networking.k8s.io",
@@ -721,7 +721,7 @@ async fn a_kind_discovery_failed_for_is_asked_again_when_its_objects_arrive() {
                     ),
                     "gateways",
                 )
-            })
+            }))
         })
     });
     let pumping = tokio::spawn(pump(
@@ -830,4 +830,86 @@ async fn a_reread_that_never_answers_does_not_hold_the_map() {
     assert_eq!(pieces_of(&drawn), vec!["apps/Deployment/shop/ledger"]);
     cancel.cancel();
     task.await.expect("ends");
+}
+
+fn gateway_object(name: &str) -> Arc<kube::api::DynamicObject> {
+    dynamic(json!({
+        "metadata": { "name": name, "namespace": "infra" },
+        "spec": { "gatewayClassName": "envoy", "listeners": [] },
+    }))
+}
+
+/// Discovery still failing when a kind's list arrived parsed its objects
+/// with no type, dropped them, and filed the kind as read and empty; the
+/// objects never came back once discovery answered. Fails if a kind
+/// discovery cannot name reads as anything but not read, or what arrived
+/// for it is not replayed, in order, once it can.
+#[tokio::test]
+async fn a_kind_discovery_cannot_name_yet_is_unread_and_kept_until_it_can() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let (asked, answers) = (asked.clone(), answers.clone());
+        Arc::new(move |_| {
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )))
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a"), gateway_object("b")],
+    })
+    .await
+    .expect("sent");
+    while asked.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let gateways = |map: &ClusterMap| {
+        map.stores()
+            .held("infra", OtherPolicies::none(), now())
+            .gateways_here
+            .map(|list| list.len())
+    };
+    assert_eq!(gateways(&map), None, "not read is not read and empty");
+
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    tx.send(crate::feeds::Update::Applied {
+        slot: slot(Kind::Gateway, None),
+        object: gateway_object("c"),
+    })
+    .await
+    .expect("sent");
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    assert_eq!(gateways(&map), Some(3));
 }

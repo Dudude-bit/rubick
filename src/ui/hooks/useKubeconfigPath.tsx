@@ -28,7 +28,7 @@ export function useKubeconfigPath() {
   const queryClient = useQueryClient();
 
   const override = useQuery({
-    queryKey: ["kubeconfig-path"],
+    queryKey: queryKeys.kubeconfigPath(),
     queryFn: () => commands.getKubeconfigPath(),
   });
 
@@ -37,12 +37,12 @@ export function useKubeconfigPath() {
   // work cluster and a home cluster asked for, rather than pasting both into
   // one file.
   const pinned = useQuery({
-    queryKey: ["kubeconfig-paths"],
+    queryKey: queryKeys.kubeconfigPaths(),
     queryFn: () => commands.getKubeconfigPaths(),
   });
 
   const source = useQuery({
-    queryKey: ["kubeconfig-source"],
+    queryKey: queryKeys.kubeconfigSource(),
     queryFn: () => commands.getKubeconfigSource(),
   });
 
@@ -51,9 +51,9 @@ export function useKubeconfigPath() {
    * kubeconfig was active, so nothing survives the file changing.
    */
   const reload = () => {
-    queryClient.invalidateQueries({ queryKey: ["kubeconfig-path"] });
-    queryClient.invalidateQueries({ queryKey: ["kubeconfig-paths"] });
-    queryClient.invalidateQueries({ queryKey: ["kubeconfig-source"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.kubeconfigPath() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.kubeconfigPaths() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.kubeconfigSource() });
     queryClient.invalidateQueries({ queryKey: queryKeys.contexts() });
     return useClusterStore.getState().loadContexts();
   };

@@ -69,7 +69,14 @@ vi.mock("@/lib/commands", () => ({
               finding: {
                 rule: "no-disruption-budget",
                 severity: "low",
-                what: [{ says: "replicas", replicas: 3, autoscaler: null }],
+                what: [
+                  {
+                    says: "replicas",
+                    replicas: 3,
+                    autoscaler: null,
+                    ceiling: null,
+                  },
+                ],
               },
             },
             {

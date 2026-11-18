@@ -36,6 +36,7 @@ pub struct Scales {
     pub kind: String,
     pub target: String,
     pub min: i32,
+    pub max: i32,
 }
 
 /// What the namespace's `LimitRanges` fill in for a container that sets none.
@@ -147,7 +148,9 @@ pub fn beside(
             Ok(autoscalers) => Ok(autoscalers
                 .iter()
                 .find(|hpa| hpa.kind == kind && hpa.target == name)
-                .map_or((own, None), |hpa| (hpa.min, Some(hpa.name.clone())))),
+                .map_or((own, None, None), |hpa| {
+                    (hpa.min, Some(hpa.name.clone()), Some(hpa.max))
+                })),
             Err(why) => Err(why),
         };
         match floor {
@@ -160,10 +163,11 @@ pub fn beside(
                     blind.push(unread(rule, AUTOSCALER, why));
                 }
             }
-            Ok((replicas, autoscaler)) if facts.long_running && replicas > 0 => {
+            Ok((replicas, autoscaler, ceiling)) if facts.long_running && replicas > 0 => {
                 let said = What::Replicas {
                     replicas,
                     autoscaler,
+                    ceiling,
                 };
                 if replicas == 1 {
                     findings.push(AuditFinding::of(RuleId::SingleReplica, vec![said]));
@@ -380,6 +384,7 @@ mod tests {
             kind: "Deployment".to_string(),
             target: "web".to_string(),
             min: 3,
+            max: 6,
         }]);
         let (fired, _) = rules(&beside(
             "Deployment",
@@ -390,6 +395,29 @@ mod tests {
         ));
         assert!(!fired.contains(&RuleId::SingleReplica));
         assert!(fired.contains(&RuleId::NoDisruptionBudget));
+
+        // Kept at one by an autoscaler that also stops at one: the fix moves
+        // both, so the finding carries the ceiling.
+        ns.autoscalers = Ok(vec![Scales {
+            name: "web".to_string(),
+            kind: "Deployment".to_string(),
+            target: "web".to_string(),
+            min: 1,
+            max: 1,
+        }]);
+        let (found, _) = beside("Deployment", "web", &server(), Replicated(Some(3)), &ns);
+        let single = found
+            .iter()
+            .find(|f| f.rule == RuleId::SingleReplica)
+            .expect("single");
+        assert_eq!(
+            single.what,
+            vec![What::Replicas {
+                replicas: 1,
+                autoscaler: Some("web".to_string()),
+                ceiling: Some(1),
+            }]
+        );
     }
 
     /// A `LimitRange` default fills what the template leaves out. Fails if a

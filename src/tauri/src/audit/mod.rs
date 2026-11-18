@@ -119,10 +119,12 @@ pub enum What {
         at: At,
         image: String,
     },
-    /// The replicas a workload keeps at least: its own, or its autoscaler's floor.
+    /// The replicas a workload keeps at least: its own, or its autoscaler's
+    /// floor, beside that autoscaler's ceiling.
     Replicas {
         replicas: i32,
         autoscaler: Option<String>,
+        ceiling: Option<i32>,
     },
     Budget {
         required: i32,
@@ -420,7 +422,9 @@ async fn enforced(
     } else {
         let era = state.audit.era(&here.context);
         let (read, whole) = read_enforced(&here.client, scope).await?;
-        if whole {
+        // As for a namespace's read: a client let go before the era was
+        // taken is caught by the client itself.
+        if whole && state.still_holds(&here.context, &here.client) {
             state.audit.keep_enforced(era, &here.context, read.clone());
         }
         read

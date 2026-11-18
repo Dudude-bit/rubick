@@ -2387,6 +2387,8 @@ export const en = {
     readingKept: "Reading what was kept…",
     olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnsettled:
+      "Rows kept under this name may be another cluster's that had it: the connection changed each time which cluster this is was checked.",
     identityUnknown:
       "Rows kept under this name may be another cluster's that had it: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
@@ -2462,7 +2464,7 @@ export const en = {
     readingUnsettled:
       "{held} is selected by {policies}, and a rule there may admit {other}: a port or an address decides, which the app does not read here.",
     readingNotSelected:
-      "No NetworkPolicy restricts {to}'s ingress or {from}'s egress; another engine's policy, or Hubble itself, dropped it.",
+      "No NetworkPolicy restricts {to}'s ingress or {from}'s egress; what Cilium dropped it by, a policy of another kind or its own enforcement mode, the app does not read.",
     readingUnread: "The NetworkPolicies on this path could not be read: {why}",
     readingUnreadBare: "The NetworkPolicies on this path could not be read.",
     readingOthers:
@@ -2948,6 +2950,8 @@ export const en = {
     noAddressPublished: "no address published",
     moreWays: "{n} more",
     lastChange: "Last change",
+    lastChangeUnsettled:
+      "not known: the rows kept under this name may be another cluster's",
     lastChangeUnchecked:
       "not known: the rows kept under this name may be another cluster's ({reason})",
     nothingSeen: "nothing seen while this app was watching",
@@ -7002,6 +7006,8 @@ export const en = {
     readingWhatRefusesToMove: "Reading what would refuse to move…",
     budgetsUnread:
       "The disruption budgets on this node could not be read, so one that allows no eviction is not named here: {why}",
+    budgetsNoStatus:
+      "No controller has written a status on these budgets yet, so whether they allow an eviction is not known: {names}",
     drainKeepsAsking:
       "The drain moves what it can and keeps asking about the rest, the way kubectl does. Nothing is deleted to get past a budget, and you can stop it at any point.",
     evictUnmanagedPodsExplained:

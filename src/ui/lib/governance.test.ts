@@ -472,6 +472,25 @@ describe("what a drain is told", () => {
   });
 
   /**
+   * A budget no controller had written a status on was named a blocker,
+   * "0 healthy of 0", in a drain's confirmation. Fails if such a budget is
+   * a blocker, or is not named as not known.
+   */
+  it("names a budget with no status as not known, never as a blocker", () => {
+    const unwritten = pdb("pdb-new", {
+      disruptionsAllowed: 0,
+      currentHealthy: 0,
+      expectedPods: 0,
+      cannotAllow: null,
+    });
+    const { blockers, unknown } = drainBlockers(read([governs(unwritten)]), t);
+    expect(blockers).toEqual([]);
+    expect(unknown.map(({ budget }) => budget.object.name)).toEqual([
+      "pdb-new",
+    ]);
+  });
+
+  /**
    * The budgets list was refused, or the node's whole neighbourhood read
    * failed, and the dialog said nothing would refuse to move. Fails if either
    * comes back as budgets read and none found.

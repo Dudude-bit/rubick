@@ -80,6 +80,7 @@ function read(
         sides: [],
         values: MEASURES.map((measure) => set[measure] ?? null),
         reasons: [],
+        unknown: [],
       })),
       reads: [],
       observed,

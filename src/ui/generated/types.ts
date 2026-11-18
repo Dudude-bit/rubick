@@ -2834,6 +2834,7 @@ export interface Flow {
   sides: string[];
   values: (number | null)[];
   reasons: DropRate[];
+  unknown: Measure[];
 }
 
 export interface DropRate {
@@ -3974,7 +3975,8 @@ export type TerminalState =
 export type Identity =
   | { says: "known" }
   | { says: "notChecked" }
-  | { says: "unknown"; message: string };
+  | { says: "unknown"; message: string }
+  | { says: "unsettled" };
 
 export type Keeping =
   | { says: "kept" }
@@ -4068,7 +4070,12 @@ export type What =
   | { says: "envLiteral"; at: At; variable: string }
   | { says: "key"; key: string; net: Withheld }
   | { says: "image"; at: At; image: string }
-  | { says: "replicas"; replicas: number; autoscaler: string | null }
+  | {
+      says: "replicas";
+      replicas: number;
+      autoscaler: string | null;
+      ceiling: number | null;
+    }
   | { says: "budget"; required: number; selected: number }
   | { says: "token"; by: TokenBy }
   | {

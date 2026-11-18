@@ -340,6 +340,8 @@ export function gatewayOfParent(
   routeNamespace: string,
   sets: ListenerSetInfo[] | null = null
 ): GatewayInfo | undefined {
+  // A Service parent is GAMMA: a Gateway that shares its name is not it.
+  if (!parentCarriesTraffic(parent)) return undefined;
   const at = parentAt(parent, routeNamespace, gateways, sets);
   return at.state === "found" ? at.gateway : undefined;
 }

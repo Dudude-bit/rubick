@@ -174,8 +174,13 @@ pub(crate) fn extract_env_from(container: &Container) -> Vec<EnvFromInfo> {
 // ============= Condition =============
 
 /// Condition information
+///
+/// Built only by [`ConditionInfo::new`], a condition read off an object's
+/// JSON included: a controller writes `reason` and `message` as it likes,
+/// and both leave for the screen through the one door. The private field
+/// makes a literal outside this module a compile error.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", from = "Written")]
 pub struct ConditionInfo {
     pub type_: String,
     pub status: String,
@@ -190,31 +195,91 @@ pub struct ConditionInfo {
     /// the condition types that never carry it (Pod, Node, workloads).
     #[serde(default)]
     pub observed_generation: Option<i64>,
+    #[serde(skip)]
+    _built: Built,
+}
+
+/// Held by every condition and nameable only here: see [`ConditionInfo`].
+#[derive(Debug, Clone, Copy)]
+struct Built;
+
+/// A condition as an object's JSON writes it, before it is built.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Written {
+    type_: String,
+    status: String,
+    reason: Option<String>,
+    message: Option<String>,
+    last_transition_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    observed_generation: Option<i64>,
+}
+
+impl From<Written> for ConditionInfo {
+    fn from(written: Written) -> Self {
+        Self::new(
+            written.type_,
+            written.status,
+            written.reason,
+            written.message,
+            written.last_transition_time,
+            written.observed_generation,
+        )
+    }
+}
+
+impl ConditionInfo {
+    /// A condition as it may leave this process. `reason` and `message`
+    /// pass [`shown_text`](crate::resources::shown_text): a core kind's
+    /// condition takes any string in either, and only `metav1.Condition`
+    /// holds `reason` to a CamelCase word. Every other word is as written,
+    /// and a message that holds no key is unchanged byte for byte.
+    #[must_use]
+    pub fn new(
+        type_: String,
+        status: String,
+        reason: Option<String>,
+        message: Option<String>,
+        last_transition_time: Option<DateTime<Utc>>,
+        observed_generation: Option<i64>,
+    ) -> Self {
+        let shown = |text: Option<String>| text.map(|text| crate::resources::shown_text(&text));
+        Self {
+            type_,
+            status,
+            reason: shown(reason),
+            message: shown(message),
+            last_transition_time,
+            observed_generation,
+            _built: Built,
+        }
+    }
 }
 
 impl From<&PodCondition> for ConditionInfo {
     fn from(cond: &PodCondition) -> Self {
-        Self {
-            type_: cond.type_.clone(),
-            status: cond.status.clone(),
-            reason: cond.reason.clone(),
-            message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
-            observed_generation: None,
-        }
+        Self::new(
+            cond.type_.clone(),
+            cond.status.clone(),
+            cond.reason.clone(),
+            cond.message.clone(),
+            cond.last_transition_time.as_ref().map(Moment::moment),
+            None,
+        )
     }
 }
 
 impl From<&NodeCondition> for ConditionInfo {
     fn from(cond: &NodeCondition) -> Self {
-        Self {
-            type_: cond.type_.clone(),
-            status: cond.status.clone(),
-            reason: cond.reason.clone(),
-            message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
-            observed_generation: None,
-        }
+        Self::new(
+            cond.type_.clone(),
+            cond.status.clone(),
+            cond.reason.clone(),
+            cond.message.clone(),
+            cond.last_transition_time.as_ref().map(Moment::moment),
+            None,
+        )
     }
 }
 
@@ -450,6 +515,89 @@ pub struct ContainerPortInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A private key as a controller might write one into a message.
+    const KEY: &str = "-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n";
+
+    /// A controller's message crossed to the screen as written on the pod,
+    /// node and workload pages while the chain withheld a key in it: one
+    /// fact, two answers. Fails if a Pod condition's message or reason holds
+    /// a key past its constructor, or a message without one is changed in
+    /// any byte: the reader matches it against kubectl.
+    #[test]
+    fn a_pod_condition_withholds_a_key_and_keeps_every_other_word_as_written() {
+        let condition = |reason: &str, message: &str| {
+            ConditionInfo::from(&PodCondition {
+                type_: "Ready".into(),
+                status: "False".into(),
+                reason: Some(reason.into()),
+                message: Some(message.into()),
+                ..Default::default()
+            })
+        };
+        let keyed = condition(KEY, KEY);
+        assert_eq!(
+            keyed.reason.as_deref(),
+            Some(crate::resources::WITHHELD_MARKER)
+        );
+        assert_eq!(
+            keyed.message.as_deref(),
+            Some(crate::resources::WITHHELD_MARKER)
+        );
+        let plain = "containers with unready status: [web]  \n\t«нет связи»  ";
+        let read = condition("ContainersNotReady", plain);
+        assert_eq!(read.message.as_deref(), Some(plain));
+        assert_eq!(read.reason.as_deref(), Some("ContainersNotReady"));
+        assert_eq!(
+            (read.type_.as_str(), read.status.as_str()),
+            ("Ready", "False")
+        );
+    }
+
+    /// The Gateway API kinds read their conditions off the object's JSON,
+    /// past every `From`: they are built by the same constructor. Fails if a
+    /// condition read off JSON keeps a key, or loses a word or a field it
+    /// was written with.
+    #[test]
+    fn a_condition_read_off_an_object_passes_the_same_door() {
+        let read = |message: &str| -> ConditionInfo {
+            serde_json::from_value(serde_json::json!({
+                "type": "Programmed", "status": "False", "reason": "Invalid",
+                "message": message, "observedGeneration": 4,
+                "lastTransitionTime": "2026-11-18T10:00:00Z",
+            }))
+            .expect("a condition")
+        };
+        assert_eq!(
+            read(KEY).message.as_deref(),
+            Some(crate::resources::WITHHELD_MARKER)
+        );
+        let plain = read("listener https has no certificate ");
+        assert_eq!(
+            plain.message.as_deref(),
+            Some("listener https has no certificate ")
+        );
+        assert_eq!(plain.observed_generation, Some(4));
+        assert!(plain.last_transition_time.is_some());
+        let shown = serde_json::to_value(&plain).expect("serialises");
+        assert_eq!(
+            shown
+                .as_object()
+                .map(|fields| fields.keys().cloned().collect::<Vec<_>>()),
+            Some(
+                [
+                    "lastTransitionTime",
+                    "message",
+                    "observedGeneration",
+                    "reason",
+                    "status",
+                    "type"
+                ]
+                .map(String::from)
+                .to_vec()
+            )
+        );
+    }
 
     /// The recommendations pod's container: a 24Mi limit and an OOM kill.
     const OOM_KILLED: &str = r#"{
