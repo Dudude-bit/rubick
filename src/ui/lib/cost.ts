@@ -655,7 +655,12 @@ export function readingPicture(
             atLeast: false,
             parts,
             unpriced: [],
-            unknown: heldParts({ ...w, storageBytes: w.claimBytes }),
+            unknown: [
+              ...new Set([
+                ...heldParts({ ...w, storageBytes: w.claimBytes }),
+                ...unreadIn(w.key.namespace),
+              ]),
+            ],
           }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
