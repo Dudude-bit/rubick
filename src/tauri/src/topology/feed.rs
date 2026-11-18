@@ -114,6 +114,56 @@ pub type Resolve = Arc<
         + Sync,
 >;
 
+/// What a slot of a kind discovery cannot name yet is held as: its last
+/// state, its last whole set, and since that set the last word on each
+/// object. A new set or a change to one object replaces what it outdates,
+/// so a kind discovery never names holds no more than one copy of its list.
+#[derive(Default)]
+pub(super) struct Kept {
+    state: Option<Update>,
+    whole: Option<Update>,
+    since: BTreeMap<(String, String), Update>,
+}
+
+impl Kept {
+    pub(super) fn keep(&mut self, update: Update) {
+        match &update {
+            Update::State { .. } => self.state = Some(update),
+            Update::Whole { .. } => {
+                self.since.clear();
+                self.whole = Some(update);
+            }
+            Update::Applied { object, .. } | Update::Deleted { object, .. } => {
+                let key = (
+                    object.metadata.namespace.clone().unwrap_or_default(),
+                    object.metadata.name.clone().unwrap_or_default(),
+                );
+                self.since.insert(key, update);
+            }
+            Update::HandedOver => {}
+        }
+    }
+
+    /// In the order the map reads them: the state, the set, the changes.
+    pub(super) fn replay(self) -> impl Iterator<Item = Update> {
+        self.state
+            .into_iter()
+            .chain(self.whole)
+            .chain(self.since.into_values())
+    }
+}
+
+/// The slot an update is about, where it is about one.
+fn slot_of(update: &Update) -> Option<&crate::ownership::SlotKey> {
+    match update {
+        Update::Whole { slot, .. }
+        | Update::Applied { slot, .. }
+        | Update::Deleted { slot, .. }
+        | Update::State { slot, .. } => Some(slot),
+        Update::HandedOver => None,
+    }
+}
+
 /// The kind an update is about, where it is about one.
 fn kind_of(update: &Update) -> Option<Kind> {
     match update {
@@ -253,7 +303,7 @@ pub async fn pump(
     };
     // What arrived for a kind discovery could not name, in the order it came:
     // parsed without its type it would be dropped, and its list read as empty.
-    let mut held: BTreeMap<Kind, Vec<Update>> = BTreeMap::new();
+    let mut held: BTreeMap<Kind, BTreeMap<crate::ownership::SlotKey, Kept>> = BTreeMap::new();
     let mut said: BTreeMap<Kind, String> = BTreeMap::new();
     while let Some(first) = updates.recv().await {
         let mut batch = vec![first];
@@ -287,7 +337,8 @@ pub async fn pump(
             .collect();
         let mut ready: Vec<Update> = named
             .iter()
-            .flat_map(|kind| held.remove(kind).unwrap_or_default())
+            .flat_map(|kind| held.remove(kind).unwrap_or_default().into_values())
+            .flat_map(Kept::replay)
             .collect();
         for update in batch {
             match kind_of(&update) {
@@ -302,7 +353,13 @@ pub async fn pump(
                             },
                         });
                     }
-                    held.entry(kind).or_default().push(update);
+                    if let Some(slot) = slot_of(&update).cloned() {
+                        held.entry(kind)
+                            .or_default()
+                            .entry(slot)
+                            .or_default()
+                            .keep(update);
+                    }
                 }
                 _ => ready.push(update),
             }
