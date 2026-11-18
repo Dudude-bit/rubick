@@ -142,7 +142,7 @@ describe("Audit's reading of requests against use", () => {
       memory: { requested: 4096 * MI, peak: 1500 * MI, atMost: false },
     });
     expect(by.api).toEqual({ says: "within" });
-    expect(by.fresh).toEqual({ says: "noSamples" });
+    expect(by.fresh).toEqual({ says: "noSamples", resource: "both" });
     expect(read.unread).toEqual([
       { namespace: "bank", message: "pods is forbidden" },
     ]);
@@ -262,14 +262,46 @@ describe("Audit's reading of requests against use", () => {
     const peakless = reading(one, [[200, null, 200 * MI, 300 * MI]]);
     const read = usageRead(one, null, peakless);
     if (read.state !== "read") throw new Error(read.state);
-    expect(read.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+    expect(read.workloads[0]!.verdict).toEqual({
+      says: "peakUnread",
+      resource: "cpu",
+    });
 
     // Its CPU average read and its memory not sampled at all: "no sample of
     // its pods" is belied by the CPU average.
     const memoryless = reading(one, [[200, null, null, null]]);
     const mixed = usageRead(one, null, memoryless);
     if (mixed.state !== "read") throw new Error(mixed.state);
-    expect(mixed.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+    expect(mixed.workloads[0]!.verdict).toEqual({
+      says: "peakUnread",
+      resource: "cpu",
+    });
+  });
+
+  /**
+   * Its CPU measured over the whole day and well used, its memory never
+   * sampled: the reason said Prometheus held no sample of its pods, with
+   * the CPU figures on the page. Fails if a reason about one resource is
+   * said of both, or one about both is narrowed to one.
+   */
+  it("names the resource a reason is about, and both only where both have it", () => {
+    const one = basis([
+      workload("web", 2000, 512 * MI),
+      workload("api", 500, 256 * MI),
+    ]);
+    const read = usageRead(
+      one,
+      null,
+      reading(one, [
+        [1200, 1500, null, null],
+        [200, null, 200 * MI, null],
+      ])
+    );
+    if (read.state !== "read") throw new Error(read.state);
+    expect(read.workloads.map((w) => w.verdict)).toEqual([
+      { says: "noSamples", resource: "memory" },
+      { says: "peakUnread", resource: "both" },
+    ]);
   });
 
   /**

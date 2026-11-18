@@ -374,12 +374,34 @@ describe("the words Audit draws its rules and findings with", () => {
    * Fails if an unread peak is worded as no sample, in either language.
    */
   it("says a peak was not read, not that no sample was held", () => {
-    const why: Why = { says: "peakUnread" };
+    const why: Why = { says: "peakUnread", resource: "both" };
     expect(whyWords(why, tIn("en"))).toBe(
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged"
     );
     expect(whyWords(why, tIn("ru"))).toBe(
       "подключённый Prometheus вернул её среднее потребление за последние сутки, но не пик, а оценивается именно пик"
+    );
+  });
+
+  /**
+   * A reason about one resource names it, in both languages: its CPU
+   * measured whole and its memory never sampled is not "no sample of its
+   * pods". Fails if the resource is dropped from the words.
+   */
+  it("names the resource a reason about use is about", () => {
+    const memory: Why = { says: "noSamples", resource: "memory" };
+    const cpu: Why = { says: "peakUnread", resource: "cpu" };
+    expect(whyWords(memory, tIn("en"))).toBe(
+      "the connected Prometheus holds no sample of its pods' memory use in the last day"
+    );
+    expect(whyWords(cpu, tIn("en"))).toBe(
+      "the connected Prometheus answered its average CPU use over the last day and no peak, and a peak is what is judged"
+    );
+    expect(whyWords(memory, tIn("ru"))).toBe(
+      "в подключённом Prometheus нет ни одного замера памяти её подов за последние сутки"
+    );
+    expect(whyWords(cpu, tIn("ru"))).toBe(
+      "подключённый Prometheus вернул её среднее потребление CPU за последние сутки, но не пик, а оценивается именно пик"
     );
   });
 

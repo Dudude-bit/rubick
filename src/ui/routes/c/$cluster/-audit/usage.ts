@@ -3,6 +3,7 @@ import type {
   OverBy,
   Subject,
   UsageRead,
+  UsageOf,
   UseVerdict,
   WorkloadUse,
 } from "@/generated/types";
@@ -90,6 +91,17 @@ const young = (e: Efficiency) =>
  * Over where either resource is; not known where either went unsampled, or
  * where its pods have not run the day a peak is judged over.
  */
+/** Which resource has `has`: one, both, or `undefined` for neither. */
+function whichHas(
+  e: { cpu: Efficiency; memory: Efficiency },
+  has: (one: Efficiency) => boolean
+): UsageOf | undefined {
+  const cpu = has(e.cpu);
+  const memory = has(e.memory);
+  if (cpu && memory) return "both";
+  return cpu ? "cpu" : memory ? "memory" : undefined;
+}
+
 function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const cpu = overBy(e.cpu);
   const memory = overBy(e.memory);
@@ -99,11 +111,15 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
     return { says: "young", since: fresh.since };
   // A peak nobody read judges nothing, though the average was read: that
   // is its own reason, and before "no sample", which a read average belies.
-  const peakless = (one: Efficiency) =>
-    one.state === "measured" && one.peakRatio === null;
-  if (peakless(e.cpu) || peakless(e.memory)) return { says: "peakUnread" };
-  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
-    return { says: "noSamples" };
+  // Each names the resource it is about: one resource's gap is not the
+  // other's, and its CPU measured whole is not "no sample of its pods".
+  const unpeaked = whichHas(
+    e,
+    (one) => one.state === "measured" && one.peakRatio === null
+  );
+  if (unpeaked) return { says: "peakUnread", resource: unpeaked };
+  const unsampled = whichHas(e, (one) => one.state === "noSamples");
+  if (unsampled) return { says: "noSamples", resource: unsampled };
   // Its peak measured from some of its pods: neither its peak nor a bound
   // on it, said for each resource. An average from some of them judges
   // nothing either way.
