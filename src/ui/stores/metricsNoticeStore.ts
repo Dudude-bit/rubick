@@ -1,8 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { persistedByName } from "@/lib/kept-by-name";
 import type { MetricsAbsence } from "@/lib/metrics-absence";
-import { entryOf, named, type Named, withEntry } from "@/lib/named";
+import {
+  entryOf,
+  named,
+  type Named,
+  withEntry,
+  withoutEntry,
+} from "@/lib/named";
 
 interface MetricsNoticeState {
   /** Per context, the reasons whose banner the reader put away. */
@@ -23,4 +30,11 @@ export const useMetricsNoticeStore = create<MetricsNoticeState>()(
     }),
     { name: "metrics-notices", version: 1 }
   )
+);
+
+// A banner put away for the last cluster under the name says nothing of this one.
+persistedByName((context) =>
+  useMetricsNoticeStore.setState((state) => ({
+    hidden: withoutEntry(state.hidden, context),
+  }))
 );
