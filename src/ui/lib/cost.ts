@@ -179,17 +179,13 @@ function pricedRow(
 }
 
 /**
- * No total, for want of a read rather than a price: nothing of it is
- * priced and how much it holds of some part was not read.
+ * No total, and some of it was not read: what it would come to is not
+ * known, whatever else of it carries no price.
  */
 export const totalUnknown = (row: {
   perHour: number | null;
-  unpriced?: readonly CostPart[];
   unknown?: readonly CostPart[];
-}): boolean =>
-  row.perHour === null &&
-  (row.unpriced?.length ?? 0) === 0 &&
-  (row.unknown?.length ?? 0) > 0;
+}): boolean => row.perHour === null && (row.unknown?.length ?? 0) > 0;
 
 /** Storage nobody could read: claims refused, or no volume read at all. */
 const storageUnread = (

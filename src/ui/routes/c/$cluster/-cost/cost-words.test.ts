@@ -230,9 +230,16 @@ describe("a namespace with no total for want of a read", () => {
     };
     expect(money(totalOf(row), "", t)).toBe("Not known");
     expect(share(row, t)).toBe("Not known");
-    expect(share({ ...row, unknown: [], unpriced: ["cpu" as const] }, t)).toBe(
-      "not priced"
-    );
+    const unpricedOnly = { ...row, unknown: [], unpriced: ["cpu" as const] };
+    expect(share(unpricedOnly, t)).toBe("not priced");
+    // CPU and memory with no price and storage not read: had storage been
+    // read, it might have priced a floor. Not known, not "not priced".
+    const unpricedToo = {
+      ...row,
+      unpriced: ["cpu" as const, "memory" as const],
+    };
+    expect(money(totalOf(unpricedToo), "", t)).toBe("Not known");
+    expect(share(unpricedToo, t)).toBe("Not known");
     const picture = {
       ...estimatePicture(refused, prices, null),
       unread: [],
