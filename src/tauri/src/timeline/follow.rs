@@ -176,7 +176,7 @@ pub(crate) fn feed(recorder: &mut Recorder, update: Update) {
                 recorder.deleted(followed, slot.namespace.as_deref(), &value);
             }
         }
-        Update::HandedOver => {}
+        Update::HandedOver => recorder.handed_over(),
     }
 }
 

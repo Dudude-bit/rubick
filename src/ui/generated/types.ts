@@ -1933,6 +1933,7 @@ export interface TimelinePage {
   epoch: number;
   identity: Identity;
   vouched: SeqStretch[];
+  attribution: number;
 }
 
 export interface SeqStretch {

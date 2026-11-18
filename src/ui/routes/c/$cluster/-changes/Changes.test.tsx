@@ -152,6 +152,7 @@ function answer(query: TimelineQuery): TimelinePage {
     epoch: 0,
     identity: { says: "known" },
     vouched: held.vouched ?? [{ first: 0, last: null }],
+    attribution: 0,
   };
 }
 

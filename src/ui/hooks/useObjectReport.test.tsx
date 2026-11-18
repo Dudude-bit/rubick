@@ -33,6 +33,10 @@ let timelineFails: Error | null = null;
 let timelineMore = false;
 let timelineVouched: SeqStretch[] = [{ first: 0, last: null }];
 let timelineIdentity: Identity = { says: "known" };
+/** Each subject's word on which rows are this cluster's, where a case gives one. */
+let wordOf: (
+  kind: string | undefined
+) => { vouched: SeqStretch[]; attribution: number } | null = () => null;
 const timelineRead = async (query: TimelineQuery) => {
   timelineAsked.push(query);
   if (timelineFails) throw timelineFails;
@@ -53,6 +57,8 @@ const timelineAnswer = (query: TimelineQuery) => ({
   unreadable: 0,
   vouched: timelineVouched,
   identity: timelineIdentity,
+  attribution: 0,
+  ...wordOf(query.subject?.kind),
 });
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -336,6 +342,63 @@ describe("the report of any object", () => {
       )
     );
     timelineIdentity = { says: "known" };
+  });
+
+  /**
+   * A pod's own read answered before a reconnect and its owner's after it:
+   * the file judged the owner's rows by the older word, and one the later
+   * answer left unplaced went out as this cluster's. Fails if the report
+   * places rows by a read older than the other.
+   */
+  it("judges every row by the later of its two reads", async () => {
+    const now = Date.now();
+    recorded = [
+      {
+        id: "s3",
+        seq: 3,
+        at: now - 60_000,
+        kind: "StatefulSet",
+        group: "apps",
+        namespace: "shop",
+        name: "web",
+        what: { says: "created" },
+        atRelist: false,
+      },
+    ];
+    wordOf = (kind) =>
+      kind === "Pod"
+        ? { vouched: [{ first: 0, last: null }], attribution: 1 }
+        : { vouched: [{ first: 5, last: null }], attribution: 2 };
+    const pod = { kind: "Pod", name: "web-0", namespace: "shop" };
+    const { result } = renderHook(
+      () =>
+        useObjectReport(
+          pod,
+          {
+            metadata: {
+              ownerReferences: [{ kind: "StatefulSet", name: "web" }],
+            },
+          },
+          undefined,
+          true
+        ),
+      { wrapper }
+    );
+    const marked = () => {
+      const section = result.current.report?.sections.find(
+        (s) => s.id === "changes"
+      );
+      return section?.body.type === "changes"
+        ? section.body.changes.some((row) =>
+            row.parts.some((part) =>
+              part.text.startsWith("Recorded under this name while")
+            )
+          )
+        : false;
+    };
+    await waitFor(() => expect(marked()).toBe(true));
+    wordOf = () => null;
+    recorded = [];
   });
 
   /**

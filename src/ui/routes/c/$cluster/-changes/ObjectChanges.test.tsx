@@ -37,6 +37,7 @@ function page(over: Partial<TimelinePage> = {}): TimelinePage {
     epoch: 0,
     identity: { says: "known" },
     vouched: [{ first: 0, last: null }],
+    attribution: 0,
     ...over,
   };
 }

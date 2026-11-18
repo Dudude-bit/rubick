@@ -223,6 +223,9 @@ pub struct TimelinePage {
     pub epoch: u64,
     pub identity: Identity,
     pub vouched: Vec<SeqStretch>,
+    /// Moves each time `identity` or `vouched` may: of two answers of one
+    /// epoch, the higher is the later word on which rows are this cluster's.
+    pub attribution: u64,
 }
 
 /// What is kept on this machine, for Settings.
@@ -254,6 +257,11 @@ struct Inner {
     past: Vec<disk::Lineage>,
     /// The connection recording now; its `last` and `to` are set as it ends.
     current: disk::Lineage,
+    /// The client was replaced and the watches are not all handed over yet:
+    /// what is recorded may still come through the old one.
+    interim: bool,
+    /// See [`TimelinePage::attribution`].
+    attribution: u64,
     epoch: u64,
     /// Moves with each clear: a write taken before one is not done after it.
     cleared: u64,
@@ -272,6 +280,7 @@ struct Inner {
 impl Inner {
     /// The connection recording ends here; the next numbers its rows after.
     fn reconnected(&mut self, now: i64) {
+        self.attribution += 1;
         let next = disk::Lineage {
             uid: None,
             first: self.store.newest() + 1,
@@ -411,12 +420,15 @@ impl ClusterTimeline {
             inner.epoch += 1;
             inner.told.rows = true;
         }
-        inner.current.uid = Some(identity.clone());
+        if !inner.interim {
+            inner.current.uid = Some(identity.clone());
+        }
         if inner.identity.as_deref() != Some(&identity) || inner.checked != Identity::Known {
             inner.identity = Some(identity);
             inner.checked = Identity::Known;
             inner.told.spans = true;
         }
+        inner.attribution += 1;
         another
     }
 
@@ -426,6 +438,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unknown { message };
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -437,9 +450,29 @@ impl ClusterTimeline {
     fn unchecked(&self) {
         let mut inner = self.inner.lock();
         inner.reconnected(Self::now());
+        inner.interim = true;
         if inner.checked == Identity::Known {
             inner.checked = Identity::NotChecked;
         }
+        inner.told.spans = true;
+    }
+
+    /// Every watch is the new client's: what is recorded from here on came
+    /// through it. What was recorded since the reconnect may have come
+    /// through the old one, and is vouched for only where the cluster read
+    /// since is the one read before.
+    pub(crate) fn handed_over(&self) {
+        let mut inner = self.inner.lock();
+        if !std::mem::take(&mut inner.interim) {
+            return;
+        }
+        let read = (inner.checked == Identity::Known)
+            .then(|| inner.identity.clone())
+            .flatten();
+        let before = inner.past.last().and_then(|lineage| lineage.uid.clone());
+        inner.current.uid = read.clone().filter(|uid| Some(uid) == before.as_ref());
+        inner.reconnected(Self::now());
+        inner.current.uid = read;
         inner.told.spans = true;
     }
 
@@ -452,6 +485,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unsettled;
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -471,10 +505,12 @@ impl ClusterTimeline {
                 last: Some(lineage.last),
             })
             .collect();
-        vouched.push(SeqStretch {
-            first: current.first,
-            last: None,
-        });
+        if !inner.interim {
+            vouched.push(SeqStretch {
+                first: current.first,
+                last: None,
+            });
+        }
         let sure: Vec<(i64, i64)> = inner
             .past
             .iter()
@@ -505,6 +541,7 @@ impl ClusterTimeline {
                 Identity::Known
             },
             vouched,
+            attribution: inner.attribution,
         }
     }
 
@@ -562,6 +599,8 @@ impl Timelines {
     /// whatever was recorded before.
     pub(crate) fn follow(&self, context: String, subscription: crate::feeds::Subscription) {
         let cluster = self.cluster(&context);
+        // Subscribed now, through the client held now.
+        cluster.handed_over();
         *self.following.lock() = Some(follow::spawn(context, cluster, subscription));
     }
 
@@ -673,6 +712,8 @@ impl Timelines {
                 checked: Identity::NotChecked,
                 past: loaded.lineages,
                 current,
+                interim: false,
+                attribution: 0,
                 epoch: 0,
                 cleared: 0,
                 disk_let_go,
