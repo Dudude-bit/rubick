@@ -308,6 +308,13 @@ pub async fn pump(
     // parsed without its type it would be dropped, and its list read as empty.
     let mut held: BTreeMap<Kind, BTreeMap<crate::ownership::SlotKey, Kept>> = BTreeMap::new();
     let mut said: BTreeMap<Kind, String> = BTreeMap::new();
+    // A kind discovery says is not served is not a kind read and empty, whatever
+    // the layer last said of it: its objects cannot be parsed without a type.
+    let mut unserved: BTreeSet<Kind> = Kind::ALL
+        .iter()
+        .copied()
+        .filter(|kind| kind.optional() && !types.contains_key(kind) && !unresolved.contains(kind))
+        .collect();
     let mut retry = tokio::time::interval_at(tokio::time::Instant::now() + again, again);
     retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -330,10 +337,13 @@ pub async fn pump(
             .collect();
         for kind in waiting {
             match resolve(kind).await {
-                Ok(resource) => {
-                    if let Some(resource) = resource {
-                        types.insert(kind, resource);
-                    }
+                Ok(Some(resource)) => {
+                    types.insert(kind, resource);
+                    unresolved.remove(&kind);
+                    said.remove(&kind);
+                }
+                Ok(None) => {
+                    unserved.insert(kind);
                     unresolved.remove(&kind);
                     said.remove(&kind);
                 }
@@ -347,13 +357,22 @@ pub async fn pump(
             .copied()
             .filter(|kind| !unresolved.contains(kind))
             .collect();
-        let mut ready: Vec<Update> = named
+        let replayed: Vec<Update> = named
             .iter()
             .flat_map(|kind| held.remove(kind).unwrap_or_default().into_values())
             .flat_map(Kept::replay)
             .collect();
-        for update in batch {
+        let mut ready = Vec::new();
+        for update in replayed.into_iter().chain(batch) {
             match kind_of(&update) {
+                Some(kind) if unserved.contains(&kind) => {
+                    if let Update::State { slot, .. } = update {
+                        ready.push(Update::State {
+                            slot,
+                            state: Reading::Unserved,
+                        });
+                    }
+                }
                 Some(kind) if unresolved.contains(&kind) => {
                     // The map is told the kind was not read, in discovery's
                     // words, never that it was read and holds nothing.

@@ -1078,3 +1078,80 @@ async fn a_kind_discovery_names_later_is_drawn_with_nothing_else_arriving() {
     drop(tx);
     pumping.await.expect("the pump ends");
 }
+
+fn reading_of(map: &ClusterMap, kind: &str) -> Option<MapKindReading> {
+    map.stores()
+        .kinds()
+        .into_iter()
+        .find(|state| state.kind == kind)
+        .map(|state| state.reading)
+}
+
+async fn within_seconds(what: impl Fn() -> bool) -> bool {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !what() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .is_ok()
+}
+
+/// A kind discovery could not name, then said the cluster does not serve:
+/// its held `Synced` was replayed and its set dropped for want of a type,
+/// so the map read the kind as installed and holding nothing. Fails if a
+/// kind discovery later says is not served is read as anything else.
+#[tokio::test]
+async fn a_kind_discovery_later_says_is_not_served_is_not_read_as_empty() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let answers = answers.clone();
+        Arc::new(move |_| {
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(None)
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+        std::time::Duration::from_millis(20),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    tx.send(crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Fresh,
+        objects: vec![gateway_object("a")],
+    })
+    .await
+    .expect("sent");
+    assert!(
+        within_seconds(|| matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        ))
+        .await
+    );
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(
+        within_seconds(|| reading_of(&map, "Gateway") == Some(MapKindReading::NotServed)).await,
+        "read as {:?} with nothing more sent",
+        reading_of(&map, "Gateway")
+    );
+    drop(tx);
+    pumping.await.expect("the pump ends");
+}
