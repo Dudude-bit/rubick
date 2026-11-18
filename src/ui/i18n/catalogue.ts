@@ -2541,7 +2541,7 @@ export const en = {
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
     panelSideBoth:
-      "From the server's proxy, and the calls only the caller's proxy saw: they failed before reaching the server.",
+      "From the server's proxy, and the calls only the caller's proxy saw: the server's proxy did not report them.",
     subRequests: "{v} req/s",
     subEvents: "{v} forwarded/s",
     subErrors: "{share} errors",
