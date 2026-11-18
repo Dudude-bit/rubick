@@ -260,6 +260,40 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * A catch-up asked of the old rows came back after an older page had found
+   * them started over and read the new ones: laid in, it brought the old
+   * cluster's row back and its numbering with it. Fails if a catch-up's
+   * answer is laid into rows of another numbering.
+   */
+  it("lays in no catch-up answered after the rows started over", async () => {
+    answers = [page([row("b", 20), row("a", 10)], { more: true })];
+    const { result } = renderHook(
+      () => useTimeline({ windowMs: WIDE, show: "all" }),
+      { wrapper: wrapperOf(fresh()) }
+    );
+    await waitFor(() => expect(result.current.readFrom).toBe(10));
+    await settled();
+    let late: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (late = resolve))];
+    told("prod");
+    await waitFor(() => expect(asked).toHaveLength(3));
+    epochNow = 1;
+    answers = [
+      page([row("x", 5)], { epoch: 1 }),
+      page([row("new", 30, 3)], { epoch: 1 }),
+    ];
+    act(() => result.current.loadOlder());
+    await waitFor(() =>
+      expect(result.current.rows.map((each) => each.id)).toEqual(["new"])
+    );
+    await act(async () => {
+      late(page([row("old", 40, 99)], { newest: 99 }));
+      await new Promise((settle) => setTimeout(settle, 50));
+    });
+    expect(result.current.rows.map((each) => each.id)).toEqual(["new"]);
+  });
+
+  /**
    * A catch-up that failed was swallowed: the rows held stayed, and the
    * page went on calling the stretch since quiet. Fails if a failed
    * catch-up is not the read's error until one answers again.
