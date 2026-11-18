@@ -80,6 +80,7 @@ import { useKeptShellStore } from "@/stores/keptShellStore";
 import { translate } from "@/i18n";
 import type { ContextInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -243,7 +244,7 @@ describe("the tab's list of clusters", () => {
       live: ["acme-staging"],
     });
     useClusterRecencyStore.setState({
-      lastUsed: { "acme-staging": 3, "acme-qa": 2, "acme-prod-eu": 1 },
+      lastUsed: named({ "acme-staging": 3, "acme-qa": 2, "acme-prod-eu": 1 }),
     });
     useScopeTabStore.setState({
       tabs: [

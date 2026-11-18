@@ -38,6 +38,7 @@ import type { ClusterInfo, ContextInfo } from "@/generated/types";
 import { hasSession, useClusterStore, wayBackTo } from "./clusterStore";
 import { holdClusters } from "./heldClusters";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
+import { entryOf, named } from "@/lib/named";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
 
@@ -868,12 +869,12 @@ describe("switching clusters keeps the one left until the new one lands", () => 
    * cluster does not count as its last use.
    */
   it("counts leaving a cluster as its last use", async () => {
-    useClusterRecencyStore.setState({ lastUsed: { "acme-staging": 1 } });
+    useClusterRecencyStore.setState({ lastUsed: named({ "acme-staging": 1 }) });
 
     await state().connect("acme-dev");
 
     expect(
-      useClusterRecencyStore.getState().lastUsed["acme-staging"]
+      entryOf(useClusterRecencyStore.getState().lastUsed, "acme-staging")
     ).toBeGreaterThan(1);
   });
 });

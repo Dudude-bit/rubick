@@ -28,6 +28,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { ContextInfo } from "@/generated/types";
 
 import { ClusterList } from "./ClusterList";
+import { named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -65,7 +66,7 @@ beforeEach(() => {
     live: [],
     failures: {},
   });
-  useClusterRecencyStore.setState({ lastUsed: {} });
+  useClusterRecencyStore.setState({ lastUsed: named({}) });
   useClusterIdentityStore.setState({ marks: {} });
 });
 
@@ -350,7 +351,9 @@ describe("the recency groups, under a filter", () => {
    */
   it("drops the captions when the filter leaves only one group", async () => {
     const user = userEvent.setup();
-    useClusterRecencyStore.setState({ lastUsed: { "prod-eus2-mki": 1_000 } });
+    useClusterRecencyStore.setState({
+      lastUsed: named({ "prod-eus2-mki": 1_000 }),
+    });
     render(<Harness />);
 
     expect(screen.getByText(t("cluster", "recent"))).toBeInTheDocument();
@@ -372,7 +375,9 @@ describe("the recent clusters, in Russian", () => {
    *  template literal the catalogue never saw. */
   it("says when a cluster was last used in the reader's language", () => {
     useLocaleStore.setState({ choice: "ru" });
-    useClusterRecencyStore.setState({ lastUsed: { "prod-eus2-mki": 1_000 } });
+    useClusterRecencyStore.setState({
+      lastUsed: named({ "prod-eus2-mki": 1_000 }),
+    });
     render(<Harness />);
 
     expect(screen.getByText(/открывался .* назад/)).toBeInTheDocument();
@@ -392,7 +397,7 @@ describe("what each row says about its cluster", () => {
    */
   it("says live, not an age, for a cluster still connected", () => {
     useClusterRecencyStore.setState({
-      lastUsed: { "prod-eus2-mki": 1_000, "prod-euw1-mki": 2_000 },
+      lastUsed: named({ "prod-eus2-mki": 1_000, "prod-euw1-mki": 2_000 }),
     });
     useClusterStore.setState({ live: ["prod-eus2-mki"] });
     render(<Harness />);
