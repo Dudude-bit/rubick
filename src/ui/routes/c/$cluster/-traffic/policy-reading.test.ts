@@ -10,7 +10,12 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { Known } from "@/lib/known";
 import type { LabeledNamespace, PolicyRows } from "@/lib/policy-peers";
-import { podsOfEnd, policyReading, type WorkloadPod } from "./policy-reading";
+import {
+  podsOfEnd,
+  policyReading,
+  rowsIn,
+  type WorkloadPod,
+} from "./policy-reading";
 import { readingWords } from "./traffic-words";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -111,6 +116,63 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
     });
   });
 
+  /**
+   * The policies listed and one namespace's refused: that namespace's empty
+   * rows are not "no policy". Fails if `rowsIn` drops the refusal it was
+   * handed for the namespace it is asked about.
+   */
+  it("says the policies could not be read where the list answered and the end's namespace was refused", () => {
+    const listed = rowsIn(
+      {
+        known: true,
+        value: {
+          rows: [],
+          unread: [
+            {
+              namespace: "shop",
+              code: "FORBIDDEN",
+              message: "networkpolicies is forbidden in shop",
+            },
+          ],
+        },
+      },
+      "shop"
+    );
+    expect(read(INTRUDER, DB, listed)).toEqual({
+      says: "unread",
+      why: "networkpolicies is forbidden in shop",
+    });
+  });
+
+  /**
+   * A rule that names addresses, or a selector Kubernetes would not build,
+   * cannot be settled from labels: never "no rule admits it".
+   */
+  it("leaves a rule of addresses or of a selector it cannot evaluate unsettled", () => {
+    const ruled = (peer: PolicyPeer) =>
+      read(
+        INTRUDER,
+        DB,
+        rows([{ ...DB_FROM_CALLER, ingress: direction(true, [peer]) }])
+      );
+    expect(
+      ruled({
+        pods: { kind: "notSaid" },
+        namespaces: { kind: "notSaid" },
+        ipBlock: { cidr: "10.0.0.0/8", except: [] },
+      })
+    ).toMatchObject({ says: "unsettled", direction: "ingress" });
+    expect(ruled(from("app in ("))).toMatchObject({ says: "unsettled" });
+  });
+
+  /** An end with no pods read has nothing to read policies over. */
+  it("says it could not read where an end has no pods to read", () => {
+    expect(read([], DB, rows([DB_FROM_CALLER]))).toEqual({
+      says: "unread",
+      why: null,
+    });
+  });
+
   /** A refused list is "could not read", never "no policy holds it". */
   it("says the policies could not be read where they or the namespaces were refused", () => {
     expect(
@@ -154,6 +216,34 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
     expect(podsOfEnd(end("CronJob", "backup"), [run, ...DB])).toEqual([run]);
     expect(podsOfEnd(end("Pod", "db-7d9f-x"), DB)).toEqual(DB);
     expect(podsOfEnd({ is: "address", address: "1.2.3.4" }, DB)).toBeNull();
+  });
+
+  /** What it could not settle, and could not read with or without the cluster's words, each said as such. */
+  it("says an unsettled rule and an unread path in their own words", () => {
+    const db = {
+      namespace: "shop",
+      group: "apps",
+      kind: "Deployment",
+      name: "db",
+    };
+    const intruder = { ...db, name: "intruder" };
+    const said = (reading: Parameters<typeof readingWords>[0]) =>
+      readingWords(reading, { known: true, value: [] }, intruder, db, t)
+        .map((part) => part.text)
+        .join(" ");
+    expect(
+      said({
+        says: "unsettled",
+        direction: "ingress",
+        policies: ["db-from-caller-only"],
+      })
+    ).toContain("a rule there may admit intruder");
+    expect(said({ says: "unread", why: null })).toContain(
+      "The NetworkPolicies on this path could not be read."
+    );
+    expect(said({ says: "unread", why: "pods is forbidden" })).toContain(
+      "could not be read: pods is forbidden"
+    );
   });
 
   /** Said as the app's reading, with the other engines it does not read. */
