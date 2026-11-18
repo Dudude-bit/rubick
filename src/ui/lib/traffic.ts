@@ -131,6 +131,8 @@ export interface SourceLine {
   protocols: readonly string[];
   /** The proxies of the pair its numbers came from: `server`, `caller`. */
   sides: readonly string[];
+  /** What it measures and could not read in this reading. */
+  unread: readonly Measure[];
 }
 
 export interface FlowRow {
@@ -354,6 +356,9 @@ export function pairRows(
                 reasons: flow.reasons,
                 protocols: flow.protocols,
                 sides: flow.sides,
+                unread: source.measures.filter((measure) =>
+                  failed(flow.source, measure)
+                ),
               },
             ]
           : [];
@@ -609,6 +614,7 @@ export function liveRow(pair: LivePair): FlowRow {
         reasons,
         protocols: pair.protocols,
         sides: [],
+        unread: [],
       },
     ],
   };
