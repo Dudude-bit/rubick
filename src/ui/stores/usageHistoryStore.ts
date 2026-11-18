@@ -23,6 +23,14 @@ import {
   MAX_SAMPLES,
   type UsageSample,
 } from "@/lib/usage-history";
+import {
+  entriesOf,
+  entryOf,
+  named,
+  type Named,
+  withEntry,
+  withoutEntry,
+} from "@/lib/named";
 
 /**
  * How many objects keep a buffer at once.
@@ -43,7 +51,7 @@ export interface UsageSeries {
 }
 
 interface UsageHistoryState {
-  series: Record<string, UsageSeries>;
+  series: Named<UsageSeries>;
   /** Appends one poll to a series, creating and evicting as needed. */
   record: (key: string, sample: UsageSample) => void;
   /** Drops a series outright — used when an object is known to be gone. */
@@ -61,11 +69,11 @@ export function seriesKey(
 }
 
 export const useUsageHistoryStore = create<UsageHistoryState>((set) => ({
-  series: {},
+  series: named(),
 
   record: (key, sample) =>
     set((state) => {
-      const existing = state.series[key];
+      const existing = entryOf(state.series, key);
       const samples = appendSample(
         existing?.samples ?? [],
         sample,
@@ -74,32 +82,21 @@ export const useUsageHistoryStore = create<UsageHistoryState>((set) => ({
       // The same poll reaching two subscribers must not re-render either.
       if (existing && samples === existing.samples) return state;
 
-      const series = {
-        ...state.series,
-        [key]: { samples, touchedAt: sample.t },
-      };
-
-      const keys = Object.keys(series);
-      if (keys.length > MAX_SERIES) {
-        let oldest = keys[0];
-        for (const candidate of keys) {
-          if (series[candidate].touchedAt < series[oldest].touchedAt) {
-            oldest = candidate;
-          }
-        }
-        delete series[oldest];
-      }
-
-      return { series };
+      const series = entriesOf(
+        withEntry(state.series, key, { samples, touchedAt: sample.t })
+      );
+      if (series.length <= MAX_SERIES) return { series: named(series) };
+      const oldest = series.reduce((first, each) =>
+        each[1].touchedAt < first[1].touchedAt ? each : first
+      );
+      return { series: named(series.filter((each) => each !== oldest)) };
     }),
 
   forget: (key) =>
     set((state) => {
-      if (!(key in state.series)) return state;
-      const series = { ...state.series };
-      delete series[key];
-      return { series };
+      if (entryOf(state.series, key) === undefined) return state;
+      return { series: withoutEntry(state.series, key) };
     }),
 
-  clear: () => set({ series: {} }),
+  clear: () => set({ series: named() }),
 }));

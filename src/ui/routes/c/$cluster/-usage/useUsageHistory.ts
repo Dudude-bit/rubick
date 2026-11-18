@@ -14,6 +14,7 @@ import {
   type UsageSeries,
 } from "@/stores/usageHistoryStore";
 import type { UsageSample } from "@/lib/usage-history";
+import { entryOf } from "@/lib/named";
 
 const EMPTY: readonly UsageSample[] = [];
 
@@ -46,7 +47,7 @@ export function useUsageHistory({
   const key = seriesKey(kind, uid);
   const record = useUsageHistoryStore((state) => state.record);
   const series: UsageSeries | undefined = useUsageHistoryStore((state) =>
-    key === null ? undefined : state.series[key]
+    key === null ? undefined : entryOf(state.series, key)
   );
 
   useEffect(() => {
