@@ -3259,6 +3259,7 @@ export type AppEvent =
       relay: RelayAt | null;
       lost: number;
       untracked: number;
+      waiting: number;
       unreached: UnreachedNode[];
     }
   | { channel: "hubble-flows-ended"; stream_id: string; end: LiveEnd }

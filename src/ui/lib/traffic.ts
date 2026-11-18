@@ -538,6 +538,8 @@ export interface LiveBatch {
   relay: RelayAt | null;
   lost: number;
   untracked: number;
+  /** Pairs the relay sent that wait for a read of their pods: not drawn yet. */
+  waiting: number;
   /** Nodes the relay cannot read, every one each batch. */
   unreached: readonly UnreachedNode[];
 }

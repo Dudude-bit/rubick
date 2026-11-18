@@ -5,7 +5,8 @@
 # yet made. Run directly, it checks itself against a scratch home.
 
 # A directory as the file system names it: the part that exists followed
-# through its links, the part not yet made with its `.` and `..` worked out.
+# through its links before any `..` is taken, the part not yet made with its
+# `.` and `..` worked out. Fails where the part that exists cannot be entered.
 canonical_dir() (
   set -f
   dir=$1 rest=""
@@ -13,7 +14,7 @@ canonical_dir() (
     rest="$(basename "$dir")${rest:+/$rest}"
     dir=$(dirname "$dir")
   done
-  out=$(cd "$dir" && pwd -P)
+  out=$(cd -P -- "$dir" && pwd -P) || exit 1
   IFS=/
   for part in $rest; do
     case $part in
@@ -31,8 +32,10 @@ refuse_home_kubeconfig() {
     to=$(readlink "$path")
     case $to in /*) path=$to ;; *) path="$(dirname "$path")/$to" ;; esac
   done
-  dir=$(canonical_dir "$(dirname "$path")")
-  home=$(canonical_dir "$HOME/.kube")
+  if ! dir=$(canonical_dir "$(dirname "$path")") || ! home=$(canonical_dir "$HOME/.kube"); then
+    echo "cannot resolve $path or $HOME/.kube, so it may be the home kubeconfig" >&2
+    exit 1
+  fi
   if [ "$dir/$(basename "$path")" = "$home/config" ] || [ "$path" -ef "$HOME/.kube/config" ]; then
     echo "refusing to write $HOME/.kube/config" >&2
     exit 1
@@ -42,7 +45,7 @@ refuse_home_kubeconfig() {
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   set -u
   scratch=$(mktemp -d)
-  trap 'rm -rf "$scratch"' EXIT
+  trap 'chmod -R u+rwx "$scratch"; rm -rf "$scratch"' EXIT
   export HOME="$scratch/home"
   mkdir -p "$HOME/.kube" "$scratch/sandbox"
   touch "$HOME/.kube/config"
@@ -67,6 +70,13 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   expect refused "$scratch/dangling-home"
   expect allowed "$scratch/dangling"
   rm -rf "$HOME/.kube"
+  mkdir "$HOME/sub" "$scratch/locked"
+  ln -s "$HOME/sub" "$scratch/sub-link"
+  expect refused "$scratch/sub-link/../.kube/config"
+  chmod 000 "$scratch/locked"
+  expect refused "$scratch/locked/inside/config"
+  (refuse_home_kubeconfig "$scratch/locked/inside/config") 2>&1 | grep -q "cannot resolve" ||
+    { echo "a path that cannot be entered is not said as such" >&2; failed=1; }
   expect refused "$HOME/./.kube/config"
   expect refused "$HOME/gone/../.kube/config"
   expect refused "$HOME/.kube/./config"

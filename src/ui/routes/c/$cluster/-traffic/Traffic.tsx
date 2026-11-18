@@ -583,6 +583,16 @@ function LiveView({
           },
         ]
       : []),
+    ...(live.waiting > 0
+      ? [
+          {
+            text: t("traffic", "liveWaiting", {
+              waiting: t("count", "flows", { n: live.waiting }),
+            }),
+            tone: "warn" as const,
+          },
+        ]
+      : []),
     ...(live.unreached.length > 0
       ? [
           {
@@ -619,11 +629,23 @@ function LiveView({
         ...caveats,
       ]}
       unread={[]}
-      quiet={t(
-        "traffic",
-        live.unreached.length > 0 ? "nothingOnReached" : "nothingInWindow",
-        { sources: LIVE_SOURCE.name, scope: scopeWords, window: lastMinute }
-      )}
+      quiet={
+        live.waiting > 0
+          ? t("traffic", "liveWaiting", {
+              waiting: t("count", "flows", { n: live.waiting }),
+            })
+          : t(
+              "traffic",
+              live.unreached.length > 0
+                ? "nothingOnReached"
+                : "nothingInWindow",
+              {
+                sources: LIVE_SOURCE.name,
+                scope: scopeWords,
+                window: lastMinute,
+              }
+            )
+      }
       panelWindow={lastMinute}
       cut={live.untracked > 0}
       measured={LIVE_MEASURED}

@@ -2579,6 +2579,8 @@ export const ru: Catalogue = {
     liveUnsubscribed: "Поток не начали слушать вовремя, и он остановлен.",
     liveFailed: "Не удалось прочитать Hubble Relay: {said}",
     liveLost: "Hubble сообщает: {lost} потеряно, не дойдя до relay.",
+    liveWaiting:
+      "{waiting} от Relay ждут, пока прочитаются их поды, и будут показаны после этого.",
     liveUntracked:
       "{untracked} не уместились в число пар, которые держатся одновременно, и не показаны.",
     liveUnreached:
