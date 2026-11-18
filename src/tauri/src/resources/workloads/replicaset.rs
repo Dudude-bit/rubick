@@ -153,14 +153,14 @@ impl ReplicaSetInfo {
 
 impl From<&ReplicaSetCondition> for ConditionInfo {
     fn from(cond: &ReplicaSetCondition) -> Self {
-        Self {
-            type_: cond.type_.clone(),
-            status: cond.status.clone(),
-            reason: cond.reason.clone(),
-            message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
-            observed_generation: None,
-        }
+        Self::new(
+            cond.type_.clone(),
+            cond.status.clone(),
+            cond.reason.clone(),
+            cond.message.clone(),
+            cond.last_transition_time.as_ref().map(Moment::moment),
+            None,
+        )
     }
 }
 

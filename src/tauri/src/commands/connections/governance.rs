@@ -39,13 +39,15 @@ pub(crate) fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectR
             .map(|conditions| {
                 conditions
                     .iter()
-                    .map(|c| ConditionInfo {
-                        type_: c.type_.clone(),
-                        status: c.status.clone(),
-                        reason: c.reason.clone(),
-                        message: c.message.clone(),
-                        last_transition_time: c.last_transition_time.as_ref().map(Moment::moment),
-                        observed_generation: None,
+                    .map(|c| {
+                        ConditionInfo::new(
+                            c.type_.clone(),
+                            c.status.clone(),
+                            c.reason.clone(),
+                            c.message.clone(),
+                            c.last_transition_time.as_ref().map(Moment::moment),
+                            None,
+                        )
                     })
                     .collect()
             })
@@ -203,13 +205,15 @@ pub(super) fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
             .map(|conditions| {
                 conditions
                     .iter()
-                    .map(|c| ConditionInfo {
-                        type_: c.type_.clone(),
-                        status: c.status.clone(),
-                        reason: Some(c.reason.clone()).filter(|r| !r.is_empty()),
-                        message: Some(c.message.clone()).filter(|m| !m.is_empty()),
-                        last_transition_time: Some(c.last_transition_time.moment()),
-                        observed_generation: None,
+                    .map(|c| {
+                        ConditionInfo::new(
+                            c.type_.clone(),
+                            c.status.clone(),
+                            Some(c.reason.clone()).filter(|r| !r.is_empty()),
+                            Some(c.message.clone()).filter(|m| !m.is_empty()),
+                            Some(c.last_transition_time.moment()),
+                            None,
+                        )
                     })
                     .collect()
             })
