@@ -825,6 +825,50 @@ describe("the last change a card names", () => {
   });
 
   /**
+   * A long change no read placed: the card cut the line at its width, and
+   * the doubt at its end went with it, so the row read as this service's
+   * own. Fails if the doubt is drawn inside the line the card cuts.
+   */
+  it("draws the doubt of a change no read placed apart from the line it cuts", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { useClusterStore } = await import("@/stores/clusterStore");
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "timeline_read"
+        ? {
+            rows: [
+              {
+                id: "1",
+                seq: 1,
+                at: Date.now() - 60_000,
+                kind: "Deployment",
+                group: "apps",
+                namespace: "shop",
+                name: "payments",
+                what: { says: "created" },
+                atRelist: false,
+              },
+            ],
+            more: false,
+            newest: 1,
+            spans: { followed: [], meta: [] },
+            letGo: { changes: null, warnings: null, normal: null },
+            keeping: { says: "kept" },
+            unreadable: 0,
+            epoch: 0,
+            identity: { says: "known" },
+            vouched: [{ first: 2, last: null }],
+          }
+        : undefined
+    );
+    await mount();
+    const doubt = await screen.findByText(
+      /^Recorded under this name while which cluster this is could not be checked/
+    );
+    expect(doubt.closest(".truncate")).toBeNull();
+  });
+
+  /**
    * After Settings › Clear, a Deployment edited three times this week read
    * "nothing seen while this app was watching". Fails if a card whose
    * changes were cleared or let go says none was seen, there or in Share.

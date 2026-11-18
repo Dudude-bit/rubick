@@ -220,20 +220,33 @@ export function ServiceCard({
         </dd>
 
         <dt className="text-fg-fnt">{t("services", "lastChange")}</dt>
-        <dd className="min-w-0 truncate text-fg-mut">
-          {!latest || !("what" in latest) ? (
-            <span className="text-fg-fnt">
-              {lastChangeWords(latest, t, (ms) => formatWhen(ms, "moment"))}
+        {latest && "unplaced" in latest ? (
+          // The doubt on a line of its own: at the end of the change's line
+          // it was the part cut off, and the row read as this cluster's.
+          <dd className="min-w-0 text-fg-mut">
+            <span className="block truncate font-mono">
+              {rowWords(latest.unplaced, t)}
             </span>
-          ) : (
-            <>
-              <span className="font-mono">{rowWords(latest, t)}</span>
-              <span className="ml-1 text-fg-fnt">
-                <RealtimeAge timestamp={new Date(latest.at).toISOString()} />
+            <span className="block text-warn">
+              {t("changes", "journalUnplaced")}
+            </span>
+          </dd>
+        ) : (
+          <dd className="min-w-0 truncate text-fg-mut">
+            {!latest || !("what" in latest) ? (
+              <span className="text-fg-fnt">
+                {lastChangeWords(latest, t, (ms) => formatWhen(ms, "moment"))}
               </span>
-            </>
-          )}
-        </dd>
+            ) : (
+              <>
+                <span className="font-mono">{rowWords(latest, t)}</span>
+                <span className="ml-1 text-fg-fnt">
+                  <RealtimeAge timestamp={new Date(latest.at).toISOString()} />
+                </span>
+              </>
+            )}
+          </dd>
+        )}
 
         {waiting.length > 0 ? (
           <>
