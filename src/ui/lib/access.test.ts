@@ -78,7 +78,24 @@ describe("the can-i command a refusal quotes", () => {
           nowhere
         )
       )
-    ).toBe("delete nodes");
+    ).toBe("delete nodes --all-namespaces");
+  });
+
+  /**
+   * A question about a cluster-scoped object went to the authorizer with no
+   * namespace; quoted without one, kubectl asks in the context's namespace,
+   * where a namespace-wide Role over every resource answers yes to what the
+   * cluster said no to. Fails if the quoted line can ask in a namespace the
+   * app did not.
+   */
+  it("asks a question the app asked without a namespace in none", () => {
+    const words = deniedWords(
+      t,
+      "delete",
+      { group: "", resource: "nodes", namespace: null, name: "node01" },
+      nowhere
+    );
+    expect(command(words)).toBe("delete nodes/node01 --all-namespaces");
   });
 
   /**

@@ -176,7 +176,9 @@ function questionWords(asked: Asked): string {
     asked.verb,
     asked.name ? `${resource}/${word(asked.name)}` : resource,
     ...(asked.subresource ? [`--subresource=${asked.subresource}`] : []),
-    ...(asked.namespace ? ["-n", word(asked.namespace)] : []),
+    // Without a namespace kubectl asks in the context's own, where a Role
+    // can say yes to what the cluster-wide question was told no.
+    ...(asked.namespace ? ["-n", word(asked.namespace)] : ["--all-namespaces"]),
   ].join(" ");
 }
 
