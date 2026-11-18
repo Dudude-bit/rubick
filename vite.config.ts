@@ -115,6 +115,7 @@ export default defineConfig({
       "rubick/status-is-a-code": "error",
       "rubick/no-native-select": "error",
       "rubick/no-overlay-scrollbar": "error",
+      "rubick/store-records-are-named": "error",
     },
     overrides: [
       {

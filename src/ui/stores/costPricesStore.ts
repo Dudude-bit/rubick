@@ -11,9 +11,17 @@ import { persist } from "zustand/middleware";
 
 import { persistedByName } from "@/lib/kept-by-name";
 import type { Prices } from "@/lib/cost";
+import {
+  type Named,
+  entryOf,
+  named,
+  storedEntries,
+  withEntry,
+  withoutEntry,
+} from "@/lib/named";
 
 interface CostPricesState {
-  prices: Record<string, Prices>;
+  prices: Named<Prices>;
   setPrices: (context: string, prices: Prices | null) => void;
 }
 
@@ -33,16 +41,11 @@ export function pricesOf(raw: unknown): Prices | null {
   };
 }
 
-/**
- * What a stored state holds that is a cluster's prices; the rest is dropped.
- * Built as own entries: assigned, a context named `__proto__` sets the
- * record's prototype and is never a key.
- */
-function validPrices(persisted: unknown): Record<string, Prices> {
+/** What a stored state holds that is a cluster's prices; the rest is dropped. */
+function validPrices(persisted: unknown): Named<Prices> {
   const stored = (persisted as { prices?: unknown } | undefined)?.prices;
-  if (!stored || typeof stored !== "object") return {};
-  return Object.fromEntries(
-    Object.entries(stored).flatMap(([context, raw]) => {
+  return named(
+    storedEntries(stored).flatMap(([context, raw]): [string, Prices][] => {
       const valid = pricesOf(raw);
       return valid ? [[context, valid]] : [];
     })
@@ -52,17 +55,14 @@ function validPrices(persisted: unknown): Record<string, Prices> {
 export const useCostPricesStore = create<CostPricesState>()(
   persist(
     (set) => ({
-      prices: {},
+      prices: named(),
       setPrices: (context, prices) =>
         set((state) => {
           const valid = prices && pricesOf(prices);
-          const rest = Object.entries(state.prices).filter(
-            ([name]) => name !== context
-          );
           return {
-            prices: Object.fromEntries(
-              valid ? [...rest, [context, valid]] : rest
-            ),
+            prices: valid
+              ? withEntry(state.prices, context, valid)
+              : withoutEntry(state.prices, context),
           };
         }),
     }),
@@ -85,9 +85,7 @@ export const useCostPricesStore = create<CostPricesState>()(
 // Another cluster's prices are not this one's.
 persistedByName((context) =>
   useCostPricesStore.setState((state) => ({
-    prices: Object.fromEntries(
-      Object.entries(state.prices).filter(([name]) => name !== context)
-    ),
+    prices: withoutEntry(state.prices, context),
   }))
 );
 
@@ -95,8 +93,7 @@ persistedByName((context) =>
 export function useCostPrices(
   context: string | null | undefined
 ): Prices | null {
-  // A context name is the reader's: `constructor` must not find a property.
   return useCostPricesStore((s) =>
-    context && Object.hasOwn(s.prices, context) ? s.prices[context]! : null
+    context ? (entryOf(s.prices, context) ?? null) : null
   );
 }

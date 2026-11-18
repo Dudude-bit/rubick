@@ -57,13 +57,14 @@ import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "./portForwardStore";
+import { named } from "@/lib/named";
 
 beforeEach(() => {
   vi.clearAllMocks();
   usePortForwardStore.setState({
     configs: [],
     sessions: [],
-    statusBySession: {},
+    statusBySession: named(),
     failed: [],
     configsLoaded: false,
   });

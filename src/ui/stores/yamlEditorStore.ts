@@ -4,6 +4,7 @@ import { keptByName } from "@/lib/kept-by-name";
 import { currentConnection } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ManifestResult } from "@/generated/types";
+import { entryOf, named, withEntry, type Named } from "@/lib/named";
 
 export interface HistoryEntry {
   timestamp: number;
@@ -51,7 +52,7 @@ interface YamlEditorState {
   applyResult: ResultShown | null;
 
   // History (per resource, stored by key)
-  history: Record<string, HistoryEntry[]>;
+  history: Named<HistoryEntry[]>;
 
   // Actions
   openEditor: (params: {
@@ -118,7 +119,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   showDiff: false,
   validationResult: null,
   applyResult: null,
-  history: {},
+  history: named(),
 
   openEditor: async ({ title, resourceKey, fetchYaml, readOnly = false }) => {
     const connection = currentConnection();
@@ -150,7 +151,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
             label: e.label ?? undefined,
           }));
           set((state) => ({
-            history: { ...state.history, [key]: history },
+            history: withEntry(state.history, key, history),
           }));
         } catch (error) {
           console.error("Failed to load YAML history:", error);
@@ -239,16 +240,11 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       label,
     };
 
-    const currentHistory = history[key] || [];
+    const currentHistory = entryOf(history, key) ?? [];
     // Add to front, limit size
     const updatedHistory = [newEntry, ...currentHistory].slice(0, 20);
 
-    set({
-      history: {
-        ...history,
-        [key]: updatedHistory,
-      },
-    });
+    set({ history: withEntry(history, key, updatedHistory) });
 
     // Save to backend (fire and forget)
     commands
@@ -267,7 +263,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
     const key = historyKey(get());
     if (!key) return;
 
-    const entry = history[key]?.find((e) => e.timestamp === timestamp);
+    const entry = entryOf(history, key)?.find((e) => e.timestamp === timestamp);
     if (entry) {
       set({
         editedContent: entry.content,
@@ -281,7 +277,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
     const { history } = get();
     const key = historyKey(get());
     if (!key) return [];
-    return history[key] || [];
+    return entryOf(history, key) ?? [];
   },
 
   resetToOriginal: () => {

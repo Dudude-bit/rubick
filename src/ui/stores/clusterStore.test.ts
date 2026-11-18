@@ -35,9 +35,15 @@ import { keptByName } from "@/lib/kept-by-name";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { currentConnection } from "@/lib/refusals";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
-import { hasSession, useClusterStore, wayBackTo } from "./clusterStore";
+import {
+  hasSession,
+  scopeFor,
+  useClusterStore,
+  wayBackTo,
+} from "./clusterStore";
 import { holdClusters } from "./heldClusters";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
+import { entriesOf, entryOf, named } from "@/lib/named";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
 
@@ -91,7 +97,7 @@ describe("moving between clusters", () => {
    */
   it("restores what that cluster was last left on", async () => {
     useClusterStore.setState({
-      savedScopes: { "prod-eu": ["web"], "prod-us": ["api", "jobs"] },
+      savedScopes: named({ "prod-eu": ["web"], "prod-us": ["api", "jobs"] }),
       currentContext: "prod-eu",
       namespaceScope: ["web"],
       currentNamespace: "web",
@@ -106,7 +112,7 @@ describe("moving between clusters", () => {
 
   it("gives the whole cluster to one it has never been asked about", async () => {
     useClusterStore.setState({
-      savedScopes: { "prod-eu": ["web"] },
+      savedScopes: named({ "prod-eu": ["web"] }),
       currentContext: "prod-eu",
       namespaceScope: ["web"],
       currentNamespace: "web",
@@ -123,7 +129,7 @@ describe("moving between clusters", () => {
    *  the new cluster opened filtered to a namespace it does not have. */
   it("does not carry the last cluster's scope across a disconnect", async () => {
     useClusterStore.setState({
-      savedScopes: { "prod-eu": ["web"] },
+      savedScopes: named({ "prod-eu": ["web"] }),
       currentContext: null,
       namespaceScope: ["web"],
       currentNamespace: "web",
@@ -144,7 +150,7 @@ describe("moving between clusters", () => {
       contexts: [
         { name: "marco", namespace: "team-checkout" },
       ] as unknown as ContextInfo[],
-      savedScopes: {},
+      savedScopes: named({}),
       currentContext: null,
       namespaceScope: [],
     });
@@ -161,7 +167,7 @@ describe("moving between clusters", () => {
       contexts: [
         { name: "marco", namespace: "team-checkout" },
       ] as unknown as ContextInfo[],
-      savedScopes: { marco: [] },
+      savedScopes: named({ marco: [] }),
       currentContext: null,
       namespaceScope: [],
     });
@@ -174,7 +180,7 @@ describe("moving between clusters", () => {
   /** Switching to the cluster already open changes nothing. */
   it("leaves the scope alone when the context has not moved", async () => {
     useClusterStore.setState({
-      savedScopes: { "prod-eu": ["something", "else"] },
+      savedScopes: named({ "prod-eu": ["something", "else"] }),
       currentContext: "prod-eu",
       namespaceScope: ["web", "api"],
       currentNamespace: "",
@@ -601,7 +607,7 @@ describe("switching clusters keeps the one left until the new one lands", () => 
       errorContext: null,
       live: [],
       wayBack: null,
-      failures: {},
+      failures: named({}),
       lastConnected: null,
     });
     backend = fakeBackend();
@@ -825,7 +831,7 @@ describe("switching clusters keeps the one left until the new one lands", () => 
     expect(state().errorContext).toBe("acme-prod-eu");
 
     await state().connect("acme-staging");
-    expect(state().failures["acme-prod-eu"]).toEqual({
+    expect(entryOf(state().failures, "acme-prod-eu")).toEqual({
       kind: "timeout",
       error: "client error (Connect): deadline has elapsed",
     });
@@ -868,12 +874,12 @@ describe("switching clusters keeps the one left until the new one lands", () => 
    * cluster does not count as its last use.
    */
   it("counts leaving a cluster as its last use", async () => {
-    useClusterRecencyStore.setState({ lastUsed: { "acme-staging": 1 } });
+    useClusterRecencyStore.setState({ lastUsed: named({ "acme-staging": 1 }) });
 
     await state().connect("acme-dev");
 
     expect(
-      useClusterRecencyStore.getState().lastUsed["acme-staging"]
+      entryOf(useClusterRecencyStore.getState().lastUsed, "acme-staging")
     ).toBeGreaterThan(1);
   });
 });
@@ -894,7 +900,7 @@ describe("the kubeconfig files changed under a connected window", () => {
       error: null,
       errorContext: null,
       live: ["acme-staging", "acme-prod-eu"],
-      paths: { "acme-staging": "direct", "acme-prod-eu": "direct" },
+      paths: named({ "acme-staging": "direct", "acme-prod-eu": "direct" }),
       wayBack: null,
     });
   });
@@ -990,5 +996,43 @@ describe("the kubeconfig files changed under a connected window", () => {
     off();
 
     expect(forget).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("clusters named like what every object has", () => {
+  const listed = (...names: string[]) =>
+    names.map((name) => ({ name }) as ContextInfo);
+
+  /**
+   * `__proto__` and `constructor` are context names like any other. Fails
+   * if a scope saved under `__proto__` is lost on launch (assigning it set
+   * the record's prototype), or if moving to a cluster with no saved scope
+   * reads `constructor`'s or `toString`'s inherited function as one, which
+   * threw in the middle of the switch.
+   */
+  it("restores, reads and lists the scopes saved under __proto__ and constructor", async () => {
+    const names = listed("prod", "__proto__", "constructor", "toString");
+    vi.mocked(commands.listContexts).mockResolvedValueOnce(names);
+    vi.mocked(commands.getClusterPreferences).mockResolvedValueOnce({
+      lastContext: "constructor",
+      namespaces: JSON.parse('{"__proto__":"shop","prod":"api"}'),
+      scopes: JSON.parse('{"constructor":["web","jobs"]}'),
+    } as never);
+    useClusterStore.setState({
+      savedScopes: named(),
+      namespaceScope: [],
+      contextsKnown: false,
+      lastContext: null,
+    });
+    await state().loadContexts();
+    expect(entriesOf(state().savedScopes)).toEqual([
+      ["__proto__", ["shop"]],
+      ["prod", ["api"]],
+      ["constructor", ["web", "jobs"]],
+    ]);
+    expect(state().namespaceScope).toEqual(["web", "jobs"]);
+    const at = { ...state(), contexts: names };
+    expect(scopeFor(at, "__proto__", true).namespaceScope).toEqual(["shop"]);
+    expect(scopeFor(at, "toString", true).namespaceScope).toEqual([]);
   });
 });

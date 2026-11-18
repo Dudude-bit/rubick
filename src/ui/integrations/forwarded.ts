@@ -16,7 +16,10 @@ import { SaidError, type Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import type { PortForwardSessionInfo, ServiceInfo } from "@/generated/types";
-import { useClusterForwardStore } from "@/stores/clusterForwardStore";
+import {
+  everyForward,
+  useClusterForwardStore,
+} from "@/stores/clusterForwardStore";
 
 /** Where a forwarded connection actually points. */
 export interface Forwarded {
@@ -62,13 +65,11 @@ export function freePort(taken: ReadonlySet<number>): number {
 export async function portsInUse(): Promise<Set<number>> {
   const sessions = await commands.listPortForwards().catch(() => []);
   const configs = await commands.listPortForwardConfigs().catch(() => []);
-  const saved = Object.values(useClusterForwardStore.getState().forwards);
+  const saved = everyForward(useClusterForwardStore.getState().forwards);
   return new Set([
     ...sessions.map((session) => session.localPort),
     ...configs.map((config) => config.localPort),
-    ...saved.flatMap((cluster) =>
-      Object.values(cluster).map((preference) => preference.localPort)
-    ),
+    ...saved.map((preference) => preference.localPort),
   ]);
 }
 

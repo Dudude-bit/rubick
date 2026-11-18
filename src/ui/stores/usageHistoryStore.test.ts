@@ -4,6 +4,7 @@ import {
   seriesKey,
   useUsageHistoryStore,
 } from "@/stores/usageHistoryStore";
+import { entriesOf, entryOf } from "@/lib/named";
 
 const poll = (t: number, cpu: number) => ({
   t,
@@ -30,13 +31,13 @@ describe("usage history buffers", () => {
     record(after, poll(3000, 4));
 
     const series = useUsageHistoryStore.getState().series;
-    expect(series[before].samples).toHaveLength(2);
-    expect(series[after].samples).toHaveLength(1);
-    expect(series[after].samples[0].cpuMillicores).toBe(4);
+    expect(entryOf(series, before)!.samples).toHaveLength(2);
+    expect(entryOf(series, after)!.samples).toHaveLength(1);
+    expect(entryOf(series, after)!.samples[0].cpuMillicores).toBe(4);
     // The new pod's window must contain none of the old pod's readings.
-    expect(series[after].samples.some((s) => s.cpuMillicores === 110)).toBe(
-      false
-    );
+    expect(
+      entryOf(series, after)!.samples.some((s) => s.cpuMillicores === 110)
+    ).toBe(false);
   });
 
   it("gives two pods with the same name in different namespaces their own window", () => {
@@ -44,7 +45,7 @@ describe("usage history buffers", () => {
     record(seriesKey("Pod", "uid-a")!, poll(1000, 5));
     record(seriesKey("Pod", "uid-b")!, poll(1000, 50));
     const series = useUsageHistoryStore.getState().series;
-    expect(Object.keys(series)).toHaveLength(2);
+    expect(entriesOf(series)).toHaveLength(2);
   });
 
   it("refuses a key for an object with no uid rather than falling back to a name", () => {
@@ -59,10 +60,10 @@ describe("usage history buffers", () => {
       record(seriesKey("Pod", `uid-${i}`)!, poll(1000 + i, i));
     }
     const series = useUsageHistoryStore.getState().series;
-    expect(Object.keys(series)).toHaveLength(MAX_SERIES);
+    expect(entriesOf(series)).toHaveLength(MAX_SERIES);
     // The ones dropped are the ones written to longest ago.
-    expect(series[seriesKey("Pod", "uid-39")!]).toBeDefined();
-    expect(series[seriesKey("Pod", "uid-0")!]).toBeUndefined();
+    expect(entryOf(series, seriesKey("Pod", "uid-39")!)).toBeDefined();
+    expect(entryOf(series, seriesKey("Pod", "uid-0")!)).toBeUndefined();
   });
 
   it("counts a repeated poll once", () => {
@@ -70,6 +71,8 @@ describe("usage history buffers", () => {
     const key = seriesKey("Pod", "uid-x")!;
     record(key, poll(1000, 10));
     record(key, poll(1000, 10));
-    expect(useUsageHistoryStore.getState().series[key].samples).toHaveLength(1);
+    expect(
+      entryOf(useUsageHistoryStore.getState().series, key)!.samples
+    ).toHaveLength(1);
   });
 });

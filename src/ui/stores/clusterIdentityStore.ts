@@ -20,6 +20,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import { CLUSTER_HUES } from "@/lib/cluster-identity";
+import {
+  type Named,
+  entryOf,
+  named,
+  storedEntries,
+  withEntry,
+  withoutEntry,
+} from "@/lib/named";
 
 export interface ClusterMark {
   /**
@@ -39,7 +47,7 @@ export interface ClusterMark {
 }
 
 interface ClusterIdentityState {
-  marks: Record<string, ClusterMark>;
+  marks: Named<ClusterMark>;
   setAlias: (context: string, alias: string) => void;
   setHue: (context: string, hue: number | null) => void;
   setCritical: (context: string, critical: boolean | null) => void;
@@ -47,43 +55,39 @@ interface ClusterIdentityState {
 
 /** Drop a mark that no longer says anything, so a reset leaves no residue. */
 function write(
-  marks: Record<string, ClusterMark>,
+  marks: Named<ClusterMark>,
   context: string,
   mark: ClusterMark
-): Record<string, ClusterMark> {
-  const next = { ...marks };
-  if (
-    mark.alias === undefined &&
+): Named<ClusterMark> {
+  return mark.alias === undefined &&
     mark.hue === undefined &&
     mark.critical === undefined
-  )
-    delete next[context];
-  else next[context] = mark;
-  return next;
+    ? withoutEntry(marks, context)
+    : withEntry(marks, context, mark);
 }
 
 export const useClusterIdentityStore = create<ClusterIdentityState>()(
   persist(
     (set) => ({
-      marks: {},
+      marks: named(),
       setAlias: (context, alias) =>
         set((state) => ({
           marks: write(state.marks, context, {
-            ...state.marks[context],
+            ...entryOf(state.marks, context),
             alias: alias.trim() === "" ? undefined : alias,
           }),
         })),
       setHue: (context, hue) =>
         set((state) => ({
           marks: write(state.marks, context, {
-            ...state.marks[context],
+            ...entryOf(state.marks, context),
             hue: hue ?? undefined,
           }),
         })),
       setCritical: (context, critical) =>
         set((state) => ({
           marks: write(state.marks, context, {
-            ...state.marks[context],
+            ...entryOf(state.marks, context),
             critical: critical ?? undefined,
           }),
         })),
@@ -98,33 +102,31 @@ export const useClusterIdentityStore = create<ClusterIdentityState>()(
       // failure the fixed hue list exists to prevent.
       migrate: (persisted) => {
         const stored = (persisted as { marks?: unknown } | undefined)?.marks;
-        const marks: Record<string, ClusterMark> = {};
-        if (stored && typeof stored === "object") {
-          for (const [context, value] of Object.entries(stored)) {
-            const raw = value as ClusterMark | undefined;
-            const mark: ClusterMark = {};
-            if (typeof raw?.alias === "string" && raw.alias.trim() !== "") {
-              mark.alias = raw.alias;
-            }
-            if (
-              typeof raw?.hue === "number" &&
-              (CLUSTER_HUES as readonly number[]).includes(raw.hue)
-            ) {
-              mark.hue = raw.hue;
-            }
-            if (typeof raw?.critical === "boolean") {
-              mark.critical = raw.critical;
-            }
-            if (
-              mark.alias !== undefined ||
-              mark.hue !== undefined ||
-              mark.critical !== undefined
-            ) {
-              marks[context] = mark;
-            }
+        const marks: [string, ClusterMark][] = [];
+        for (const [context, value] of storedEntries(stored)) {
+          const raw = value as ClusterMark | undefined;
+          const mark: ClusterMark = {};
+          if (typeof raw?.alias === "string" && raw.alias.trim() !== "") {
+            mark.alias = raw.alias;
+          }
+          if (
+            typeof raw?.hue === "number" &&
+            (CLUSTER_HUES as readonly number[]).includes(raw.hue)
+          ) {
+            mark.hue = raw.hue;
+          }
+          if (typeof raw?.critical === "boolean") {
+            mark.critical = raw.critical;
+          }
+          if (
+            mark.alias !== undefined ||
+            mark.hue !== undefined ||
+            mark.critical !== undefined
+          ) {
+            marks.push([context, mark]);
           }
         }
-        return { marks } as ClusterIdentityState;
+        return { marks: named(marks) } as ClusterIdentityState;
       },
     }
   )
@@ -132,10 +134,10 @@ export const useClusterIdentityStore = create<ClusterIdentityState>()(
 
 /** What this cluster is called, or nothing if it is called what it is named. */
 export function aliasOf(
-  marks: Record<string, ClusterMark>,
+  marks: Named<ClusterMark>,
   context: string
 ): string | undefined {
-  return marks[context]?.alias?.trim() || undefined;
+  return entryOf(marks, context)?.alias?.trim() || undefined;
 }
 
 /** The mark for one cluster, without re-rendering on every other cluster's. */
@@ -143,8 +145,9 @@ export function useClusterMark(
   context: string | null | undefined
 ): ClusterMark {
   return (
-    useClusterIdentityStore((s) => (context ? s.marks[context] : EMPTY)) ??
-    EMPTY
+    useClusterIdentityStore((s) =>
+      context ? entryOf(s.marks, context) : EMPTY
+    ) ?? EMPTY
   );
 }
 

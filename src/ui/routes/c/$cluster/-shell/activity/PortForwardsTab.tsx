@@ -46,6 +46,7 @@ import {
 import { useAsk } from "../../-object/useAsk";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { entryOf } from "@/lib/named";
 
 /** `undefined` is closed, `null` is the new-config form. */
 type Editing = PortForwardConfig | null | undefined;
@@ -402,7 +403,7 @@ export function PortForwardsTab() {
               <SessionRow
                 key={session.id}
                 session={session}
-                status={statusBySession[session.id]}
+                status={entryOf(statusBySession, session.id)}
                 isBusy={busyIds.has(session.id)}
                 onStop={() => handleStop(session.id)}
                 watched={watched}
@@ -440,7 +441,7 @@ export function PortForwardsTab() {
             <SessionRow
               key={session.id}
               session={session}
-              status={statusBySession[session.id]}
+              status={entryOf(statusBySession, session.id)}
               isBusy={busyIds.has(session.id)}
               onStop={() => handleStop(session.id)}
               namesCluster

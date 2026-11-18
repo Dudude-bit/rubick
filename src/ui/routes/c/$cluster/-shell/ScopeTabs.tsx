@@ -94,6 +94,7 @@ import {
   useScopeTabStore,
   type ScopeTab,
 } from "@/stores/scopeTabStore";
+import { entryOf } from "@/lib/named";
 
 /**
  * The window's tab strip. A tab is a route plus the scope it is read under,
@@ -1087,7 +1088,7 @@ function NamespacePopover({
   const context = useClusterStore((s) => s.currentContext);
   const recent =
     useNamespaceRecencyStore((s) =>
-      context ? s.recent[context] : undefined
+      context ? entryOf(s.recent, context) : undefined
     ) ?? NO_RECENT;
   // Counted like the scope's own, so a namespace keeps its count when the
   // window moves off it.

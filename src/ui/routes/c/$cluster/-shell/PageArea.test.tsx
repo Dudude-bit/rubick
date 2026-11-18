@@ -25,6 +25,7 @@ import { setRouter } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { renderWithProviders } from "@/test/render";
+import { named } from "@/lib/named";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -89,7 +90,7 @@ beforeEach(() => {
     errorContext: null,
     live: [],
     wayBack: null,
-    failures: {},
+    failures: named({}),
   });
 });
 

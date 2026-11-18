@@ -31,6 +31,7 @@ import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { translate } from "@/i18n";
 import { SaidError, sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import { named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -377,8 +378,8 @@ describe("a port for a new forward", () => {
    */
   it("is none another cluster's saved forward is on", async () => {
     useClusterForwardStore.setState({
-      forwards: {
-        prod: {
+      forwards: named({
+        prod: named({
           prometheus: {
             namespace: "mon",
             service: "prom",
@@ -386,8 +387,8 @@ describe("a port for a new forward", () => {
             localPort: 20000,
             autoStart: false,
           },
-        },
-      },
+        }),
+      }),
     });
     vi.mocked(commands.portForwardService).mockImplementationOnce(
       async (_name, _namespace, request) =>

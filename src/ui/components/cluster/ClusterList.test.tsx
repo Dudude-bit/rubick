@@ -28,6 +28,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { ContextInfo } from "@/generated/types";
 
 import { ClusterList } from "./ClusterList";
+import { named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -63,9 +64,9 @@ beforeEach(() => {
   useClusterStore.setState({
     contexts: NAMES.map(context),
     live: [],
-    failures: {},
+    failures: named({}),
   });
-  useClusterRecencyStore.setState({ lastUsed: {} });
+  useClusterRecencyStore.setState({ lastUsed: named({}) });
   useClusterIdentityStore.setState({ marks: {} });
 });
 
@@ -132,7 +133,7 @@ describe("narrowing the cluster list", () => {
   it("finds a cluster by the name its user renamed it to", async () => {
     const user = userEvent.setup();
     useClusterIdentityStore.setState({
-      marks: { [ARN]: { alias: "payments" } },
+      marks: named({ [ARN]: { alias: "payments" } }),
     });
     render(<Harness />);
 
@@ -350,7 +351,9 @@ describe("the recency groups, under a filter", () => {
    */
   it("drops the captions when the filter leaves only one group", async () => {
     const user = userEvent.setup();
-    useClusterRecencyStore.setState({ lastUsed: { "prod-eus2-mki": 1_000 } });
+    useClusterRecencyStore.setState({
+      lastUsed: named({ "prod-eus2-mki": 1_000 }),
+    });
     render(<Harness />);
 
     expect(screen.getByText(t("cluster", "recent"))).toBeInTheDocument();
@@ -372,7 +375,9 @@ describe("the recent clusters, in Russian", () => {
    *  template literal the catalogue never saw. */
   it("says when a cluster was last used in the reader's language", () => {
     useLocaleStore.setState({ choice: "ru" });
-    useClusterRecencyStore.setState({ lastUsed: { "prod-eus2-mki": 1_000 } });
+    useClusterRecencyStore.setState({
+      lastUsed: named({ "prod-eus2-mki": 1_000 }),
+    });
     render(<Harness />);
 
     expect(screen.getByText(/открывался .* назад/)).toBeInTheDocument();
@@ -392,7 +397,7 @@ describe("what each row says about its cluster", () => {
    */
   it("says live, not an age, for a cluster still connected", () => {
     useClusterRecencyStore.setState({
-      lastUsed: { "prod-eus2-mki": 1_000, "prod-euw1-mki": 2_000 },
+      lastUsed: named({ "prod-eus2-mki": 1_000, "prod-euw1-mki": 2_000 }),
     });
     useClusterStore.setState({ live: ["prod-eus2-mki"] });
     render(<Harness />);
@@ -410,9 +415,9 @@ describe("what each row says about its cluster", () => {
    */
   it("marks a context whose last connect failed, with why on hover", () => {
     useClusterStore.setState({
-      failures: {
+      failures: named({
         "dev-euw1-mki": { kind: "timeout", error: "deadline has elapsed" },
-      },
+      }),
     });
     render(<Harness />);
 
@@ -424,5 +429,37 @@ describe("what each row says about its cluster", () => {
         context: "dev-euw1-mki",
       })
     );
+  });
+});
+
+describe("clusters named like what every object has", () => {
+  const rowOf = (name: string) =>
+    rows().find((row) => row.textContent?.includes(name)) as HTMLElement;
+
+  /**
+   * A context named `constructor` or `toString` read `Object`'s functions
+   * as its last use and its failure: the row said it had failed and gave an
+   * invalid date. Fails if a row says anything its own entry does not.
+   */
+  it("says of each row only what was kept under its own name", () => {
+    useClusterStore.setState({
+      contexts: ["__proto__", "constructor", "toString"].map(context),
+      failures: named([
+        ["__proto__", { kind: "timeout", error: "deadline has elapsed" }],
+      ]),
+    });
+    useClusterRecencyStore.setState({
+      lastUsed: named([["constructor", 1_000]]),
+    });
+    render(<Harness />);
+    expect(rowOf("__proto__").textContent).toContain(
+      t("cluster", "connectFailed")
+    );
+    for (const name of ["constructor", "toString"])
+      expect(rowOf(name).textContent).not.toContain(
+        t("cluster", "connectFailed")
+      );
+    expect(rowOf("constructor").textContent).toMatch(/last used/);
+    expect(rowOf("toString").textContent).not.toMatch(/last used/);
   });
 });

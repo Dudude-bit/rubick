@@ -44,6 +44,7 @@ import { PortForwardsTab } from "./PortForwardsTab";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
+import { named } from "@/lib/named";
 
 // ----- Fixtures -----
 
@@ -86,7 +87,7 @@ describe("PortForwardsTab", () => {
     usePortForwardStore.setState({
       configs: [CONFIG],
       sessions: [SESSION],
-      statusBySession: {},
+      statusBySession: named(),
       failed: [],
       configsLoaded: true,
     });

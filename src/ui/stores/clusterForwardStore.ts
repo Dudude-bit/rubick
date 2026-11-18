@@ -24,6 +24,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import {
+  entriesOf,
+  entryOf,
+  named,
+  withEntry,
+  withoutEntry,
+  type Named,
+} from "@/lib/named";
+
 export interface ForwardPreference {
   namespace: string;
   service: string;
@@ -49,7 +58,7 @@ export interface ForwardPreference {
 }
 
 /** `context` → vendor id → what it points at. */
-type Saved = Record<string, Record<string, ForwardPreference>>;
+type Saved = Named<Named<ForwardPreference>>;
 
 interface ClusterForwardState {
   forwards: Saved;
@@ -66,46 +75,75 @@ interface ClusterForwardState {
 function write(
   saved: Saved,
   context: string,
-  forCluster: Record<string, ForwardPreference>
+  forCluster: Named<ForwardPreference>
 ): Saved {
-  const next = { ...saved };
-  if (Object.keys(forCluster).length === 0) delete next[context];
-  else next[context] = forCluster;
-  return next;
+  return entriesOf(forCluster).length === 0
+    ? withoutEntry(saved, context)
+    : withEntry(saved, context, forCluster);
 }
+
+const forClusterOf = (saved: Saved, context: string) =>
+  entryOf(saved, context) ?? named<ForwardPreference>();
 
 export const useClusterForwardStore = create<ClusterForwardState>()(
   persist(
     (set) => ({
-      forwards: {},
+      forwards: named(),
       remember: (context, vendorId, preference) =>
         set((state) => ({
-          forwards: write(state.forwards, context, {
-            ...state.forwards[context],
-            [vendorId]: preference,
-          }),
+          forwards: write(
+            state.forwards,
+            context,
+            withEntry(
+              forClusterOf(state.forwards, context),
+              vendorId,
+              preference
+            )
+          ),
         })),
       setAutoStart: (context, vendorId, on) =>
         set((state) => {
-          const found = state.forwards[context]?.[vendorId];
+          const forCluster = forClusterOf(state.forwards, context);
+          const found = entryOf(forCluster, vendorId);
           if (!found) return state;
           return {
-            forwards: write(state.forwards, context, {
-              ...state.forwards[context],
-              [vendorId]: { ...found, autoStart: on },
-            }),
+            forwards: write(
+              state.forwards,
+              context,
+              withEntry(forCluster, vendorId, { ...found, autoStart: on })
+            ),
           };
         }),
       forget: (context, vendorId) =>
-        set((state) => {
-          const forCluster = { ...state.forwards[context] };
-          delete forCluster[vendorId];
-          return { forwards: write(state.forwards, context, forCluster) };
-        }),
+        set((state) => ({
+          forwards: write(
+            state.forwards,
+            context,
+            withoutEntry(forClusterOf(state.forwards, context), vendorId)
+          ),
+        })),
     }),
     { name: "cluster-forwards" }
   )
 );
+
+/** What `context` forwards for that vendor in `forwards`, or `undefined`. */
+export function forwardOf(
+  forwards: Saved,
+  context: string | null,
+  vendorId: string
+): ForwardPreference | undefined {
+  return context === null
+    ? undefined
+    : entryOf(forClusterOf(forwards, context), vendorId);
+}
+
+/** Every forward saved, every cluster's. */
+export function everyForward(forwards: Saved): ForwardPreference[] {
+  return entriesOf(forwards).flatMap(([, forCluster]) =>
+    entriesOf(forCluster).map(([, preference]) => preference)
+  );
+}
 
 /** What this cluster forwards for that vendor, or `undefined`. */
 export function useForwardPreference(
@@ -113,7 +151,7 @@ export function useForwardPreference(
   vendorId: string
 ): ForwardPreference | undefined {
   return useClusterForwardStore((state) =>
-    context === null ? undefined : state.forwards[context]?.[vendorId]
+    forwardOf(state.forwards, context, vendorId)
   );
 }
 
@@ -123,5 +161,5 @@ export function forwardsFor(
   context: string | null
 ): Array<[string, ForwardPreference]> {
   if (context === null) return [];
-  return Object.entries(forwards[context] ?? {});
+  return entriesOf(forClusterOf(forwards, context));
 }

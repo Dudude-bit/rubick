@@ -46,7 +46,10 @@ import { useReadAt } from "@/hooks/useReadUid";
 import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
-import { useClusterForwardStore } from "@/stores/clusterForwardStore";
+import {
+  forwardOf,
+  useClusterForwardStore,
+} from "@/stores/clusterForwardStore";
 import { detectProvider } from "@/lib/cluster-identity";
 import {
   ResourceType,
@@ -597,7 +600,7 @@ function IntegrationsGroup() {
   // held up for it — the page has its own pending and error states, and a
   // sidebar row that swallowed a click for two seconds would read as broken.
   const press = (id: string) => {
-    const preference = context ? saved[context]?.[id] : undefined;
+    const preference = forwardOf(saved, context, id);
     if (!context || !preference) return;
     setWaking(id);
     setFailed(null);

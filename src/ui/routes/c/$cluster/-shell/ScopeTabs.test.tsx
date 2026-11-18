@@ -80,6 +80,7 @@ import { useKeptShellStore } from "@/stores/keptShellStore";
 import { translate } from "@/i18n";
 import type { ContextInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { named } from "@/lib/named";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -141,7 +142,7 @@ beforeEach(() => {
   summary.namespaces = [];
   summary.podCount = 0;
   summary.namespaceList = "listed";
-  useNamespaceRecencyStore.setState({ recent: {} });
+  useNamespaceRecencyStore.setState({ recent: named({}) });
   nsAccess.answers = [];
   useClusterIdentityStore.setState({ marks: {} });
   useClusterStore.setState({
@@ -243,7 +244,7 @@ describe("the tab's list of clusters", () => {
       live: ["acme-staging"],
     });
     useClusterRecencyStore.setState({
-      lastUsed: { "acme-staging": 3, "acme-qa": 2, "acme-prod-eu": 1 },
+      lastUsed: named({ "acme-staging": 3, "acme-qa": 2, "acme-prod-eu": 1 }),
     });
     useScopeTabStore.setState({
       tabs: [
@@ -1060,7 +1061,7 @@ describe("watching several namespaces at once", () => {
 describe("a cluster that has been renamed", () => {
   beforeEach(() => {
     useClusterIdentityStore.setState({
-      marks: { "k3d-dev": { alias: "payments" } },
+      marks: named({ "k3d-dev": { alias: "payments" } }),
     });
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" }), tab({ id: "b", context: "prod-eu" })],
@@ -1269,7 +1270,7 @@ describe("a token that may not list namespaces", () => {
   it("offers the kubeconfig namespace and the recent ones", async () => {
     const user = userEvent.setup();
     useNamespaceRecencyStore.setState({
-      recent: { "k3d-dev": ["team-shared"] },
+      recent: named({ "k3d-dev": ["team-shared"] }),
     });
     await mount();
     const list = await openPicker(user);
@@ -1327,7 +1328,7 @@ describe("a token that may not list namespaces", () => {
       { namespace: "team-blind", allowed: false, otherLists: false },
     ];
     useNamespaceRecencyStore.setState({
-      recent: { "k3d-dev": ["team-blind"] },
+      recent: named({ "k3d-dev": ["team-blind"] }),
     });
     useClusterStore.setState({
       contexts: [],

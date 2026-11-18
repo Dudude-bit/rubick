@@ -15,6 +15,7 @@ import { execBinary } from "./clusters/context-reading";
 import { useSettingSearchMatch } from "./settings-search";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { entryOf } from "@/lib/named";
 
 /**
  * The contexts are the screen.
@@ -120,7 +121,7 @@ export function ClustersSettings() {
               binding={bindingByContext.get(context.name)}
               binaries={binaries}
               connected={live.includes(context.name)}
-              failure={failures[context.name] ?? null}
+              failure={entryOf(failures, context.name) ?? null}
               onBind={setBinding}
               fromFile={fileOf.get(context.name)}
             />
