@@ -7,6 +7,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { iconSvg } from "@/lib/icon-svg";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
+import { heldUnder } from "@/lib/config-data";
 
 function byteSize(value: string): number {
   return new TextEncoder().encode(value).length;
@@ -43,9 +44,7 @@ export function configMapKeysSection(
       type: "table",
       columns: [t("share", "clKeyColumn"), t("share", "clSizeColumn")],
       rows: dataKeys.map((key) => {
-        const reason = query.data?.withheld?.[key];
-        const binary = query.data?.binary?.[key];
-        const value = query.data?.values?.[key];
+        const { withheld: reason, binary, value } = heldUnder(query.data, key);
         const size =
           reason !== undefined
             ? { text: withheldWords(reason, t), quiet: true }

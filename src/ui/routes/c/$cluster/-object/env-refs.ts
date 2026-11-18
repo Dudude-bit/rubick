@@ -1,5 +1,6 @@
 import type { ConfigData, Withheld } from "@/generated/types";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
+import { heldUnder } from "@/lib/config-data";
 
 /** A ConfigMap or Secret a container's environment names, as the read of it answered. */
 export type RefObject =
@@ -78,13 +79,12 @@ export function heldOf(
 ): Held {
   const data = query?.data;
   if (data) {
-    if (key in data.values) return { is: "value", value: data.values[key] };
-    if (key in data.withheld) {
-      return { is: "withheld", reason: data.withheld[key] };
-    }
-    if (key in data.binary) {
-      return { is: "binary", bytes: data.binary[key].bytes };
-    }
+    const held = heldUnder(data, key);
+    if (held.value !== undefined) return { is: "value", value: held.value };
+    if (held.withheld !== undefined)
+      return { is: "withheld", reason: held.withheld };
+    if (held.binary !== undefined)
+      return { is: "binary", bytes: held.binary.bytes };
     return { is: "absent" };
   }
   if (!query?.error) return { is: "reading" };

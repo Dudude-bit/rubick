@@ -18,6 +18,7 @@ import { useLocaleStore } from "@/stores/localeStore";
 import type { NodeInfo } from "@/generated/types";
 import { vendorLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
+import { named } from "@/lib/named";
 
 const capability = vi.fn();
 
@@ -67,7 +68,7 @@ const T0 = 1_700_000_000_000;
 const GI = 1024 ** 3;
 
 const window: NodeUsageWindow = {
-  nodes: {
+  nodes: named({
     hot: {
       cpuMillicores: [
         { t: T0, v: 1000 },
@@ -79,8 +80,8 @@ const window: NodeUsageWindow = {
       cpuMillicores: [{ t: T0, v: 400 }],
       memoryBytes: [{ t: T0, v: 2 * GI }],
     },
-  },
-  newestAt: { fresh: T0 - 4 * 60_000 },
+  }),
+  newestAt: named({ fresh: T0 - 4 * 60_000 }),
   basis: "node",
   resolution: {
     key: "promBucketsMaxOver",
@@ -177,8 +178,8 @@ describe("NodeUtilisation", () => {
       vendor: "Prometheus",
       page: vendorLink("prometheus", { tab: "monitors" }),
       use: vi.fn(async () => ({
-        nodes: {},
-        newestAt: {},
+        nodes: named({}),
+        newestAt: named({}),
         newestKnown: true,
         basis: "pods",
         resolution: {

@@ -178,7 +178,8 @@ export const GLOBAL_KEYS = Object.keys(GLOBAL).length;
  * looking at.
  */
 export function readSetting(key: string, value: string, t: T): SettingReading {
-  const own = GLOBAL[key];
+  // The key is the ConfigMap's: `constructor` is no setting of ours.
+  const own = Object.hasOwn(GLOBAL, key) ? GLOBAL[key] : undefined;
   if (own) {
     const said = own(value, t);
     return {

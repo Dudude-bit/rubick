@@ -1,4 +1,9 @@
-import type { DeclaredPoint, NodeUsageWindow } from "@/integrations";
+import type {
+  DeclaredPoint,
+  NodeUsageSeries,
+  NodeUsageWindow,
+} from "@/integrations";
+import { entriesOf } from "@/lib/named";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { nodeMatcher } from "@/lib/node-names";
 import type { NodeInfo } from "@/generated/types";
@@ -76,14 +81,14 @@ export function nodeTrends(
   windowKnown = true
 ): NodeTrend[] {
   const nodeOf = nodeMatcher(nodes.map((node) => node.name));
-  const byNode = new Map<string, NodeUsageWindow["nodes"][string]>();
+  const byNode = new Map<string, NodeUsageSeries>();
   const newestByNode = new Map<string, number>();
   if (window) {
-    for (const [name, series] of Object.entries(window.nodes)) {
+    for (const [name, series] of entriesOf(window.nodes)) {
       const node = nodeOf(name);
       if (node !== null) byNode.set(node, series);
     }
-    for (const [name, at] of Object.entries(window.newestAt)) {
+    for (const [name, at] of entriesOf(window.newestAt)) {
       const node = nodeOf(name);
       if (node !== null) newestByNode.set(node, at);
     }
@@ -150,7 +155,7 @@ export function everyNodeSilent(
 ): boolean {
   return (
     window !== null &&
-    Object.keys(window.nodes).length === 0 &&
+    entriesOf(window.nodes).length === 0 &&
     trends.length > 0 &&
     trends.every(
       (trend) => trend.blind === "noSeries" && trend.newestAgoMs === null

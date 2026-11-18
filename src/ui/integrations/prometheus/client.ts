@@ -16,6 +16,7 @@ import type {
   DeclaredHistory,
   DeclaredPoint,
   NodeBasis,
+  NodeUsageSeries,
   NodeUsageWindow,
   TrafficWindow,
   UsageRange,
@@ -38,6 +39,7 @@ import {
   volumeUsedQuery,
 } from "./queries";
 import type { RangeSpec } from "./queries";
+import { named } from "@/lib/named";
 
 /**
  * The buckets a series answered for, gaps kept as gaps.
@@ -270,9 +272,14 @@ export async function nodeUsage(input: {
     [cpu, memory, newest] = await read(basis);
   }
 
-  const nodes: NodeUsageWindow["nodes"] = {};
-  const lane = (name: string) =>
-    (nodes[name] ??= { cpuMillicores: [], memoryBytes: [] });
+  // Keyed by node names, `constructor` among them: kept in a Map while
+  // built, so a name every object has is never found already there.
+  const lanes = new Map<string, NodeUsageSeries>();
+  const lane = (name: string) => {
+    const held = lanes.get(name) ?? { cpuMillicores: [], memoryBytes: [] };
+    lanes.set(name, held);
+    return held;
+  };
   for (const series of cpu) {
     const name = nodeNameOf(series);
     if (name) lane(name).cpuMillicores = pointsOf([series]);
@@ -281,12 +288,16 @@ export async function nodeUsage(input: {
     const name = nodeNameOf(series);
     if (name) lane(name).memoryBytes = pointsOf([series]);
   }
-  const newestAt: Record<string, number> = {};
-  for (const series of newest ?? []) {
-    const name = nodeNameOf(series);
-    const seconds = series.points[0]?.v;
-    if (name && typeof seconds === "number") newestAt[name] = seconds * 1000;
-  }
+  const nodes = named(lanes);
+  const newestAt = named(
+    (newest ?? []).flatMap((series): [string, number][] => {
+      const name = nodeNameOf(series);
+      const seconds = series.points[0]?.v;
+      return name && typeof seconds === "number"
+        ? [[name, seconds * 1000]]
+        : [];
+    })
+  );
   return {
     nodes,
     newestAt,
