@@ -2009,6 +2009,11 @@ export interface Unchecked {
   why: Why;
 }
 
+export interface PodsRead {
+  read: number;
+  of: number;
+}
+
 export interface AuditFinding {
   rule: RuleId;
   severity: AuditSeverity;
@@ -4017,7 +4022,7 @@ export type Why =
   | { says: "noSamples" }
   | { says: "peakUnread" }
   | { says: "young"; since: string | null }
-  | { says: "partial"; read: number; of: number }
+  | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null }
   | { says: "folded" }
   | { says: "admitted"; webhooks: string[] };
 
@@ -4198,7 +4203,7 @@ export type UseVerdict =
   | { says: "noSamples" }
   | { says: "peakUnread" }
   | { says: "young"; since: string | null }
-  | { says: "partial"; read: number; of: number };
+  | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null };
 
 export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 

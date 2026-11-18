@@ -1,8 +1,9 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
+import { efficiencyOf } from "@/lib/efficiency";
 import { renderWithProviders } from "@/test/render";
-import { Money, ShareCell } from "./cost-cells";
+import { EfficiencyCell, Money, ShareCell, UsedCell } from "./cost-cells";
 
 const row = { perHour: 0.05, unpriced: [], unknown: [] };
 
@@ -34,5 +35,32 @@ describe("a cell that says something other than a number", () => {
     expect(unknownTotal).toHaveClass("text-warn");
     for (const quiet of screen.getAllByText("not priced"))
       expect(quiet).toHaveClass("text-fg-fnt");
+  });
+});
+
+describe("use read from some of a workload's pods", () => {
+  /**
+   * A figure from two of three pods said so in words and was drawn like
+   * one over every pod. Fails if the cell's tone does not tell them apart,
+   * or puts one figure's count on the other.
+   */
+  it("is drawn quieter than use read from every pod", () => {
+    const since = "2020-01-01T00:00:00Z";
+    const some = efficiencyOf(1000, 200, 800, since, Date.now(), {
+      peakPods: { read: 2, of: 3 },
+    });
+    const every = efficiencyOf(1000, 200, 800, since, Date.now());
+    renderWithProviders(
+      <>
+        <EfficiencyCell efficiency={{ cpu: some, memory: every }} />
+        <UsedCell efficiency={some} kind="cpu" />
+      </>
+    );
+    expect(screen.getByText(/^CPU /)).toHaveClass("text-fg-mut");
+    expect(screen.getByText(/^Memory /)).not.toHaveClass("text-fg-mut");
+    expect(screen.getByText("200m average")).not.toHaveClass("text-fg-mut");
+    expect(
+      screen.getByText(/^800m \(from 2 of its 3 pods\) peak$/)
+    ).toHaveClass("text-fg-mut");
   });
 });

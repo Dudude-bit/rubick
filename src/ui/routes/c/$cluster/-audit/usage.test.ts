@@ -47,7 +47,11 @@ const basis = (workloads: WorkloadBasis[]): CostBasis => ({
 /** A start long enough ago that every pod has run the whole day. */
 const LONG_AGO = "2020-01-01T00:00:00Z";
 
-/** cpuAvg, cpuPeak, memoryAvg, memoryPeak, per workload in the basis's order. */
+/**
+ * cpuAvg, cpuPeak, memoryAvg, memoryPeak, per workload in the basis's
+ * order, as the fold writes them: one pod each, which every answered query
+ * covered. Counted here, not taken from the basis, which is read apart.
+ */
 const reading = (
   b: CostBasis,
   values: (number | null)[][],
@@ -61,8 +65,8 @@ const reading = (
     unplaced: [],
     unread: [],
     unlabelled: 0,
-    covered: [],
-    pods: [],
+    covered: values.map((each) => each.map((v) => (v === null ? 0 : 1))),
+    pods: values.map(() => 1),
     since,
   },
 });
@@ -187,6 +191,41 @@ describe("Audit's reading of requests against use", () => {
   });
 
   /**
+   * The requests list has no row in `vault` and the read of use was refused
+   * there: the refusal reached no row, so the backend passed every
+   * workload in it as one requesting nothing. Fails if a refusal is carried
+   * only through a row, or the list's own words are replaced.
+   */
+  it("names every namespace the read of use was refused, with or without a row", () => {
+    const one = basis([workload("api", 500, 256 * MI)]);
+    const read = reading(one, [[300, 450, 150 * MI, 240 * MI]]);
+    if (read.state !== "read") throw new Error(read.state);
+    read.fold.unread = [
+      {
+        namespace: "vault",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden in vault",
+        values: [null, null, null, null],
+      },
+      {
+        namespace: "bank",
+        code: "PERMISSION_DENIED",
+        message: "the read of use was refused in bank",
+        values: [null, null, null, null],
+      },
+    ];
+    const audit = usageRead(one, null, read);
+    if (audit.state !== "read") throw new Error(audit.state);
+    expect(audit.workloads.map((w) => [w.name, w.verdict.says])).toEqual([
+      ["api", "within"],
+    ]);
+    expect(audit.unread).toEqual([
+      { namespace: "bank", message: "pods is forbidden" },
+      { namespace: "vault", message: "pods is forbidden in vault" },
+    ]);
+  });
+
+  /**
    * A workload rolled out two hours ago has a peak of two hours, which has
    * not met the day's busiest hour: neither page calls its request far
    * above use, and Audit says why it did not judge rather than passing it.
@@ -224,6 +263,13 @@ describe("Audit's reading of requests against use", () => {
     const read = usageRead(one, null, peakless);
     if (read.state !== "read") throw new Error(read.state);
     expect(read.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+
+    // Its CPU average read and its memory not sampled at all: "no sample of
+    // its pods" is belied by the CPU average.
+    const memoryless = reading(one, [[200, null, null, null]]);
+    const mixed = usageRead(one, null, memoryless);
+    if (mixed.state !== "read") throw new Error(mixed.state);
+    expect(mixed.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
   });
 
   /**
@@ -257,8 +303,9 @@ describe("Audit's reading of requests against use", () => {
 
   /**
    * Two of three pods were read and their summed peak stayed low: Audit
-   * called the workload over-requested, or within. Fails if a workload
-   * measured from some of its pods is judged either way.
+   * called the workload over-requested, or within; then it gave one count
+   * without saying whose. Fails if a workload measured from some of its
+   * pods is judged, or a count is not its own resource's.
    */
   it("says from how many pods a workload was measured, rather than judging it", () => {
     const one = basis([workload("web", 2000, 512 * MI)]);
@@ -271,7 +318,7 @@ describe("Audit's reading of requests against use", () => {
         unplaced: [],
         unread: [],
         unlabelled: 0,
-        covered: [[2, 2, 2, 2]],
+        covered: [[2, 2, 3, 1]],
         pods: [3],
         since: [LONG_AGO],
       },
@@ -280,8 +327,8 @@ describe("Audit's reading of requests against use", () => {
     if (read.state !== "read") throw new Error(read.state);
     expect(read.workloads[0]!.verdict).toEqual({
       says: "partial",
-      read: 2,
-      of: 3,
+      cpu: { read: 2, of: 3 },
+      memory: { read: 1, of: 3 },
     });
   });
 

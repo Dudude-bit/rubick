@@ -1960,10 +1960,20 @@ export const en = {
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
-    whyPartial: {
-      one: "the connected Prometheus holds samples of {read} of its {n} pod in the last day, and a peak is judged over every one",
+    whyPartialCpu: {
+      one: "the connected Prometheus holds the last day's CPU peak of {read} of its {n} pod, and a peak is judged over every one",
       other:
-        "the connected Prometheus holds samples of {read} of its {n} pods in the last day, and a peak is judged over every one",
+        "the connected Prometheus holds the last day's CPU peak of {read} of its {n} pods, and a peak is judged over every one",
+    },
+    whyPartialMemory: {
+      one: "the connected Prometheus holds the last day's memory peak of {read} of its {n} pod, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds the last day's memory peak of {read} of its {n} pods, and a peak is judged over every one",
+    },
+    whyPartialBoth: {
+      one: "the connected Prometheus holds the last day's CPU peak of {cpu} and memory peak of {memory} of its {n} pod, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds the last day's CPU peak of {cpu} and memory peak of {memory} of its {n} pods, and a peak is judged over every one",
     },
     whyYoungUndated:
       "when its pods started is not known, and a peak is judged over a whole day",
@@ -2607,9 +2617,9 @@ export const en = {
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
     atMost: "at most {value}",
-    fromPods: {
-      one: "{line}, from {read} of its {n} pod",
-      other: "{line}, from {read} of its {n} pods",
+    ofPods: {
+      one: "{value} (from {read} of its {n} pod)",
+      other: "{value} (from {read} of its {n} pods)",
     },
     notKnown: "Not known",
     shareNoTotal: "not known: no total",

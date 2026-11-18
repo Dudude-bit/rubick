@@ -212,7 +212,20 @@ const WHY_WORDS: {
     why.says === "young" && why.since !== null
       ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
       : t("audit", "whyYoungUndated"),
-  partial: (why, t) => t("audit", "whyPartial", { read: why.read, n: why.of }),
+  partial: (why, t) => {
+    const { cpu, memory } = why;
+    if (cpu && memory)
+      return t("audit", "whyPartialBoth", {
+        cpu: cpu.read,
+        memory: memory.read,
+        n: cpu.of,
+      });
+    const one = cpu ?? memory;
+    return t("audit", cpu ? "whyPartialCpu" : "whyPartialMemory", {
+      read: one?.read ?? 0,
+      n: one?.of ?? 0,
+    });
+  },
   folded: (_, t) => t("audit", "whyFolded"),
   admitted: (why, t) =>
     t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),

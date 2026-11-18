@@ -275,10 +275,11 @@ pub enum Why {
     Young {
         since: Option<String>,
     },
-    /// The usage supplier holds samples of `read` of the `of` pods it runs.
+    /// The usage supplier holds the peak of some of the pods it runs, per
+    /// resource.
     Partial {
-        read: u32,
-        of: u32,
+        cpu: Option<usage::PodsRead>,
+        memory: Option<usage::PodsRead>,
     },
     /// Past the row cap of the requests list, its usage was read only as a sum.
     Folded,

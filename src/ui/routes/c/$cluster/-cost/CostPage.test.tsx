@@ -636,6 +636,43 @@ describe("the share of a row that is itself a floor", () => {
   });
 });
 
+describe("a workload's use read from some of its pods, on its line", () => {
+  /** The figure said "from 2 of its 3 pods" in the tone of one over every pod. Fails if the line does not draw it quieter. */
+  it("is drawn quieter than use read from every pod", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    usage.mockReturnValue({
+      state: "read",
+      keys: [BASIS.workloads[0]!.key],
+      fold: {
+        values: [[50, 100, 0.1 * GIB, 0.2 * GIB]],
+        rest: [],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [[2, 2, 3, 3]],
+        pods: [3],
+        since: ["2020-01-01T00:00:00Z"],
+      },
+    });
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-efficiency");
+    expect(within(line).getByText(/^CPU /)).toHaveClass("text-fg-fnt");
+    expect(within(line).getByText(/Memory /)).not.toHaveClass("text-fg-fnt");
+  });
+});
+
 describe("the cost line where Prometheus holds no OpenCost series", () => {
   /**
    * No cost source is how most clusters are, not this object's fault: every

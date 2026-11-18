@@ -5,6 +5,7 @@
 import { useT } from "@/i18n/useT";
 import {
   efficiencyWarns,
+  fromSomePods,
   overRequested,
   type Efficiency,
   type WorkloadEfficiency,
@@ -84,7 +85,9 @@ export function EfficiencyCell({
               e.state === "measured" && "font-mono tabular-nums",
               efficiencyWarns(e)
                 ? "text-warn"
-                : e.state !== "measured" && "text-fg-fnt"
+                : e.state !== "measured"
+                  ? "text-fg-fnt"
+                  : fromSomePods(e) && "text-fg-mut"
             )}
             title={titleOf(e)}
           >
@@ -108,8 +111,17 @@ export function UsedCell({
   const t = useT();
   return (
     <span className="flex flex-col text-[11px] leading-tight">
-      {usedLines(efficiency, kind, t).map((line) => (
-        <span key={line}>{line}</span>
+      {usedLines(efficiency, kind, t).map((line, i, lines) => (
+        <span
+          key={line}
+          className={cn(
+            lines.length === 2 &&
+              fromSomePods(efficiency, i === 0 ? "avg" : "peak") &&
+              "text-fg-mut"
+          )}
+        >
+          {line}
+        </span>
       ))}
     </span>
   );

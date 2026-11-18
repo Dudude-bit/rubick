@@ -38,6 +38,11 @@ export function usageRead(
   if (basis.workloads.length > 0 && reading.state !== "read")
     return { state: "reading" };
   const unread = new Map(basis.unread.map((u) => [u.namespace, u.message]));
+  // A namespace refused to the read of use is unread whether or not the
+  // requests list has a row in it; the list's own words come first.
+  if (reading.state === "read")
+    for (const u of reading.fold.unread)
+      if (!unread.has(u.namespace)) unread.set(u.namespace, u.message);
   const workloads: WorkloadUse[] = [];
   for (const w of basis.workloads) {
     const e = workloadEfficiency(reading, w.key, {
@@ -46,12 +51,7 @@ export function usageRead(
     });
     // Its pods were refused to the read of use: no verdict, and the
     // backend names the refusal where it finds no row.
-    const failed = [e.cpu, e.memory].find((one) => one.state === "failed");
-    if (failed?.state === "failed") {
-      if (!unread.has(w.key.namespace))
-        unread.set(w.key.namespace, failed.said);
-      continue;
-    }
+    if (e.cpu.state === "failed" || e.memory.state === "failed") continue;
     workloads.push({
       namespace: w.key.namespace,
       kind: w.key.kind,
@@ -97,17 +97,22 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const fresh = [e.cpu, e.memory].find(young);
   if (fresh?.state === "measured" || fresh?.state === "noSamples")
     return { says: "young", since: fresh.since };
-  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
-    return { says: "noSamples" };
   // A peak nobody read judges nothing, though the average was read: that
-  // is its own reason, not that no sample was held.
+  // is its own reason, and before "no sample", which a read average belies.
   const peakless = (one: Efficiency) =>
     one.state === "measured" && one.peakRatio === null;
   if (peakless(e.cpu) || peakless(e.memory)) return { says: "peakUnread" };
-  // Measured from some of its pods: neither its figure nor a bound on it.
-  for (const one of [e.cpu, e.memory])
-    if (one.state === "measured" && one.podsRead)
-      return { says: "partial", ...one.podsRead };
+  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
+    return { says: "noSamples" };
+  // Its peak measured from some of its pods: neither its peak nor a bound
+  // on it, said for each resource. An average from some of them judges
+  // nothing either way.
+  const peakPods = (one: Efficiency) =>
+    one.state === "measured" ? one.peakPods : null;
+  const cpuPods = peakPods(e.cpu);
+  const memoryPods = peakPods(e.memory);
+  if (cpuPods || memoryPods)
+    return { says: "partial", cpu: cpuPods, memory: memoryPods };
   return { says: "within" };
 }
 
