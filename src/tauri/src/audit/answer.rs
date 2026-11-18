@@ -855,6 +855,10 @@ fn judges(rule: RuleId, kind: &str) -> bool {
         R::SingleReplica | R::NoSpread | R::NoDisruptionBudget => {
             matches!(kind, "Deployment" | "StatefulSet")
         }
+        // Judged on a pod that restarts Always, which a Job's never does
+        // (concepts/workloads/controllers/job, "Pod Template"), nor a
+        // CronJob's, whose template is a Job's.
+        R::NoLivenessProbe | R::NoReadinessProbe => template && !matches!(kind, "Job" | "CronJob"),
         // Read by their own pass, not through the kind's feed.
         R::NamespaceWithoutNetworkPolicy
         | R::RemovedApiInHelmRelease
@@ -1742,6 +1746,22 @@ mod tests {
             let rules = unread_rules(kind);
             assert!(!replica.iter().any(|rule| rules.contains(rule)), "{kind}");
             assert!(rules.contains(&RuleId::PssPrivileged), "{kind}");
+        }
+    }
+
+    /// A Job's pods never restart Always, so no probe rule judges them.
+    /// Fails if a `Job` or `CronJob` not read is said to leave the probe rules
+    /// unchecked, or a kind whose pods do restart stops saying so.
+    #[test]
+    fn a_job_not_read_leaves_the_probe_rules_answered() {
+        let probes = [RuleId::NoLivenessProbe, RuleId::NoReadinessProbe];
+        for kind in ["Job", "CronJob"] {
+            let rules = unread_rules(kind);
+            assert!(!probes.iter().any(|rule| rules.contains(rule)), "{kind}");
+        }
+        for kind in ["Deployment", "StatefulSet", "DaemonSet", POD] {
+            let rules = unread_rules(kind);
+            assert!(probes.iter().all(|rule| rules.contains(rule)), "{kind}");
         }
     }
 
