@@ -2542,6 +2542,8 @@ export const en = {
     panelBuckets: "Percentiles from {source}'s histogram buckets.",
     panelBelowHttp:
       "Seen only below HTTP: requests, errors and latency are not counted for this pair.",
+    panelRequestsUnread:
+      "Its requests could not be read, so whether this pair is seen above HTTP is not known.",
     panelSideServer: "From the server's proxy.",
     panelSideCaller:
       "From the caller's proxy: the server's reported none of it.",
