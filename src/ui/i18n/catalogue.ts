@@ -2609,6 +2609,7 @@ export const en = {
     },
     notKnown: "Not known",
     shareNoTotal: "not known: no total",
+    shareBothFloors: "not known: both are floors",
     notPriced: "not priced",
     notMeasured: "not measured",
     fromOpenCost:
@@ -2774,6 +2775,9 @@ export const en = {
     linePerMonth: "{amount} per month projected",
     lineShare: "{share} of the cluster",
     lineShareAtMost: "at most {share} of the cluster",
+    lineShareAtLeast: "at least {share} of the cluster",
+    lineShareBothFloors:
+      "share of the cluster not known, as both amounts are floors",
     lineShareNoTotal: "share of the cluster not known, as its total is not",
     lineFromOpenCost: "from OpenCost",
     lineFromPrices: "estimated from entered prices",

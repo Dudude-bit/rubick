@@ -748,22 +748,31 @@ export interface CostOf {
 }
 
 /**
- * A priced row's share of a whole: at most that where the whole is a floor,
- * `noTotal` where there is no whole to take it of; `null` for a row with no
- * total of its own, which its own words say.
+ * A priced row's share of a whole: at least that where the row is a floor,
+ * at most where the whole is, and `bothFloors` where both are, which bounds
+ * it neither way; `noTotal` where there is no whole to take it of; `null`
+ * for a row with no total of its own, which its own words say.
  */
-export type RowShare = { of: number; atMost: boolean } | "noTotal" | null;
+export type RowShare =
+  | { of: number; bound: "exact" | "atLeast" | "atMost" }
+  | "noTotal"
+  | "bothFloors"
+  | null;
 
 export function shareOf(
-  perHour: number | null,
+  row: Amount | { perHour: null } | null,
   whole: Amount | null
 ): RowShare {
-  if (perHour === null) return null;
+  if (!row || row.perHour === null) return null;
   if (!whole) return "noTotal";
   // A floor of nothing is no whole; an exact nothing has no part in it.
   if (whole.perHour <= 0)
-    return whole.atLeast ? "noTotal" : { of: 0, atMost: false };
-  return { of: perHour / whole.perHour, atMost: whole.atLeast };
+    return whole.atLeast ? "noTotal" : { of: 0, bound: "exact" };
+  if (row.atLeast && whole.atLeast) return "bothFloors";
+  return {
+    of: row.perHour / whole.perHour,
+    bound: row.atLeast ? "atLeast" : whole.atLeast ? "atMost" : "exact",
+  };
 }
 
 /** One workload: a custom kind may share a built-in's name, so the group counts too. */
@@ -792,7 +801,7 @@ export function costOf(
   return {
     perHour: row.perHour,
     partial: row.atLeast,
-    share: shareOf(row.perHour, picture.cluster),
+    share: shareOf(row, picture.cluster),
     unknown: totalUnknown(row),
   };
 }
