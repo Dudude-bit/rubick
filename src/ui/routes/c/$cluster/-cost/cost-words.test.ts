@@ -57,9 +57,10 @@ describe("the cost line of an object in a namespace that was refused", () => {
    */
   it("says the cost could not be read, for the namespace and for a workload in it", () => {
     const picture = estimatePicture(refused, prices, null);
-    expect(costLineWords(picture, { namespace: "bank" }, t)).toBe(
-      "Could not read what this costs."
-    );
+    expect(costLineWords(picture, { namespace: "bank" }, t)).toEqual({
+      words: "Could not read what this costs.",
+      unread: true,
+    });
     expect(
       costLineWords(
         picture,
@@ -71,7 +72,7 @@ describe("the cost line of an object in a namespace that was refused", () => {
         },
         t
       )
-    ).toBe("Could not read what this costs.");
+    ).toEqual({ words: "Could not read what this costs.", unread: true });
   });
 });
 
@@ -124,7 +125,10 @@ describe("the cost line of a workload whose cost read failed", () => {
         { namespace: "shop", group: "apps", kind: "Deployment", name: "web" },
         t
       )
-    ).toBe("Could not read what this costs: query timed out");
+    ).toEqual({
+      words: "Could not read what this costs: query timed out",
+      unread: true,
+    });
   });
 });
 
@@ -154,9 +158,11 @@ describe("a CronJob while the Jobs could not be listed", () => {
         { namespace: "shop", group: "batch", kind: "CronJob", name: "nightly" },
         t
       )
-    ).toBe(
-      "Not known: the Jobs that run it could not be listed (jobs is forbidden)."
-    );
+    ).toEqual({
+      words:
+        "Not known: the Jobs that run it could not be listed (jobs is forbidden).",
+      unread: true,
+    });
   });
 });
 

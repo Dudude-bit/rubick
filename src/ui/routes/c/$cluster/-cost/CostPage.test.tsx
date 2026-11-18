@@ -472,6 +472,40 @@ describe("the Cost page", () => {
   });
 });
 
+describe("efficiency whose read did not answer", () => {
+  /**
+   * A refused or failed read of use said so in the faint grey of "not
+   * measured". Fails if the cell or the line draws it like an absence.
+   */
+  it("is amber in its cell and on the workload's line", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    usage.mockReturnValue({ state: "failed", said: "query timed out" });
+    await open();
+    const [cell] = screen.getAllByText(
+      /^CPU could not read use: query timed out$/
+    );
+    expect(cell).toHaveClass("text-warn");
+    expect(cell).not.toHaveClass("text-fg-fnt");
+
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-efficiency");
+    expect(line).toHaveTextContent("could not read use: query timed out");
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
 describe("the cost line where Prometheus holds no OpenCost series", () => {
   /**
    * No cost source is how most clusters are, not this object's fault: every
@@ -606,6 +640,47 @@ describe("a namespace no OpenCost series prices", () => {
     expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
       "No OpenCost series priced its pods."
     );
+    expect(
+      screen.getByTestId("namespace-cost").querySelector(".text-warn")
+    ).toBeNull();
+  });
+});
+
+describe("a workload's line where what each workload costs was not read", () => {
+  /**
+   * The per-workload read timed out and the line said so in the muted grey
+   * of a part with no price. Fails if a read that did not answer is drawn
+   * like an absence.
+   */
+  it("says why in amber", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: {
+        ...opencost,
+        workloads: opencost.workloads.map((w) => ({
+          ...w,
+          perHour: null,
+          atLeast: false,
+          parts: {},
+        })),
+        workloadsFailed: "query timed out",
+      },
+      trouble: null,
+    });
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent(
+      "Could not read what this costs: query timed out"
+    );
+    expect(line.querySelector(".text-warn")).not.toBeNull();
   });
 });
 

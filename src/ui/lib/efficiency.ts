@@ -192,6 +192,10 @@ export function workloadEfficiency(
   };
 }
 
+/** Amber: asking far more than it used, or a read of its use that did not answer. */
+export const efficiencyWarns = (efficiency: Efficiency): boolean =>
+  efficiency.state === "failed" || overRequested(efficiency);
+
 /** The share of a request a peak must stay under for the request to be far above use. */
 export const OVER_REQUESTED_BELOW = 0.5;
 

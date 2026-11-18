@@ -168,20 +168,26 @@ export function pictureNotes(picture: CostPicture, t: T): string[] {
 }
 
 /** The line's words for a picture: its cost, or why it has none. */
+/**
+ * One object's cost line, and whether it says a read did not answer: that
+ * is amber, where a part with no price is not.
+ */
 export function costLineWords(
   picture: CostPicture,
   target: CostTarget,
   t: T
-): string {
+): { words: string; unread: boolean } {
+  const unread = (words: string) => ({ words, unread: true });
   const of = costOf(picture, target);
   // Its namespace's pods could not be read: no row, or one with no price,
   // is the refusal, not an absence.
   const refused = picture.unread.some((u) => u.namespace === target.namespace);
-  if (refused && (!of || of.perHour === null)) return t("cost", "lineUnread");
+  if (refused && (!of || of.perHour === null))
+    return unread(t("cost", "lineUnread"));
   // What each workload costs was not read: its row has no price for that
   // reason, not for want of a price.
   if ("kind" in target && picture.workloadsFailed && of?.perHour === null)
-    return t("cost", "lineFailed", { said: picture.workloadsFailed });
+    return unread(t("cost", "lineFailed", { said: picture.workloadsFailed }));
   // A CronJob's runs went under each Job while the Jobs were refused.
   if (
     !of &&
@@ -189,7 +195,18 @@ export function costLineWords(
     target.kind === "CronJob" &&
     picture.jobsUnread
   )
-    return t("cost", "lineJobsUnread", { said: picture.jobsUnread.message });
+    return unread(
+      t("cost", "lineJobsUnread", { said: picture.jobsUnread.message })
+    );
+  return { words: readLineWords(picture, target, of, t), unread: false };
+}
+
+function readLineWords(
+  picture: CostPicture,
+  target: CostTarget,
+  of: ReturnType<typeof costOf>,
+  t: T
+): string {
   if (!of) {
     if (!("kind" in target)) return t("cost", "lineNothingOnANode");
     if (picture.rest)
