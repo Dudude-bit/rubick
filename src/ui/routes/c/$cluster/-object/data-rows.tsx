@@ -17,6 +17,7 @@ import { withheldWords } from "@/lib/certificates";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
+import { heldUnder } from "@/lib/config-data";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -107,12 +108,15 @@ export function DataSection({
     ]);
     return [...names]
       .sort((a, b) => a.localeCompare(b))
-      .map((key) => ({
-        key,
-        value: data[key] as string | undefined,
-        refusal: withheld[key] as Withheld | undefined,
-        blob: binary[key] as BinaryValue | undefined,
-      }));
+      .map((key) => {
+        const held = heldUnder({ values: data, withheld, binary }, key);
+        return {
+          key,
+          value: held.value,
+          refusal: held.withheld,
+          blob: held.binary,
+        };
+      });
   }, [data, keys, withheld, binary]);
 
   const toggle = (key: string) =>

@@ -85,6 +85,26 @@ describe("DataSection", () => {
    * control — a Reveal on a value the app does not hold is a button that
    * either lies or, worse, one day starts working.
    */
+  /**
+   * A data key is the cluster's to choose. Fails if a key called
+   * `constructor` or `toString` finds `Object`'s function in the withheld
+   * or binary record and is drawn as withheld instead of as its value, or
+   * if a key called `__proto__` that is withheld loses its reason.
+   */
+  it("reads each key's own value, whatever the key is called", () => {
+    render(
+      <DataSection
+        data={JSON.parse('{"constructor":"one","toString":"two"}')}
+        withheld={JSON.parse('{"__proto__":{"says":"privateKey"}}')}
+      />
+    );
+    expect(screen.getByText("one")).toBeInTheDocument();
+    expect(screen.getByText("two")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("a private key, which the app never shows")
+    ).toHaveLength(1);
+  });
+
   it("offers neither reveal nor copy for a withheld value", () => {
     render(
       <DataSection

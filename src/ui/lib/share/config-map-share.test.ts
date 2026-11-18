@@ -48,6 +48,30 @@ describe("a ConfigMap's keys table", () => {
     );
   });
 
+  /**
+   * The same keys the Data tab draws, read by the same function. Fails if
+   * a key called `constructor` or `toString` is sized as withheld from
+   * `Object`'s prototype rather than by its own value.
+   */
+  it("sizes each key by its own value, whatever the key is called", () => {
+    const section = configMapKeysSection(
+      ["constructor", "toString", "__proto__"],
+      {
+        data: JSON.parse(
+          '{"values":{"constructor":"abc","toString":"de"},"withheld":{"__proto__":{"says":"privateKey"}},"binary":{}}'
+        ),
+        error: null,
+      },
+      t
+    );
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows.map((row) => row.cells[1].text)).toEqual([
+      "3 B",
+      "2 B",
+      "a private key, which the app never shows",
+    ]);
+  });
+
   /** An empty table and a refused read are different answers. */
   it("marks the section unread on a refused read instead of an empty table", () => {
     const section = configMapKeysSection(
