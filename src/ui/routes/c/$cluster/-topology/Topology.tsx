@@ -46,7 +46,12 @@ import {
 import { toneOf, type ToneInputs } from "./tone";
 import { shareSaid, topologySection } from "./topology-share";
 import { useVendorLayers } from "./vendor-layers";
-import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
+import {
+  mapVerdicts,
+  verdictSay,
+  verdictsUnread,
+  withNamedGateways,
+} from "./route-verdicts";
 
 const EVERY_NAMESPACE: readonly string[] = [];
 
@@ -353,6 +358,10 @@ function TopologyMap() {
     edgeless.length > 0 &&
       t("topology", "edgesAbsent", { kinds: edgeless.join(", ") }),
     ...vendor.unread,
+    verdictsUnread(
+      { gateways: routes.gatewaysAll.error, classes: routes.classes.error },
+      t
+    ),
     others.length > 0 &&
       t("topology", "otherEngines", { kinds: others.join(", ") }),
     syncing.length > 0 &&

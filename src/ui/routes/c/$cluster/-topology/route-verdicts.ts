@@ -7,6 +7,8 @@
 
 import type { GatewayInfo, TopologyNode } from "@/generated/types";
 import type { MapTone } from "@/integrations";
+import type { T } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 import type { RoutesBoard } from "@/lib/route-rows";
 
 export interface MapVerdict {
@@ -132,4 +134,24 @@ export function withNamedGateways(
     out.set(id, read);
   }
   return out ?? nodes;
+}
+
+/**
+ * What the map says where a list its route and Gateway verdicts are judged
+ * against failed, its last answer included: they are drawn not checked, and
+ * the line says why. `null` where both were read.
+ */
+export function verdictsUnread(
+  lists: { gateways: unknown; classes: unknown },
+  t: T
+): string | null {
+  const failed = [
+    lists.gateways != null && "Gateway",
+    lists.classes != null && "GatewayClass",
+  ].filter((kind): kind is string => kind !== false);
+  if (failed.length === 0) return null;
+  return t("topology", "verdictsUnread", {
+    kinds: failed.join(", "),
+    said: errorToShow(lists.gateways ?? lists.classes),
+  });
 }

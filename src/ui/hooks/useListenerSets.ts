@@ -38,9 +38,10 @@ export function useListenerSets(
   const { data, error } = query;
   return useMemo(() => {
     if (detection !== undefined && !served) return { sets: [], said: null };
-    return {
-      sets: data ?? null,
-      said: data === undefined && error ? errorToShow(error) : null,
-    };
+    // A read failed since the last answer: what that answer held is not
+    // what is there now.
+    return error
+      ? { sets: null, said: errorToShow(error) }
+      : { sets: data ?? null, said: null };
   }, [detection, served, data, error]);
 }

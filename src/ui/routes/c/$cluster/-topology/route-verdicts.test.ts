@@ -10,7 +10,12 @@ import type {
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { routesBoard } from "@/lib/route-rows";
-import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
+import {
+  mapVerdicts,
+  verdictSay,
+  verdictsUnread,
+  withNamedGateways,
+} from "./route-verdicts";
 import { toneOf } from "./tone";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -251,6 +256,23 @@ describe("a route and a Gateway on the map, as their pages read them", () => {
   });
 
   /** A Gateway the cluster-wide list answered without is missing, as the Routes page calls it. */
+  /**
+   * The map drew routes and Gateways not checked once a list behind their
+   * verdicts failed, with nothing above it to say why. Fails if a failed
+   * list is not named with the cluster's words, or one read is.
+   */
+  it("says which list behind the verdicts failed, in the cluster's words", () => {
+    expect(verdictsUnread({ gateways: null, classes: null }, t)).toBeNull();
+    expect(
+      verdictsUnread(
+        { gateways: null, classes: new Error("gatewayclasses is forbidden") },
+        t
+      )
+    ).toBe(
+      "GatewayClass could not be read, so routes and Gateways are drawn not checked: gatewayclasses is forbidden"
+    );
+  });
+
   it("calls a named Gateway the cluster-wide list does not hold missing", () => {
     const verdicts = mapVerdicts(board(true), [], true);
     const read = withNamedGateways(
