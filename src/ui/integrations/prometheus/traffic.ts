@@ -374,13 +374,17 @@ export function hubbleQueries(
       sum([...pairs, "protocol"], scoped(answered, [r], HUBBLE_SCOPE, ask))
     );
     pair("requests", first(...requests), { protocol: "protocol" });
+    // Requests take the client's report per protocol the server's lacks, so
+    // errors are chosen by protocol too: the server's HTTP/1.1 must not hide
+    // the client's failed HTTP/2 that the requests already count.
+    const call = [...pairs, "protocol"];
     pair(
       "errors",
       sameReporterAs(
-        pairs,
+        call,
         requests,
         reporters.map((r) =>
-          sum(pairs, scoped(answered, [r, 'status=~"5.."'], HUBBLE_SCOPE, ask))
+          sum(call, scoped(answered, [r, 'status=~"5.."'], HUBBLE_SCOPE, ask))
         )
       )
     );

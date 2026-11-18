@@ -177,7 +177,7 @@ describe("the other sources' queries", () => {
     expect(events).toContain("source_workload_kind");
     const [, client] = of(queries, "errors").split(") or ((");
     expect(client).toMatch(
-      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind\) \(.*reporter!="client"/
+      /reporter="client".* unless on\(source_namespace, source_workload, source_workload_kind, destination_namespace, destination_workload, destination_workload_kind, protocol\) \(.*reporter!="client"/
     );
   });
 });
@@ -223,6 +223,22 @@ describe("Hubble's ends, metric by metric", () => {
 });
 
 describe("Hubble's HTTP metrics, v1 and v2", () => {
+  /**
+   * The server reporting HTTP/1.1 and the client alone HTTP/2 with two 5xx:
+   * requests count the client's HTTP/2, so its errors must count too. Keyed
+   * on the pair alone, the server's HTTP/1.1 hid them and the share read 0%.
+   */
+  it("keeps a client's errors on a protocol the server did not report", () => {
+    const queries = hubbleQueries(
+      0,
+      ["hubble_http_requests_total{source_workload}"],
+      ALL
+    );
+    const errors = of(queries, "errors");
+    expect(errors).toMatch(/^\(sum by \([^)]*, protocol\)/);
+    expect(errors).toMatch(/unless on\([^)]*, protocol\)/);
+  });
+
   /**
    * HTTP v1 writes `status` only on its responses: a 5xx share read from
    * its requests finds none and reads 0% where half the calls failed.
