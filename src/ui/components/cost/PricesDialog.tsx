@@ -53,13 +53,20 @@ export function PricesDialog({
             {t("cost", "pricesNotUsed")}
           </p>
         )}
-        <PricesForm context={context} onDone={() => onOpenChange(false)} />
+        <PricesForm
+          key={context}
+          context={context}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
-/** Mounted with the dialog's content, so each opening starts from what is saved. */
+/**
+ * Mounted with the dialog's content and again for each context, so each
+ * opening, and each cluster, starts from what is saved.
+ */
 function PricesForm({
   context,
   onDone,

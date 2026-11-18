@@ -67,4 +67,34 @@ describe("the prices dialog", () => {
     act(() => nameIsAnotherCluster("turned-before"));
     expect(cpu).toHaveValue("");
   });
+
+  /**
+   * The dialog stayed open while its context changed: the form kept the
+   * first cluster's draft, and Save wrote it under the second name. Fails
+   * if a form outlives its context.
+   */
+  it("starts again from what is saved when its context changes", async () => {
+    const prices = (cpu: number) => ({
+      cpu,
+      memory: 0.005,
+      storage: null,
+      gpu: null,
+      currency: "EUR",
+    });
+    useCostPricesStore.setState({
+      prices: named({ first: prices(0.04), second: prices(0.09) }),
+    });
+    const page = await renderWithRouter(
+      <PricesDialog context="first" open onOpenChange={() => {}} />
+    );
+    expect(screen.getByRole("textbox", { name: /CPU/ })).toHaveValue("0.04");
+    page.rerender(
+      <PricesDialog context="second" open onOpenChange={() => {}} />
+    );
+    expect(screen.getByRole("textbox", { name: /CPU/ })).toHaveValue("0.09");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(entryOf(useCostPricesStore.getState().prices, "second")).toEqual(
+      prices(0.09)
+    );
+  });
 });
