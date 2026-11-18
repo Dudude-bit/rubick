@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/i18n/useT";
 import { persistedByName } from "@/lib/kept-by-name";
+import { entryOf } from "@/lib/named";
 import { useCostPrices, useCostPricesStore } from "@/stores/costPricesStore";
 import {
   FIELDS,
@@ -79,20 +80,27 @@ function PricesForm({
   const saved = useCostPrices(context);
   const setPrices = useCostPricesStore((s) => s.setPrices);
   const [draft, setDraft] = useState<Draft>(() => draftOf(saved));
+  const [drawnFrom] = useState(saved);
   const [touched, setTouched] = useState(false);
   // The name turned into another cluster while the form was open: what it
   // holds are the old cluster's prices, and Save must not give them to it.
-  // A turn told again as it subscribes came before it opened.
+  // A turn told again as it subscribes came before it was drawn only where
+  // what it was drawn from is still what is saved; one between the drawing
+  // and the subscription took that away.
   useEffect(() => {
     let open = false;
     const off = persistedByName((turned) => {
-      if (!open || turned !== context) return;
+      if (turned !== context) return;
+      const kept =
+        (entryOf(useCostPricesStore.getState().prices, context) ?? null) ===
+        drawnFrom;
+      if (!open && kept) return;
       setDraft(draftOf(null));
       setTouched(false);
     });
     open = true;
     return off;
-  }, [context]);
+  }, [context, drawnFrom]);
 
   const answer = pricesFromDraft(draft);
   const save = () => {
