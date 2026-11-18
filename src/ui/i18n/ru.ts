@@ -2746,6 +2746,7 @@ export const ru: Catalogue = {
     },
     notKnown: "Неизвестно",
     shareNoTotal: "неизвестна: нет итога",
+    shareBothFloors: "неизвестна: обе суммы оценки снизу",
     notPriced: "без цены",
     notMeasured: "не измерено",
     fromOpenCost:
@@ -2928,6 +2929,9 @@ export const ru: Catalogue = {
     linePerMonth: "{amount} в месяц по прогнозу",
     lineShare: "{share} от кластера",
     lineShareAtMost: "не больше {share} от кластера",
+    lineShareAtLeast: "не меньше {share} от кластера",
+    lineShareBothFloors:
+      "доля от кластера неизвестна: обе суммы лишь оценки снизу",
     lineShareNoTotal: "доля от кластера неизвестна, как и его итог",
     lineFromOpenCost: "по OpenCost",
     lineFromPrices: "оценка по введённым ценам",

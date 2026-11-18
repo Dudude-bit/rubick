@@ -778,7 +778,7 @@ describe("one object's cost", () => {
     expect(of.perHour).toBe(picture.workloads[0]!.perHour);
     expect(of.share).toEqual({
       of: expect.closeTo(0.05 / 0.2, 6),
-      atMost: false,
+      bound: "exact",
     });
     expect(costOf(picture, { namespace: "shop" })!.perHour).toBeCloseTo(0.05);
     expect(
@@ -799,17 +799,20 @@ describe("a row's share of a whole", () => {
    * reads as anything but what is known of it.
    */
   it("is not known where the whole is not, and at most where the whole is a floor", () => {
-    expect(shareOf(0.05, null)).toBe("noTotal");
-    expect(shareOf(0.05, { perHour: 0, atLeast: true })).toBe("noTotal");
-    expect(shareOf(0.05, { perHour: 0.2, atLeast: true })).toEqual({
+    const row = { perHour: 0.05, atLeast: false };
+    expect(shareOf(row, null)).toBe("noTotal");
+    expect(shareOf(row, { perHour: 0, atLeast: true })).toBe("noTotal");
+    expect(shareOf(row, { perHour: 0.2, atLeast: true })).toEqual({
       of: 0.25,
-      atMost: true,
+      bound: "atMost",
     });
-    expect(shareOf(0.05, { perHour: 0.2, atLeast: false })).toEqual({
+    expect(shareOf(row, { perHour: 0.2, atLeast: false })).toEqual({
       of: 0.25,
-      atMost: false,
+      bound: "exact",
     });
-    expect(shareOf(null, { perHour: 0.2, atLeast: false })).toBeNull();
+    expect(
+      shareOf({ perHour: null }, { perHour: 0.2, atLeast: false })
+    ).toBeNull();
     const unlisted = readingPicture(
       basis({ nodes: null }),
       reading(),
@@ -817,6 +820,21 @@ describe("a row's share of a whole", () => {
       null
     );
     expect(costOf(unlisted, { namespace: "shop" })!.share).toBe("noTotal");
+  });
+
+  /**
+   * A row that is itself a floor printed its share plain, and beside a
+   * whole that is a floor too it would have been a number bounded neither
+   * way. Fails if a floor's share is not at least, or two floors' share is
+   * a number.
+   */
+  it("is at least where the row is a floor, and not known where both are", () => {
+    const floor = { perHour: 0.05, atLeast: true };
+    expect(shareOf(floor, { perHour: 0.2, atLeast: false })).toEqual({
+      of: 0.25,
+      bound: "atLeast",
+    });
+    expect(shareOf(floor, { perHour: 0.2, atLeast: true })).toBe("bothFloors");
   });
 });
 

@@ -416,31 +416,45 @@ export const sortable = (said: Said): number =>
         ? 0
         : -1;
 
+const LINE_SHARE = {
+  exact: "lineShare",
+  atLeast: "lineShareAtLeast",
+  atMost: "lineShareAtMost",
+} as const;
+
 /** A share of the cluster, as an object's line and the scope's tile say it. */
 export function clusterShareWords(share: RowShare, t: T): string | null {
   if (share === null) return null;
   if (share === "noTotal") return t("cost", "lineShareNoTotal");
-  return t("cost", share.atMost ? "lineShareAtMost" : "lineShare", {
-    share: formatShare(share.of),
-  });
+  if (share === "bothFloors") return t("cost", "lineShareBothFloors");
+  return t("cost", LINE_SHARE[share.bound], { share: formatShare(share.of) });
 }
 
+const SHARE_BOUND: Record<
+  Extract<RowShare, object>["bound"],
+  (share: string, t: T) => string
+> = {
+  exact: (share) => share,
+  atLeast: (share, t) => t("cost", "atLeast", { amount: share }),
+  atMost: (share, t) => t("cost", "atMost", { value: share }),
+};
+
 /**
- * A row's share of the whole: at most where the whole is a floor, not known
- * where the whole is, and not priced only where the row is not.
+ * A row's share of the whole, bounded as {@link shareOf} bounds it: not
+ * known where the whole is or both are floors, and not priced only where
+ * the row is not.
  */
 export function share(
   row: Parameters<typeof totalUnknown>[0] & { share: RowShare },
   t: T
 ): string {
   if (row.share === "noTotal") return t("cost", "shareNoTotal");
+  if (row.share === "bothFloors") return t("cost", "shareBothFloors");
   if (row.share)
-    return row.share.atMost
-      ? t("cost", "atMost", { value: formatShare(row.share.of) })
-      : formatShare(row.share.of);
+    return SHARE_BOUND[row.share.bound](formatShare(row.share.of), t);
   return t("cost", totalUnknown(row) ? "notKnown" : "notPriced");
 }
 
 /** A share as a number to sort by: one with none sorts last. */
 export const shareSortable = (value: RowShare): number =>
-  value && value !== "noTotal" ? value.of : -1;
+  typeof value === "object" && value !== null ? value.of : -1;

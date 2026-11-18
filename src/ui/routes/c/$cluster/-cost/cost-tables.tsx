@@ -56,19 +56,20 @@ export function CostTables({
   // object, so the tables redraw and re-measure only what moved, and an
   // answer that moved nothing hands them the arrays they already hold.
   const built = useMemo(() => {
-    const of = (perHour: number | null) => shareOf(perHour, picture.total);
+    const of = (row: Parameters<typeof shareOf>[0]) =>
+      shareOf(row, picture.total);
     return {
       namespaces: picture.namespaces.map((row): NamespaceRow => ({
         ...row,
         currency,
-        share: of(row.perHour),
+        share: of(row),
       })),
       workloads: picture.workloads.map((row): WorkloadRow => ({
         ...row,
         id: idOf(row.key),
         crd: crdInGroup(row.key, crdFor),
         currency,
-        share: of(row.perHour),
+        share: of(row),
         efficiency: workloadEfficiency(usage, row.key, row.requests),
       })),
       nodes:

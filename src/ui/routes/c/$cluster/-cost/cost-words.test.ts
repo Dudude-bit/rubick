@@ -10,6 +10,7 @@ import {
   efficiencyWords,
   money,
   partOf,
+  clusterShareWords,
   pictureNotes,
   share,
   totalOf,
@@ -254,11 +255,28 @@ describe("a priced row's share where the whole is not known", () => {
       share: "noTotal" as const,
     };
     expect(share(row, t)).toBe("not known: no total");
-    expect(share({ ...row, share: { of: 0.25, atMost: true } }, t)).toBe(
+    expect(share({ ...row, share: { of: 0.25, bound: "atMost" } }, t)).toBe(
       "at most 25%"
     );
-    expect(share({ ...row, share: { of: 0.25, atMost: false } }, t)).toBe(
+    expect(share({ ...row, share: { of: 0.25, bound: "exact" } }, t)).toBe(
       "25%"
+    );
+  });
+
+  /** A floor's share is a floor; two floors bound it neither way. Fails if either prints a plain number. */
+  it("says at least of a floor, and not known of two", () => {
+    const row = { perHour: 0.05, unpriced: [], unknown: [] };
+    expect(share({ ...row, share: { of: 0.25, bound: "atLeast" } }, t)).toBe(
+      "at least 25%"
+    );
+    expect(share({ ...row, share: "bothFloors" }, t)).toBe(
+      "not known: both are floors"
+    );
+    expect(clusterShareWords({ of: 0.25, bound: "atLeast" }, t)).toBe(
+      "at least 25% of the cluster"
+    );
+    expect(clusterShareWords("bothFloors", t)).toBe(
+      "share of the cluster not known, as both amounts are floors"
     );
   });
 });

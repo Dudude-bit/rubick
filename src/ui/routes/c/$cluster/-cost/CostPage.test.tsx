@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import {
   afterEach,
   beforeEach,
@@ -571,6 +571,68 @@ describe("a priced row where the cluster's total is not known", () => {
         ? summary.body.rows.find((r) => r.label === "The cluster")
         : undefined;
     expect(cluster?.values).toEqual([{ text: "Not known", mono: true }]);
+  });
+});
+
+describe("the share of a row that is itself a floor", () => {
+  /**
+   * `shop`'s amount is "at least": its share printed plain in the table and
+   * on its line; beside a cluster total that is a floor too it is bounded
+   * neither way. Fails if either reader prints a plain number, or a number
+   * where nothing bounds it.
+   */
+  it("is at least beside an exact total, and not known beside a floor", async () => {
+    const floor = (atLeast: boolean): CostState => ({
+      state: "picture",
+      picture: {
+        ...opencost,
+        cluster: { perHour: 0.2, atLeast },
+        total: { perHour: 0.2, atLeast },
+        namespaces: opencost.namespaces.map((n) => ({
+          ...n,
+          perHour: 0.05,
+          atLeast: true,
+        })),
+      },
+      trouble: null,
+    });
+    const line = async () => {
+      await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+        at: "/c/prod/namespaces",
+        route: "/c/$cluster/namespaces",
+      });
+      return screen.getByTestId("namespace-cost");
+    };
+    cost.mockReturnValue(floor(false));
+    await open();
+    expect(screen.getAllByText("at least 25%").length).toBeGreaterThan(0);
+    expect(await line()).toHaveTextContent("at least 25% of the cluster");
+    cleanup();
+
+    cost.mockReturnValue(floor(true));
+    await open();
+    expect(
+      screen.getAllByText("not known: both are floors").length
+    ).toBeGreaterThan(0);
+    expect(await line()).toHaveTextContent(
+      "share of the cluster not known, as both amounts are floors"
+    );
+  });
+
+  /** A scope whose total is a floor took a plain share of an exact cluster on its tile. Fails if the tile drops the bound. */
+  it("is at least on the tile of a scope whose total is a floor", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: {
+        ...opencost,
+        cluster: { perHour: 0.2, atLeast: false },
+        total: { perHour: 0.05, atLeast: true },
+      },
+      trouble: null,
+    });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    await open();
+    expect(screen.getByText("at least 25% of the cluster")).toBeInTheDocument();
   });
 });
 

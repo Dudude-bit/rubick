@@ -125,11 +125,7 @@ function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
         value={total ? amountWords(total, currency, t) : t("cost", "notKnown")}
         testId="cost-per-hour"
         note={
-          (scoped &&
-            clusterShareWords(
-              shareOf(total?.perHour ?? null, picture.cluster),
-              t
-            )) ||
+          (scoped && clusterShareWords(shareOf(total, picture.cluster), t)) ||
           undefined
         }
       />
