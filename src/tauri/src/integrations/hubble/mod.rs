@@ -504,7 +504,10 @@ async fn owners_in(
         return Owners::unread();
     };
     match scoped_pods_on(cache, client, context, scope).await {
-        Ok(read) => Owners::of(&read),
+        Ok(read) => Owners {
+            read_in: scope.map(|names| names.iter().cloned().collect()),
+            ..Owners::of(&read)
+        },
         Err(_) => Owners::unread(),
     }
 }
@@ -780,6 +783,8 @@ struct Owners {
     missing: BTreeSet<(String, String)>,
     /// No read has answered yet: a pod's owner is not known either way.
     pending: bool,
+    /// The namespaces the read covered; `None` for every one.
+    read_in: Option<BTreeSet<String>>,
 }
 
 impl Owners {
@@ -797,6 +802,7 @@ impl Owners {
             all: false,
             missing: BTreeSet::new(),
             pending: false,
+            read_in: None,
         }
     }
 
@@ -812,6 +818,27 @@ impl Owners {
             pending: true,
             ..Self::default()
         }
+    }
+
+    /// A pod no read has looked for yet, before any or in a namespace the
+    /// last did not cover: its owner is not known, and "not listed" would be
+    /// said of a list not made.
+    fn waits(&self, end: &FlowEnd) -> bool {
+        let FlowEnd::NotListed {
+            namespace,
+            kind: Some(kind),
+            why: NotListedWhy::NoSuch,
+            ..
+        } = end
+        else {
+            return false;
+        };
+        kind == "Pod"
+            && (self.pending
+                || self
+                    .read_in
+                    .as_ref()
+                    .is_some_and(|read| !read.contains(namespace)))
     }
 
     /// Whether the pods are worth reading again: a pod a flow named and the
@@ -1097,11 +1124,9 @@ impl Fold {
         let mut pairs = Vec::new();
         let mut gone = Vec::new();
         for key in changed {
-            // Before the first read a pod's pair waits: "not listed" would be
-            // said of a list not yet made. One the window emptied goes below,
-            // or it holds a place under the cap with nothing in it.
-            if self.owners.pending
-                && (unlisted_pod(&key.0) || unlisted_pod(&key.1))
+            // A pod no read has looked for waits. One the window emptied goes
+            // below, or it holds a place under the cap with nothing in it.
+            if (self.owners.waits(&key.0) || self.owners.waits(&key.1))
                 && self
                     .pairs
                     .get(&key)
@@ -1132,10 +1157,6 @@ impl Fold {
         }
         (pairs, gone)
     }
-}
-
-fn unlisted_pod(end: &FlowEnd) -> bool {
-    matches!(end, FlowEnd::NotListed { kind: Some(kind), .. } if kind == "Pod")
 }
 
 /// A rate as the page draws it: three significant figures, whole from 100.
@@ -1610,6 +1631,39 @@ mod tests {
         }
         .read_again());
         assert!(!Owners::default().read_again());
+    }
+
+    /// A pod in a namespace the last read did not cover was said "not
+    /// listed" there, of a list never made: its pair waits for a read that
+    /// covers it, and is said as that read finds it.
+    #[test]
+    fn a_pod_in_a_namespace_no_read_covered_waits_for_one_that_does() {
+        let read_in = |names: &[&str]| Owners {
+            read_in: Some(names.iter().map(|name| (*name).to_string()).collect()),
+            ..Owners::default()
+        };
+        let mut fold = Fold::new(0);
+        fold.owners_read(read_in(&["shop"]));
+        fold.add(
+            100,
+            &flow::Flow {
+                verdict: Verdict::Forwarded as i32,
+                source: Some(endpoint("monitoring", None, "prometheus-0")),
+                destination: Some(endpoint("shop", Some(("Deployment", "web")), "")),
+                ..Default::default()
+            },
+        );
+        assert!(fold.tick(101).0.is_empty());
+        assert!(fold
+            .owners
+            .missing
+            .contains(&("monitoring".into(), "prometheus-0".into())));
+        fold.owners_read(read_in(&["monitoring", "shop"]));
+        let (pairs, _) = fold.tick(102);
+        assert!(matches!(
+            &pairs[0].from,
+            FlowEnd::NotListed { why: NotListedWhy::NoSuch, namespace, .. } if namespace == "monitoring"
+        ));
     }
 
     /// A pod's pair held back before the first read, and emptied by the
