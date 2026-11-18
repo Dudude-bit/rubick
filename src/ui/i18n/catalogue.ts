@@ -2450,6 +2450,8 @@ export const en = {
       "The live stream was not listened to in time and stopped.",
     liveFailed: "Hubble Relay could not be read: {said}",
     liveLost: "Hubble reports {lost} lost before they reached the relay.",
+    liveWaiting:
+      "{waiting} the relay sent wait for their pods to be read, and are drawn once they are.",
     liveUntracked:
       "{untracked} fell outside the pairs held at once and are not drawn.",
     liveUnreached:
