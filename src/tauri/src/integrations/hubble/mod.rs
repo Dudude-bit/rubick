@@ -801,19 +801,25 @@ impl Owners {
     }
 
     /// A bare pod as its workload; one whose pods could not be read as not
-    /// listed for that reason; one nothing owns as itself.
+    /// listed for that reason; one nothing owns as itself. A pod held as not
+    /// listed is a pod still, resolved again by the next read.
     fn resolve(&mut self, end: FlowEnd) -> FlowEnd {
-        let FlowEnd::Workload { key } = &end else {
-            return end;
+        let at = match &end {
+            FlowEnd::Workload { key } if key.kind == "Pod" && key.group.is_empty() => {
+                (key.namespace.clone(), key.name.clone())
+            }
+            FlowEnd::NotListed {
+                namespace,
+                name,
+                kind: Some(kind),
+                ..
+            } if kind == "Pod" => (namespace.clone(), name.clone()),
+            _ => return end,
         };
-        if key.kind != "Pod" || !key.group.is_empty() {
-            return end;
-        }
-        let at = (key.namespace.clone(), key.name.clone());
         if let Some(owner) = self.of.get(&at) {
             return FlowEnd::Workload { key: owner.clone() };
         }
-        if self.all || self.unread.contains(&key.namespace) {
+        if self.all || self.unread.contains(&at.0) {
             return FlowEnd::NotListed {
                 namespace: at.0,
                 name: at.1,
@@ -1504,6 +1510,40 @@ mod tests {
         assert!(matches!(
             &read.tick(101).0[0].from,
             FlowEnd::Workload { key } if key.kind == "Pod" && key.name == "debug"
+        ));
+    }
+
+    /// A pod's pairs held as not listed while its namespace's pods could not
+    /// be read join its workload's once a read lists it, and its later flows
+    /// go to the same pair: one pod, one row, not two until the window ends.
+    #[test]
+    fn a_pod_not_listed_for_a_failed_read_joins_its_workload_when_a_read_lists_it() {
+        let mut fold = Fold::new(0);
+        fold.owners_read(Owners::unread());
+        fold.add(100, &from_pod("caller-649d545b48-c74f8"));
+        fold.tick(101);
+        fold.owners_read(Owners {
+            of: HashMap::from([(
+                ("shop".into(), "caller-649d545b48-c74f8".into()),
+                deployment("caller"),
+            )]),
+            ..Owners::default()
+        });
+        fold.add(102, &from_pod("caller-649d545b48-c74f8"));
+        let (pairs, gone) = fold.tick(103);
+        assert_eq!(fold.pairs.len(), 1);
+        assert_eq!(
+            pairs[0].from,
+            FlowEnd::Workload {
+                key: deployment("caller")
+            }
+        );
+        assert!(matches!(
+            &gone[..],
+            [LiveKey {
+                from: FlowEnd::NotListed { .. },
+                ..
+            }]
         ));
     }
 
