@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useT } from "@/i18n/useT";
-import { currencyOf, type CostPicture } from "@/lib/cost";
+import { currencyOf, shareOf, type CostPicture } from "@/lib/cost";
 import { workloadEfficiency, type UsageReading } from "@/lib/efficiency";
 import { crdInGroup, hrefOf, objectLink } from "@/lib/links";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
@@ -56,21 +56,20 @@ export function CostTables({
   // object, so the tables redraw and re-measure only what moved, and an
   // answer that moved nothing hands them the arrays they already hold.
   const built = useMemo(() => {
-    const whole = picture.total?.perHour ?? null;
-    const shareOf = (perHour: number | null) =>
-      perHour === null || whole === null || whole <= 0 ? null : perHour / whole;
+    const of = (row: Parameters<typeof shareOf>[0]) =>
+      shareOf(row, picture.total);
     return {
       namespaces: picture.namespaces.map((row): NamespaceRow => ({
         ...row,
         currency,
-        share: shareOf(row.perHour),
+        share: of(row),
       })),
       workloads: picture.workloads.map((row): WorkloadRow => ({
         ...row,
         id: idOf(row.key),
         crd: crdInGroup(row.key, crdFor),
         currency,
-        share: shareOf(row.perHour),
+        share: of(row),
         efficiency: workloadEfficiency(usage, row.key, row.requests),
       })),
       nodes:

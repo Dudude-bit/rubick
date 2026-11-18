@@ -2001,8 +2001,17 @@ export const ru: Catalogue = {
       "к кластеру не подключён Prometheus, а потребление нагрузки за сутки читается из него",
     whyNoSamples:
       "в подключённом Prometheus нет ни одного замера её подов за последние сутки",
+    whyPeakUnread:
+      "подключённый Prometheus вернул её среднее потребление за последние сутки, но не пик, а оценивается именно пик",
     whyYoung:
       "самый молодой её под запущен {age} назад, а пик оценивается по целым суткам",
+    whyPartial: {
+      one: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её пода, а пик оценивается по всем",
+      few: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+      many: "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+      other:
+        "в подключённом Prometheus за последние сутки есть замеры {read} из {n} её подов, а пик оценивается по всем",
+    },
     whyYoungUndated:
       "неизвестно, когда запущены её поды, а пик оценивается по целым суткам",
     whyFolded:
@@ -2727,12 +2736,19 @@ export const ru: Catalogue = {
     reservedNote:
       "Оплачено и никому не отдано; {amount} из этого держат за собой kubelet и система.",
     theCluster: "Кластер",
-    ofCluster: "{share} от кластера",
     unclaimed: "Тома, которые никто не занял",
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
     atMost: "не больше {value}",
+    fromPods: {
+      one: "{line}, по замерам {read} из {n} пода",
+      few: "{line}, по замерам {read} из {n} подов",
+      many: "{line}, по замерам {read} из {n} подов",
+      other: "{line}, по замерам {read} из {n} подов",
+    },
     notKnown: "Неизвестно",
+    shareNoTotal: "неизвестна: нет итога",
+    shareBothFloors: "неизвестна: обе суммы оценки снизу",
     notPriced: "без цены",
     notMeasured: "не измерено",
     fromOpenCost:
@@ -2818,6 +2834,8 @@ export const ru: Catalogue = {
       "Prometheus по адресу {endpoint} ответил, но рядов OpenCost (node_total_hourly_cost) в нём нет. OpenCost пишет их, когда его /metrics собирается в этот Prometheus; Kubecost пишет ряды с теми же именами.",
     noNodePrices:
       "OpenCost в Prometheus по адресу {endpoint} не дал цену ни одному узлу этого кластера: прайс-листа для них он не нашёл.",
+    noNodePricesLastFailed:
+      "OpenCost в Prometheus по адресу {endpoint} в последнем полученном ответе не дал цену ни одному узлу этого кластера; следующее чтение не удалось ({said}).",
     whyNoNodePrices:
       "OpenCost не нашёл прайс-листа для этих узлов, так бывает на kind или у провайдера, которого он не знает. Задайте OpenCost свои цены или {prices}, и страница посчитает по ним.",
     whySomeNodePrices:
@@ -2913,6 +2931,10 @@ export const ru: Catalogue = {
     linePerMonth: "{amount} в месяц по прогнозу",
     lineShare: "{share} от кластера",
     lineShareAtMost: "не больше {share} от кластера",
+    lineShareAtLeast: "не меньше {share} от кластера",
+    lineShareBothFloors:
+      "доля от кластера неизвестна: обе суммы лишь оценки снизу",
+    lineShareNoTotal: "доля от кластера неизвестна, как и его итог",
     lineFromOpenCost: "по OpenCost",
     lineFromPrices: "оценка по введённым ценам",
     lineNotPriced: "Ни один ряд OpenCost не дал цену её подам.",

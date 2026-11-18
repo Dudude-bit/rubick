@@ -395,7 +395,8 @@ export function changesSection(
     icon: iconSvg(History),
   };
   // A read that failed or never answered is not a history with no change.
-  if (read.unread)
+  // Beside rows another read gave, it is what the section lacks.
+  if (read.unread && read.rows.length === 0)
     return {
       ...shell,
       unread: read.unread,
@@ -446,7 +447,11 @@ export function changesSection(
     Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms)),
     readFrom ?? Number.NEGATIVE_INFINITY
   );
-  const gaps = watched ? gapsOf(spans, from, now, watching, namespaces) : [];
+  // The object's own read gave no spans: what was watched is not known,
+  // so neither a gap nor an empty journal is.
+  const known = read.spans !== undefined;
+  const gaps =
+    watched && known ? gapsOf(spans, from, now, watching, namespaces) : [];
   const letGo = read.letGo?.changes;
   const rows: (ReportChange & { ms: number })[] = [
     ...out.map(({ ms, at, ref, parts }) => ({
@@ -474,24 +479,30 @@ export function changesSection(
   ].sort((a, b) => b.ms - a.ms);
   const said = rows.map(({ at, ref, parts }) => ({ at, ref, parts }));
   // Not watched, the let-go line is still what is known of the history.
-  const changes: ReportChange[] = watched
-    ? said
-    : [
-        ...said,
-        {
-          at: null,
-          ref: null,
-          parts: [{ text: t("share", "journalEmpty"), quiet: true }],
-        },
-      ];
+  const changes: ReportChange[] =
+    watched || !known
+      ? said
+      : [
+          ...said,
+          {
+            at: null,
+            ref: null,
+            parts: [{ text: t("share", "journalEmpty"), quiet: true }],
+          },
+        ];
   return {
     ...shell,
     // Changes, as the Changes tab counts them; a row holds every change of one moment.
     count: all.length,
     partial:
-      readFrom === null
-        ? null
-        : t("changes", "olderNotRead", { at: utcMoment(readFrom) }),
+      [
+        read.unread,
+        readFrom === null
+          ? null
+          : t("changes", "olderNotRead", { at: utcMoment(readFrom) }),
+      ]
+        .filter(Boolean)
+        .join(" ") || null,
     body: { type: "changes", changes },
   };
 }

@@ -87,7 +87,7 @@ describe("the breakdown by workload", () => {
       parts: { cpu: 0.001, memory: 0.0005 },
       unpriced: [],
       currency: "EUR",
-      share: 0.12,
+      share: { of: 0.12, bound: "exact" as const },
       requests: { cpu: 100, memory: 128 * MI },
       efficiency: {
         cpu: efficiencyOf(100, 3, 9, since, now),
@@ -124,7 +124,7 @@ describe("the breakdown by workload", () => {
       unpriced: [],
       unknown: [],
       currency: "EUR",
-      share: 0.5,
+      share: { of: 0.5, bound: "exact" as const },
     }));
     for (const [columns, held] of [
       [workloadColumns(t), rows],

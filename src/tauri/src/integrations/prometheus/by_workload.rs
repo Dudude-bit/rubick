@@ -66,6 +66,10 @@ pub struct WorkloadFold {
     /// the answer had a series for. Fewer than run is a sum over some of
     /// them; more than one is a sum of each pod's own figure.
     pub covered: Vec<Vec<u32>>,
+    /// Positional like `values`: how many of the workload's pods this read
+    /// listed on a node, the count `covered` is out of. A basis read before
+    /// may count otherwise: the workload scaled between the two.
+    pub pods: Vec<u32>,
     /// Positional like `values`: when the youngest of the workload's pods on
     /// a node started (or, not started yet, was created). A window of use is
     /// no longer than the pods it was read from have run.
@@ -165,10 +169,12 @@ pub(crate) fn fold(
     let in_scope = |namespace: &str| scope.is_none_or(|names| names.iter().any(|n| n == namespace));
 
     let mut youngest: Vec<Option<k8s_openapi::jiff::Timestamp>> = vec![None; keys.len()];
+    let mut listed = vec![0_u32; keys.len()];
     for pod in read.pods.iter().filter(|pod| on_a_node(pod)) {
         let Some(&row) = index.get(&cost_key(pod, &read.cron_of)) else {
             continue;
         };
+        listed[row] += 1;
         let started = pod
             .status
             .as_ref()
@@ -189,6 +195,7 @@ pub(crate) fn fold(
         unread: Vec::new(),
         unlabelled: 0,
         covered: Vec::new(),
+        pods: listed,
         since: youngest
             .into_iter()
             .map(|at| at.map(|at| at.to_string()))
@@ -261,16 +268,22 @@ pub(crate) fn fold(
             values,
         })
         .collect();
-    fold.unread = unread_sums
+    // Every refusal, with or without a series in it: a namespace no series
+    // fell in is still one whose pods were not read.
+    let mut refused: Vec<_> = unread
+        .iter()
+        .filter(|(namespace, _)| in_scope(namespace))
+        .collect();
+    refused.sort_by_key(|(namespace, _)| *namespace);
+    fold.unread = refused
         .into_iter()
-        .map(|(namespace, values)| {
-            let why = unread[namespace];
-            UnreadSums {
-                namespace: namespace.to_string(),
-                code: why.code.clone(),
-                message: why.message.clone(),
-                values,
-            }
+        .map(|(namespace, why)| UnreadSums {
+            namespace: (*namespace).to_string(),
+            code: why.code.clone(),
+            message: why.message.clone(),
+            values: unread_sums
+                .remove(namespace)
+                .unwrap_or_else(|| vec![None; width]),
         })
         .collect();
     fold
@@ -364,6 +377,23 @@ mod tests {
         assert_eq!(fold.unread[0].values, vec![Some(4.0)]);
     }
 
+    /// `vault`'s pods were refused and no series fell in it: the refusal
+    /// was dropped with nothing to sum, and its workloads read as having
+    /// no samples. Fails if a refusal is named only where a series was.
+    #[test]
+    fn a_namespace_whose_pods_were_refused_is_named_with_no_series_in_it() {
+        let mut read = read_of(vec![]);
+        read.unread.push(UnreadNamespace::of(
+            "vault".into(),
+            &Error::PermissionDenied("pods is forbidden".into()),
+        ));
+        let fold = fold(&[vec![], vec![]], &read, &[], None);
+        assert_eq!(fold.unread.len(), 1);
+        assert_eq!(fold.unread[0].namespace, "vault");
+        assert_eq!(fold.unread[0].code, "PERMISSION_DENIED");
+        assert_eq!(fold.unread[0].values, vec![None, None]);
+    }
+
     /// A query that named none of a workload's pods has no value for it:
     /// `None`, which the page says as "not measured", never a zero.
     #[test]
@@ -394,6 +424,28 @@ mod tests {
         ];
         let fold = fold(&answers, &read, &[key("kept")], None);
         assert_eq!(fold.covered, vec![vec![1, 2]]);
+    }
+
+    /// The basis counted one pod and the workload scaled to two before this
+    /// read: a series for one of them was compared with the basis's one and
+    /// read as whole. The fold counts the pods it read itself. Fails if
+    /// `covered` has no count from the same read to be out of.
+    #[test]
+    fn the_fold_counts_each_workload_s_pods_from_the_read_its_coverage_is_of() {
+        let waiting = Spec {
+            node: None,
+            phase: "Pending",
+            ..running("shop", "kept-2", ("StatefulSet", "kept"))
+        };
+        let read = read_of(vec![
+            pod(&running("shop", "kept-0", ("StatefulSet", "kept"))),
+            pod(&running("shop", "kept-1", ("StatefulSet", "kept"))),
+            pod(&waiting),
+        ]);
+        let answers = vec![vec![series("shop", "kept-0", 1.0)]];
+        let fold = fold(&answers, &read, &[key("kept"), key("none")], None);
+        assert_eq!(fold.pods, vec![2, 0]);
+        assert_eq!(fold.covered, vec![vec![1], vec![0]]);
     }
 
     /// A window of use is no longer than the pods it was read from: the

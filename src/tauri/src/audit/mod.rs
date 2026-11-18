@@ -268,10 +268,17 @@ pub enum Why {
     NoUsage,
     /// The usage supplier holds no sample of its pods in the window.
     NoSamples,
+    /// The supplier gave its average use in the window and no peak.
+    PeakUnread,
     /// Its youngest pod, started at `since` where known, has not been seen
     /// to run the usage window.
     Young {
         since: Option<String>,
+    },
+    /// The usage supplier holds samples of `read` of the `of` pods it runs.
+    Partial {
+        read: u32,
+        of: u32,
     },
     /// Past the row cap of the requests list, its usage was read only as a sum.
     Folded,

@@ -1956,8 +1956,15 @@ export const en = {
       "no Prometheus is connected to this cluster, and a workload's day of usage is read from one",
     whyNoSamples:
       "the connected Prometheus holds no sample of its pods in the last day",
+    whyPeakUnread:
+      "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
+    whyPartial: {
+      one: "the connected Prometheus holds samples of {read} of its {n} pod in the last day, and a peak is judged over every one",
+      other:
+        "the connected Prometheus holds samples of {read} of its {n} pods in the last day, and a peak is judged over every one",
+    },
     whyYoungUndated:
       "when its pods started is not known, and a peak is judged over a whole day",
     whyFolded:
@@ -2594,12 +2601,17 @@ export const en = {
     reservedNote:
       "Paid for and allocated to nobody; {amount} of it is kept back by the kubelet and the system.",
     theCluster: "The cluster",
-    ofCluster: "{share} of the cluster",
     unclaimed: "Volumes nobody claims",
     fee: "Cluster management fee",
     atLeast: "at least {amount}",
     atMost: "at most {value}",
+    fromPods: {
+      one: "{line}, from {read} of its {n} pod",
+      other: "{line}, from {read} of its {n} pods",
+    },
     notKnown: "Not known",
+    shareNoTotal: "not known: no total",
+    shareBothFloors: "not known: both are floors",
     notPriced: "not priced",
     notMeasured: "not measured",
     fromOpenCost:
@@ -2682,6 +2694,8 @@ export const en = {
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
     noNodePrices:
       "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    noNodePricesLastFailed:
+      "OpenCost in Prometheus at {endpoint} priced none of this cluster's nodes in the last read that answered; the read after it failed ({said}).",
     whyNoNodePrices:
       "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
     whySomeNodePrices:
@@ -2763,6 +2777,10 @@ export const en = {
     linePerMonth: "{amount} per month projected",
     lineShare: "{share} of the cluster",
     lineShareAtMost: "at most {share} of the cluster",
+    lineShareAtLeast: "at least {share} of the cluster",
+    lineShareBothFloors:
+      "share of the cluster not known, as both amounts are floors",
+    lineShareNoTotal: "share of the cluster not known, as its total is not",
     lineFromOpenCost: "from OpenCost",
     lineFromPrices: "estimated from entered prices",
     lineNotPriced: "No OpenCost series priced its pods.",

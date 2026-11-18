@@ -322,6 +322,7 @@ fn opening(
             cancel: cancel.clone(),
             lease: None,
             ask_at_most: stream::ASK_AT_MOST,
+            touch_every: stream::TOUCH_EVERY,
         },
         cancel,
     )
@@ -912,4 +913,31 @@ async fn a_kind_discovery_cannot_name_yet_is_unread_and_kept_until_it_can() {
     drop(tx);
     pumping.await.expect("the pump ends");
     assert_eq!(gateways(&map), Some(3));
+}
+
+/// A reread slower than a touch held the map still: the touch it missed
+/// came due at once, and the next reread began before the changes waiting
+/// behind it were drawn, for as long as the reread stayed slow. Fails if a
+/// change is not drawn while every reread outlasts the touch.
+#[tokio::test]
+async fn a_reread_slower_than_a_touch_does_not_hold_the_map_still() {
+    let map = Arc::new(ClusterMap::default());
+    map.feed(every_kind_read());
+    map.feed([Feed::Applied(deployment("shop", "cart"))]);
+    let (events, mut rx) = broadcast::channel(64);
+    let (mut open, cancel) = opening(map.clone(), &events);
+    open.reread = Some(Arc::new(|| Box::pin(std::future::pending())));
+    open.touch_every = std::time::Duration::from_millis(30);
+    open.ask_at_most = std::time::Duration::from_millis(100);
+    let task = tokio::spawn(stream::run(open));
+    while next(&mut rx).await != vec!["ready"] {}
+
+    map.feed([Feed::Applied(deployment("shop", "ledger"))]);
+    let drawn = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+        .await
+        .expect("drawn while every reread outlasts a touch")
+        .expect("open");
+    assert_eq!(pieces_of(&drawn), vec!["apps/Deployment/shop/ledger"]);
+    cancel.cancel();
+    task.await.expect("ends");
 }

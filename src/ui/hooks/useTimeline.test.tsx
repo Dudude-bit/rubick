@@ -317,6 +317,36 @@ describe("one surface reading the timeline", () => {
   });
 
   /**
+   * A catch-up of the 24-hour window was out when the reader switched to 7
+   * days, whose catch-up failed; the first one's late success cleared that
+   * failure, and the stretch it never read was called quiet again. Fails if
+   * an answer to a question no longer asked writes the read's error.
+   */
+  it("keeps the failure of the question asked now when an earlier one answers late", async () => {
+    answers = [page([row("a", 10)])];
+    const { result, rerender } = renderHook(
+      ({ windowMs }) => useTimeline({ windowMs, show: "all" }),
+      { wrapper: wrapperOf(fresh()), initialProps: { windowMs: WIDE } }
+    );
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await settled();
+    let late: (page: TimelinePage) => void = () => {};
+    answers = [new Promise((resolve) => (late = resolve))];
+    told("prod");
+    await waitFor(() => expect(asked).toHaveLength(3));
+    answers = [page([row("a", 10)]), new Error("disk refused")];
+    rerender({ windowMs: WIDE - 1 });
+    await waitFor(() =>
+      expect(result.current.error?.message).toContain("disk refused")
+    );
+    await act(async () => {
+      late(page([]));
+      await new Promise((settle) => setTimeout(settle, 50));
+    });
+    expect(result.current.error?.message).toContain("disk refused");
+  });
+
+  /**
    * A Changes tab closed and opened again within the cache's life: its rows
    * were held and never read again, so what was recorded while it was closed
    * stayed off screen until the next change. Fails if a surface opened on

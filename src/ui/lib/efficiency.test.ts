@@ -52,6 +52,8 @@ describe("efficiency", () => {
       state: "unrequested",
       avg: 20,
       peak: 40,
+      peakAtMost: false,
+      podsRead: null,
       since: DAY_OLD,
       whole: true,
     });
@@ -128,6 +130,7 @@ describe("efficiency", () => {
         ],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [null],
       },
     };
@@ -158,6 +161,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [[1, 1, 1, 1]],
+        pods: [1],
         since: [since],
       },
       at: readAt,
@@ -183,6 +187,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [[2, 2, 1, 1]],
+        pods: [2],
         since: [DAY_OLD],
       },
     };
@@ -194,6 +199,42 @@ describe("efficiency", () => {
     );
     expect(of.cpu).toMatchObject({ state: "measured", peakAtMost: true });
     expect(of.memory).toMatchObject({ state: "measured", peakAtMost: false });
+  });
+
+  /**
+   * Two of its three pods were read: their peaks summed were called "at
+   * most" the workload's, though the third may have peaked higher than
+   * both, and a low sum was called a request far above use. Fails if a sum
+   * over some of its pods reads as a bound, or is judged.
+   */
+  it("says which pods a sum over some of them was read from, and judges none", () => {
+    const fold = (covered: number[], pods: number): UsageReading => ({
+      state: "read",
+      keys: [key],
+      fold: {
+        values: [[100, 200, 10, 20]],
+        rest: [null, null, null, null],
+        unplaced: [],
+        unread: [],
+        unlabelled: 0,
+        covered: [covered],
+        pods: [pods],
+        since: [DAY_OLD],
+      },
+    });
+    const requests = { cpu: 1000, memory: 100 };
+    const some = workloadEfficiency(fold([2, 2, 2, 1], 3), key, requests, NOW);
+    expect(some.cpu).toMatchObject({
+      state: "measured",
+      peakAtMost: false,
+      podsRead: { read: 2, of: 3 },
+    });
+    expect(some.memory).toMatchObject({ podsRead: { read: 1, of: 3 } });
+    expect(overRequested(some.cpu)).toBe(false);
+
+    const one = workloadEfficiency(fold([1, 1, 1, 1], 1), key, requests, NOW);
+    expect(one.cpu).toMatchObject({ peakAtMost: false, podsRead: null });
+    expect(overRequested(one.cpu)).toBe(true);
   });
 
   /** Where the reading itself is missing, both resources say why. */
@@ -224,6 +265,7 @@ describe("efficiency", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [DAY_OLD, TWO_HOURS_OLD],
       },
     };

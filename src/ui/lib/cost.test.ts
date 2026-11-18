@@ -19,6 +19,8 @@ import {
   noNodePriced,
   pricesNoNode,
   readingPicture,
+  shareOf,
+  totalUnknown,
   type CostReading,
   type Prices,
 } from "./cost";
@@ -99,6 +101,7 @@ const fold = (
   unread: [],
   unlabelled: 0,
   covered: [],
+  pods: values.map(() => 2),
   since: values.map(() => null),
 });
 
@@ -378,6 +381,25 @@ describe("a picture from OpenCost's prices", () => {
     expect(bank.perHour).toBeNull();
   });
 
+  /**
+   * A LoadBalancer is billed to its namespace whatever the namespace holds:
+   * with CPU and memory unpriced its known price was dropped and the row had
+   * no total. Fails if a part beyond what it holds prices nothing of it.
+   */
+  it("keeps a LoadBalancer's price as a floor where CPU and memory carry none", () => {
+    const picture = readingPicture(
+      basis(),
+      reading({ namespaces: { shop: { loadBalancer: 0.1 } } }),
+      opencost,
+      null
+    );
+    expect(picture.namespaces[0]).toMatchObject({
+      perHour: 0.1,
+      atLeast: true,
+      unpriced: ["cpu", "memory"],
+    });
+  });
+
   /** No series for any of a workload's pods is "not priced", never 0/h. */
   it("leaves a workload no series priced without a cost rather than at zero", () => {
     const picture = readingPicture(
@@ -537,6 +559,36 @@ describe("what the supplier's series cover", () => {
     expect(all.workloads[0]!.atLeast).toBe(false);
     expect(all.namespaces[0]!.atLeast).toBe(false);
   });
+
+  /**
+   * The basis counted one pod and the workload scaled to two before the
+   * series were read, which covered one: compared with the basis's count
+   * the row read as whole. Fails if coverage is judged out of any count but
+   * the read's own.
+   */
+  it("judges coverage out of the pods the same read listed", () => {
+    const one = basis({ workloads: [{ ...workload("web"), pods: 1 }] });
+    const scaled = fold([[0.03, 0.02, null, null]]);
+    scaled.covered = [[1, 1, 0, 0]];
+    scaled.pods = [2];
+    const up = readingPicture(
+      one,
+      reading({ workloads: scaled }),
+      opencost,
+      null
+    );
+    expect(up.workloads[0]!.atLeast).toBe(true);
+    expect(up.namespaces[0]!.atLeast).toBe(true);
+
+    scaled.pods = [1];
+    const same = readingPicture(
+      one,
+      reading({ workloads: scaled }),
+      opencost,
+      null
+    );
+    expect(same.workloads[0]!.atLeast).toBe(false);
+  });
 });
 
 describe("whether no node carries a price", () => {
@@ -603,6 +655,45 @@ describe("storage nobody could read", () => {
     const none = shop(0);
     expect(none.namespaces[0]).toMatchObject({ atLeast: false, unknown: [] });
     expect(none.workloads[0]!.atLeast).toBe(false);
+  });
+
+  /**
+   * A namespace that runs nothing, whose claims were refused, with no part
+   * priced: its row read as exactly 0. Fails if storage nobody read prices
+   * as none, or storage read as 0 bytes does not.
+   */
+  it("has no total for a namespace that holds nothing else, where its storage was not read", () => {
+    const empty = (storageBytes: number | null) =>
+      readingPicture(
+        basis({
+          namespaces: [
+            {
+              namespace: "vault",
+              workloads: 0,
+              pods: 0,
+              cpu: 0,
+              memory: 0,
+              gpus: 0,
+              storageBytes,
+            },
+          ],
+          workloads: [],
+        }),
+        reading({ namespaces: {}, workloads: fold([]) }),
+        opencost,
+        ["vault"]
+      );
+    const unread = empty(null);
+    expect(unread.namespaces[0]).toMatchObject({
+      perHour: null,
+      unknown: ["storage"],
+    });
+    expect(totalUnknown(unread.namespaces[0]!)).toBe(true);
+    expect(unread.total?.atLeast).toBe(true);
+    expect(empty(0).namespaces[0]).toMatchObject({
+      perHour: 0,
+      atLeast: false,
+    });
   });
 });
 
@@ -685,7 +776,10 @@ describe("one object's cost", () => {
       name: "web",
     })!;
     expect(of.perHour).toBe(picture.workloads[0]!.perHour);
-    expect(of.share).toBeCloseTo(0.05 / 0.2);
+    expect(of.share).toEqual({
+      of: expect.closeTo(0.05 / 0.2, 6),
+      bound: "exact",
+    });
     expect(costOf(picture, { namespace: "shop" })!.perHour).toBeCloseTo(0.05);
     expect(
       costOf(picture, {
@@ -695,6 +789,52 @@ describe("one object's cost", () => {
         name: "gone",
       })
     ).toBeNull();
+  });
+});
+
+describe("a row's share of a whole", () => {
+  /**
+   * A priced row beside a cluster total nobody knows read "not priced", and
+   * a share of a total that is a floor read as the share. Fails if either
+   * reads as anything but what is known of it.
+   */
+  it("is not known where the whole is not, and at most where the whole is a floor", () => {
+    const row = { perHour: 0.05, atLeast: false };
+    expect(shareOf(row, null)).toBe("noTotal");
+    expect(shareOf(row, { perHour: 0, atLeast: true })).toBe("noTotal");
+    expect(shareOf(row, { perHour: 0.2, atLeast: true })).toEqual({
+      of: 0.25,
+      bound: "atMost",
+    });
+    expect(shareOf(row, { perHour: 0.2, atLeast: false })).toEqual({
+      of: 0.25,
+      bound: "exact",
+    });
+    expect(
+      shareOf({ perHour: null }, { perHour: 0.2, atLeast: false })
+    ).toBeNull();
+    const unlisted = readingPicture(
+      basis({ nodes: null }),
+      reading(),
+      opencost,
+      null
+    );
+    expect(costOf(unlisted, { namespace: "shop" })!.share).toBe("noTotal");
+  });
+
+  /**
+   * A row that is itself a floor printed its share plain, and beside a
+   * whole that is a floor too it would have been a number bounded neither
+   * way. Fails if a floor's share is not at least, or two floors' share is
+   * a number.
+   */
+  it("is at least where the row is a floor, and not known where both are", () => {
+    const floor = { perHour: 0.05, atLeast: true };
+    expect(shareOf(floor, { perHour: 0.2, atLeast: false })).toEqual({
+      of: 0.25,
+      bound: "atLeast",
+    });
+    expect(shareOf(floor, { perHour: 0.2, atLeast: true })).toBe("bothFloors");
   });
 });
 

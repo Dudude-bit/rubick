@@ -14,7 +14,12 @@ import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import { parentWords, stopParent } from "@/lib/parent-at";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
-import { doorDoubt, refusedStop, type DoorAsk } from "@/lib/policy-door";
+import {
+  doorDoubt,
+  doorVerdict,
+  refusedStop,
+  type DoorAsk,
+} from "@/lib/policy-door";
 import { publishedFor } from "@/lib/published";
 import { stopMood } from "@/lib/stop-mood";
 import type {
@@ -189,13 +194,19 @@ export function trafficDoors(
     service: ObjectRef,
     port: string | null
   ) => {
-    if (!door || !controller) return { shut: null, doubt: null };
+    if (!door || !controller) return { shut: null, doubt: null, unsure: false };
     const read = door.ask(controller);
     const published = publishedFor(conns, service);
     const shut = refusedStop(published, port, read);
     return {
       shut,
       doubt: shut ? null : doorDoubt(published, port, read, controller),
+      // Unsure is not judged, with or without policies or words to name.
+      unsure:
+        !shut &&
+        published !== undefined &&
+        !published.stop &&
+        doorVerdict(published, port, read).state === "unsure",
     };
   };
 
@@ -248,7 +259,7 @@ export function trafficDoors(
             ? t("empty", "gwDoorGatewayClass", { name: className })
             : "Gateway"
         );
-        const { shut, doubt } = doorAt(
+        const { shut, doubt, unsure } = doorAt(
           className ? door?.ask.classController?.(className) : null,
           edge.to,
           edge.relation.port
@@ -267,7 +278,7 @@ export function trafficDoors(
         const checked =
           gateway.existence !== "notChecked" &&
           !unjudged.has(`${key(edge.from)}@${key(gateway)}`) &&
-          !doubt;
+          !unsure;
         if (edge.relation.hostnames.length > 0) {
           for (const host of edge.relation.hostnames) {
             entry.doors.push({

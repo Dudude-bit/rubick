@@ -36,4 +36,32 @@ describe("the prices dialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(useCostPricesStore.getState().prices["turning"]).toBeUndefined();
   });
+
+  /**
+   * The name had turned earlier this session and the new cluster's prices
+   * were saved since: opening the form must show them. Fails if the turn,
+   * told again as the form subscribes, empties a form drawn from them.
+   */
+  it("opens on the new cluster's prices after its name turned earlier", async () => {
+    nameIsAnotherCluster("turned-before");
+    useCostPricesStore.setState({
+      prices: {
+        "turned-before": {
+          cpu: 0.07,
+          memory: 0.005,
+          storage: null,
+          gpu: null,
+          currency: "EUR",
+        },
+      },
+    });
+    await renderWithRouter(
+      <PricesDialog context="turned-before" open onOpenChange={() => {}} />
+    );
+    const cpu = screen.getByRole("textbox", { name: /CPU/ });
+    expect(cpu).toHaveValue("0.07");
+
+    act(() => nameIsAnotherCluster("turned-before"));
+    expect(cpu).toHaveValue("");
+  });
 });

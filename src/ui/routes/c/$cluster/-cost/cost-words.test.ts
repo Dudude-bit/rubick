@@ -10,8 +10,13 @@ import {
   efficiencyWords,
   money,
   partOf,
+  clusterShareWords,
   pictureNotes,
+  share,
+  totalOf,
+  troubleWords,
   usedLines,
+  usedWords,
 } from "./cost-words";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -56,9 +61,10 @@ describe("the cost line of an object in a namespace that was refused", () => {
    */
   it("says the cost could not be read, for the namespace and for a workload in it", () => {
     const picture = estimatePicture(refused, prices, null);
-    expect(costLineWords(picture, { namespace: "bank" }, t)).toBe(
-      "Could not read what this costs."
-    );
+    expect(costLineWords(picture, { namespace: "bank" }, t)).toEqual({
+      words: "Could not read what this costs.",
+      unread: true,
+    });
     expect(
       costLineWords(
         picture,
@@ -70,7 +76,7 @@ describe("the cost line of an object in a namespace that was refused", () => {
         },
         t
       )
-    ).toBe("Could not read what this costs.");
+    ).toEqual({ words: "Could not read what this costs.", unread: true });
   });
 });
 
@@ -123,7 +129,10 @@ describe("the cost line of a workload whose cost read failed", () => {
         { namespace: "shop", group: "apps", kind: "Deployment", name: "web" },
         t
       )
-    ).toBe("Could not read what this costs: query timed out");
+    ).toEqual({
+      words: "Could not read what this costs: query timed out",
+      unread: true,
+    });
   });
 });
 
@@ -153,28 +162,122 @@ describe("a CronJob while the Jobs could not be listed", () => {
         { namespace: "shop", group: "batch", kind: "CronJob", name: "nightly" },
         t
       )
-    ).toBe(
-      "Not known: the Jobs that run it could not be listed (jobs is forbidden)."
-    );
+    ).toEqual({
+      words:
+        "Not known: the Jobs that run it could not be listed (jobs is forbidden).",
+      unread: true,
+    });
   });
 });
 
 describe("a peak summed over several pods", () => {
   /** A bound is said as one, as a percentage and as a quantity. Fails if it reads as the peak. */
   it("says at most beside it", () => {
-    const e = efficiencyOf(
-      1000,
-      200,
-      800,
-      "2020-01-01T00:00:00Z",
-      Date.now(),
-      true
-    );
+    const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      peakAtMost: true,
+    });
     expect(efficiencyWords(e, t)).toBe("20% average, at most 80% peak");
     expect(usedLines(e, "cpu", t)).toEqual([
       "200m average",
       "at most 800m peak",
     ]);
+  });
+
+  /** A workload that requests nothing still shows what it used. Fails if its summed peak reads as the peak. */
+  it("says at most beside it where nothing was requested", () => {
+    const e = efficiencyOf(0, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      peakAtMost: true,
+    });
+    expect(usedLines(e, "cpu", t)).toEqual([
+      "200m average",
+      "at most 800m peak",
+    ]);
+    expect(usedWords(e, "cpu", t)).toBe("200m average · at most 800m peak");
+  });
+});
+
+describe("figures read from some of a workload's pods", () => {
+  /** A sum over two of three pods says so, and is not "at most". Fails if it reads as the workload's. */
+  it("says how many pods they were read from", () => {
+    const e = efficiencyOf(1000, 200, 800, "2020-01-01T00:00:00Z", Date.now(), {
+      podsRead: { read: 2, of: 3 },
+    });
+    expect(efficiencyWords(e, t)).toBe(
+      "20% average, 80% peak, from 2 of its 3 pods"
+    );
+    expect(usedLines(e, "cpu", t)).toEqual([
+      "200m average",
+      "800m peak, from 2 of its 3 pods",
+    ]);
+  });
+});
+
+describe("a namespace with no total for want of a read", () => {
+  /**
+   * Nothing of it priced and its storage not read: its total, share and
+   * line said "not priced" or 0. Fails if any of the three says other than
+   * that it is not known.
+   */
+  it("says not known in its total and its share, and on its line in amber", () => {
+    const row = {
+      namespace: "vault",
+      perHour: null,
+      atLeast: false,
+      parts: {},
+      unpriced: [],
+      unknown: ["storage" as const],
+      share: null,
+    };
+    expect(money(totalOf(row), "", t)).toBe("Not known");
+    expect(share(row, t)).toBe("Not known");
+    expect(share({ ...row, unknown: [], unpriced: ["cpu" as const] }, t)).toBe(
+      "not priced"
+    );
+    const picture = {
+      ...estimatePicture(refused, prices, null),
+      unread: [],
+      namespaces: [row],
+    };
+    expect(costLineWords(picture, { namespace: "vault" }, t)).toEqual({
+      words: "Could not read what this costs.",
+      unread: true,
+    });
+  });
+});
+
+describe("a priced row's share where the whole is not known", () => {
+  /** The row is priced; what is not known is the whole. Fails if its share says "not priced", or a floor's share reads as the share. */
+  it("says not known and why, and at most of a floor", () => {
+    const row = {
+      perHour: 0.05,
+      unpriced: [],
+      unknown: [],
+      share: "noTotal" as const,
+    };
+    expect(share(row, t)).toBe("not known: no total");
+    expect(share({ ...row, share: { of: 0.25, bound: "atMost" } }, t)).toBe(
+      "at most 25%"
+    );
+    expect(share({ ...row, share: { of: 0.25, bound: "exact" } }, t)).toBe(
+      "25%"
+    );
+  });
+
+  /** A floor's share is a floor; two floors bound it neither way. Fails if either prints a plain number. */
+  it("says at least of a floor, and not known of two", () => {
+    const row = { perHour: 0.05, unpriced: [], unknown: [] };
+    expect(share({ ...row, share: { of: 0.25, bound: "atLeast" } }, t)).toBe(
+      "at least 25%"
+    );
+    expect(share({ ...row, share: "bothFloors" }, t)).toBe(
+      "not known: both are floors"
+    );
+    expect(clusterShareWords({ of: 0.25, bound: "atLeast" }, t)).toBe(
+      "at least 25% of the cluster"
+    );
+    expect(clusterShareWords("bothFloors", t)).toBe(
+      "share of the cluster not known, as both amounts are floors"
+    );
   });
 });
 
@@ -189,6 +292,24 @@ describe("a part nobody could read", () => {
     expect(money(partOf(row, "storage"), "", t)).toBe("Not known");
     expect(money(partOf({ ...row, unknown: [] }, "storage"), "", t)).toBe(
       "none"
+    );
+  });
+});
+
+describe("node prices that the last answer lacked, before a read that failed", () => {
+  /** The reason for the estimate is from the answer before a failed read, and says so. Fails if the failure goes unsaid. */
+  it("says the read after it failed", () => {
+    const trouble = {
+      kind: "noNodePrices" as const,
+      vendor: "opencost",
+      endpoint: "http://prom:9090",
+      lastFailed: "query timed out",
+    };
+    expect(troubleWords(trouble, t)).toBe(
+      "OpenCost in Prometheus at http://prom:9090 priced none of this cluster's nodes in the last read that answered; the read after it failed (query timed out)."
+    );
+    expect(troubleWords({ ...trouble, lastFailed: null }, t)).toBe(
+      "OpenCost in Prometheus at http://prom:9090 prices none of this cluster's nodes: it found no price list for them."
     );
   });
 });

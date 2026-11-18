@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import {
   afterEach,
   beforeEach,
@@ -108,6 +108,7 @@ const READING: CostReading = {
     unread: [],
     unlabelled: 0,
     covered: [],
+    pods: [],
     since: [null],
   },
   storage: {
@@ -455,6 +456,7 @@ describe("the Cost page", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [started],
       },
     });
@@ -469,6 +471,168 @@ describe("the Cost page", () => {
     expect(screen.getAllByText(/^100m peak, over 2h$/).length).toBeGreaterThan(
       0
     );
+  });
+});
+
+describe("efficiency whose read did not answer", () => {
+  /**
+   * A refused or failed read of use said so in the faint grey of "not
+   * measured". Fails if the cell or the line draws it like an absence.
+   */
+  it("is amber in its cell and on the workload's line", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: opencost,
+      trouble: null,
+    });
+    usage.mockReturnValue({ state: "failed", said: "query timed out" });
+    await open();
+    const [cell] = screen.getAllByText(
+      /^CPU could not read use: query timed out$/
+    );
+    expect(cell).toHaveClass("text-warn");
+    expect(cell).not.toHaveClass("text-fg-fnt");
+
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-efficiency");
+    expect(line).toHaveTextContent("could not read use: query timed out");
+    expect(line.querySelector(".text-warn")).not.toBeNull();
+  });
+});
+
+describe("a priced row where the cluster's total is not known", () => {
+  /**
+   * The nodes could not be listed, so there is no cluster total: each
+   * priced row's share read "not priced", and the line left it out. Fails
+   * if the table or the line does not say the share is not known, and why.
+   */
+  it("says its share is not known and why, in the table and on the line", async () => {
+    const picture = readingPicture(
+      { ...BASIS, nodes: null },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      null
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    await open();
+    expect(screen.getAllByText("not known: no total").length).toBeGreaterThan(
+      0
+    );
+    expect(screen.queryByText("not priced")).toBeNull();
+
+    await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+      at: "/c/prod/namespaces",
+      route: "/c/$cluster/namespaces",
+    });
+    expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
+      "share of the cluster not known, as its total is not"
+    );
+  });
+
+  /**
+   * A scope's tile and its Share summary said nothing of the cluster where
+   * its total is not known. Fails if either stays silent.
+   */
+  it("says on the scope's tile and in Share that the cluster's total is not known", async () => {
+    const picture = readingPicture(
+      { ...BASIS, nodes: null },
+      READING,
+      { kind: "opencost", vendor: "Prometheus", endpoint: "prom.example.com" },
+      ["shop"]
+    );
+    cost.mockReturnValue({ state: "picture", picture, trouble: null });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <CostPage />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/cost", route: "/c/$cluster/cost" }
+    );
+    expect(
+      screen.getByText("share of the cluster not known, as its total is not")
+    ).toBeInTheDocument();
+    const summary = collect!().find((s) => s.id === "cost-summary")!;
+    const cluster =
+      summary.body.type === "facts"
+        ? summary.body.rows.find((r) => r.label === "The cluster")
+        : undefined;
+    expect(cluster?.values).toEqual([{ text: "Not known", mono: true }]);
+  });
+});
+
+describe("the share of a row that is itself a floor", () => {
+  /**
+   * `shop`'s amount is "at least": its share printed plain in the table and
+   * on its line; beside a cluster total that is a floor too it is bounded
+   * neither way. Fails if either reader prints a plain number, or a number
+   * where nothing bounds it.
+   */
+  it("is at least beside an exact total, and not known beside a floor", async () => {
+    const floor = (atLeast: boolean): CostState => ({
+      state: "picture",
+      picture: {
+        ...opencost,
+        cluster: { perHour: 0.2, atLeast },
+        total: { perHour: 0.2, atLeast },
+        namespaces: opencost.namespaces.map((n) => ({
+          ...n,
+          perHour: 0.05,
+          atLeast: true,
+        })),
+      },
+      trouble: null,
+    });
+    const line = async () => {
+      await renderWithRouter(<NamespaceCostLine namespace="shop" />, {
+        at: "/c/prod/namespaces",
+        route: "/c/$cluster/namespaces",
+      });
+      return screen.getByTestId("namespace-cost");
+    };
+    cost.mockReturnValue(floor(false));
+    await open();
+    expect(screen.getAllByText("at least 25%").length).toBeGreaterThan(0);
+    expect(await line()).toHaveTextContent("at least 25% of the cluster");
+    cleanup();
+
+    cost.mockReturnValue(floor(true));
+    await open();
+    expect(
+      screen.getAllByText("not known: both are floors").length
+    ).toBeGreaterThan(0);
+    expect(await line()).toHaveTextContent(
+      "share of the cluster not known, as both amounts are floors"
+    );
+  });
+
+  /** A scope whose total is a floor took a plain share of an exact cluster on its tile. Fails if the tile drops the bound. */
+  it("is at least on the tile of a scope whose total is a floor", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: {
+        ...opencost,
+        cluster: { perHour: 0.2, atLeast: false },
+        total: { perHour: 0.05, atLeast: true },
+      },
+      trouble: null,
+    });
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    await open();
+    expect(screen.getByText("at least 25% of the cluster")).toBeInTheDocument();
   });
 });
 
@@ -555,6 +719,7 @@ describe("a workload minutes old", () => {
         unread: [],
         unlabelled: 0,
         covered: [],
+        pods: [],
         since: [started],
       },
     });
@@ -606,6 +771,47 @@ describe("a namespace no OpenCost series prices", () => {
     expect(screen.getByTestId("namespace-cost")).toHaveTextContent(
       "No OpenCost series priced its pods."
     );
+    expect(
+      screen.getByTestId("namespace-cost").querySelector(".text-warn")
+    ).toBeNull();
+  });
+});
+
+describe("a workload's line where what each workload costs was not read", () => {
+  /**
+   * The per-workload read timed out and the line said so in the muted grey
+   * of a part with no price. Fails if a read that did not answer is drawn
+   * like an absence.
+   */
+  it("says why in amber", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: {
+        ...opencost,
+        workloads: opencost.workloads.map((w) => ({
+          ...w,
+          perHour: null,
+          atLeast: false,
+          parts: {},
+        })),
+        workloadsFailed: "query timed out",
+      },
+      trouble: null,
+    });
+    await renderWithRouter(
+      <WorkloadCostLine
+        group="apps"
+        kind="Deployment"
+        name="web"
+        namespace="shop"
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/deployments" }
+    );
+    const line = screen.getByTestId("workload-cost");
+    expect(line).toHaveTextContent(
+      "Could not read what this costs: query timed out"
+    );
+    expect(line.querySelector(".text-warn")).not.toBeNull();
   });
 });
 

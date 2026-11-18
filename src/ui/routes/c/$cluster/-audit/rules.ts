@@ -207,10 +207,12 @@ const WHY_WORDS: {
   notScraped: (_, t) => t("audit", "whyNotScraped"),
   noUsage: (_, t) => t("audit", "whyNoUsage"),
   noSamples: (_, t) => t("audit", "whyNoSamples"),
+  peakUnread: (_, t) => t("audit", "whyPeakUnread"),
   young: (why, t) =>
     why.says === "young" && why.since !== null
       ? t("audit", "whyYoung", { age: formatAge(why.since, t) })
       : t("audit", "whyYoungUndated"),
+  partial: (why, t) => t("audit", "whyPartial", { read: why.read, n: why.of }),
   folded: (_, t) => t("audit", "whyFolded"),
   admitted: (why, t) =>
     t("audit", "whyAdmitted", { webhooks: why.webhooks.join(", ") }),

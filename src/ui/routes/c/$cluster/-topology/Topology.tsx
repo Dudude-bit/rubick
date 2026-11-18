@@ -46,17 +46,18 @@ import {
 import { toneOf, type ToneInputs } from "./tone";
 import { shareSaid, topologySection } from "./topology-share";
 import { useVendorLayers } from "./vendor-layers";
-import {
-  mapVerdicts,
-  verdictSay,
-  verdictsUnread,
-  withNamedGateways,
-} from "./route-verdicts";
+import { mapNotes, type MapNote } from "./map-notes";
+import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
 
 const EVERY_NAMESPACE: readonly string[] = [];
 
 /** Past this many nodes in a scope of several namespaces, every group starts collapsed. */
 export const COLLAPSE_ABOVE = 400;
+
+const NOTE_TONE: Record<MapNote["tone"], string> = {
+  warn: "text-warn",
+  mute: "text-fg-mut",
+};
 
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -353,22 +354,23 @@ function TopologyMap() {
   }, [map, policies]);
   const edgeless = notLooked.flatMap((entry) => entry.edges);
   // What the screen says above the map is what Share and the image say too.
+  const notes = mapNotes(
+    {
+      edgeless,
+      vendorUnread: vendor.unread,
+      routing: {
+        gateways: routes.gatewaysAll.error,
+        classes: routes.classes.error,
+      },
+      others,
+      syncing: syncing.map((kind) => kind.kind),
+    },
+    t
+  );
   const caveats = [
     ...notLooked.map((entry) => entry.line),
-    edgeless.length > 0 &&
-      t("topology", "edgesAbsent", { kinds: edgeless.join(", ") }),
-    ...vendor.unread,
-    verdictsUnread(
-      { gateways: routes.gatewaysAll.error, classes: routes.classes.error },
-      t
-    ),
-    others.length > 0 &&
-      t("topology", "otherEngines", { kinds: others.join(", ") }),
-    syncing.length > 0 &&
-      t("topology", "stillListing", {
-        kinds: syncing.map((kind) => kind.kind).join(", "),
-      }),
-  ].filter((line): line is string => typeof line === "string");
+    ...notes.map((note) => note.text),
+  ];
 
   const caption = [
     grouping === "app"
@@ -498,8 +500,7 @@ function TopologyMap() {
         }
       />
       {(notLooked.length > 0 ||
-        others.length > 0 ||
-        vendor.unread.length > 0 ||
+        notes.length > 0 ||
         matches !== null ||
         stopped !== null) && (
         <div
@@ -524,21 +525,11 @@ function TopologyMap() {
               )}
             </div>
           ))}
-          {edgeless.length > 0 && (
-            <p className="text-fg-mut">
-              {t("topology", "edgesAbsent", { kinds: edgeless.join(", ") })}
-            </p>
-          )}
-          {vendor.unread.map((line) => (
-            <p key={line} className="text-warn">
-              {line}
+          {notes.map((note) => (
+            <p key={note.text} className={NOTE_TONE[note.tone]}>
+              {note.text}
             </p>
           ))}
-          {others.length > 0 && (
-            <p className="text-fg-mut">
-              {t("topology", "otherEngines", { kinds: others.join(", ") })}
-            </p>
-          )}
           {matches !== null && (
             <p className="text-fg-mut">
               {matches.size > 0

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { nameIsAnotherCluster } from "@/lib/kept-by-name";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 import { pricesOf, useCostPrices, useCostPricesStore } from "./costPricesStore";
 
@@ -58,6 +58,29 @@ describe("entered prices", () => {
   it("has no prices for a context nobody priced, whatever its name", () => {
     useCostPricesStore.setState({ prices: {} });
     const { result } = renderHook(() => useCostPrices("constructor"));
+    expect(result.current).toBeNull();
+  });
+
+  /**
+   * A context named `__proto__`, assigned into the record, set its
+   * prototype: the prices were not its own and the next save lost them.
+   * Fails if a restore or a save writes that name by assignment.
+   */
+  it("keeps the prices of a context named __proto__ as its own", async () => {
+    localStorage.setItem(
+      "cost-prices",
+      `{"state":{"prices":{"__proto__":${JSON.stringify(prices)}}},"version":1}`
+    );
+    await useCostPricesStore.persist.rehydrate();
+    expect(
+      Object.hasOwn(useCostPricesStore.getState().prices, "__proto__")
+    ).toBe(true);
+
+    useCostPricesStore.setState({ prices: {} });
+    useCostPricesStore.getState().setPrices("__proto__", prices);
+    const { result } = renderHook(() => useCostPrices("__proto__"));
+    expect(result.current).toEqual(prices);
+    act(() => useCostPricesStore.getState().setPrices("__proto__", null));
     expect(result.current).toBeNull();
   });
 });

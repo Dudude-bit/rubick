@@ -863,10 +863,10 @@ describe("trafficDoors", () => {
      * followed to its controller at the pods' door.
      */
     it("calls a Gateway door shut where the pods' policies refuse the controller its class names", () => {
-      const doorWith = (read: DoorRead | null) =>
+      const doorWith = (read: DoorRead | null, pods = published) =>
         trafficDoors(
           conns({
-            published: [published],
+            published: [pods],
             edges: [
               edge(
                 ref("HTTPRoute", "front"),
@@ -905,6 +905,14 @@ describe("trafficDoors", () => {
         checked: false,
         note: "NetworkPolicy not checked",
       });
+      // No policy over the pods, and the controller's pods still listing:
+      // unsure with no policy or words to name, and still not judged fine.
+      expect(
+        doorWith(
+          { ...traefik, clients: { known: false, why: null } },
+          { ...published, door: { state: "open" } }
+        )
+      ).toMatchObject({ broken: null, checked: false, note: null });
     });
   });
 

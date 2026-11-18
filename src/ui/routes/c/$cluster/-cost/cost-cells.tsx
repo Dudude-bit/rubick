@@ -4,6 +4,7 @@
  */
 import { useT } from "@/i18n/useT";
 import {
+  efficiencyWarns,
   overRequested,
   type Efficiency,
   type WorkloadEfficiency,
@@ -55,8 +56,10 @@ export function EfficiencyCell({
           <span
             key={resource}
             className={cn(
-              e.state === "measured" ? "font-mono tabular-nums" : "text-fg-fnt",
-              overRequested(e) && "text-warn"
+              e.state === "measured" && "font-mono tabular-nums",
+              efficiencyWarns(e)
+                ? "text-warn"
+                : e.state !== "measured" && "text-fg-fnt"
             )}
             title={titleOf(e)}
           >

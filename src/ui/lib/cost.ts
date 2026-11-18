@@ -159,20 +159,37 @@ function pricedRow(
   unknown: readonly CostPart[] = []
 ): Priced {
   const unpriced = held.filter((part) => parts[part] === undefined);
-  // Priced where something it holds has a price: a part it holds none of,
-  // storage at 0 say, prices nothing of it.
-  const any =
-    held.length === 0
-      ? Object.keys(parts).length > 0
-      : held.some((part) => parts[part] !== undefined);
+  // Priced where something it holds has a price, or a part beyond those
+  // costs something: a LoadBalancer is billed to the namespace whatever it
+  // holds, where storage at 0 for one that holds none prices nothing of it.
+  const any = Object.entries(parts).some(([part, value]) =>
+    held.includes(part as CostPart)
+      ? value !== undefined
+      : held.length === 0 || (value ?? 0) > 0
+  );
   return {
-    perHour: !any && unpriced.length > 0 ? null : partsTotal(parts),
+    // Nothing priced and something not priced or not read: no total, never 0.
+    perHour:
+      !any && unpriced.length + unknown.length > 0 ? null : partsTotal(parts),
     atLeast: any && (unpriced.length > 0 || unknown.length > 0),
     parts,
     unpriced,
     unknown: [...unknown],
   };
 }
+
+/**
+ * No total, for want of a read rather than a price: nothing of it is
+ * priced and how much it holds of some part was not read.
+ */
+export const totalUnknown = (row: {
+  perHour: number | null;
+  unpriced?: readonly CostPart[];
+  unknown?: readonly CostPart[];
+}): boolean =>
+  row.perHour === null &&
+  (row.unpriced?.length ?? 0) === 0 &&
+  (row.unknown?.length ?? 0) > 0;
 
 /** Storage nobody could read: claims refused, or no volume read at all. */
 const storageUnread = (
@@ -605,12 +622,15 @@ export function readingPicture(
 
   const fold = "failed" in reading.workloads ? null : reading.workloads;
   // Series for fewer of its pods than run: the sum is of some of them.
-  const partly = (i: number, pods: number) => {
+  // Out of the pods the same read listed: the basis's count is from before,
+  // and a workload scaled between the two would read as whole.
+  const partly = (i: number) => {
     const covered = fold?.covered[i];
+    const of = fold?.pods[i] ?? Number.POSITIVE_INFINITY;
     return (
       covered !== undefined &&
       covered.length > 0 &&
-      WORKLOAD_PARTS.slice(0, 2).some((_, at) => (covered[at] ?? 0) < pods)
+      WORKLOAD_PARTS.slice(0, 2).some((_, at) => (covered[at] ?? 0) < of)
     );
   };
   const workloads = basis.workloads.map((w, i): WorkloadCost => {
@@ -626,7 +646,7 @@ export function readingPicture(
       // A failed read priced nothing it could vouch for: no total at all.
       ...(fold
         ? floorWhere(
-            partly(i, w.pods),
+            partly(i),
             pricedRow(
               parts,
               heldParts({ ...w, storageBytes: w.claimBytes }),
@@ -640,9 +660,7 @@ export function readingPicture(
   // A namespace whose workloads' series cover some of their pods is summed
   // from the same series, and is a floor for the same reason.
   const partial = new Set(
-    basis.workloads
-      .filter((w, i) => partly(i, w.pods))
-      .map((w) => w.key.namespace)
+    basis.workloads.filter((_, i) => partly(i)).map((w) => w.key.namespace)
   );
   // Every namespace the cluster runs something in, priced or not: one
   // nothing priced is a row that says so, not a row left out.
@@ -723,9 +741,38 @@ export interface CostOf {
   perHour: number | null;
   /** Its own total is a floor: some of what it holds carries no price. */
   partial: boolean;
-  /** Of the whole cluster, where both are known. */
-  share: number | null;
-  atLeast: boolean;
+  /** Of the whole cluster. */
+  share: RowShare;
+  /** No total because what it holds was not read: {@link totalUnknown}. */
+  unknown: boolean;
+}
+
+/**
+ * A priced row's share of a whole: at least that where the row is a floor,
+ * at most where the whole is, and `bothFloors` where both are, which bounds
+ * it neither way; `noTotal` where there is no whole to take it of; `null`
+ * for a row with no total of its own, which its own words say.
+ */
+export type RowShare =
+  | { of: number; bound: "exact" | "atLeast" | "atMost" }
+  | "noTotal"
+  | "bothFloors"
+  | null;
+
+export function shareOf(
+  row: Amount | { perHour: null } | null,
+  whole: Amount | null
+): RowShare {
+  if (!row || row.perHour === null) return null;
+  if (!whole) return "noTotal";
+  // A floor of nothing is no whole; an exact nothing has no part in it.
+  if (whole.perHour <= 0)
+    return whole.atLeast ? "noTotal" : { of: 0, bound: "exact" };
+  if (row.atLeast && whole.atLeast) return "bothFloors";
+  return {
+    of: row.perHour / whole.perHour,
+    bound: row.atLeast ? "atLeast" : whole.atLeast ? "atMost" : "exact",
+  };
 }
 
 /** One workload: a custom kind may share a built-in's name, so the group counts too. */
@@ -751,15 +798,11 @@ export function costOf(
       ? picture.workloads.find((w) => sameKey(w.key, target))
       : picture.namespaces.find((n) => n.namespace === target.namespace);
   if (!row) return null;
-  const cluster = picture.cluster;
   return {
     perHour: row.perHour,
     partial: row.atLeast,
-    share:
-      row.perHour === null || !cluster || cluster.perHour <= 0
-        ? null
-        : row.perHour / cluster.perHour,
-    atLeast: cluster?.atLeast ?? true,
+    share: shareOf(row, picture.cluster),
+    unknown: totalUnknown(row),
   };
 }
 
