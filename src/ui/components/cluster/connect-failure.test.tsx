@@ -10,6 +10,7 @@ import { useLocaleStore } from "@/stores/localeStore";
 import { StatusBar } from "@/routes/c/$cluster/-shell/StatusBar";
 
 import { ClusterList } from "./ClusterList";
+import { named } from "@/lib/named";
 
 const PROD = "acme-prod-eu";
 
@@ -46,7 +47,7 @@ function afterFailedConnect(locale: Locale) {
     error: "deadline has elapsed",
     errorContext: PROD,
     live: [],
-    failures: { [PROD]: failure },
+    failures: named({ [PROD]: failure }),
   });
   renderWithProviders(
     <>

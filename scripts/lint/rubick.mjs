@@ -7,6 +7,7 @@ const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
 const OVERLAY_SCROLLBAR =
   /(^|[^a-z0-9-])(scrollbar-thin(?![a-z0-9-])|\[scrollbar-width:(?!none\])|\[scrollbar-color:(?!auto\]))/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
+const STORE_FILE = /(^|[/\\])stores[/\\][^/\\]+(?<!\.test)\.tsx?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */
 function guard(types, test, message) {
@@ -39,6 +40,14 @@ const overlayScrollbar = (node) => {
 
 const sourceMatching = (pattern) => (node) =>
   node.source?.type === "Literal" && stringMatching(pattern)(node.source);
+
+const keyedByString = (node) =>
+  node.type === "TSIndexSignature"
+    ? node.parameters?.[0]?.typeAnnotation?.typeAnnotation?.type ===
+      "TSStringKeyword"
+    : node.typeName?.name === "Record" &&
+      (node.typeArguments ?? node.typeParameters)?.params?.[0]?.type ===
+        "TSStringKeyword";
 
 export default {
   meta: { name: "rubick" },
@@ -97,6 +106,26 @@ export default {
       overlayScrollbar,
       "Use scrollbar-lane. The thin utility, or any scrollbar-width or scrollbar-color, hands WebKit its overlay scrollbar, which takes the pointer over the last 14 px of the scroller while it is not drawn, so whatever sits there ignores clicks."
     ),
+    // `__proto__` and `constructor` are names a reader can give a context:
+    // assigned into a plain object the first sets its prototype, and read
+    // the second hands back Object. A store that persists one did both.
+    "store-records-are-named": {
+      meta: {
+        type: "problem",
+        messages: {
+          refused:
+            "A store's record keyed by a string is a Named<T> from @/lib/named, read and written through entryOf, withEntry and withoutEntry. A plain object answers `constructor` from its prototype, and assigning `__proto__` sets the prototype instead of an entry.",
+        },
+      },
+      create(context) {
+        if (!STORE_FILE.test(context.filename)) return {};
+        const check = (node) => {
+          if (keyedByString(node))
+            context.report({ node, messageId: "refused" });
+        };
+        return { TSTypeReference: check, TSIndexSignature: check };
+      },
+    },
     // The OS paints it: in a dark window it opens white. Reported an hour
     // after a release.
     "no-native-select": guard(

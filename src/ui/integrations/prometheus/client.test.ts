@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { PromSeries } from "@/generated/types";
+import { entriesOf, entryOf } from "@/lib/named";
 
 const prometheusQueryRange = vi.fn<(query: string) => Promise<PromSeries[]>>();
 const prometheusQuery = vi.fn<(query: string) => Promise<PromSeries[]>>();
@@ -76,6 +77,31 @@ describe("usageHistory and what was declared", () => {
 });
 
 describe("nodeUsage", () => {
+  /**
+   * A node name is the cluster's to choose, and `constructor` is a valid
+   * one. Fails if its lane is found already there, as `Object`, and the
+   * write into it throws for the whole cluster, or if its samples are not
+   * its own.
+   */
+  it("keeps a lane for a node named constructor like any other", async () => {
+    prometheusQueryRange.mockImplementation(async (query) =>
+      ["constructor", "n1"].map((node) => ({
+        labels: { node },
+        points: [{ t: 1, v: query.includes("cpu") ? 900 : 5e9 }],
+      }))
+    );
+    prometheusQuery.mockResolvedValue([
+      { labels: { node: "constructor" }, points: [{ t: 0, v: 7 }] },
+    ]);
+    const window = await nodeUsage({ range: "6h" });
+    expect(entriesOf(window.nodes).map(([name]) => name)).toEqual([
+      "constructor",
+      "n1",
+    ]);
+    expect(entryOf(window.nodes, "constructor")!.cpuMillicores[0].v).toBe(900);
+    expect(entryOf(window.newestAt, "constructor")).toBe(7000);
+  });
+
   /** A node whose series carries `instance` instead of `node` is the same node. */
   it("keys each node by whichever label the supplier wrote, and says when it last spoke", async () => {
     prometheusQueryRange.mockImplementation(async (query) => [
@@ -93,10 +119,10 @@ describe("nodeUsage", () => {
     ]);
 
     const window = await nodeUsage({ range: "6h" });
-    expect(Object.keys(window.nodes)).toEqual(["n1"]);
-    expect(window.nodes.n1.cpuMillicores[0].v).toBe(900);
-    expect(window.nodes.n1.memoryBytes[0].v).toBe(5e9);
-    expect(window.newestAt.n1).toBe(1_700_000_000_000);
+    expect(entriesOf(window.nodes).map(([name]) => name)).toEqual(["n1"]);
+    expect(entryOf(window.nodes, "n1")!.cpuMillicores[0].v).toBe(900);
+    expect(entryOf(window.nodes, "n1")!.memoryBytes[0].v).toBe(5e9);
+    expect(entryOf(window.newestAt, "n1")).toBe(1_700_000_000_000);
   });
 });
 
@@ -157,7 +183,7 @@ describe("a read that failed is not an answer", () => {
     prometheusQuery.mockResolvedValue([]);
 
     const window = await nodeUsage({ range: "1h" });
-    expect(window.nodes["worker-1"].cpuMillicores).toEqual([
+    expect(entryOf(window.nodes, "worker-1")!.cpuMillicores).toEqual([
       { t: 1, v: 5 },
       { t: 2, v: null },
       { t: 3, v: 7 },
@@ -187,8 +213,8 @@ describe("a node's basis", () => {
 
     const window = await nodeUsage({ range: "6h" });
     expect(window.basis).toBe("pods");
-    expect(window.nodes.n1.cpuMillicores[0].v).toBe(700);
-    expect(window.nodes.n1.memoryBytes[0].v).toBe(3e9);
+    expect(entryOf(window.nodes, "n1")!.cpuMillicores[0].v).toBe(700);
+    expect(entryOf(window.nodes, "n1")!.memoryBytes[0].v).toBe(3e9);
     expect(prometheusQuery.mock.calls.at(-1)?.[0]).toContain(PODS);
   });
 

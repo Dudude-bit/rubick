@@ -1,12 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { ColumnSizingState } from "@tanstack/react-table";
 
-/** One table's columns, by column id, in pixels. */
-export type ColumnWidths = Record<string, number>;
+import {
+  entryOf,
+  named,
+  withEntry,
+  withoutEntry,
+  type Named,
+} from "@/lib/named";
+
+/** One table's columns, by column id, in pixels: the table's own shape. */
+export type ColumnWidths = ColumnSizingState;
 
 interface ColumnWidthsState {
   /** Keyed by what the table lists, so the Pods list keeps its own. */
-  widths: Record<string, ColumnWidths>;
+  widths: Named<ColumnWidths>;
   set: (key: string, widths: ColumnWidths) => void;
   reset: (key: string) => void;
 }
@@ -25,16 +34,15 @@ interface ColumnWidthsState {
 export const useColumnWidthsStore = create<ColumnWidthsState>()(
   persist(
     (set) => ({
-      widths: {},
+      widths: named(),
       set: (key, widths) =>
-        set((state) => ({ widths: { ...state.widths, [key]: widths } })),
+        set((state) => ({ widths: withEntry(state.widths, key, widths) })),
       reset: (key) =>
-        set((state) => {
-          if (!(key in state.widths)) return state;
-          const next = { ...state.widths };
-          delete next[key];
-          return { widths: next };
-        }),
+        set((state) =>
+          entryOf(state.widths, key) === undefined
+            ? state
+            : { widths: withoutEntry(state.widths, key) }
+        ),
     }),
     { name: "column-widths" }
   )

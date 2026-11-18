@@ -13,6 +13,7 @@ import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
+import { named } from "@/lib/named";
 
 const available = { status: "available" as const, message: null };
 const notInstalled = {
@@ -24,7 +25,7 @@ const bannerOf = (title: string) =>
   screen.getByText(title).closest('[role="status"]') as HTMLElement;
 
 beforeEach(() => {
-  useMetricsNoticeStore.setState({ hidden: {} });
+  useMetricsNoticeStore.setState({ hidden: named() });
   useClusterStore.setState({ currentContext: "acme-staging" });
 });
 

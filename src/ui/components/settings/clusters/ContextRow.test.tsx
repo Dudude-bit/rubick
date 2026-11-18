@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { ContextRow } from "./ContextRow";
 import type { ContextInfo } from "@/generated/types";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { entryOf, named } from "@/lib/named";
 
 const PROD = "prod-eu-1";
 
@@ -51,10 +52,14 @@ describe("the critical checkbox on a context row", () => {
     row(PROD);
 
     await userEvent.click(criticalBox());
-    expect(useClusterIdentityStore.getState().marks[PROD]?.critical).toBe(true);
+    expect(
+      entryOf(useClusterIdentityStore.getState().marks, PROD)?.critical
+    ).toBe(true);
 
     await userEvent.click(criticalBox());
-    expect(useClusterIdentityStore.getState().marks[PROD]).toBeUndefined();
+    expect(
+      entryOf(useClusterIdentityStore.getState().marks, PROD)
+    ).toBeUndefined();
   });
 });
 
@@ -103,7 +108,7 @@ describe("the status word on a context row", () => {
    * colour instead of a role tone.
    */
   it("marks the status in a role tone of its own, apart from the cluster's colour", () => {
-    useClusterIdentityStore.setState({ marks: { [PROD]: { hue: 0 } } });
+    useClusterIdentityStore.setState({ marks: named({ [PROD]: { hue: 0 } }) });
     row(PROD);
     const status = screen.getByTestId("context-status");
     expect(status.className).toContain("text-fg-fnt");

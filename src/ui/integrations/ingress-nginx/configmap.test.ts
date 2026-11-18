@@ -11,6 +11,22 @@ const ru: T = (section, key, values) => translate("ru", section, key, values);
 
 describe("the global ConfigMap reader", () => {
   /**
+   * A ConfigMap key is the cluster's to choose. Fails if a key called
+   * `constructor` or `toString` finds a function every object has and runs
+   * it as that setting's reader, instead of saying the table does not know it.
+   */
+  it("knows no setting called like what every object has", () => {
+    for (const key of ["constructor", "toString", "valueOf", "__proto__"])
+      expect(readSetting(key, "on", t)).toEqual({
+        key,
+        value: "on",
+        said: null,
+        raw: "notInTheTable",
+        overridable: false,
+      });
+  });
+
+  /**
    * The same floor annotations.test.ts holds over TABLE_SIZE. Without it a
    * table that quietly shrank to three keys would still pass every other
    * test here — each one names its own key, so none of them notices the

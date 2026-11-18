@@ -5,6 +5,7 @@ import { nameIsAnotherCluster } from "@/lib/kept-by-name";
 import { act, renderHook } from "@testing-library/react";
 
 import { pricesOf, useCostPrices, useCostPricesStore } from "./costPricesStore";
+import { named } from "@/lib/named";
 
 const prices = {
   cpu: 0.04,
@@ -56,7 +57,7 @@ describe("entered prices", () => {
    * inherited function as its prices. Fails if a name finds a property.
    */
   it("has no prices for a context nobody priced, whatever its name", () => {
-    useCostPricesStore.setState({ prices: {} });
+    useCostPricesStore.setState({ prices: named({}) });
     const { result } = renderHook(() => useCostPrices("constructor"));
     expect(result.current).toBeNull();
   });
@@ -76,7 +77,7 @@ describe("entered prices", () => {
       Object.hasOwn(useCostPricesStore.getState().prices, "__proto__")
     ).toBe(true);
 
-    useCostPricesStore.setState({ prices: {} });
+    useCostPricesStore.setState({ prices: named({}) });
     useCostPricesStore.getState().setPrices("__proto__", prices);
     const { result } = renderHook(() => useCostPrices("__proto__"));
     expect(result.current).toEqual(prices);

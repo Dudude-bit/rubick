@@ -19,6 +19,7 @@ import type {
   PortForwardRequest,
   PortForwardSessionInfo,
 } from "@/generated/types";
+import { named, withEntry, type Named } from "@/lib/named";
 
 /**
  * Saved port forward configuration
@@ -111,7 +112,7 @@ export interface PortForwardStatus {
 interface PortForwardState {
   configs: PortForwardConfig[];
   sessions: PortForwardSession[];
-  statusBySession: Record<string, PortForwardStatus>;
+  statusBySession: Named<PortForwardStatus>;
   failed: FailedForward[];
   configsLoaded: boolean;
   refreshConfigs: () => Promise<void>;
@@ -296,7 +297,7 @@ async function startConfigsWithFilter(
 export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   configs: [],
   sessions: [],
-  statusBySession: {},
+  statusBySession: named(),
   failed: [],
   configsLoaded: false,
 
@@ -402,10 +403,7 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
 
   setStatus: (status) => {
     set((state) => ({
-      statusBySession: {
-        ...state.statusBySession,
-        [status.id]: status,
-      },
+      statusBySession: withEntry(state.statusBySession, status.id, status),
     }));
   },
 

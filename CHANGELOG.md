@@ -79,6 +79,22 @@ These were in 5.0 too.
 
 - Changes dropped rows past its limit without saying so.
 
+- A condition's reason and message were drawn as the cluster wrote them; a
+  private key a controller pasted into one is now withheld there as it is
+  everywhere else.
+
+- **A cluster, namespace, node or key named `constructor` or `__proto__`
+  is read as any other.** A cluster named `__proto__` lost its alias,
+  colour and critical mark, so marking it critical did not gate it; one
+  named `constructor` could not be switched to; a ConfigMap key of that
+  name showed as withheld.
+
+- A drain called a disruption budget with no status a blocker; it is now
+  "not known".
+
+- A route whose parent is a Service was matched to a Gateway of the same
+  name.
+
 ## [5.0.0] - 2026-11-12
 
 Rubick 5 is a rewrite of how the app reads a cluster and how it says what it

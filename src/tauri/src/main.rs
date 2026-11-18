@@ -216,6 +216,7 @@ fn main() {
             commands::cluster::connection_attempt,
             commands::cluster::credential_renewal,
             commands::cluster::get_kubeconfig_source,
+            commands::cluster::cli_kubeconfig,
             commands::access::check_list_access,
             commands::access::check_access,
             commands::access::check_namespace_access,

@@ -39,10 +39,14 @@ vi.mock("@/integrations", () => ({
 }));
 
 import type { PortForwardSessionInfo } from "@/generated/types";
-import { useClusterForwardStore } from "@/stores/clusterForwardStore";
+import {
+  forwardOf,
+  useClusterForwardStore,
+} from "@/stores/clusterForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { commands } from "@/lib/commands";
 import { orphansIn, useClusterForwards, wake } from "./useClusterForwards";
+import { entryOf, named } from "@/lib/named";
 
 const session = (
   id: string,
@@ -76,7 +80,7 @@ beforeEach(() => {
   tunnels.sessions = [];
   tunnels.forward.mockClear();
   tunnels.save.mockClear();
-  useClusterForwardStore.setState({ forwards: {} });
+  useClusterForwardStore.setState({ forwards: named() });
   useClusterStore.setState({ currentContext: "staging", isConnected: true });
 });
 
@@ -134,7 +138,11 @@ describe("a saved address another cluster's tunnel is answering", () => {
       expect.objectContaining({ url: "http://localhost:20001" })
     );
     expect(
-      useClusterForwardStore.getState().forwards.staging?.prometheus?.localPort
+      forwardOf(
+        useClusterForwardStore.getState().forwards,
+        "staging",
+        "prometheus"
+      )?.localPort
     ).toBe(20001);
   });
 
@@ -154,9 +162,9 @@ describe("a saved address another cluster's tunnel is answering", () => {
   it("is woken when the cluster lands, asked to start or not", async () => {
     tunnels.sessions = [session("prod's", 20000, 9090, viaProm, "prod")];
     useClusterForwardStore.setState({
-      forwards: {
-        staging: { prometheus: { ...preference, localPort: 20000 } },
-      },
+      forwards: named({
+        staging: named({ prometheus: { ...preference, localPort: 20000 } }),
+      }),
     });
     useClusterStore.setState({ currentContext: "staging", isConnected: true });
     const client = new QueryClient();
@@ -198,6 +206,8 @@ describe("a wake the window moved on from", () => {
     await wake("prometheus", "staging", preference);
 
     expect(tunnels.save).not.toHaveBeenCalled();
-    expect(useClusterForwardStore.getState().forwards.staging).toBeUndefined();
+    expect(
+      entryOf(useClusterForwardStore.getState().forwards, "staging")
+    ).toBeUndefined();
   });
 });

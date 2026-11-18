@@ -267,11 +267,22 @@ function cellOf(
 
 function errorShareOf(
   requests: { cell: Cell; flow: Flow | null },
+  flows: readonly Flow[],
   reading: TrafficReading,
   failed: (source: number, measure: Measure) => boolean
 ): Cell {
   const flow = requests.flow;
-  if (!flow) return { ...requests.cell, value: null };
+  if (!flow) {
+    // A pair whose errors answered with no number is not "below HTTP".
+    const blank = flows.find((each) => each.unknown.includes("errors"));
+    return blank
+      ? {
+          value: null,
+          source: reading.sources[blank.source]?.name ?? null,
+          state: "notRead",
+        }
+      : { ...requests.cell, value: null };
+  }
   const from = reading.sources[flow.source];
   const source = from?.name ?? null;
   if (failed(flow.source, "errors") || flow.unknown.includes("errors"))
@@ -348,7 +359,7 @@ export function pairRows(
       from,
       to,
       requests: requests.cell,
-      errorShare: errorShareOf(requests, reading, failed),
+      errorShare: errorShareOf(requests, flows, reading, failed),
       p50: cellOf(flows, reading, failed, "p50").cell,
       p95: cellOf(flows, reading, failed, "p95").cell,
       p99: cellOf(flows, reading, failed, "p99").cell,

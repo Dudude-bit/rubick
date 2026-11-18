@@ -18,19 +18,27 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import {
+  type Named,
+  entryOf,
+  named,
+  storedEntries,
+  withEntry,
+} from "@/lib/named";
+
 interface ClusterRecencyState {
   /** Context name to the epoch millisecond it was last in use: landed on, or left. */
-  lastUsed: Record<string, number>;
+  lastUsed: Named<number>;
   recordUse: (context: string) => void;
 }
 
 export const useClusterRecencyStore = create<ClusterRecencyState>()(
   persist(
     (set) => ({
-      lastUsed: {},
+      lastUsed: named(),
       recordUse: (context) =>
         set((state) => ({
-          lastUsed: { ...state.lastUsed, [context]: Date.now() },
+          lastUsed: withEntry(state.lastUsed, context, Date.now()),
         })),
     }),
     {
@@ -42,14 +50,12 @@ export const useClusterRecencyStore = create<ClusterRecencyState>()(
       migrate: (persisted) => {
         const stored = (persisted as { lastUsed?: unknown } | undefined)
           ?.lastUsed;
-        const lastUsed: Record<string, number> = {};
-        if (stored && typeof stored === "object") {
-          for (const [context, at] of Object.entries(stored)) {
-            if (typeof at === "number" && Number.isFinite(at)) {
-              lastUsed[context] = at;
-            }
-          }
-        }
+        const lastUsed = named(
+          storedEntries(stored).filter(
+            (entry): entry is [string, number] =>
+              typeof entry[1] === "number" && Number.isFinite(entry[1])
+          )
+        );
         return { lastUsed } as ClusterRecencyState;
       },
     }
@@ -65,13 +71,14 @@ export const useClusterRecencyStore = create<ClusterRecencyState>()(
  */
 export function splitByRecency<T extends { name: string }>(
   contexts: T[],
-  lastUsed: Record<string, number>
+  lastUsed: Named<number>
 ): { recent: T[]; rest: T[] } {
   const recent: T[] = [];
   const rest: T[] = [];
+  const at = (context: T) => entryOf(lastUsed, context.name) ?? 0;
   for (const context of contexts) {
-    (lastUsed[context.name] ? recent : rest).push(context);
+    (at(context) ? recent : rest).push(context);
   }
-  recent.sort((a, b) => lastUsed[b.name] - lastUsed[a.name]);
+  recent.sort((a, b) => at(b) - at(a));
   return { recent, rest };
 }

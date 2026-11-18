@@ -30,6 +30,7 @@ import {
   type ForwardPort,
   type LocalPortProblem,
 } from "@/lib/port-forward";
+import { entryOf } from "@/lib/named";
 
 /** What a forward is aimed at. A Service is followed to a ready pod by the backend. */
 export interface ForwardTarget {
@@ -400,7 +401,7 @@ function ForwardForm({
           <div className="space-y-2">
             <Label>{t("activity", "activeForwards")}</Label>
             {active.map((session) => {
-              const status = statusBySession[session.id];
+              const status = entryOf(statusBySession, session.id);
               return (
                 <div
                   key={session.id}

@@ -29,6 +29,7 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { marcoReview } from "@/test/marco";
 import { WITHHELD_MARKER } from "@/lib/withheld";
 import { credentialsRestored, readExpiredCredentials } from "@/lib/credentials";
+import { entryOf } from "@/lib/named";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
@@ -558,8 +559,10 @@ describe("an answer that comes back after its editor is gone", () => {
     const store = useYamlEditorStore.getState();
     expect(screen.queryByTestId("yaml-result")).toBeNull();
     expect(store.isApplying).toBe(true);
-    expect(store.history["test:ConfigMap:shop:settings"] ?? []).toEqual([]);
-    expect(store.history["test:Deployment:shop:api"]).toEqual([
+    expect(
+      entryOf(store.history, "test:ConfigMap:shop:settings") ?? []
+    ).toEqual([]);
+    expect(entryOf(store.history, "test:Deployment:shop:api")).toEqual([
       expect.objectContaining({ content: EDITED }),
     ]);
   });

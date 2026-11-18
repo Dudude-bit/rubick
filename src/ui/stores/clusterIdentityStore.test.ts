@@ -2,6 +2,8 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { aliasOf, useClusterIdentityStore } from "./clusterIdentityStore";
+import { entriesOf, entryOf, named } from "@/lib/named";
+import { reload } from "@/test/reload";
 
 const ARN = "arn:aws:eks:us-east-1:1234:cluster/prod";
 
@@ -9,7 +11,7 @@ const state = () => useClusterIdentityStore.getState();
 
 beforeEach(() => {
   localStorage.clear();
-  useClusterIdentityStore.setState({ marks: {} });
+  useClusterIdentityStore.setState({ marks: named() });
 });
 
 describe("what a cluster is called", () => {
@@ -21,7 +23,7 @@ describe("what a cluster is called", () => {
     // Trimming between keystrokes would make a space impossible to type,
     // so the field's own text is kept and the trimmed one handed out.
     state().setAlias(ARN, "payments ");
-    expect(state().marks[ARN].alias).toBe("payments ");
+    expect(entryOf(state().marks, ARN)?.alias).toBe("payments ");
     expect(aliasOf(state().marks, ARN)).toBe("payments");
   });
 
@@ -38,7 +40,7 @@ describe("what colour it wears", () => {
     state().setHue(ARN, 224);
     state().setHue(ARN, null);
 
-    expect(state().marks[ARN]).toEqual({ alias: "payments" });
+    expect(entryOf(state().marks, ARN)).toEqual({ alias: "payments" });
   });
 
   it("leaves no residue once both are given up", () => {
@@ -47,7 +49,7 @@ describe("what colour it wears", () => {
     state().setHue(ARN, null);
     state().setAlias(ARN, "");
 
-    expect(ARN in state().marks).toBe(false);
+    expect(entryOf(state().marks, ARN)).toBeUndefined();
   });
 });
 
@@ -90,9 +92,9 @@ describe("whether it is critical infrastructure", () => {
   /** A cleared flag that left `{critical: undefined}` behind would keep the row forever. */
   it("is unsaid again once unticked, leaving no residue", () => {
     state().setCritical(ARN, true);
-    expect(state().marks[ARN]).toEqual({ critical: true });
+    expect(entryOf(state().marks, ARN)).toEqual({ critical: true });
     state().setCritical(ARN, null);
-    expect(ARN in state().marks).toBe(false);
+    expect(entryOf(state().marks, ARN)).toBeUndefined();
   });
 
   /** Dropping the flag on read would silently disarm every guard after a restart. */
@@ -101,5 +103,50 @@ describe("whether it is critical infrastructure", () => {
       [ARN]: { critical: true },
     });
     expect(migrate({ marks: { [ARN]: { critical: "yes" } } })).toEqual({});
+  });
+});
+
+describe("clusters named like what every object has", () => {
+  /**
+   * `__proto__` and `constructor` are context names like any other. Fails
+   * if a mark set under either is lost (assigning `__proto__` set the
+   * record's prototype, so a cluster marked critical asked nothing), read
+   * back for a cluster nobody marked, dropped by a restart, or left out.
+   */
+  it("keeps, restores and lists the marks of __proto__ and constructor", async () => {
+    expect(aliasOf(state().marks, "constructor")).toBeUndefined();
+    for (const context of ["prod", "__proto__", "constructor"]) {
+      state().setAlias(context, `called-${context}`);
+      state().setCritical(context, true);
+    }
+    await reload(useClusterIdentityStore);
+    const { marks } = state();
+    for (const context of ["prod", "__proto__", "constructor"])
+      expect(entryOf(marks, context)).toEqual({
+        alias: `called-${context}`,
+        critical: true,
+      });
+    expect(entriesOf(marks).map(([context]) => context)).toEqual([
+      "prod",
+      "__proto__",
+      "constructor",
+    ]);
+    expect(entryOf(marks, "toString")).toBeUndefined();
+
+    state().setAlias("__proto__", "");
+    state().setCritical("__proto__", null);
+    expect(entriesOf(state().marks).map(([context]) => context)).toEqual([
+      "prod",
+      "constructor",
+    ]);
+  });
+
+  /** A store from before its version is read through `migrate`: fails if it loses `__proto__` there. */
+  it("keeps __proto__ through a store written at an older version", () => {
+    const read = JSON.parse('{"marks":{"__proto__":{"critical":true}}}');
+    expect(migrate(read)).toEqual(
+      JSON.parse('{"__proto__":{"critical":true}}')
+    );
+    expect(Object.hasOwn(migrate(read), "__proto__")).toBe(true);
   });
 });

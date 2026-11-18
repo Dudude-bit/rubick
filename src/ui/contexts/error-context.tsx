@@ -21,6 +21,7 @@ import {
   reportError,
   type NormalizedError,
 } from "@/lib/error-utils";
+import { entryOf } from "@/lib/named";
 
 const TOAST_DEDUPE_MS = 3000;
 
@@ -102,7 +103,7 @@ export function ErrorProvider({ children }: Props) {
       t("cluster", "couldNotConnect", { context: clusterErrorContext }),
       failureLine(
         t,
-        failures[clusterErrorContext]?.kind ?? "unknown",
+        entryOf(failures, clusterErrorContext)?.kind ?? "unknown",
         clusterErrorContext,
         info?.server,
         info?.exec_command

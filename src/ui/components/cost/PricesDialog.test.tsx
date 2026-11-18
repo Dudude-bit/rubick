@@ -6,6 +6,7 @@ import { nameIsAnotherCluster } from "@/lib/kept-by-name";
 import { useCostPricesStore } from "@/stores/costPricesStore";
 import { renderWithRouter } from "@/test/render";
 import { PricesDialog } from "./PricesDialog";
+import { entryOf, named } from "@/lib/named";
 
 describe("the prices dialog", () => {
   /**
@@ -15,7 +16,7 @@ describe("the prices dialog", () => {
    */
   it("lets go of what it holds when its name turns into another cluster", async () => {
     useCostPricesStore.setState({
-      prices: {
+      prices: named({
         turning: {
           cpu: 0.04,
           memory: 0.005,
@@ -23,7 +24,7 @@ describe("the prices dialog", () => {
           gpu: null,
           currency: "EUR",
         },
-      },
+      }),
     });
     await renderWithRouter(
       <PricesDialog context="turning" open onOpenChange={() => {}} />
@@ -34,7 +35,9 @@ describe("the prices dialog", () => {
     act(() => nameIsAnotherCluster("turning"));
     expect(cpu).toHaveValue("");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(useCostPricesStore.getState().prices["turning"]).toBeUndefined();
+    expect(
+      entryOf(useCostPricesStore.getState().prices, "turning")
+    ).toBeUndefined();
   });
 
   /**
@@ -45,7 +48,7 @@ describe("the prices dialog", () => {
   it("opens on the new cluster's prices after its name turned earlier", async () => {
     nameIsAnotherCluster("turned-before");
     useCostPricesStore.setState({
-      prices: {
+      prices: named({
         "turned-before": {
           cpu: 0.07,
           memory: 0.005,
@@ -53,7 +56,7 @@ describe("the prices dialog", () => {
           gpu: null,
           currency: "EUR",
         },
-      },
+      }),
     });
     await renderWithRouter(
       <PricesDialog context="turned-before" open onOpenChange={() => {}} />

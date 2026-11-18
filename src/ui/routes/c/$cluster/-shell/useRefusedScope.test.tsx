@@ -18,12 +18,13 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import type { ContextInfo } from "@/generated/types";
 import { useRefusedScope } from "./useRefusedScope";
+import { named } from "@/lib/named";
 
 const scope = () => useClusterStore.getState().namespaceScope;
 
 beforeEach(() => {
   list.state = "refused";
-  useNamespaceRecencyStore.setState({ recent: {} });
+  useNamespaceRecencyStore.setState({ recent: named({}) });
   useClusterStore.setState({
     contexts: [{ name: "dev" }] as unknown as ContextInfo[],
     currentContext: "dev",
@@ -39,7 +40,9 @@ describe("a window that may not list namespaces", () => {
    * stays there when the reader has used a namespace on this cluster before.
    */
   it("moves to the last namespace used instead of the whole cluster", () => {
-    useNamespaceRecencyStore.setState({ recent: { dev: ["team-checkout"] } });
+    useNamespaceRecencyStore.setState({
+      recent: named({ dev: ["team-checkout"] }),
+    });
     renderHook(() => useRefusedScope());
     expect(scope()).toEqual(["team-checkout"]);
   });
@@ -57,7 +60,9 @@ describe("a window that may not list namespaces", () => {
   /** A list that answered is the reader's to scope as they like. */
   it("leaves the whole cluster alone when the list was read", () => {
     list.state = "listed";
-    useNamespaceRecencyStore.setState({ recent: { dev: ["team-checkout"] } });
+    useNamespaceRecencyStore.setState({
+      recent: named({ dev: ["team-checkout"] }),
+    });
     renderHook(() => useRefusedScope());
     expect(scope()).toEqual([]);
   });

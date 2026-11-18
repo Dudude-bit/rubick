@@ -22,6 +22,14 @@ import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
 import { namesRebound } from "@/lib/kept-by-name";
+import {
+  entriesOf,
+  entryOf,
+  named,
+  withEntry,
+  withoutEntry,
+  type Named,
+} from "@/lib/named";
 import { followConnections } from "@/lib/refusals";
 import {
   clampScope,
@@ -72,7 +80,7 @@ interface ClusterState {
    * render — reading it back over IPC would let a beat of the new cluster
    * render under the old cluster's scope.
    */
-  savedScopes: Record<string, string[]>;
+  savedScopes: Named<string[]>;
   isConnected: boolean;
   /**
    * Which way the session reaches the cluster, once connected. Through a
@@ -116,9 +124,9 @@ interface ClusterState {
    * Every context whose last connect failed, with why, until it lands. Kept
    * apart from `error`, which is the screen's and goes with the next move.
    */
-  failures: Record<string, ConnectFailed>;
+  failures: Named<ConnectFailed>;
   /** Which way each session that landed reaches its cluster. */
-  paths: Record<string, ConnectionPath>;
+  paths: Named<ConnectionPath>;
   /** When the window last turned to `currentContext`: an answer older than this is from before. */
   turnedAt: number;
 
@@ -176,11 +184,6 @@ function leaving(state: {
     useClusterRecencyStore.getState().recordUse(state.currentContext);
 }
 
-function without<T>(record: Record<string, T>, key: string) {
-  const { [key]: _gone, ...rest } = record;
-  return rest;
-}
-
 /**
  * What the window looks at after moving to `context`.
  *
@@ -190,7 +193,7 @@ function without<T>(record: Record<string, T>, key: string) {
  */
 export function scopeFor(
   state: {
-    savedScopes: Record<string, string[]>;
+    savedScopes: Named<string[]>;
     namespaceScope: string[];
     contexts: ContextInfo[];
   },
@@ -199,7 +202,7 @@ export function scopeFor(
 ): { namespaceScope: string[]; currentNamespace: string } {
   const scope = changed
     ? clampScope(
-        state.savedScopes[context] ??
+        entryOf(state.savedScopes, context) ??
           seedScope(state.contexts.find((c) => c.name === context)?.namespace)
       )
     : state.namespaceScope;
@@ -237,7 +240,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   currentContext: null,
   currentNamespace: "", // Empty string means all namespaces
   namespaceScope: [],
-  savedScopes: {},
+  savedScopes: named(),
   isConnected: false,
   connectedThrough: null,
   isLoading: false,
@@ -251,8 +254,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   contextSwitches: 0,
   live: [],
   wayBack: null,
-  failures: {},
-  paths: {},
+  failures: named(),
+  paths: named(),
   turnedAt: 0,
 
   loadContexts: async () => {
@@ -276,18 +279,25 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
           // Every context's selection, not only the one being reopened:
           // the first switch to another cluster has to restore without a
           // round-trip.
-          const savedScopes: Record<string, string[]> = {};
-          for (const [context, stored] of Object.entries(prefs.namespaces)) {
-            savedScopes[context] = clampScope(decodeScope(stored));
-          }
           // The list wins where there is one — `namespaces` only ever holds
           // a single namespace, so a selection of three reads as one there.
-          for (const [context, stored] of Object.entries(prefs.scopes ?? {})) {
-            savedScopes[context] = clampScope(stored);
-          }
+          const savedScopes = named<string[]>([
+            ...entriesOf(named(prefs.namespaces)).map(
+              ([context, stored]): [string, string[]] => [
+                context,
+                clampScope(decodeScope(stored)),
+              ]
+            ),
+            ...entriesOf(named(prefs.scopes ?? {})).map(
+              ([context, stored]): [string, string[]] => [
+                context,
+                clampScope(stored),
+              ]
+            ),
+          ]);
           set({ savedScopes });
 
-          const scope = savedScopes[prefs.lastContext] ?? [];
+          const scope = entryOf(savedScopes, prefs.lastContext) ?? [];
           if (scope.length > 0) {
             set({
               namespaceScope: scope,
@@ -355,7 +365,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       // per context that a build without this feature reads straight into
       // `currentNamespace`. The selection itself is kept by the scope tab.
       set((state) => ({
-        savedScopes: { ...state.savedScopes, [context]: scope },
+        savedScopes: withEntry(state.savedScopes, context, scope),
       }));
       // The scope left behind too: without a list it is offered only from here.
       useNamespaceRecencyStore.getState().record(context, [...scope, ...left]);
@@ -429,8 +439,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         connectStartedAt: null,
         wayBack: null,
         live: [...new Set([...get().live, connectedContext])],
-        failures: without(get().failures, connectedContext),
-        paths: { ...get().paths, [connectedContext]: info.connected_through },
+        failures: withoutEntry(get().failures, connectedContext),
+        paths: withEntry(get().paths, connectedContext, info.connected_through),
       });
       // Only a connection that landed counts as "used": ordering the
       // front door by clusters the reader failed to reach would put the
@@ -450,7 +460,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     if (changed && before.live.includes(targetContext)) {
       set({
         ...moving,
-        connectedThrough: before.paths[targetContext] ?? null,
+        connectedThrough: entryOf(before.paths, targetContext) ?? null,
         isLoading: false,
         isAuthenticating: false,
         connectStartedAt: null,
@@ -501,16 +511,13 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         // Every reader of this field puts it on screen.
         error: shown,
         errorContext: targetContext,
-        failures: {
-          ...get().failures,
-          [targetContext]: {
-            kind:
-              attempt?.direct.state === "failed"
-                ? attempt.direct.failure
-                : "unknown",
-            error: shown,
-          },
-        },
+        failures: withEntry(get().failures, targetContext, {
+          kind:
+            attempt?.direct.state === "failed"
+              ? attempt.direct.failure
+              : "unknown",
+          error: shown,
+        }),
         isLoading: false,
         isAuthenticating: false,
         isConnected: false,
@@ -581,19 +588,21 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const held = before.live.filter(
       (name) => moved.has(name) && name !== before.currentContext
     );
-    const dropped: string[] = [];
+    // Out of `live` before the first wait: a switch to one of them meanwhile
+    // connects it afresh, where `live` would focus the old entry's client.
+    set({
+      live: before.live.filter((name) => !held.includes(name)),
+      wayBack:
+        before.wayBack !== null && moved.has(before.wayBack)
+          ? null
+          : before.wayBack,
+    });
     for (const name of held) {
       // One the reader went to meanwhile is theirs now, not a held one.
       if (get().currentContext === name) continue;
       await commands.disconnectCluster(name).catch(() => null);
-      dropped.push(name);
     }
     const now = get();
-    set({
-      live: now.live.filter((name) => !dropped.includes(name)),
-      wayBack:
-        now.wayBack !== null && moved.has(now.wayBack) ? null : now.wayBack,
-    });
     // The reader connected elsewhere while those were let go: the window
     // follows them, not the cluster it showed when the file changed.
     if (
@@ -614,7 +623,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   sessionsDropped: async () => {
     const { currentContext, contexts, isConnected, isAuthenticating } = get();
     namesRebound();
-    set({ live: [], paths: {}, wayBack: null });
+    set({ live: [], paths: named(), wayBack: null });
     if (!currentContext || (!isConnected && !isAuthenticating)) return;
     if (!contexts.some((c) => c.name === currentContext)) {
       await get().disconnect();

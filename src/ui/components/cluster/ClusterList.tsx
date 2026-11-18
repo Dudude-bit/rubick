@@ -13,6 +13,7 @@ import {
 } from "@/stores/clusterRecencyStore";
 import { useT } from "@/i18n/useT";
 import type { ContextInfo } from "@/generated/types";
+import { entryOf } from "@/lib/named";
 import { failureLine } from "@/components/cluster/connect-failure";
 import { useClusterStore, type ConnectFailed } from "@/stores/clusterStore";
 
@@ -207,9 +208,9 @@ export function ClusterList({
           <ClusterListRow
             key={ctx.name}
             context={ctx}
-            lastUsedAt={lastUsed[ctx.name]}
+            lastUsedAt={entryOf(lastUsed, ctx.name)}
             live={live.includes(ctx.name)}
-            failure={failures[ctx.name]}
+            failure={entryOf(failures, ctx.name)}
             onSelect={onSelect}
           />
         ))}
@@ -222,7 +223,7 @@ export function ClusterList({
             key={ctx.name}
             context={ctx}
             live={live.includes(ctx.name)}
-            failure={failures[ctx.name]}
+            failure={entryOf(failures, ctx.name)}
             onSelect={onSelect}
           />
         ))}

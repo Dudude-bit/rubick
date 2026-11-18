@@ -79,6 +79,7 @@ import { listWords } from "@/i18n/say";
 import { useShareSection } from "@/components/share/screen-share";
 import { tableSection, type TableShare } from "@/components/share/table-share";
 import { formatCount } from "@/lib/count";
+import { entryOf } from "@/lib/named";
 
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
@@ -808,7 +809,7 @@ function DataTableInner<TData extends RowData>({
   // still resizes; it just has nowhere to remember it.
   const widthsFiledAs = widthsKey ?? rowLabel ?? null;
   const storedWidths = useColumnWidthsStore((state) =>
-    widthsFiledAs ? state.widths[widthsFiledAs] : undefined
+    widthsFiledAs ? entryOf(state.widths, widthsFiledAs) : undefined
   );
   const saveWidths = useColumnWidthsStore((state) => state.set);
   const forgetWidths = useColumnWidthsStore((state) => state.reset);

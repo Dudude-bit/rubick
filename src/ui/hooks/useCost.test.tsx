@@ -12,6 +12,7 @@ import {
 
 import type { CostBasis } from "@/generated/types";
 import type { CostReading, Prices } from "@/lib/cost";
+import { named } from "@/lib/named";
 
 const capability = vi.fn();
 const costBasis = vi.fn<() => Promise<CostBasis>>();
@@ -103,7 +104,7 @@ beforeEach(() => {
   costBasis.mockReset();
   costBasis.mockResolvedValue(BASIS);
   useClusterStore.setState({ currentContext: "prod", isConnected: true });
-  useCostPricesStore.setState({ prices: {} });
+  useCostPricesStore.setState({ prices: named({}) });
 });
 
 afterEach(() => {
@@ -122,7 +123,7 @@ describe("which source a cost is read from", () => {
   /** A configured supplier still being asked is not "none connected". */
   it("waits while the configured supplier's probe is out", async () => {
     capability.mockReturnValue({ state: "reading" });
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     // Even once what the cluster holds is read, entered prices wait for it.
     await waitFor(() => expect(hook.result.current.basis).toBeDefined());
@@ -156,7 +157,7 @@ describe("which source a cost is read from", () => {
         ],
       }))
     );
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
     const cost = hook.result.current.cost;
@@ -171,7 +172,7 @@ describe("which source a cost is read from", () => {
    */
   it("estimates from prices and says why where the supplier holds no series", async () => {
     capability.mockReturnValue(ready(async () => null));
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
     const cost = hook.result.current.cost;
@@ -188,7 +189,7 @@ describe("which source a cost is read from", () => {
    */
   it("estimates from prices where OpenCost prices no node, and says why", async () => {
     capability.mockReturnValue(ready(async () => READING));
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
     const cost = hook.result.current.cost;
@@ -327,7 +328,7 @@ describe("which source a cost is read from", () => {
       endpoint: "prom.example.com",
       reason: "connection refused",
     });
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     await waitFor(() => expect(hook.result.current.cost.state).toBe("picture"));
     const cost = hook.result.current.cost;
@@ -340,7 +341,7 @@ describe("which source a cost is read from", () => {
   /** The basis failing is not a cluster that costs nothing. */
   it("says the basis could not be read rather than drawing an empty picture", async () => {
     capability.mockReturnValue({ state: "absent" });
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     costBasis.mockRejectedValue(new Error("forbidden"));
     const hook = render();
     await waitFor(() =>
@@ -413,7 +414,7 @@ describe("a read that failed after one that answered", () => {
         return READING;
       })
     );
-    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    useCostPricesStore.setState({ prices: named({ prod: PRICES }) });
     const hook = render();
     await waitFor(() => {
       const cost = hook.result.current.cost;

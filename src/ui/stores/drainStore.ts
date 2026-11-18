@@ -28,6 +28,14 @@ import type {
   DrainReport,
 } from "@/generated/types";
 import { listenAll, listenEvent } from "@/lib/events";
+import {
+  entriesOf,
+  entryOf,
+  named,
+  withEntry,
+  withoutEntry,
+  type Named,
+} from "@/lib/named";
 import { keptByName } from "@/lib/kept-by-name";
 
 export type {
@@ -89,13 +97,13 @@ export const drainKey = (context: string, node: string) =>
   `${context}\u0000${node}`;
 
 interface DrainStore {
-  drains: Record<string, DrainState>;
+  drains: Named<DrainState>;
   /** The drain whose dialog is open, so its ending is not also said in a toast. */
   shown: string | null;
 }
 
 export const useDrainStore = create<DrainStore>(() => ({
-  drains: {},
+  drains: named(),
   shown: null,
 }));
 
@@ -115,7 +123,7 @@ const handles = new Map<string, Handle>();
 const finishedBy = new Set<(result: DrainFinished) => void>();
 
 const put = (key: string, state: DrainState) =>
-  useDrainStore.setState((s) => ({ drains: { ...s.drains, [key]: state } }));
+  useDrainStore.setState((s) => ({ drains: withEntry(s.drains, key, state) }));
 
 const keyOf = (drainId: string) =>
   [...handles].find(([, handle]) => handle.drainId === drainId)?.[0];
@@ -150,8 +158,8 @@ function listen(): Promise<unknown> {
     }),
     listenEvent("event-bridge-lagged", () => {
       useDrainStore.setState((s) => ({
-        drains: Object.fromEntries(
-          Object.entries(s.drains).map(([key, state]) => [
+        drains: named(
+          entriesOf(s.drains).map(([key, state]) => [
             key,
             state.phase === "running" ? { ...state, missed: true } : state,
           ])
@@ -164,7 +172,7 @@ function listen(): Promise<unknown> {
         if (!handle.drainId) continue;
         commands.nodeDrainSubscribed(handle.drainId).catch(() => {
           setTimeout(() => {
-            const state = useDrainStore.getState().drains[key];
+            const state = entryOf(useDrainStore.getState().drains, key);
             if (handles.get(key) !== handle || state?.phase !== "running") {
               return;
             }
@@ -183,10 +191,10 @@ function listen(): Promise<unknown> {
 
 /** The drain of `node` on `context`, or idle when the window holds none. */
 export const drainOf = (
-  drains: Record<string, DrainState>,
+  drains: Named<DrainState>,
   context: string,
   node: string | null
-): DrainState => (node && drains[drainKey(context, node)]) || IDLE;
+): DrainState => (node && entryOf(drains, drainKey(context, node))) || IDLE;
 
 export async function startDrain(
   context: string,
@@ -245,9 +253,7 @@ export function stopDrain(context: string, node: string): void {
 export function forgetDrain(key: string): void {
   if (handles.has(key)) return;
   useDrainStore.setState((s) => ({
-    drains: Object.fromEntries(
-      Object.entries(s.drains).filter(([held]) => held !== key)
-    ),
+    drains: withoutEntry(s.drains, key),
   }));
 }
 

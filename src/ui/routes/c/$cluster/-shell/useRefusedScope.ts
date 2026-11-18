@@ -5,6 +5,7 @@ import { seedScope } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+import { entryOf } from "@/lib/named";
 
 /**
  * A token refused the namespace list is almost always refused the whole
@@ -26,7 +27,7 @@ export function useRefusedScope(): void {
     const named = cluster.contexts.find((c) => c.name === context)?.namespace;
     const [fallback] = [
       ...seedScope(named),
-      ...(useNamespaceRecencyStore.getState().recent[context] ?? []),
+      ...(entryOf(useNamespaceRecencyStore.getState().recent, context) ?? []),
     ];
     if (fallback) void cluster.setNamespaceScope([fallback]);
     else openNamespacePicker();

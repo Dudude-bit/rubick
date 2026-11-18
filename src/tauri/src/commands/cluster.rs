@@ -620,6 +620,15 @@ fn kubeconfig_candidates(
     vec![candidate(&default, "default")]
 }
 
+/// The kubeconfig files the app reads `context` from, joined as `KUBECONFIG`
+/// takes them: a command copied out of the app names them, or a terminal
+/// whose file names another cluster alike acts on that one.
+#[tauri::command]
+pub async fn cli_kubeconfig(state: State<'_, AppState>, context: String) -> Result<String> {
+    let target = state.client_manager.cli_target(&context).await?;
+    Ok(target.kubeconfig.to_string_lossy().into_owned())
+}
+
 /// Report the kubeconfig lookup and what it found.
 #[tauri::command]
 pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<KubeconfigSource> {

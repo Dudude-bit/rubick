@@ -7,10 +7,15 @@ vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 
 import { useClusterStore } from "@/stores/clusterStore";
 import { ErrorProvider } from "./error-context";
+import { named } from "@/lib/named";
 
 beforeEach(() => {
   toast.mockClear();
-  useClusterStore.setState({ error: null, errorContext: null, failures: {} });
+  useClusterStore.setState({
+    error: null,
+    errorContext: null,
+    failures: named({}),
+  });
 });
 
 describe("the toast for a failure nobody caught", () => {
@@ -95,12 +100,12 @@ describe("the toast for a cluster that could not be reached", () => {
       useClusterStore.setState({
         error: "Connection error: deadline has elapsed",
         errorContext: "acme-prod-eu",
-        failures: {
+        failures: named({
           "acme-prod-eu": {
             kind: "timeout",
             error: "Connection error: deadline has elapsed",
           },
-        },
+        }),
       });
     });
 

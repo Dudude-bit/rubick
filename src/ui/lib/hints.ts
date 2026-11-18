@@ -20,6 +20,7 @@ import type {
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import type { PathPolicies } from "@/lib/policy-peers";
+import { entryOf } from "@/lib/named";
 
 export type HintKey = keyof typeof en.hints;
 
@@ -581,7 +582,8 @@ export function topologyReading(
       carrying:
         nodes === null
           ? null
-          : nodes.filter((node) => key in node.labels).length,
+          : nodes.filter((node) => entryOf(node.labels, key) !== undefined)
+              .length,
     })),
     nodes: nodes?.length ?? null,
   };

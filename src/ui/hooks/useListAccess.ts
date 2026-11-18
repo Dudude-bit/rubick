@@ -28,6 +28,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { listQueryFor, type ResourceKind } from "@/lib/resource-registry";
 import type { ListQuery } from "@/generated/types";
+import { entryOf } from "@/lib/named";
 
 /** What the authorizer said, for the rows that carry a kind. */
 export type ListAccessMap = Partial<Record<ResourceKind, boolean>>;
@@ -165,7 +166,7 @@ function useNameableNamespaces(): string[] {
   );
   const recent =
     useNamespaceRecencyStore((s) =>
-      context ? s.recent[context] : undefined
+      context ? entryOf(s.recent, context) : undefined
     ) ?? NO_RECENT;
   return [...new Set([...seedScope(named), ...recent])].slice(0, NAMEABLE);
 }
