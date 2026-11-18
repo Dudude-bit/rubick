@@ -17,9 +17,9 @@ import { useT } from "@/i18n/useT";
 import {
   currencyOf,
   formatMoney,
-  formatShare,
   monthOf,
   noNodePriced,
+  shareOf,
   type CostPicture,
 } from "@/lib/cost";
 import { iconSvg } from "@/lib/icon-svg";
@@ -30,7 +30,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useCostPrices } from "@/stores/costPricesStore";
 import { BasisFailed, CostNotes, NothingYet, SupplierOnly } from "./cost-notes";
 import { CostTables } from "./cost-tables";
-import { amountWords, sourceWords } from "./cost-words";
+import { amountWords, clusterShareWords, sourceWords } from "./cost-words";
 import { CostTrend } from "./cost-trend";
 
 function summarySection(
@@ -58,8 +58,14 @@ function summarySection(
       )
     );
   }
-  if (scoped && picture.cluster)
-    add(t("cost", "theCluster"), amountWords(picture.cluster, currency, t));
+  // What a scope is a share of, known or not.
+  if (scoped)
+    add(
+      t("cost", "theCluster"),
+      picture.cluster
+        ? amountWords(picture.cluster, currency, t)
+        : t("cost", "notKnown")
+    );
   // As the tiles say it: a namespace's summary carries the cluster's idle
   // under the cluster's name, and none of the cluster's own charges.
   add(
@@ -112,7 +118,6 @@ function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
   const currency = currencyOf(picture);
   const total = picture.total;
   const idle = picture.idle;
-  const whole = picture.cluster?.perHour ?? null;
   return (
     <div className="flex flex-wrap gap-2">
       <Tile
@@ -120,11 +125,12 @@ function Tiles({ picture, scoped }: { picture: CostPicture; scoped: boolean }) {
         value={total ? amountWords(total, currency, t) : t("cost", "notKnown")}
         testId="cost-per-hour"
         note={
-          scoped && total && whole !== null && whole > 0
-            ? t("cost", "ofCluster", {
-                share: formatShare(total.perHour / whole),
-              })
-            : undefined
+          (scoped &&
+            clusterShareWords(
+              shareOf(total?.perHour ?? null, picture.cluster),
+              t
+            )) ||
+          undefined
         }
       />
       <Tile

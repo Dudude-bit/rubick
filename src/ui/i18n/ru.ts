@@ -2734,7 +2734,6 @@ export const ru: Catalogue = {
     reservedNote:
       "Оплачено и никому не отдано; {amount} из этого держат за собой kubelet и система.",
     theCluster: "Кластер",
-    ofCluster: "{share} от кластера",
     unclaimed: "Тома, которые никто не занял",
     fee: "Плата за управление кластером",
     atLeast: "не меньше {amount}",
@@ -2746,6 +2745,7 @@ export const ru: Catalogue = {
       other: "{line}, по замерам {read} из {n} подов",
     },
     notKnown: "Неизвестно",
+    shareNoTotal: "неизвестна: нет итога",
     notPriced: "без цены",
     notMeasured: "не измерено",
     fromOpenCost:
@@ -2928,6 +2928,7 @@ export const ru: Catalogue = {
     linePerMonth: "{amount} в месяц по прогнозу",
     lineShare: "{share} от кластера",
     lineShareAtMost: "не больше {share} от кластера",
+    lineShareNoTotal: "доля от кластера неизвестна, как и его итог",
     lineFromOpenCost: "по OpenCost",
     lineFromPrices: "оценка по введённым ценам",
     lineNotPriced: "Ни один ряд OpenCost не дал цену её подам.",

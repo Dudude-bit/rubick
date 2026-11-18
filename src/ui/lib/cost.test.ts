@@ -19,6 +19,7 @@ import {
   noNodePriced,
   pricesNoNode,
   readingPicture,
+  shareOf,
   totalUnknown,
   type CostReading,
   type Prices,
@@ -775,7 +776,10 @@ describe("one object's cost", () => {
       name: "web",
     })!;
     expect(of.perHour).toBe(picture.workloads[0]!.perHour);
-    expect(of.share).toBeCloseTo(0.05 / 0.2);
+    expect(of.share).toEqual({
+      of: expect.closeTo(0.05 / 0.2, 6),
+      atMost: false,
+    });
     expect(costOf(picture, { namespace: "shop" })!.perHour).toBeCloseTo(0.05);
     expect(
       costOf(picture, {
@@ -785,6 +789,34 @@ describe("one object's cost", () => {
         name: "gone",
       })
     ).toBeNull();
+  });
+});
+
+describe("a row's share of a whole", () => {
+  /**
+   * A priced row beside a cluster total nobody knows read "not priced", and
+   * a share of a total that is a floor read as the share. Fails if either
+   * reads as anything but what is known of it.
+   */
+  it("is not known where the whole is not, and at most where the whole is a floor", () => {
+    expect(shareOf(0.05, null)).toBe("noTotal");
+    expect(shareOf(0.05, { perHour: 0, atLeast: true })).toBe("noTotal");
+    expect(shareOf(0.05, { perHour: 0.2, atLeast: true })).toEqual({
+      of: 0.25,
+      atMost: true,
+    });
+    expect(shareOf(0.05, { perHour: 0.2, atLeast: false })).toEqual({
+      of: 0.25,
+      atMost: false,
+    });
+    expect(shareOf(null, { perHour: 0.2, atLeast: false })).toBeNull();
+    const unlisted = readingPicture(
+      basis({ nodes: null }),
+      reading(),
+      opencost,
+      null
+    );
+    expect(costOf(unlisted, { namespace: "shop" })!.share).toBe("noTotal");
   });
 });
 

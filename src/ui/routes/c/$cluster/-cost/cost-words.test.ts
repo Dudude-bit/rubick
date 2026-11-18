@@ -244,6 +244,25 @@ describe("a namespace with no total for want of a read", () => {
   });
 });
 
+describe("a priced row's share where the whole is not known", () => {
+  /** The row is priced; what is not known is the whole. Fails if its share says "not priced", or a floor's share reads as the share. */
+  it("says not known and why, and at most of a floor", () => {
+    const row = {
+      perHour: 0.05,
+      unpriced: [],
+      unknown: [],
+      share: "noTotal" as const,
+    };
+    expect(share(row, t)).toBe("not known: no total");
+    expect(share({ ...row, share: { of: 0.25, atMost: true } }, t)).toBe(
+      "at most 25%"
+    );
+    expect(share({ ...row, share: { of: 0.25, atMost: false } }, t)).toBe(
+      "25%"
+    );
+  });
+});
+
 describe("a part nobody could read", () => {
   /** Unread storage is "Not known", not "none" and not "not priced". Fails if its cell says either. */
   it("says not known in its cell", () => {
