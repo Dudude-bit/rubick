@@ -46,6 +46,14 @@ const STORE_SHAPES: Record<string, [string, number]> = {
     "export type Saved = Record<string | symbol, number>;",
     1,
   ],
+  "stores/heritage.ts": [
+    "export interface Saved extends Record<string, number> {}",
+    1,
+  ],
+  "stores/implements.ts": [
+    "export class Saved implements Record<string, number> { [key: symbol]: number }",
+    1,
+  ],
   "stores/symbol-index.ts": [
     "export interface S { tags: { [tag: symbol]: number } }",
     0,

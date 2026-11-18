@@ -47,11 +47,23 @@ const takesString = (type) =>
   type?.type === "TSStringKeyword" ||
   (type?.type === "TSUnionType" && type.types.some(takesString));
 
-const keyedByString = (node) =>
-  node.type === "TSIndexSignature"
-    ? takesString(node.parameters?.[0]?.typeAnnotation?.typeAnnotation)
-    : node.typeName?.name === "Record" &&
-      takesString((node.typeArguments ?? node.typeParameters)?.params?.[0]);
+/** `Record<string, …>` named by `name` with `args`, however it is reached. */
+const recordOfString = (name, args) =>
+  name === "Record" && takesString(args?.params?.[0]);
+
+const keyedByString = (node) => {
+  const args = node.typeArguments ?? node.typeParameters;
+  switch (node.type) {
+    case "TSIndexSignature":
+      return takesString(node.parameters?.[0]?.typeAnnotation?.typeAnnotation);
+    // `interface S extends Record<string, …>`, or a class implementing one.
+    case "TSInterfaceHeritage":
+    case "TSClassImplements":
+      return recordOfString(node.expression?.name, args);
+    default:
+      return recordOfString(node.typeName?.name, args);
+  }
+};
 
 export default {
   meta: { name: "rubick" },
@@ -127,7 +139,12 @@ export default {
           if (keyedByString(node))
             context.report({ node, messageId: "refused" });
         };
-        return { TSTypeReference: check, TSIndexSignature: check };
+        return {
+          TSTypeReference: check,
+          TSIndexSignature: check,
+          TSInterfaceHeritage: check,
+          TSClassImplements: check,
+        };
       },
     },
     // The OS paints it: in a dark window it opens white. Reported an hour
