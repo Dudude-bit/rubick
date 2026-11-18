@@ -252,13 +252,17 @@ export function useObjectReport(
           ? t("empty", "eventsReadShort")
           : null,
     });
+    const placing =
+      (ownerChanges.attribution ?? -1) > (ownChanges.attribution ?? -1)
+        ? ownerChanges
+        : ownChanges;
     const changes = changesSection(
       {
         rows: withNewer(ownChanges.rows, ownerChanges.rows),
-        // One timeline, so either read's word on it; the owner's where the
-        // object's own has not answered.
-        vouched: ownChanges.vouched ?? ownerChanges.vouched,
-        identity: ownChanges.identity ?? ownerChanges.identity,
+        // One timeline, so the later word of the two reads on it is every
+        // row's: an answer from before a reconnect places rows it no longer does.
+        vouched: placing.vouched,
+        identity: placing.identity,
         spans: ownChanges.spans,
         letGo: ownChanges.letGo,
         readFrom: changesReadFrom,
@@ -364,11 +368,13 @@ export function useObjectReport(
     ownChanges.rows,
     ownChanges.vouched,
     ownChanges.identity,
+    ownChanges.attribution,
     ownChanges.spans,
     ownChanges.letGo,
     ownerChanges.rows,
     ownerChanges.vouched,
     ownerChanges.identity,
+    ownerChanges.attribution,
     changesFailed,
     changesPending,
     changesReadFrom,
