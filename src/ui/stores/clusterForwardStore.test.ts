@@ -2,10 +2,14 @@
  * A forward is a choice about *this laptop*, so it is kept beside the alias
  * and the colour rather than in the kubeconfig or the shared config file.
  */
-
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { entryOf, named } from "@/lib/named";
+import { reload } from "@/test/reload";
+
 import {
+  forwardOf,
   forwardsFor,
   useClusterForwardStore,
   type ForwardPreference,
@@ -23,7 +27,7 @@ const preference = (
 });
 
 beforeEach(() => {
-  useClusterForwardStore.setState({ forwards: {} });
+  useClusterForwardStore.setState({ forwards: named() });
 });
 
 describe("what a cluster forwards", () => {
@@ -51,14 +55,16 @@ describe("what a cluster forwards", () => {
   it("does not start on its own until somebody says so", () => {
     const { remember, setAutoStart } = useClusterForwardStore.getState();
     remember("prod", "prometheus", preference());
-    expect(
-      useClusterForwardStore.getState().forwards.prod.prometheus.autoStart
-    ).toBe(false);
+    const autoStart = () =>
+      forwardOf(
+        useClusterForwardStore.getState().forwards,
+        "prod",
+        "prometheus"
+      )?.autoStart;
+    expect(autoStart()).toBe(false);
 
     setAutoStart("prod", "prometheus", true);
-    expect(
-      useClusterForwardStore.getState().forwards.prod.prometheus.autoStart
-    ).toBe(true);
+    expect(autoStart()).toBe(true);
   });
 
   /** Toggling something that was never saved must not invent an entry. */
@@ -75,10 +81,48 @@ describe("what a cluster forwards", () => {
 
     forget("prod", "loki");
     expect(
-      Object.keys(useClusterForwardStore.getState().forwards.prod)
+      forwardsFor(useClusterForwardStore.getState().forwards, "prod").map(
+        ([id]) => id
+      )
     ).toEqual(["prometheus"]);
 
     forget("prod", "prometheus");
     expect(useClusterForwardStore.getState().forwards).toEqual({});
+  });
+});
+
+describe("clusters named like what every object has", () => {
+  /**
+   * `__proto__` and `constructor` are context names like any other. Fails
+   * if a forward saved under either is lost (assigning `__proto__` set the
+   * record's prototype), read back for a cluster that saved none, dropped
+   * by a restart, or left out of the list.
+   */
+  it("keeps, restores and lists the forwards of __proto__ and constructor", async () => {
+    const { remember, setAutoStart, forget } =
+      useClusterForwardStore.getState();
+    expect(
+      forwardsFor(useClusterForwardStore.getState().forwards, "constructor")
+    ).toEqual([]);
+    for (const [at, context] of [
+      "prod",
+      "__proto__",
+      "constructor",
+    ].entries()) {
+      remember(context, "prometheus", preference({ localPort: 20001 + at }));
+      setAutoStart(context, "prometheus", true);
+    }
+    await reload(useClusterForwardStore);
+    const { forwards } = useClusterForwardStore.getState();
+    for (const [at, context] of ["prod", "__proto__", "constructor"].entries())
+      expect(forwardOf(forwards, context, "prometheus")).toEqual(
+        preference({ localPort: 20001 + at, autoStart: true })
+      );
+    expect(forwardsFor(forwards, "toString")).toEqual([]);
+
+    forget("__proto__", "prometheus");
+    const left = useClusterForwardStore.getState().forwards;
+    expect(entryOf(left, "__proto__")).toBeUndefined();
+    expect(forwardsFor(left, "constructor")).toHaveLength(1);
   });
 });

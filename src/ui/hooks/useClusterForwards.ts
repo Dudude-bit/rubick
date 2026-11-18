@@ -22,9 +22,10 @@ import {
 } from "@/integrations";
 import type { PortForwardSessionInfo, ServiceInfo } from "@/generated/types";
 import {
+  forwardOf,
   forwardsFor,
-  useClusterForwardStore,
   type ForwardPreference,
+  useClusterForwardStore,
 } from "@/stores/clusterForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -221,7 +222,7 @@ export function useWakeOnVisit(vendorId: string): void {
 
   useEffect(() => {
     if (tried.current || context === null) return;
-    const preference = forwards[context]?.[vendorId];
+    const preference = forwardOf(forwards, context, vendorId);
     if (!preference) return;
     tried.current = true;
     void (async () => {
