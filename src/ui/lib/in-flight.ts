@@ -1,3 +1,4 @@
+import { keptByName } from "@/lib/kept-by-name";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -11,6 +12,9 @@ import { useClusterStore } from "@/stores/clusterStore";
 export function inFlightOnce<T>(read: () => Promise<T>): () => Promise<T> {
   // Per cluster: one switched to and back finds its own read still going.
   const held = new Map<string | null, Promise<T>>();
+  // A kubeconfig change can put another cluster behind a name: a read
+  // going for the one before is not that cluster's answer.
+  keptByName(() => held.clear());
   return () => {
     const context = useClusterStore.getState().currentContext;
     const going = held.get(context);
