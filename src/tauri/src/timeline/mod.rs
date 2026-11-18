@@ -223,6 +223,9 @@ pub struct TimelinePage {
     pub epoch: u64,
     pub identity: Identity,
     pub vouched: Vec<SeqStretch>,
+    /// Moves each time `identity` or `vouched` may: of two answers of one
+    /// epoch, the higher is the later word on which rows are this cluster's.
+    pub attribution: u64,
 }
 
 /// What is kept on this machine, for Settings.
@@ -257,6 +260,8 @@ struct Inner {
     /// The client was replaced and the watches are not all handed over yet:
     /// what is recorded may still come through the old one.
     interim: bool,
+    /// See [`TimelinePage::attribution`].
+    attribution: u64,
     epoch: u64,
     /// Moves with each clear: a write taken before one is not done after it.
     cleared: u64,
@@ -275,6 +280,7 @@ struct Inner {
 impl Inner {
     /// The connection recording ends here; the next numbers its rows after.
     fn reconnected(&mut self, now: i64) {
+        self.attribution += 1;
         let next = disk::Lineage {
             uid: None,
             first: self.store.newest() + 1,
@@ -422,6 +428,7 @@ impl ClusterTimeline {
             inner.checked = Identity::Known;
             inner.told.spans = true;
         }
+        inner.attribution += 1;
         another
     }
 
@@ -431,6 +438,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unknown { message };
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -477,6 +485,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.checked != Identity::Known {
             inner.checked = Identity::Unsettled;
+            inner.attribution += 1;
             inner.told.spans = true;
         }
     }
@@ -532,6 +541,7 @@ impl ClusterTimeline {
                 Identity::Known
             },
             vouched,
+            attribution: inner.attribution,
         }
     }
 
@@ -703,6 +713,7 @@ impl Timelines {
                 past: loaded.lineages,
                 current,
                 interim: false,
+                attribution: 0,
                 epoch: 0,
                 cleared: 0,
                 disk_let_go,

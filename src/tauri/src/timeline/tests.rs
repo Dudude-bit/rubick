@@ -1273,6 +1273,30 @@ fn rows_recorded_before_the_watches_are_handed_over_are_not_another_clusters() {
     }
 }
 
+/// Two answers of one epoch, one asked before a reconnect: the window could
+/// not tell which said the later word on which rows are this cluster's.
+/// Fails if a reconnect, a handover or a check leaves the attribution where
+/// it was.
+#[test]
+fn the_word_on_which_rows_are_this_clusters_moves_with_every_change_to_it() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    let mut said = cluster.page(&query(Show::All)).attribution;
+    let mut moved = |step: &str| {
+        let now = cluster.page(&query(Show::All)).attribution;
+        assert!(now > said, "{step} left it at {now}");
+        said = now;
+    };
+    cluster.seen_cluster("uid-a".into());
+    moved("a check");
+    timelines.client_replaced("kind");
+    moved("a reconnect");
+    cluster.not_identified("forbidden".into());
+    moved("a refused check");
+    cluster.handed_over();
+    moved("a handover");
+}
+
 /// A kept file that says nothing of its connections, as a build before
 /// them wrote it, or says it unreadably: fails if anything in it is
 /// vouched for, its watching drawn, or the rest of the file is lost.

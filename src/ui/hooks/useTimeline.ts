@@ -61,6 +61,8 @@ export interface TimelineRead {
   identity: Identity | undefined;
   /** The rows a connection read to be this cluster recorded; see `placedBy`. */
   vouched: readonly SeqStretch[] | undefined;
+  /** Moves each time `identity` or `vouched` does: the higher is the later word. */
+  attribution: number | undefined;
   unreadable: number;
   /** Where the rows read end while older ones remain unread; `null` when all are read. */
   readFrom: number | null;
@@ -210,6 +212,13 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
           now && now.epoch === page.epoch
             ? {
                 ...page,
+                // A late answer, asked before a reconnect another reader has
+                // already heard of, does not put the older word back.
+                ...(page.attribution < now.attribution && {
+                  identity: now.identity,
+                  vouched: now.vouched,
+                  attribution: now.attribution,
+                }),
                 rows: withNewer(
                   now.rows,
                   page.rows,
@@ -288,6 +297,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     keeping: data?.keeping,
     identity: data?.identity,
     vouched: data?.vouched,
+    attribution: data?.attribution,
     unreadable: data?.unreadable ?? 0,
     readFrom: data?.more ? (data.rows.at(-1)?.at ?? null) : null,
     loadOlder,
