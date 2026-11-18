@@ -47,7 +47,11 @@ const basis = (workloads: WorkloadBasis[]): CostBasis => ({
 /** A start long enough ago that every pod has run the whole day. */
 const LONG_AGO = "2020-01-01T00:00:00Z";
 
-/** cpuAvg, cpuPeak, memoryAvg, memoryPeak, per workload in the basis's order. */
+/**
+ * cpuAvg, cpuPeak, memoryAvg, memoryPeak, per workload in the basis's
+ * order, as the fold writes them: one pod each, which every answered query
+ * covered. Counted here, not taken from the basis, which is read apart.
+ */
 const reading = (
   b: CostBasis,
   values: (number | null)[][],
@@ -61,8 +65,8 @@ const reading = (
     unplaced: [],
     unread: [],
     unlabelled: 0,
-    covered: [],
-    pods: [],
+    covered: values.map((each) => each.map((v) => (v === null ? 0 : 1))),
+    pods: values.map(() => 1),
     since,
   },
 });
