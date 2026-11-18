@@ -672,6 +672,21 @@ describe("changesSection", () => {
     expect(ownerOnly?.partial).toBe("changes.readFailed");
     expect(texts(ownerOnly)).toHaveLength(1);
     expect(texts(ownerOnly)).not.toContain("share.journalEmpty");
+
+    // Rows none of which are this object's change nothing: with its own
+    // spans not read, nothing says its journal is empty.
+    const noneOfIt = changesSection(
+      {
+        rows: [row({ name: "other" })],
+        spans: undefined,
+        letGo: undefined,
+        unread: "changes.readFailed",
+      },
+      payments,
+      AT,
+      t
+    );
+    expect(texts(noneOfIt)).not.toContain("share.journalEmpty");
   });
 
   /** Nothing recorded and no span over the object is not "nothing changed". */

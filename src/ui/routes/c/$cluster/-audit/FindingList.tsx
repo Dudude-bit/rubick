@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 
 import type {
   AuditFinding,
@@ -15,10 +14,8 @@ import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
-import { queryKeys } from "@/lib/query-keys";
+import { useCliTarget } from "@/lib/kubectl";
 import { cn } from "@/lib/utils";
-import { useClusterStore } from "@/stores/clusterStore";
 import { fixYaml } from "./fix-yaml";
 import {
   CATEGORY_WORDS,
@@ -86,14 +83,8 @@ export function RuleExplained({
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
-  const context = useClusterStore((s) => s.currentContext);
-  const files = useQuery({
-    queryKey: queryKeys.cliKubeconfig(context),
-    queryFn: () => commands.cliKubeconfig(context!),
-    enabled: context !== null,
-    staleTime: Infinity,
-  });
-  const yaml = fixYaml(rule, kind, finding, subject, context, files.data);
+  const cli = useCliTarget();
+  const yaml = fixYaml(rule, kind, finding, subject, cli);
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div>

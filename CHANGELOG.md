@@ -95,6 +95,11 @@ These were in 5.0 too.
 - A route whose parent is a Service was matched to a Gateway of the same
   name.
 
+- A kubectl line the app hands out to copy (a list row's `kubectl get`,
+  My Access's `auth can-i`, the check beside a refused action) names the
+  context and the kubeconfig files the app read it from, so it asks the
+  cluster on screen and not the one a terminal happens to point at.
+
 ## [5.0.0] - 2026-11-12
 
 Rubick 5 is a rewrite of how the app reads a cluster and how it says what it

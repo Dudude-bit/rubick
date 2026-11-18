@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 
 import type {
   Identity,
@@ -186,7 +191,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         // The rows started over, for another cluster under the name or a
         // clear: what is held is not this timeline's any more.
         if (page.epoch !== held.epoch) {
-          await client.resetQueries({ queryKey: key, exact: true });
+          await startOver(client, key, held.epoch);
           return;
         }
         if (page.more) {
@@ -252,7 +257,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
       .timelineRead(question({ before: { at: last.at, seq: last.seq } }))
       .then((page) => {
         if (page.epoch !== held.epoch) {
-          void client.resetQueries({ queryKey: key, exact: true });
+          void startOver(client, key, held.epoch);
           return;
         }
         client.setQueryData<TimelinePage>(key, (now) => {
@@ -288,6 +293,17 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
 }
 
 const NO_SCOPE: readonly string[] = [];
+
+/**
+ * Rows held of the numbering `from` read again from the top. Ones of
+ * another are left: a reader already read the new numbering since this
+ * answer was asked, and resetting them again drops what it read.
+ */
+function startOver(client: QueryClient, key: QueryKey, from: number) {
+  return client.getQueryData<TimelinePage>(key)?.epoch === from
+    ? client.resetQueries({ queryKey: key, exact: true })
+    : Promise.resolve();
+}
 
 /**
  * While a timeline is on screen the backend keeps the ownership index

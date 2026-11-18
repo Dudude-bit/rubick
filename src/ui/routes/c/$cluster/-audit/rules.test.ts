@@ -371,15 +371,15 @@ describe("the words Audit draws its rules and findings with", () => {
   /**
    * The average was read and the peak was not: the reason said Prometheus
    * held no sample, which sent the reader looking for a scrape that worked.
-   * Fails if an unread peak is worded as no sample.
+   * Fails if an unread peak is worded as no sample, in either language.
    */
   it("says a peak was not read, not that no sample was held", () => {
     const why: Why = { says: "peakUnread" };
     expect(whyWords(why, tIn("en"))).toBe(
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged"
     );
-    expect(whyWords(why, tIn("ru"))).not.toBe(
-      whyWords({ says: "noSamples" }, tIn("ru"))
+    expect(whyWords(why, tIn("ru"))).toBe(
+      "подключённый Prometheus вернул её среднее потребление за последние сутки, но не пик, а оценивается именно пик"
     );
   });
 

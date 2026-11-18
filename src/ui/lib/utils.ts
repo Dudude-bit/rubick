@@ -98,27 +98,41 @@ export function formatDecimal(
 const amountFormats = new Map<string, Intl.NumberFormat>();
 
 /**
+ * Which way a figure is rounded: a bound is rounded away from what it
+ * bounds, so "at most" is never below the value and "at least" never above.
+ */
+export type Rounding = "nearest" | "up" | "down";
+// `roundingMode` is ES2023, past the `lib` this project compiles against.
+const roundingOf = (rounding: Rounding) =>
+  ({
+    roundingMode: { nearest: "halfExpand", up: "ceil", down: "floor" }[
+      rounding
+    ],
+  }) as Intl.NumberFormatOptions;
+
+/**
  * An amount of money: whole above a hundred, to the cent above one, and
  * three significant digits below, so a pod's 0.0042 an hour is not 0.00.
  */
 export function formatAmount(
   value: number,
-  locale: string = currentLocale()
+  locale: string = currentLocale(),
+  rounding: Rounding = "nearest"
 ): string {
   const abs = Math.abs(value);
   const shape =
     abs >= 100 || abs === 0 ? "whole" : abs >= 1 ? "cents" : "small";
-  const key = `${locale}|${shape}`;
+  const key = `${locale}|${shape}|${rounding}`;
   let format = amountFormats.get(key);
   if (!format) {
-    format = new Intl.NumberFormat(
-      locale,
-      shape === "whole"
+    format = new Intl.NumberFormat(locale, {
+      ...(shape === "whole"
         ? { maximumFractionDigits: 0 }
         : shape === "cents"
           ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-          : { maximumSignificantDigits: 3 }
-    );
+          : { maximumSignificantDigits: 3 }),
+      ...roundingOf(rounding),
+    });
     amountFormats.set(key, format);
   }
   return format.format(value);
@@ -152,14 +166,16 @@ const percentFormats = new Map<string, Intl.NumberFormat>();
 export function formatPercent(
   ratio: number,
   fractionDigits: number,
-  locale: string = currentLocale()
+  locale: string = currentLocale(),
+  rounding: Rounding = "nearest"
 ): string {
-  const key = `${locale}|${fractionDigits}`;
+  const key = `${locale}|${fractionDigits}|${rounding}`;
   let format = percentFormats.get(key);
   if (!format) {
     format = new Intl.NumberFormat(locale, {
       style: "percent",
       maximumFractionDigits: fractionDigits,
+      ...roundingOf(rounding),
     });
     percentFormats.set(key, format);
   }
