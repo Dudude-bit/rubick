@@ -14,7 +14,7 @@ import { renderWithRouter } from "@/test/render";
 
 vi.mock("./PolicyReadingLine", () => ({
   PolicyReadingLine: ({ from, to }: { from: FlowEnd; to: FlowEnd }) => (
-    <p data-testid="policy-reading">{`${from.is} → ${to.is}`}</p>
+    <span data-testid="policy-reading">{`${from.is} → ${to.is}`}</span>
   ),
 }));
 

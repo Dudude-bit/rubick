@@ -5,7 +5,7 @@
  */
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import type { FlowEnd } from "@/generated/types";
+import type { FlowEnd, WorkloadKey } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { knownOf, type Known } from "@/lib/known";
@@ -23,7 +23,7 @@ import {
 } from "./policy-reading";
 import { readingWords } from "./traffic-words";
 
-type Read = PolicyReading & { others: Known<string[]> };
+export type Read = PolicyReading & { others: Known<string[]> };
 
 function useReading(
   from: FlowEnd & { is: "workload" },
@@ -86,6 +86,30 @@ function useReading(
   };
 }
 
+/**
+ * The reading as words, inside the drop's own line: a block span, since that
+ * line is a paragraph and a paragraph holds no other.
+ */
+export function ReadingText({
+  read,
+  from,
+  to,
+}: {
+  read: Read;
+  from: WorkloadKey;
+  to: WorkloadKey;
+}) {
+  const t = useT();
+  return (
+    <span
+      className="mt-0.5 block text-[11px] text-fg-mut"
+      data-testid="policy-reading"
+    >
+      {readingWords(read, read.others, from, to, t).join(" ")}
+    </span>
+  );
+}
+
 function Reading({
   from,
   to,
@@ -93,14 +117,9 @@ function Reading({
   from: FlowEnd & { is: "workload" };
   to: FlowEnd & { is: "workload" };
 }) {
-  const t = useT();
   const read = useReading(from, to);
   if (!read) return null;
-  return (
-    <p className="text-[11px] text-fg-mut" data-testid="policy-reading">
-      {readingWords(read, read.others, from.key, to.key, t).join(" ")}
-    </p>
-  );
+  return <ReadingText read={read} from={from.key} to={to.key} />;
 }
 
 /** Nothing for an end that is no workload: no pods to read policies over. */
