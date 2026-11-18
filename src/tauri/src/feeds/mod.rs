@@ -677,9 +677,17 @@ fn pack(object: &DynamicObject) -> Option<Box<str>> {
 }
 
 fn unpacked<'a>(objects: impl Iterator<Item = &'a Box<str>>) -> Vec<Arc<DynamicObject>> {
+    #[cfg(test)]
+    UNPACKED.with(|count| count.set(count.get() + 1));
     objects
         .filter_map(|text| serde_json::from_str(text).ok().map(Arc::new))
         .collect()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many stores were unpacked on this thread.
+    static UNPACKED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 fn keeps(kind: &KindKey) -> bool {
@@ -880,6 +888,11 @@ impl Inner {
                 self.list_for(id, slot);
                 continue;
             }
+            // Room first: a full queue is asked again on every change, and
+            // unpacking a store to drop it holds every reader of the context.
+            if sub.tx.capacity() < 1 + usize::from(store.is_some()) {
+                return;
+            }
             let whole = store.map(|store| Update::Whole {
                 slot: slot.clone(),
                 why: if sub.seen.contains(&slot) {
@@ -895,10 +908,6 @@ impl Inner {
             let Some(sub) = self.subscribers.get_mut(&id) else {
                 return;
             };
-            let needs = 1 + usize::from(whole.is_some());
-            if sub.tx.capacity() < needs {
-                return;
-            }
             let _ = sub.tx.try_send(Update::State {
                 slot: slot.clone(),
                 state,
@@ -2866,6 +2875,36 @@ mod tests {
             );
         }
         assert_eq!(sets.len(), 3, "sets handed: {sets:?}");
+        context.end();
+    }
+
+    /// A reader whose queue stayed full had every slot it was behind on
+    /// unpacked on every change, only to be dropped for want of room, while
+    /// the context's lock was held. Fails if a full queue unpacks a store.
+    #[tokio::test]
+    async fn a_reader_with_no_room_has_no_store_unpacked_for_it() {
+        let feeds = feeds().lingering(LINGER, PAGE_IDLE, 2);
+        let context = feeds.context_for("prod", client().await);
+        let _sub = context.join(&ask(None, Binding::Session), &[deployments()], &[]);
+        let generation = context.serving();
+        let slot = whole(&deployments().0);
+        list(&generation, &slot, vec![deployment("shop", "web", "1")]);
+        for n in 0..3 {
+            apply(
+                &generation,
+                &slot,
+                deployment("shop", &format!("burst-{n}"), "1"),
+            );
+        }
+        let before = UNPACKED.with(std::cell::Cell::get);
+        for n in 0..5 {
+            apply(
+                &generation,
+                &slot,
+                deployment("shop", &format!("more-{n}"), "1"),
+            );
+        }
+        assert_eq!(UNPACKED.with(std::cell::Cell::get), before);
         context.end();
     }
 
