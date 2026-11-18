@@ -851,6 +851,10 @@ fn judges(rule: RuleId, kind: &str) -> bool {
         R::ClusterAdminBinding => matches!(kind, "RoleBinding" | "ClusterRoleBinding"),
         R::AutoscalerPinned | R::AutoscalerTargetMissing => kind == AUTOSCALER,
         R::BudgetBlocksDisruption => kind == BUDGET,
+        // Judged on a replica count, which only these two carry.
+        R::SingleReplica | R::NoSpread | R::NoDisruptionBudget => {
+            matches!(kind, "Deployment" | "StatefulSet")
+        }
         // Read by their own pass, not through the kind's feed.
         R::NamespaceWithoutNetworkPolicy
         | R::RemovedApiInHelmRelease
@@ -1719,6 +1723,28 @@ mod tests {
         index.stop_for_test();
     }
 
+    /// A kind that could not be read leaves unanswered the rules that can
+    /// judge it and no others. Fails if a `DaemonSet`, a `Job`, a `CronJob` or a
+    /// pod, none of which carries a replica count, is said to leave the
+    /// replica rules unchecked.
+    #[test]
+    fn a_kind_not_read_leaves_the_replica_rules_only_where_there_is_a_count() {
+        let replica = [
+            RuleId::SingleReplica,
+            RuleId::NoSpread,
+            RuleId::NoDisruptionBudget,
+        ];
+        for kind in ["Deployment", "StatefulSet"] {
+            let rules = unread_rules(kind);
+            assert!(replica.iter().all(|rule| rules.contains(rule)), "{kind}");
+        }
+        for kind in ["DaemonSet", "Job", "CronJob", POD] {
+            let rules = unread_rules(kind);
+            assert!(!replica.iter().any(|rule| rules.contains(rule)), "{kind}");
+            assert!(rules.contains(&RuleId::PssPrivileged), "{kind}");
+        }
+    }
+
     /// A pod the cluster will not hand over is named not checked with its
     /// words, not read as "still being read" and fetched on every read.
     /// Fails if a refused GET reads as reading for good.
@@ -1760,6 +1786,14 @@ mod tests {
         // A pod read whole is judged by the template rules, unanswered here.
         assert!(refused.rules.contains(&RuleId::PssPrivileged));
         assert!(refused.rules.contains(&RuleId::NoLivenessProbe));
+        // A pod carries no replica count: those rules never judge one.
+        for rule in [
+            RuleId::SingleReplica,
+            RuleId::NoSpread,
+            RuleId::NoDisruptionBudget,
+        ] {
+            assert!(!refused.rules.contains(&rule), "{rule:?}");
+        }
         assert_eq!(
             hits.lock()
                 .unwrap()
