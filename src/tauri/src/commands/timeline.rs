@@ -62,6 +62,7 @@ pub async fn timeline_follow(
             break (here, another);
         }
         if tries == 3 {
+            cluster.unsettled();
             break (state.here()?, false);
         }
     };

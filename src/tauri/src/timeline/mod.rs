@@ -161,6 +161,10 @@ pub enum Identity {
     /// Kept from an earlier run, and `kube-system` could not be read: the
     /// rows may be another cluster's that had this name.
     Unknown { message: String },
+    /// Kept, and the client behind the name changed each time `kube-system`
+    /// was read: the rows may be another cluster's, even where they were
+    /// checked before.
+    Unsettled,
 }
 
 /// The question a timeline surface asks.
@@ -248,6 +252,11 @@ struct Inner {
 }
 
 impl Inner {
+    /// Whether anything is held to be another cluster's.
+    fn holds_any(&self) -> bool {
+        self.store.newest() > 0 || !self.spans.followed.is_empty() || !self.spans.meta.is_empty()
+    }
+
     /// A stretch whose rows were not written, joined to the one before where
     /// they meet: rows dropped every second for a day are one stretch, not
     /// eighty thousand walked on every flush.
@@ -368,11 +377,20 @@ impl ClusterTimeline {
     /// Nothing is dropped; the next check decides.
     fn unchecked(&self) {
         let mut inner = self.inner.lock();
-        let held = inner.store.newest() > 0
-            || !inner.spans.followed.is_empty()
-            || !inner.spans.meta.is_empty();
-        if held && inner.checked == Identity::Known {
+        if inner.holds_any() && inner.checked == Identity::Known {
             inner.checked = Identity::NotChecked;
+        }
+    }
+
+    /// Which cluster this name is could not be settled: the client kept
+    /// changing while it was read. What is held is said to be perhaps
+    /// another's until a read through the client held settles it; nothing
+    /// is dropped.
+    pub fn unsettled(&self) {
+        let mut inner = self.inner.lock();
+        if inner.holds_any() {
+            inner.checked = Identity::Unsettled;
+            inner.told.spans = true;
         }
     }
 

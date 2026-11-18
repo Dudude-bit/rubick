@@ -2387,6 +2387,8 @@ export const en = {
     readingKept: "Reading what was kept…",
     olderNotRead: "Changes before {at} were not read for this file.",
     readFailed: "The timeline could not be read: {reason}",
+    identityUnsettled:
+      "Rows kept under this name may be another cluster's that had it: the connection changed each time which cluster this is was checked.",
     identityUnknown:
       "Rows kept under this name may be another cluster's that had it: which cluster this is could not be checked ({reason}).",
     loadOlder: "Older rows",
@@ -2948,6 +2950,8 @@ export const en = {
     noAddressPublished: "no address published",
     moreWays: "{n} more",
     lastChange: "Last change",
+    lastChangeUnsettled:
+      "not known: the rows kept under this name may be another cluster's",
     lastChangeUnchecked:
       "not known: the rows kept under this name may be another cluster's ({reason})",
     nothingSeen: "nothing seen while this app was watching",

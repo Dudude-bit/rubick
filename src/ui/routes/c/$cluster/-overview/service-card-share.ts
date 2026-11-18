@@ -37,7 +37,7 @@ export type LastChange =
   /** Kept rows that could not be read: one of them may be the last change. */
   | { unreadable: number }
   /** Rows kept under the name, and which cluster this is could not be checked. */
-  | { unchecked: string }
+  | { unchecked: string | null }
   | null
   | undefined;
 
@@ -52,6 +52,7 @@ export function lastChangeOf(
   // row as this service's last change.
   if (read.identity?.says === "unknown")
     return { unchecked: read.identity.message };
+  if (read.identity?.says === "unsettled") return { unchecked: null };
   const latest = read.rows.find(isChange);
   if (latest) return latest;
   if (read.unreadable > 0) return { unreadable: read.unreadable };
@@ -67,7 +68,9 @@ export function lastChangeWords(
   if (latest === undefined) return t("services", "notReadYet");
   if (latest === null) return t("services", "nothingSeen");
   if ("unchecked" in latest)
-    return t("services", "lastChangeUnchecked", { reason: latest.unchecked });
+    return latest.unchecked === null
+      ? t("services", "lastChangeUnsettled")
+      : t("services", "lastChangeUnchecked", { reason: latest.unchecked });
   if ("unreadable" in latest)
     return t("changes", "keptUnreadable", { n: latest.unreadable });
   if ("before" in latest)

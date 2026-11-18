@@ -975,6 +975,25 @@ fn stretches_not_kept_that_meet_are_one() {
     assert_eq!(cluster.inner.lock().unkept.len(), 1);
 }
 
+/// The client behind the name changed each time `kube-system` was read:
+/// rows checked against cluster A stayed "this cluster's" while the name now
+/// led to another. Fails if what is held is not said to be unsettled, or a
+/// read that settles it does not clear it.
+#[test]
+fn rows_held_when_the_cluster_could_not_be_settled_are_said_to_be() {
+    let (timelines, _rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+    cluster.unsettled();
+    assert_eq!(
+        cluster.page(&query(Show::All)).identity,
+        Identity::Unsettled
+    );
+    assert!(!cluster.seen_cluster("uid-a".into()));
+    assert_eq!(cluster.page(&query(Show::All)).identity, Identity::Known);
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {
