@@ -27,8 +27,16 @@ import { useClusterStore } from "@/stores/clusterStore";
 /** Why the supplier gave no picture, said beside an estimate or alone. */
 export type SupplierTrouble =
   | { kind: "noSeries"; vendor: string; endpoint: string }
-  /** OpenCost answers and prices none of the nodes. */
-  | { kind: "noNodePrices"; vendor: string; endpoint: string }
+  /**
+   * OpenCost answers and prices none of the nodes; `lastFailed` where that
+   * answer is the one before a read that failed.
+   */
+  | {
+      kind: "noNodePrices";
+      vendor: string;
+      endpoint: string;
+      lastFailed: string | null;
+    }
   | {
       kind: "unreachable";
       vendor: string;
@@ -170,6 +178,7 @@ export function useCost(
             kind: "noNodePrices",
             vendor: power.vendor,
             endpoint: power.endpoint,
+            lastFailed: reading.error ? errorToShow(reading.error) : null,
           },
         };
       if (reading.data?.reading)

@@ -400,6 +400,39 @@ describe("a read that failed after one that answered", () => {
   });
 
   /**
+   * OpenCost priced no node and prices were entered, so the estimate is
+   * drawn; a re-read that then failed went unsaid behind the reason for the
+   * estimate. Fails if the estimate branch drops the failed re-read.
+   */
+  it("says the latest read failed beside the estimate it drew for want of node prices", async () => {
+    let answers = true;
+    capability.mockReturnValue(
+      ready(async () => {
+        if (!answers) throw new Error("query timed out");
+        return READING;
+      })
+    );
+    useCostPricesStore.setState({ prices: { prod: PRICES } });
+    const hook = render();
+    await waitFor(() => {
+      const cost = hook.result.current.cost;
+      expect(cost.state === "picture" && cost.trouble).toMatchObject({
+        kind: "noNodePrices",
+        lastFailed: null,
+      });
+    });
+    answers = false;
+    act(() => hook.result.current.retry());
+    await waitFor(() => {
+      const cost = hook.result.current.cost;
+      expect(cost.state === "picture" && cost.trouble).toMatchObject({
+        kind: "noNodePrices",
+        lastFailed: "query timed out",
+      });
+    });
+  });
+
+  /**
    * A day of a young pod is judged when the reading was taken, and the
    * reading is taken again on its poll even when Prometheus answers the
    * same: Audit's "young" turns into a verdict on the first read past the

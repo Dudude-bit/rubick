@@ -69,7 +69,12 @@ export function troubleWords(trouble: SupplierTrouble, t: T): string {
     case "noSeries":
       return t("cost", "noSeries", { endpoint: trouble.endpoint });
     case "noNodePrices":
-      return t("cost", "noNodePrices", { endpoint: trouble.endpoint });
+      return trouble.lastFailed === null
+        ? t("cost", "noNodePrices", { endpoint: trouble.endpoint })
+        : t("cost", "noNodePricesLastFailed", {
+            endpoint: trouble.endpoint,
+            said: trouble.lastFailed,
+          });
     case "unreachable":
       return t("cost", "unreachable", {
         endpoint: trouble.endpoint,

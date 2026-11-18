@@ -2680,6 +2680,8 @@ export const en = {
       "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
     noNodePrices:
       "OpenCost in Prometheus at {endpoint} prices none of this cluster's nodes: it found no price list for them.",
+    noNodePricesLastFailed:
+      "OpenCost in Prometheus at {endpoint} priced none of this cluster's nodes in the last read that answered; the read after it failed ({said}).",
     whyNoNodePrices:
       "OpenCost found no price list for these nodes, as on kind or with a provider it has none for. Give OpenCost custom pricing, or {prices} and this page estimates from them.",
     whySomeNodePrices:

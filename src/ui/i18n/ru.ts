@@ -2816,6 +2816,8 @@ export const ru: Catalogue = {
       "Prometheus по адресу {endpoint} ответил, но рядов OpenCost (node_total_hourly_cost) в нём нет. OpenCost пишет их, когда его /metrics собирается в этот Prometheus; Kubecost пишет ряды с теми же именами.",
     noNodePrices:
       "OpenCost в Prometheus по адресу {endpoint} не дал цену ни одному узлу этого кластера: прайс-листа для них он не нашёл.",
+    noNodePricesLastFailed:
+      "OpenCost в Prometheus по адресу {endpoint} в последнем полученном ответе не дал цену ни одному узлу этого кластера; следующее чтение не удалось ({said}).",
     whyNoNodePrices:
       "OpenCost не нашёл прайс-листа для этих узлов, так бывает на kind или у провайдера, которого он не знает. Задайте OpenCost свои цены или {prices}, и страница посчитает по ним.",
     whySomeNodePrices:

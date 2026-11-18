@@ -11,6 +11,7 @@ import {
   money,
   partOf,
   pictureNotes,
+  troubleWords,
   usedLines,
 } from "./cost-words";
 
@@ -189,6 +190,24 @@ describe("a part nobody could read", () => {
     expect(money(partOf(row, "storage"), "", t)).toBe("Not known");
     expect(money(partOf({ ...row, unknown: [] }, "storage"), "", t)).toBe(
       "none"
+    );
+  });
+});
+
+describe("node prices that the last answer lacked, before a read that failed", () => {
+  /** The reason for the estimate is from the answer before a failed read, and says so. Fails if the failure goes unsaid. */
+  it("says the read after it failed", () => {
+    const trouble = {
+      kind: "noNodePrices" as const,
+      vendor: "opencost",
+      endpoint: "http://prom:9090",
+      lastFailed: "query timed out",
+    };
+    expect(troubleWords(trouble, t)).toBe(
+      "OpenCost in Prometheus at http://prom:9090 priced none of this cluster's nodes in the last read that answered; the read after it failed (query timed out)."
+    );
+    expect(troubleWords({ ...trouble, lastFailed: null }, t)).toBe(
+      "OpenCost in Prometheus at http://prom:9090 prices none of this cluster's nodes: it found no price list for them."
     );
   });
 });
