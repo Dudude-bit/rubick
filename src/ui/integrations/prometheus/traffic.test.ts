@@ -264,6 +264,32 @@ describe("Hubble's HTTP metrics, v1 and v2", () => {
     }
     expect(of(v1, "errors")).toContain('status=~"5.."');
   });
+
+  /**
+   * HTTP v1 labels a response as it went, from api back to web; read as
+   * written, every v1 call and its latency was drawn backwards. httpV2
+   * inverts its labels to the call's own direction, and is read as written.
+   */
+  it("reads HTTP v1's responses and latency from the caller to the server", () => {
+    const response = {
+      source_namespace: "shop",
+      source_workload: "api",
+      destination_namespace: "shop",
+      destination_workload: "web",
+    } as Record<string, string>;
+    const ends = (found: string[]) =>
+      hubbleQueries(0, found, ALL)
+        .filter((q) => ["requests", "errors", "p95"].includes(q.measure))
+        .map((q) => [response[q.from.name!], response[q.to.name!]]);
+    const v1 = ends([
+      "hubble_http_requests_total{source_workload}",
+      "hubble_http_responses_total{source_workload}",
+    ]);
+    expect(v1).toHaveLength(3);
+    for (const pair of v1) expect(pair).toEqual(["web", "api"]);
+    for (const pair of ends(["hubble_http_requests_total{source_workload}"]))
+      expect(pair).toEqual(["api", "web"]);
+  });
 });
 
 describe("which sources a Prometheus holds", () => {

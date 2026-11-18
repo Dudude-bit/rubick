@@ -198,6 +198,9 @@ pub struct Flow {
     /// no series of the source had one for this pair.
     pub values: Vec<Option<f64>>,
     pub reasons: Vec<DropRate>,
+    /// Measures a series answered for this pair with no number (NaN):
+    /// unknown, where a `None` without it is a measure with no series.
+    pub unknown: Vec<Measure>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -647,7 +650,10 @@ pub(crate) fn fold(
             // A series with no number (NaN) answered for its pair: unknown,
             // not the zero a pair with no series of a counted subset is.
             let Some(value) = value else {
-                valueless.insert((query.source, query.measure.at(), from, to));
+                valueless.insert((query.source, query.measure.at(), from.clone(), to.clone()));
+                // The pair answered: it is drawn with the measure unknown,
+                // never left out for the source to read as quiet.
+                joined.entry((query.source, from, to)).or_default();
                 continue;
             };
             let pair = joined.entry((query.source, from, to)).or_default();
@@ -724,6 +730,13 @@ pub(crate) fn fold(
     let flows = ranked
         .into_iter()
         .map(|((source, from, to), pair)| Flow {
+            unknown: MEASURES
+                .into_iter()
+                .filter(|m| {
+                    pair.values[m.at()].is_none()
+                        && valueless.contains(&(source, m.at(), from.clone(), to.clone()))
+                })
+                .collect(),
             source,
             from: intern(from),
             to: intern(to),
@@ -1167,6 +1180,22 @@ mod tests {
         };
         assert_eq!(errors("b"), None);
         assert_eq!(errors("c"), Some(0.0));
+    }
+
+    /// A pair whose only series answered with no number is in the answer,
+    /// its measure unknown: left out, its source read as having seen
+    /// nothing while it had answered for the pair.
+    #[test]
+    fn a_pair_whose_only_series_has_no_number_is_drawn_with_that_measure_unknown() {
+        let read = read_of(vec![]);
+        let nan = series(
+            &[("sns", "shop"), ("sw", "a"), ("dns", "shop"), ("dw", "b")],
+            None,
+        );
+        let answer = fold_one(&[by_name(0, Measure::Requests)], vec![Ok(vec![nan])], &read);
+        assert_eq!(answer.flows.len(), 1);
+        assert_eq!(answer.flows[0].values[Measure::Requests.at()], None);
+        assert_eq!(answer.flows[0].unknown, vec![Measure::Requests]);
     }
 
     /// Where the namespace's pods could not be read, a bare name is not

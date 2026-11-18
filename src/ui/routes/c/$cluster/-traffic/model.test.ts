@@ -69,6 +69,7 @@ function model(
           m === "requests" ? requests(pairs.indexOf(pair)) : null
         ),
         reasons: [],
+        unknown: [],
       })),
       reads: [],
       observed: null,
