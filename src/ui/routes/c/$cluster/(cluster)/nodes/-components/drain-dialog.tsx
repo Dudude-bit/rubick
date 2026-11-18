@@ -164,7 +164,7 @@ function DrainConfirm({
     null,
     !!node
   );
-  const { blockers, unread } = drainBlockers(query, t);
+  const { blockers, unknown, unread } = drainBlockers(query, t);
 
   return (
     <>
@@ -179,6 +179,18 @@ function DrainConfirm({
         {unread !== null && (
           <p className="pt-1 text-xs text-warn">
             {t("empty", "budgetsUnread", { why: unread })}
+          </p>
+        )}
+        {unknown.length > 0 && (
+          <p className="pt-1 text-xs text-fg-mut">
+            {t("empty", "budgetsNoStatus", {
+              names: unknown
+                .map(
+                  ({ budget }) =>
+                    `${budget.object.namespace}/${budget.object.name}`
+                )
+                .join(", "),
+            })}
           </p>
         )}
         {blockers.length > 0 && (

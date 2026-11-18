@@ -544,7 +544,7 @@ mod tests {
             keyed.message.as_deref(),
             Some(crate::resources::WITHHELD_MARKER)
         );
-        let plain = "containers with unready status: [web]  \n\tнет связи —  ";
+        let plain = "containers with unready status: [web]  \n\t«нет связи»  ";
         let read = condition("ContainersNotReady", plain);
         assert_eq!(read.message.as_deref(), Some(plain));
         assert_eq!(read.reason.as_deref(), Some("ContainersNotReady"));

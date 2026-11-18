@@ -34,7 +34,8 @@ const onNode = (
   counts: Pick<
     Extract<ObjectFacts, { kind: "budget" }>,
     "disruptionsAllowed" | "currentHealthy" | "desiredHealthy" | "expectedPods"
-  >
+  >,
+  written = true
 ): ResourceConnections => {
   const node = {
     kind: "Node",
@@ -57,10 +58,9 @@ const onNode = (
             minAvailable: "1",
             maxUnavailable: null,
             conditions: [],
-            cannotAllow: cannotAllowOf(
-              counts.desiredHealthy,
-              counts.expectedPods
-            ),
+            cannotAllow: written
+              ? cannotAllowOf(counts.desiredHealthy, counts.expectedPods)
+              : null,
             ...counts,
           },
         },
@@ -198,6 +198,33 @@ describe("confirming a drain", () => {
     expect(
       screen.getByText(/requires as many healthy pods as it covers/)
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A budget no controller had written a status on was listed as one this
+   * drain cannot get past, "0 healthy of 0". Fails if it is drawn as a
+   * blocker, or its status is not said to be unknown.
+   */
+  it("says a budget with no status is not known, rather than that it blocks", async () => {
+    neighbourhood.answer = onNode(
+      {
+        disruptionsAllowed: 0,
+        currentHealthy: 0,
+        desiredHealthy: 1,
+        expectedPods: 0,
+      },
+      false
+    );
+    await wrap(dialog({ phase: "idle" }));
+    neighbourhood.answer = undefined;
+
+    expect(
+      screen.getByText(
+        /No controller has written a status on these budgets yet.*prod\/pdb-stateful/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/allows? nothing to be evicted/)).toBeNull();
+    expect(screen.queryByText(/healthy/)).toBeNull();
   });
 
   /**
