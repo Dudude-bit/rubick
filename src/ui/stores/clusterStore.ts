@@ -171,6 +171,12 @@ export interface ConnectFailed {
 }
 
 let releases = 0;
+/**
+ * Held sessions made from a kubeconfig entry that has since changed, until
+ * they are let go or the reader connects the name afresh. None is fit to
+ * focus, whatever a release answers.
+ */
+const outdated = new Set<string>();
 
 /**
  * A cluster stops being in use when the reader leaves it, not when it was
@@ -473,6 +479,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       }
     }
 
+    outdated.delete(targetContext);
     set({
       ...moving,
       isLoading: true,
@@ -575,7 +582,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       get().connectionAttemptId !== state.connectionAttemptId
     )
       return;
-    set({ live });
+    set({ live: live.filter((name) => !outdated.has(name)) });
   },
 
   entriesChanged: async (changed: string[]) => {
@@ -588,6 +595,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const held = before.live.filter(
       (name) => moved.has(name) && name !== before.currentContext
     );
+    for (const name of held) outdated.add(name);
     // Out of `live` before the first wait: a switch to one of them meanwhile
     // connects it afresh, where `live` would focus the old entry's client.
     set({
@@ -600,7 +608,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     for (const name of held) {
       // One the reader went to meanwhile is theirs now, not a held one.
       if (get().currentContext === name) continue;
-      await commands.disconnectCluster(name).catch(() => null);
+      await commands
+        .disconnectCluster(name)
+        .then(() => outdated.delete(name))
+        .catch(() => null);
     }
     const now = get();
     // The reader connected elsewhere while those were let go: the window
