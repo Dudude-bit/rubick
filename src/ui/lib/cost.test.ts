@@ -425,6 +425,20 @@ describe("a picture from OpenCost's prices", () => {
     // Not read, so not known: its total, share and parts are not "not priced".
     expect(picture.workloads[0]!.unknown).toEqual(["cpu", "memory"]);
     expect(totalUnknown(picture.workloads[0]!)).toBe(true);
+    // Its namespace's storage not read either: storage too, not "none".
+    const claimsUnread = readingPicture(
+      basis({
+        namespaces: [{ ...basis().namespaces[0]!, storageBytes: null }],
+      }),
+      reading({ workloads: { failed: "timed out after 20s" } }),
+      opencost,
+      null
+    );
+    expect(claimsUnread.workloads[0]!.unknown).toEqual([
+      "cpu",
+      "memory",
+      "storage",
+    ]);
   });
 
   /**
