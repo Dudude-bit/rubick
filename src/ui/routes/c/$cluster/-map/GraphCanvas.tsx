@@ -240,9 +240,12 @@ function Canvas({
     now.current = { placement, nodes: drawn.nodes, absolute, fitKey };
   });
   useEffect(() => {
+    // A canvas hidden has no size; shown again, it is measured against the
+    // size it had before, not against nothing.
+    if (width === 0 || height === 0) return;
     const was = size.current;
     size.current = { width, height };
-    if (!was || width === 0 || height === 0) return;
+    if (!was) return;
     if (was.width === width && was.height === height) return;
     const { placement, nodes, absolute, fitKey } = now.current;
     if (!moved.current) {

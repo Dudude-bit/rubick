@@ -267,6 +267,35 @@ describe("the map's view", () => {
     expect(fits).toEqual([2]);
   });
 
+  /**
+   * A canvas hidden and shown again at the size it had moved a moved view
+   * by half that size: the hidden 0×0 was kept as the size before. Fails if
+   * a view comes back moved by a size that did not change.
+   */
+  it("keeps a moved view where it was when the canvas is hidden and shown again", async () => {
+    Object.assign(view, { width: 800, height: 600 });
+    setViewport.mockClear();
+    fitView.mockClear();
+    const draw = () => (
+      <GraphCanvas
+        groups={[group("shop")]}
+        nodes={[node("web", "shop")]}
+        edges={[]}
+        onToggleGroup={() => {}}
+        onOpen={() => {}}
+        ariaLabel="map"
+      />
+    );
+    const { rerender } = render(draw());
+    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1), SLOW);
+    handed.onMoveStart({} as MouseEvent);
+    Object.assign(view, { width: 0, height: 0 });
+    rerender(draw());
+    Object.assign(view, { width: 800, height: 600 });
+    rerender(draw());
+    expect(setViewport).not.toHaveBeenCalled();
+  });
+
   /** A `null` key holds the fit until the page says the drawing is worth fitting. */
   it("holds the fit while its key is null", async () => {
     fitView.mockClear();
