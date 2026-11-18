@@ -625,8 +625,18 @@ fn kubeconfig_candidates(
 /// whose file names another cluster alike acts on that one.
 #[tauri::command]
 pub async fn cli_kubeconfig(state: State<'_, AppState>, context: String) -> Result<String> {
-    let target = state.client_manager.cli_target(&context).await?;
-    Ok(target.kubeconfig.to_string_lossy().into_owned())
+    as_text(state.client_manager.cli_target(&context).await?.kubeconfig)
+}
+
+/// The files as the window can carry them: a path that is not UTF-8 would
+/// reach a copied command with its bytes replaced, naming another file.
+fn as_text(kubeconfig: std::ffi::OsString) -> Result<String> {
+    kubeconfig.into_string().map_err(|path| {
+        Error::Config(format!(
+            "The kubeconfig path {} is not text a command can carry; rename the file.",
+            std::path::Path::new(&path).display()
+        ))
+    })
 }
 
 /// Report the kubeconfig lookup and what it found.
@@ -1281,7 +1291,21 @@ mod failure_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{kubeconfig_candidates, pinned_files};
+    use super::{as_text, kubeconfig_candidates, pinned_files};
+
+    /// A kubeconfig path whose bytes are not UTF-8 is refused, not handed to
+    /// a copied command with its bytes replaced, which names another file.
+    #[cfg(unix)]
+    #[test]
+    fn a_kubeconfig_path_that_is_not_text_is_refused_not_mangled() {
+        use std::os::unix::ffi::OsStringExt;
+        let mangled = std::ffi::OsString::from_vec(b"/tmp/k\xffube.yaml".to_vec());
+        assert!(as_text(mangled).is_err());
+        assert_eq!(
+            as_text("/tmp/kube.yaml".into()).expect("text"),
+            "/tmp/kube.yaml"
+        );
+    }
 
     #[test]
     fn env_kubeconfig_lists_every_file_it_would_merge() {
