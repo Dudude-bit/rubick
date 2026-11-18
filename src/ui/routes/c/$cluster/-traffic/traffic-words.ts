@@ -173,7 +173,10 @@ export function cellText(cell: Cell, kind: CellKind, t: T): string {
     case "bytes":
       return bytesRate(cell.value);
     case "share":
-      return `${cell.floor ? "≥" : ""}${formatShare(cell.value)}`;
+      // "At least" rounds down: a floor of 12.6% is not "≥13%".
+      return cell.floor
+        ? `≥${formatShare(cell.value, "down")}`
+        : formatShare(cell.value);
     case "ms":
       return ms(cell.value, t);
   }
