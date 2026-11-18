@@ -1167,6 +1167,66 @@ fn another_cluster_does_not_inherit_what_the_old_one_let_go() {
     }
 }
 
+/// Keeping was off while a row was recorded; back on, another cluster
+/// under the name rewrote what was held from memory, and that row reached
+/// the disk. Fails if a row recorded while keeping was off is kept.
+#[test]
+fn a_row_recorded_while_keeping_was_off_is_not_kept_when_the_cluster_turns() {
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "a-row");
+        timelines.flush();
+        timelines.set_keep(false);
+        timelines.client_replaced("kind");
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "off-row");
+        timelines.flush();
+        timelines.set_keep(true);
+        timelines.client_replaced("kind");
+        assert!(cluster.seen_cluster("uid-b".into()));
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let page = timelines.cluster("kind").page(&query(Show::All));
+    let ids: Vec<&str> = page.rows.iter().map(|row| row.id.as_str()).collect();
+    assert!(ids.is_empty(), "kept {ids:?}");
+}
+
+/// The turn to another cluster wiped the files and queued what was kept to
+/// be written again; the wipe failed once, and the retry wiped without the
+/// rows. Fails if a row kept and not the old cluster's is lost to a write
+/// that failed once.
+#[cfg(unix)]
+#[test]
+fn rows_kept_survive_a_turn_whose_first_write_fails() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    {
+        let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+        let cluster = timelines.cluster("kind");
+        cluster.not_identified("forbidden".into());
+        recorded(&cluster, "kept");
+        timelines.client_replaced("kind");
+        cluster.seen_cluster("uid-a".into());
+        recorded(&cluster, "a-row");
+        timelines.flush();
+        timelines.client_replaced("kind");
+        let dir = disk::dir_of(root.path(), "kind");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        assert!(cluster.seen_cluster("uid-b".into()));
+        timelines.flush();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        timelines.flush();
+    }
+    let (timelines, _rx) = holder(Some(root.path().to_path_buf()), true);
+    let page = timelines.cluster("kind").page(&query(Show::All));
+    let ids: Vec<&str> = page.rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids, ["kept"]);
+}
+
 /// A kept file that says nothing of its connections, as a build before
 /// them wrote it, or says it unreadably: fails if anything in it is
 /// vouched for, its watching drawn, or the rest of the file is lost.

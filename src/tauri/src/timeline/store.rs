@@ -115,15 +115,6 @@ impl Store {
         self.seq = self.seq.max(seq);
     }
 
-    /// Every row, oldest first.
-    pub(super) fn rows(&self) -> Vec<TimelineRow> {
-        self.by_seq
-            .values()
-            .filter_map(|(class, key)| self.rows.get(class)?.get(key))
-            .map(|held| held.row.clone())
-            .collect()
-    }
-
     /// Lets go of the rows `keep` refuses, saying nothing of them: they were
     /// another cluster's, not this one's history cut short.
     pub(super) fn retain(&mut self, keep: impl Fn(&TimelineRow) -> bool) {

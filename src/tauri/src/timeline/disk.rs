@@ -43,6 +43,42 @@ const CLASSES: [Class; 3] = [Class::Changes, Class::Warnings, Class::Normal];
 pub(super) struct Pending {
     pub rows: Vec<TimelineRow>,
     pub wipe: bool,
+    /// Rows by `seq` to take out of what is kept, another cluster's: done
+    /// again after a failure, and nothing in them is appended.
+    pub drop: Vec<(u64, u64)>,
+}
+
+fn dropped(drop: &[(u64, u64)], seq: u64) -> bool {
+    drop.iter()
+        .any(|(first, last)| (*first..=*last).contains(&seq))
+}
+
+/// The rows numbered inside `drop` taken out of every segment: what was
+/// kept and is not another cluster's stays, and nothing held only in
+/// memory is written by it.
+fn drop_rows(dir: &Path, drop: &[(u64, u64)]) -> std::io::Result<()> {
+    #[derive(Deserialize)]
+    struct Numbered {
+        seq: u64,
+    }
+    for (_, path) in segments(dir).into_values().flatten() {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
+        };
+        let kept: String = text
+            .lines()
+            .filter(|line| {
+                serde_json::from_str::<Numbered>(line).map_or(true, |row| !dropped(drop, row.seq))
+            })
+            .map(|line| format!("{line}\n"))
+            .collect();
+        if kept != text {
+            private_file::write(&path, kept.as_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -186,6 +222,9 @@ pub(super) fn write(
             _ => {}
         }
     }
+    if !pending.drop.is_empty() {
+        drop_rows(dir, &pending.drop)?;
+    }
     let Some(state) = state else {
         return Ok(LetGoes::default());
     };
@@ -198,7 +237,7 @@ pub(super) fn write(
         for row in pending
             .rows
             .iter()
-            .filter(|row| Class::of(&row.what) == class)
+            .filter(|row| Class::of(&row.what) == class && !dropped(&pending.drop, row.seq))
         {
             serde_json::to_writer(&mut lines, row).map_err(std::io::Error::other)?;
             lines.push(b'\n');

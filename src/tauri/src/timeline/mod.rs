@@ -255,6 +255,8 @@ struct Inner {
     /// The connection recording now; its `last` and `to` are set as it ends.
     current: disk::Lineage,
     epoch: u64,
+    /// Moves with each clear: a write taken before one is not done after it.
+    cleared: u64,
     /// What the files' own bounds let go, kept apart from what memory did.
     disk_let_go: LetGoes,
     /// When rows were last taken to be written.
@@ -307,7 +309,7 @@ struct Taken {
     state: Option<disk::State>,
     since: i64,
     now: i64,
-    epoch: u64,
+    cleared: u64,
 }
 
 #[derive(Default)]
@@ -384,8 +386,11 @@ impl ClusterTimeline {
             .filter(|lineage| theirs(lineage))
             .map(|lineage| (lineage.first, lineage.last))
             .collect();
+        // Read through this very connection to be another: what it recorded
+        // so far goes, and it records from here on as the one read now.
         if theirs(&inner.current) {
-            gone.push((inner.current.first, u64::MAX));
+            gone.push((inner.current.first, inner.store.newest()));
+            inner.current.first = inner.store.newest() + 1;
         }
         if another || !gone.is_empty() {
             inner.past.retain(|lineage| !theirs(lineage));
@@ -395,13 +400,14 @@ impl ClusterTimeline {
                     .any(|(first, last)| (*first..=*last).contains(&row.seq))
             });
             inner.store.forget_let_go();
-            let kept = inner.store.rows();
             inner.spans = SpanSets::default();
             inner.disk_let_go = LetGoes::default();
-            inner.pending = disk::Pending {
-                rows: kept,
-                wipe: true,
-            };
+            inner.pending.rows.retain(|row| {
+                !gone
+                    .iter()
+                    .any(|(first, last)| (*first..=*last).contains(&row.seq))
+            });
+            inner.pending.drop.extend(gone);
             inner.epoch += 1;
             inner.told.rows = true;
         }
@@ -508,6 +514,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         inner.store.clear(Self::now());
         inner.epoch += 1;
+        inner.cleared += 1;
         inner.disk_let_go = LetGoes::default();
         inner.pending = disk::Pending {
             wipe: true,
@@ -667,6 +674,7 @@ impl Timelines {
                 past: loaded.lineages,
                 current,
                 epoch: 0,
+                cleared: 0,
                 disk_let_go,
                 flushed_at: now,
                 unkept: Vec::new(),
@@ -749,13 +757,12 @@ impl Timelines {
             state,
             since,
             now,
-            epoch: inner.epoch,
+            cleared: inner.cleared,
         }
     }
 
-    /// Writes what was taken, unless the rows started over since: a clear or
-    /// another cluster under the name between the two put back on disk what
-    /// was just let go of.
+    /// Writes what was taken, unless a clear came between the two: done
+    /// after it, it put back on disk what was just let go of.
     fn write(&self, cluster: &ClusterTimeline, keep: bool, taken: Taken) {
         let Taken {
             pending,
@@ -763,14 +770,15 @@ impl Timelines {
             state,
             since,
             now,
-            epoch,
+            cleared,
         } = taken;
         // A cluster with nothing new since is not written again: an idle
         // one was a full fsync a second, and a context merely read was a
         // folder in Settings.
         let changed = told.rows || told.spans;
-        let current = cluster.inner.lock().epoch == epoch;
-        if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || pending.wipe)) {
+        let current = cluster.inner.lock().cleared == cleared;
+        let deletes = pending.wipe || !pending.drop.is_empty();
+        if let (Some(dir), true) = (&cluster.dir, current && ((keep && changed) || deletes)) {
             let written = disk::write(dir, &pending, state.as_ref(), now);
             let mut inner = cluster.inner.lock();
             let next = match written {
@@ -784,6 +792,7 @@ impl Timelines {
                     if pending.wipe {
                         inner.pending.wipe = true;
                     }
+                    inner.pending.drop.extend(pending.drop);
                     if !pending.rows.is_empty() {
                         inner.unkept_from(since, now);
                         inner.told.spans = true;
