@@ -47,9 +47,10 @@ each says which of its sources it could not read.
 ### Changed
 
 - **Changes keeps its history.** What changed in the cluster is recorded
-  while the app is connected and kept for seven days on this machine, so it
-  is still there after a restart; a stretch the app was not watching is
-  drawn as one. Events stand beside changes on one clock, and every object
+  while the app is connected and kept on this machine for up to seven days
+  (and up to 20 000 changes a cluster), so it is still there after a
+  restart; a stretch the app was not watching is drawn as one, and rows let
+  go early are said to be. Events stand beside changes on one clock, and every object
   has a Changes tab. Values of Secrets, ConfigMaps and environment
   variables are never kept, only that they changed. Settings › Diagnostics
   shows what is kept and clears it.
