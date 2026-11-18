@@ -3,12 +3,12 @@ import { persist } from "zustand/middleware";
 
 import { persistedByName } from "@/lib/kept-by-name";
 import {
-  entriesOf,
+  type Named,
   entryOf,
   named,
+  storedEntries,
   withEntry,
   withoutEntry,
-  type Named,
 } from "@/lib/named";
 
 const KEEP = 6;
@@ -45,18 +45,16 @@ export const useNamespaceRecencyStore = create<NamespaceRecencyState>()(
       migrate: (persisted) => {
         const stored = (persisted as { recent?: unknown } | undefined)?.recent;
         const recent = named(
-          stored && typeof stored === "object"
-            ? entriesOf(named<unknown>(stored as Record<string, unknown>))
-                .filter((entry): entry is [string, unknown[]] =>
-                  Array.isArray(entry[1])
-                )
-                .map(([context, names]): [string, string[]] => [
-                  context,
-                  names
-                    .filter((name): name is string => typeof name === "string")
-                    .slice(0, KEEP),
-                ])
-            : []
+          storedEntries(stored)
+            .filter((entry): entry is [string, unknown[]] =>
+              Array.isArray(entry[1])
+            )
+            .map(([context, names]): [string, string[]] => [
+              context,
+              names
+                .filter((name): name is string => typeof name === "string")
+                .slice(0, KEEP),
+            ])
         );
         return { recent } as NamespaceRecencyState;
       },

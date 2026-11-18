@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { entriesOf, entryOf, named, withEntry, withoutEntry } from "./named";
+import {
+  entriesOf,
+  entryOf,
+  named,
+  storedEntries,
+  withEntry,
+  withoutEntry,
+} from "./named";
 
 describe("a record keyed by names a cluster chose", () => {
   /**
@@ -51,5 +58,15 @@ describe("a record keyed by names a cluster chose", () => {
       ["__proto__", 2],
       ["a", 1],
     ]);
+  });
+
+  /** A restore reads whatever was on the disk. Fails if a stored `__proto__` is dropped, or a value that is no record yields entries. */
+  it("reads back only the own entries of a stored record", () => {
+    expect(storedEntries(JSON.parse('{"__proto__":1,"a":2}'))).toEqual([
+      ["__proto__", 1],
+      ["a", 2],
+    ]);
+    for (const nothing of [null, undefined, "x", 3, ["a"]])
+      expect(storedEntries(nothing)).toEqual([]);
   });
 });

@@ -12,12 +12,12 @@ import { persist } from "zustand/middleware";
 import { persistedByName } from "@/lib/kept-by-name";
 import type { Prices } from "@/lib/cost";
 import {
-  entriesOf,
+  type Named,
   entryOf,
   named,
+  storedEntries,
   withEntry,
   withoutEntry,
-  type Named,
 } from "@/lib/named";
 
 interface CostPricesState {
@@ -44,14 +44,11 @@ export function pricesOf(raw: unknown): Prices | null {
 /** What a stored state holds that is a cluster's prices; the rest is dropped. */
 function validPrices(persisted: unknown): Named<Prices> {
   const stored = (persisted as { prices?: unknown } | undefined)?.prices;
-  if (!stored || typeof stored !== "object") return named();
   return named(
-    entriesOf(named<unknown>(stored as Record<string, unknown>)).flatMap(
-      ([context, raw]): [string, Prices][] => {
-        const valid = pricesOf(raw);
-        return valid ? [[context, valid]] : [];
-      }
-    )
+    storedEntries(stored).flatMap(([context, raw]): [string, Prices][] => {
+      const valid = pricesOf(raw);
+      return valid ? [[context, valid]] : [];
+    })
   );
 }
 

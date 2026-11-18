@@ -18,7 +18,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { entriesOf, entryOf, named, withEntry, type Named } from "@/lib/named";
+import {
+  type Named,
+  entryOf,
+  named,
+  storedEntries,
+  withEntry,
+} from "@/lib/named";
 
 interface ClusterRecencyState {
   /** Context name to the epoch millisecond it was last in use: landed on, or left. */
@@ -45,14 +51,10 @@ export const useClusterRecencyStore = create<ClusterRecencyState>()(
         const stored = (persisted as { lastUsed?: unknown } | undefined)
           ?.lastUsed;
         const lastUsed = named(
-          stored && typeof stored === "object"
-            ? entriesOf(
-                named<unknown>(stored as Record<string, unknown>)
-              ).filter(
-                (entry): entry is [string, number] =>
-                  typeof entry[1] === "number" && Number.isFinite(entry[1])
-              )
-            : []
+          storedEntries(stored).filter(
+            (entry): entry is [string, number] =>
+              typeof entry[1] === "number" && Number.isFinite(entry[1])
+          )
         );
         return { lastUsed } as ClusterRecencyState;
       },

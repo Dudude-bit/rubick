@@ -21,12 +21,12 @@ import { persist } from "zustand/middleware";
 
 import { CLUSTER_HUES } from "@/lib/cluster-identity";
 import {
-  entriesOf,
+  type Named,
   entryOf,
   named,
+  storedEntries,
   withEntry,
   withoutEntry,
-  type Named,
 } from "@/lib/named";
 
 export interface ClusterMark {
@@ -103,31 +103,27 @@ export const useClusterIdentityStore = create<ClusterIdentityState>()(
       migrate: (persisted) => {
         const stored = (persisted as { marks?: unknown } | undefined)?.marks;
         const marks: [string, ClusterMark][] = [];
-        if (stored && typeof stored === "object") {
-          for (const [context, value] of entriesOf(
-            named<unknown>(stored as Record<string, unknown>)
-          )) {
-            const raw = value as ClusterMark | undefined;
-            const mark: ClusterMark = {};
-            if (typeof raw?.alias === "string" && raw.alias.trim() !== "") {
-              mark.alias = raw.alias;
-            }
-            if (
-              typeof raw?.hue === "number" &&
-              (CLUSTER_HUES as readonly number[]).includes(raw.hue)
-            ) {
-              mark.hue = raw.hue;
-            }
-            if (typeof raw?.critical === "boolean") {
-              mark.critical = raw.critical;
-            }
-            if (
-              mark.alias !== undefined ||
-              mark.hue !== undefined ||
-              mark.critical !== undefined
-            ) {
-              marks.push([context, mark]);
-            }
+        for (const [context, value] of storedEntries(stored)) {
+          const raw = value as ClusterMark | undefined;
+          const mark: ClusterMark = {};
+          if (typeof raw?.alias === "string" && raw.alias.trim() !== "") {
+            mark.alias = raw.alias;
+          }
+          if (
+            typeof raw?.hue === "number" &&
+            (CLUSTER_HUES as readonly number[]).includes(raw.hue)
+          ) {
+            mark.hue = raw.hue;
+          }
+          if (typeof raw?.critical === "boolean") {
+            mark.critical = raw.critical;
+          }
+          if (
+            mark.alias !== undefined ||
+            mark.hue !== undefined ||
+            mark.critical !== undefined
+          ) {
+            marks.push([context, mark]);
           }
         }
         return { marks: named(marks) } as ClusterIdentityState;

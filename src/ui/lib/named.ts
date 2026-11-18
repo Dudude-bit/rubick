@@ -27,6 +27,13 @@ export function named<T>(
   return Object.fromEntries(entries) as Named<T>;
 }
 
+/** What was stored read back: its own entries where it is an object, none where it is not. */
+export function storedEntries(stored: unknown): [string, unknown][] {
+  return stored && typeof stored === "object" && !Array.isArray(stored)
+    ? Object.entries(stored)
+    : [];
+}
+
 /** The entry under `name`; never a property every object has. */
 export function entryOf<T>(record: Named<T>, name: string): T | undefined {
   return Object.hasOwn(record, name) ? (record as Plain<T>)[name] : undefined;
