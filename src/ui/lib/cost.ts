@@ -17,7 +17,7 @@ import type {
   WorkloadFold,
   WorkloadKey,
 } from "@/generated/types";
-import { formatAmount, formatPercent } from "@/lib/utils";
+import { formatAmount, formatPercent, type Rounding } from "@/lib/utils";
 import { currentLocale } from "@/stores/localeStore";
 
 /** OpenCost's and Kubecost's own month: 730 hours. */
@@ -179,17 +179,13 @@ function pricedRow(
 }
 
 /**
- * No total, for want of a read rather than a price: nothing of it is
- * priced and how much it holds of some part was not read.
+ * No total, and some of it was not read: what it would come to is not
+ * known, whatever else of it carries no price.
  */
 export const totalUnknown = (row: {
   perHour: number | null;
-  unpriced?: readonly CostPart[];
   unknown?: readonly CostPart[];
-}): boolean =>
-  row.perHour === null &&
-  (row.unpriced?.length ?? 0) === 0 &&
-  (row.unknown?.length ?? 0) > 0;
+}): boolean => row.perHour === null && (row.unknown?.length ?? 0) > 0;
 
 /** Storage nobody could read: claims refused, or no volume read at all. */
 const storageUnread = (
@@ -643,7 +639,8 @@ export function readingPicture(
     return {
       key: w.key,
       pods: w.pods,
-      // A failed read priced nothing it could vouch for: no total at all.
+      // A failed read priced nothing it could vouch for: no total at all,
+      // and every part it holds not known rather than not priced.
       ...(fold
         ? floorWhere(
             partly(i),
@@ -653,7 +650,13 @@ export function readingPicture(
               unreadIn(w.key.namespace)
             )
           )
-        : { perHour: null, atLeast: false, parts, unpriced: [], unknown: [] }),
+        : {
+            perHour: null,
+            atLeast: false,
+            parts,
+            unpriced: [],
+            unknown: heldParts({ ...w, storageBytes: w.claimBytes }),
+          }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });
@@ -813,18 +816,20 @@ export function costOf(
 export function formatMoney(
   value: number,
   currency: string,
-  locale: string = currentLocale()
+  locale: string = currentLocale(),
+  rounding: Rounding = "nearest"
 ): string {
-  const text = formatAmount(value, locale);
+  const text = formatAmount(value, locale, rounding);
   return currency ? `${text}\u00a0${currency}` : text;
 }
 
 /** A share of a whole, to a tenth of a per cent below ten. */
 export function formatShare(
   ratio: number,
+  rounding: Rounding = "nearest",
   locale: string = currentLocale()
 ): string {
-  return formatPercent(ratio, ratio < 0.1 ? 1 : 0, locale);
+  return formatPercent(ratio, ratio < 0.1 ? 1 : 0, locale, rounding);
 }
 
 /** The currency an amount is written in: the entered label, or none for OpenCost's. */

@@ -31,8 +31,10 @@ const names = (list: readonly string[]) => list.join(", ");
 
 /** An amount, said as "at least" where something in it carries no price. */
 export function amountWords(amount: Amount, currency: string, t: T): string {
-  const money = formatMoney(amount.perHour, currency);
-  return amount.atLeast ? t("cost", "atLeast", { amount: money }) : money;
+  if (!amount.atLeast) return formatMoney(amount.perHour, currency);
+  // A floor rounded up would claim more than is known.
+  const money = formatMoney(amount.perHour, currency, undefined, "down");
+  return t("cost", "atLeast", { amount: money });
 }
 
 /** Where the numbers come from, in one line under the title. */
@@ -291,7 +293,11 @@ export function efficiencyWords(e: Efficiency, t: T): string {
     peak:
       e.peakRatio === null
         ? t("cost", "notMeasured")
-        : peakSaid(e, formatShare(e.peakRatio), t),
+        : peakSaid(
+            e,
+            formatShare(e.peakRatio, e.peakAtMost ? "up" : "nearest"),
+            t
+          ),
   };
   const age = youngFor(e, t);
   return fromPods(
@@ -427,8 +433,13 @@ export function clusterShareWords(share: RowShare, t: T): string | null {
   if (share === null) return null;
   if (share === "noTotal") return t("cost", "lineShareNoTotal");
   if (share === "bothFloors") return t("cost", "lineShareBothFloors");
-  return t("cost", LINE_SHARE[share.bound], { share: formatShare(share.of) });
+  return t("cost", LINE_SHARE[share.bound], {
+    share: formatShare(share.of, ROUNDED[share.bound]),
+  });
 }
+
+/** A bound rounded away from what it bounds. */
+const ROUNDED = { exact: "nearest", atLeast: "down", atMost: "up" } as const;
 
 const SHARE_BOUND: Record<
   Extract<RowShare, object>["bound"],
@@ -451,7 +462,10 @@ export function share(
   if (row.share === "noTotal") return t("cost", "shareNoTotal");
   if (row.share === "bothFloors") return t("cost", "shareBothFloors");
   if (row.share)
-    return SHARE_BOUND[row.share.bound](formatShare(row.share.of), t);
+    return SHARE_BOUND[row.share.bound](
+      formatShare(row.share.of, ROUNDED[row.share.bound]),
+      t
+    );
   return t("cost", totalUnknown(row) ? "notKnown" : "notPriced");
 }
 
