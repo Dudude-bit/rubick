@@ -47,6 +47,7 @@ import {
 } from "@/lib/resource-registry";
 import { scopeFor, useClusterStore } from "./clusterStore";
 import { holdClusters } from "./heldClusters";
+import { entryOf, named as namedRecord } from "@/lib/named";
 
 /** The front door: no cluster yet, and a tab's address before it has one. */
 const HOME = "/";
@@ -656,7 +657,7 @@ export function tabRouteLabel(href: string, t: T, named?: ListNamer): string {
   const [page] = route;
   if (isResourceType(page)) return getDisplayPlural(page);
   return (
-    PAGE_NAMES[page]?.(t) ??
+    entryOf(PAGE_NAMES, page)?.(t) ??
     [...ACCESS_KINDS, ...RESOURCE_REGISTRY].find(
       (entry) => segmentOf(entry) === page
     )?.displayPlural ??
@@ -676,7 +677,8 @@ function decoded(segment: string): string {
   }
 }
 
-const PAGE_NAMES: Record<string, ((t: T) => string) | undefined> = {
+// A segment can be any plural discovery answers, `constructor` among them.
+const PAGE_NAMES = namedRecord<(t: T) => string>({
   helm: () => "Helm",
   changes: (t) => t("nav", "changes"),
   audit: (t) => t("nav", "audit"),
@@ -687,7 +689,7 @@ const PAGE_NAMES: Record<string, ((t: T) => string) | undefined> = {
   routes: (t) => t("nav", "routes"),
   "api-resources": (t) => t("nav", "apiResources"),
   "my-access": (t) => t("nav", "myAccess"),
-};
+});
 
 /**
  * The list a route belongs to, for a route that names one object.

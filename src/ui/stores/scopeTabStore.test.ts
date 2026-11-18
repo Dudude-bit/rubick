@@ -656,6 +656,16 @@ describe("titles", () => {
     expect(tabRouteLabel(href, t)).toBe(expected);
   });
 
+  /**
+   * A list segment is whatever plural discovery answers, `constructor`
+   * among them. Fails if such a segment finds a function every object has
+   * and the tab is named by what it returns.
+   */
+  it("names a list called like what every object has by its own name", () => {
+    for (const page of ["constructor", "toString", "__proto__", "valueOf"])
+      expect(tabRouteLabel(`/c/prod/${page}`, t)).toBe(page);
+  });
+
   /** A Russian strip read "overview" and "changes" beside a sidebar that
    *  said Обзор and Изменения. */
   it("names a page the way the sidebar does, in the reader's language", () => {
