@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AuditFinding } from "@/generated/types";
+import type { AuditFinding, RuleId } from "@/generated/types";
 import { fixYaml } from "./fix-yaml";
 import { RULE_IDS } from "./rules";
 
@@ -78,7 +78,7 @@ describe("the fix Audit offers to copy", () => {
         root({ list: "ephemeralContainers", container: "debugger" }),
         { kind: "Pod", namespace: "shop", name: "web-x" }
       )
-    ).toBe("kubectl delete pod web-x --namespace shop");
+    ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
     const single = (autoscaler: string | null): AuditFinding => ({
       rule: "single-replica",
       severity: "medium",
@@ -129,7 +129,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(gone.rule, release.kind, gone, release)).toBe(
-      "helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis web --namespace shop\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
+      "helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis web --namespace shop --kube-context CONTEXT\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
     );
     const due: AuditFinding = {
       ...gone,
@@ -199,7 +199,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "kubectl get crontabs.example.com --all-namespaces -o json | kubectl replace -f -\nkubectl patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | kubectl --context CONTEXT replace -f -\nkubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -249,10 +249,51 @@ describe("the fix Audit offers to copy", () => {
         namespace: null,
         name: "example.com/v1beta1 widgets/status",
       })
-    ).toBe("kubectl api-resources --api-group=example.com");
+    ).toBe("kubectl --context CONTEXT api-resources --api-group=example.com");
   });
 
   /** Fails if a rule has no fix, or one with a word of prose in it. */
+  /**
+   * kubectl and helm act on their kubeconfig's current context unless told:
+   * a pod deleted by name in the terminal's cluster may be another one's.
+   * Fails if any command the fix offers leaves out the cluster on screen.
+   */
+  it("names the cluster on screen in every command it offers", () => {
+    const ephemeral: AuditFinding = {
+      rule: "pss-privileged",
+      severity: "high",
+      what: [
+        {
+          says: "set",
+          at: { list: "ephemeralContainers", container: "debugger" },
+          field: "securityContext.privileged",
+          value: "true",
+        },
+      ],
+    };
+    const pod = { kind: "Pod", namespace: "shop", name: "web-x" };
+    expect(fixYaml("pss-privileged", "Pod", ephemeral, pod, "kind-prod")).toBe(
+      "kubectl --context kind-prod delete pod web-x --namespace shop"
+    );
+    expect(
+      fixYaml("pss-privileged", "Pod", ephemeral, pod, "my cluster's prod")
+    ).toBe(
+      "kubectl --context 'my cluster'\\''s prod' delete pod web-x --namespace shop"
+    );
+    const commands = (RULE_IDS as readonly RuleId[])
+      .map((rule) =>
+        fixYaml(rule, "Deployment", undefined, undefined, "kind-prod")
+      )
+      .flatMap((text) => text.split("\n"))
+      .filter(
+        (line) =>
+          /^(kubectl|helm) /.test(line) && !line.startsWith("helm plugin")
+      );
+    expect(commands.length).toBeGreaterThan(0);
+    for (const line of commands)
+      expect(line).toMatch(/--(kube-)?context kind-prod/);
+  });
+
   it("offers a fix for every rule, written in the API's fields only", () => {
     for (const rule of RULE_IDS) {
       const yaml = fixYaml(rule, "Deployment");

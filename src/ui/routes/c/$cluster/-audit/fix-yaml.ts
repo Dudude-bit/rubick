@@ -96,14 +96,26 @@ function replaced(finding: AuditFinding | undefined, kind: string): string[] {
   return [...seen];
 }
 
-/** The fix for `rule` on an object of `kind`, filled from `finding` where it has one. */
+/** A shell word as written, quoted where the shell would read it otherwise. */
+const word = (text: string) =>
+  /^[\w.:/@=+-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The fix for `rule` on an object of `kind`, filled from `finding` where it
+ * has one. A command names `context`, the cluster on screen: without it
+ * kubectl and helm act on whatever their kubeconfig's current context is,
+ * which may be another cluster with an object of the same name.
+ */
 export function fixYaml(
   rule: RuleId,
   kind: string,
   finding?: AuditFinding,
-  subject?: Subject
+  subject?: Subject,
+  context?: string | null
 ): string {
   const pod = (body: string) => underPodSpec(kind, body);
+  const on = word(context ?? "CONTEXT");
+  const kubectl = `kubectl --context ${on}`;
   const volume =
     first(finding, "volume")?.volume ??
     first(finding, "socket")?.volume ??
@@ -114,7 +126,7 @@ export function fixYaml(
     atContainer(finding) &&
     containerOf(finding).list === "ephemeralContainers"
   )
-    return `kubectl delete pod ${subject?.name ?? "POD"} --namespace ${subject?.namespace ?? "NAMESPACE"}`;
+    return `${kubectl} delete pod ${subject?.name ?? "POD"} --namespace ${subject?.namespace ?? "NAMESPACE"}`;
   switch (rule) {
     case "pss-host-process":
       return pod("securityContext:\n  windowsOptions:\n    hostProcess: false");
@@ -258,7 +270,7 @@ export function fixYaml(
         !finding || finding.what.some((w) => w.says === "stored" && !w.served);
       const map = gone
         ? [
-            `helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis ${subject?.name ?? "RELEASE"} --namespace ${subject?.namespace ?? "NAMESPACE"}`,
+            `helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis ${subject?.name ?? "RELEASE"} --namespace ${subject?.namespace ?? "NAMESPACE"} --kube-context ${on}`,
           ]
         : [];
       return [...map, ...replaced(finding, kind)].join("\n---\n");
@@ -276,7 +288,7 @@ export function fixYaml(
       );
       if (held) {
         const crd = subject?.name ?? "CRD";
-        return `kubectl get ${crd} --all-namespaces -o json | kubectl replace -f -\nkubectl patch customresourcedefinitions ${crd} --subresource='status' --type='merge' -p '{"status":{"storedVersions":["${storage}"]}}'`;
+        return `${kubectl} get ${crd} --all-namespaces -o json | ${kubectl} replace -f -\n${kubectl} patch customresourcedefinitions ${crd} --subresource='status' --type='merge' -p '{"status":{"storedVersions":["${storage}"]}}'`;
       }
       const current =
         at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;
@@ -306,7 +318,7 @@ export function fixYaml(
         .split("/")
         .slice(0, -1)
         .join("/");
-      return `kubectl api-resources --api-group=${group}`;
+      return `${kubectl} api-resources --api-group=${group}`;
     }
   }
 }

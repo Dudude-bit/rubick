@@ -15,6 +15,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import { useClusterStore } from "@/stores/clusterStore";
 import { fixYaml } from "./fix-yaml";
 import {
   CATEGORY_WORDS,
@@ -82,7 +83,8 @@ export function RuleExplained({
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
-  const yaml = fixYaml(rule, kind, finding, subject);
+  const context = useClusterStore((s) => s.currentContext);
+  const yaml = fixYaml(rule, kind, finding, subject, context);
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div>
