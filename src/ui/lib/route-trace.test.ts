@@ -13,6 +13,7 @@ import {
   servingSay,
   routeBackingOf,
   topologyRead,
+  gatewayOfParent,
 } from "./route-trace";
 import type { DoorRead } from "./policy-door";
 import { translate } from "@/i18n";
@@ -270,6 +271,27 @@ const ids = (trace: { steps: { id: string }[] }) =>
  * "no controller answered" about a gateway the map, the pulse and the peek
  * all called programmed — one cluster, two answers.
  */
+describe("the Gateway a parentRef leads to", () => {
+  /**
+   * A GAMMA route's Service parent was resolved to a Gateway of the same
+   * name and namespace, and that Gateway's pulse was drawn on a route that
+   * never rides it. Fails if a parent that is not a Gateway or a set leads
+   * to a Gateway, or one that is does not.
+   */
+  it("leads nowhere from a Service named like a Gateway", () => {
+    const shared = gateway("shared");
+    const parent = (kind: string) => ({
+      kind,
+      name: "shared",
+      namespace: "gwtest",
+    });
+    expect(
+      gatewayOfParent([shared], parent("Service"), "shop")
+    ).toBeUndefined();
+    expect(gatewayOfParent([shared], parent("Gateway"), "shop")).toBe(shared);
+  });
+});
+
 describe("whether the verdict sources are current", () => {
   /**
    * A GatewayClass list that failed on its next read kept its last answer,
