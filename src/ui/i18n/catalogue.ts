@@ -7002,6 +7002,8 @@ export const en = {
     readingWhatRefusesToMove: "Reading what would refuse to move…",
     budgetsUnread:
       "The disruption budgets on this node could not be read, so one that allows no eviction is not named here: {why}",
+    budgetsNoStatus:
+      "No controller has written a status on these budgets yet, so whether they allow an eviction is not known: {names}",
     drainKeepsAsking:
       "The drain moves what it can and keeps asking about the rest, the way kubectl does. Nothing is deleted to get past a budget, and you can stop it at any point.",
     evictUnmanagedPodsExplained:

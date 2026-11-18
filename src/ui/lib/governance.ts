@@ -467,6 +467,8 @@ function governingUnread(
 
 export interface DrainRefusals {
   blockers: DrainBlocker[];
+  /** Budgets no controller has written a status on: whether they allow an eviction is not known, and their counts are not counts. */
+  unknown: DrainBlocker[];
   /** Why the budgets are not known; with it, no blockers is not "none". */
   unread: string | null;
 }
@@ -484,14 +486,22 @@ export interface DrainRefusals {
 export function drainBlockers(read: GovernanceRead, t: T): DrainRefusals {
   const unread = governingUnread(read, "PodDisruptionBudget", t);
   const byBudget = new Map<string, DrainBlocker>();
+  const unknown = new Map<string, DrainBlocker>();
   for (const budget of read.data ? budgets(read.data) : []) {
-    if (budget.facts.disruptionsAllowed > 0) continue;
+    // No status yet: as budgetFinding says nothing of it, nor is it counted
+    // here; it is named as not known.
+    const into = budget.facts.cannotAllow === null ? unknown : byBudget;
+    if (into === byBudget && budget.facts.disruptionsAllowed > 0) continue;
     const key = `${budget.object.namespace}/${budget.object.name}`;
-    const seen = byBudget.get(key);
+    const seen = into.get(key);
     if (seen) seen.pods += 1;
-    else byBudget.set(key, { budget, pods: 1 });
+    else into.set(key, { budget, pods: 1 });
   }
-  return { blockers: [...byBudget.values()], unread };
+  return {
+    blockers: [...byBudget.values()],
+    unknown: [...unknown.values()],
+    unread,
+  };
 }
 
 // --- at the point of action ---------------------------------------------
