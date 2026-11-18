@@ -1958,6 +1958,14 @@ export const en = {
       "the connected Prometheus holds no sample of its pods in the last day",
     whyPeakUnread:
       "the connected Prometheus answered its average use over the last day and no peak, and a peak is what is judged",
+    whyNoSamplesCpu:
+      "the connected Prometheus holds no sample of its pods' CPU use in the last day",
+    whyNoSamplesMemory:
+      "the connected Prometheus holds no sample of its pods' memory use in the last day",
+    whyPeakUnreadCpu:
+      "the connected Prometheus answered its average CPU use over the last day and no peak, and a peak is what is judged",
+    whyPeakUnreadMemory:
+      "the connected Prometheus answered its average memory use over the last day and no peak, and a peak is what is judged",
     whyYoung:
       "its youngest pod started {age} ago, and a peak is judged over a whole day",
     whyPartialCpu: {

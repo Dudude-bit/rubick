@@ -4019,12 +4019,14 @@ export type Why =
   | { says: "noPrometheus" }
   | { says: "notScraped" }
   | { says: "noUsage" }
-  | { says: "noSamples" }
-  | { says: "peakUnread" }
+  | { says: "noSamples"; resource: UsageOf }
+  | { says: "peakUnread"; resource: UsageOf }
   | { says: "young"; since: string | null }
   | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null }
   | { says: "folded" }
   | { says: "admitted"; webhooks: string[] };
+
+export type UsageOf = "cpu" | "memory" | "both";
 
 export type RuleId =
   | "pss-host-process"
@@ -4200,8 +4202,8 @@ export type UsageRead =
 export type UseVerdict =
   | { says: "over"; cpu: OverBy | null; memory: OverBy | null }
   | { says: "within" }
-  | { says: "noSamples" }
-  | { says: "peakUnread" }
+  | { says: "noSamples"; resource: UsageOf }
+  | { says: "peakUnread"; resource: UsageOf }
   | { says: "young"; since: string | null }
   | { says: "partial"; cpu: PodsRead | null; memory: PodsRead | null };
 
