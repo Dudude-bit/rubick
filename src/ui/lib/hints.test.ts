@@ -600,6 +600,29 @@ describe("what the scheduler says keeps a pending pod out", () => {
   });
 
   /**
+   * A topology key is any label key, `constructor` and `toString` among
+   * them. Fails if every node counts as carrying such a key because every
+   * object has it, or a node's own label of that name is not counted.
+   */
+  it("counts a node as carrying a key only by its own label", () => {
+    const nodes = [
+      { labels: JSON.parse('{"constructor":"a"}') as Record<string, string> },
+      { labels: { "kubernetes.io/hostname": "agent-0" } },
+    ];
+    expect(
+      topologyReading(["constructor", "toString", "__proto__"], nodes)
+    ).toEqual({
+      read: "read",
+      nodes: 2,
+      keys: [
+        { key: "constructor", carrying: 1 },
+        { key: "toString", carrying: 0 },
+        { key: "__proto__", carrying: 0 },
+      ],
+    });
+  });
+
+  /**
    * Marco cannot list nodes. Fails if a refused node list is counted as
    * "0 of 0 carry it", or the key is dropped because the count is missing.
    */
