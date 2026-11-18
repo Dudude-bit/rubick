@@ -3975,7 +3975,8 @@ export type TerminalState =
 export type Identity =
   | { says: "known" }
   | { says: "notChecked" }
-  | { says: "unknown"; message: string };
+  | { says: "unknown"; message: string }
+  | { says: "unsettled" };
 
 export type Keeping =
   | { says: "kept" }

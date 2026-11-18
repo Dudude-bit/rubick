@@ -604,6 +604,30 @@ describe("the last change a card names", () => {
     );
   });
 
+  /** Where which cluster this is could not be settled: fails if the card names a row it cannot place. */
+  it("does not name a row where which cluster this is could not be settled", () => {
+    const latest = lastChangeOf({
+      read: true,
+      rows: [],
+      letGo: undefined,
+      unreadable: 0,
+      identity: { says: "unsettled" },
+    });
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 1, total: 1 },
+      { entries: [], known: true },
+      [],
+      latest,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(
+      rows.find((row) => row.label === "Last change")?.values[0].text
+    ).toBe("not known: the rows kept under this name may be another cluster's");
+  });
+
   /**
    * Every kept row failed to parse, and the card said "nothing seen while
    * this app was watching". Fails if rows that could not be read leave the

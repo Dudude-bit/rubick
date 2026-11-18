@@ -267,6 +267,27 @@ describe("what the shared Changes report says beyond the changes", () => {
   });
 
   /**
+   * The connection changed each time which cluster this is was read: the
+   * rows held were still filed as this cluster's. Fails if the file does
+   * not say they may be another's.
+   */
+  it("says the kept rows may be another cluster's where which cluster this is could not be settled", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, "all", {
+      read: true,
+      keeping: { says: "kept" },
+      identity: { says: "unsettled" },
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+      readFrom: null,
+    });
+    expect(section.body.type === "text" && section.body.text).toContain(
+      "the connection changed each time which cluster this is was checked."
+    );
+  });
+
+  /**
    * Under "Warnings only" the screen reads no change row at all, while forty
    * Deployment edits sat in the timeline. Fails if the file sent on says none
    * was made.

@@ -51,44 +51,66 @@ pub async fn timeline_follow(
     // now, so it is read again through the new one. A client that keeps
     // changing leaves the cluster unchecked rather than misnamed.
     let mut tries = 0;
-    let (here, read) = loop {
+    let (here, another_cluster) = loop {
         let here = state.here()?;
+        let cluster = cluster_of(&timelines, &here.context).await?;
         let read = kube::Api::<k8s_openapi::api::core::v1::Namespace>::all((*here.client).clone())
             .get("kube-system")
             .await;
         tries += 1;
-        if state.still_holds(&here.context, &here.client) {
-            break (here, Some(read));
+        if let Some(another) = identify(&state, &here.context, &here.client, &cluster, read) {
+            break (here, another);
         }
         if tries == 3 {
-            break (state.here()?, None);
+            cluster.unsettled();
+            break (state.here()?, false);
         }
     };
     let context = here.context.clone();
-    let cluster = {
-        let timelines = timelines.clone();
-        let context = context.clone();
-        off_main(move || Ok(timelines.cluster(&context))).await?
-    };
-    // A reader who may not read kube-system cannot tell: nothing is dropped,
-    // and the rows kept before are said to be perhaps another cluster's.
-    let another_cluster = match read {
-        Some(Ok(namespace)) => namespace
-            .metadata
-            .uid
-            .is_some_and(|identity| cluster.seen_cluster(identity)),
-        Some(Err(error)) => {
-            cluster.not_identified(Error::from(error).said());
-            false
-        }
-        None => false,
-    };
     if timelines.tell(&context, Control::Rescope(scope.clone())) {
         return Ok(Following { another_cluster });
     }
     let subscription = state.feeds.subscribe(&here, ask(scope)).await?;
     timelines.follow(context, subscription);
     Ok(Following { another_cluster })
+}
+
+async fn cluster_of(
+    timelines: &std::sync::Arc<crate::timeline::Timelines>,
+    context: &str,
+) -> Result<std::sync::Arc<crate::timeline::ClusterTimeline>> {
+    let timelines = timelines.clone();
+    let context = context.to_string();
+    off_main(move || Ok(timelines.cluster(&context))).await
+}
+
+/// What `read` says of which cluster `cluster` is, applied only while
+/// `client` is still the one held for `context`: checked and applied under
+/// the lock a connect installs its client under, with nothing awaited
+/// between, so a reconnect cannot land in the gap. `None` where it was
+/// replaced: the read says nothing of the cluster held now. A reader who may
+/// not read kube-system cannot tell, and nothing is dropped.
+pub(crate) fn identify(
+    state: &AppState,
+    context: &str,
+    client: &std::sync::Arc<kube::Client>,
+    cluster: &crate::timeline::ClusterTimeline,
+    read: kube::Result<k8s_openapi::api::core::v1::Namespace>,
+) -> Option<bool> {
+    let _lifecycle = state.cluster_lifecycle.lock();
+    if !state.still_holds(context, client) {
+        return None;
+    }
+    Some(match read {
+        Ok(namespace) => namespace
+            .metadata
+            .uid
+            .is_some_and(|identity| cluster.seen_cluster(identity)),
+        Err(error) => {
+            cluster.not_identified(Error::from(error).said());
+            false
+        }
+    })
 }
 
 /// A timeline is on screen: the ownership index is kept reading, and what it

@@ -1,6 +1,6 @@
 import { Eye, History } from "lucide-react";
 
-import type { Keeping, Show } from "@/generated/types";
+import type { Identity, Keeping, Show } from "@/generated/types";
 import type { ChangeItem, SpanCover, SpanLike } from "@/lib/changes";
 import {
   changesKnownFrom,
@@ -37,6 +37,19 @@ const clock = (ms: number) =>
     timeZone: "UTC",
   }).format(ms)} UTC`;
 
+/** Whether the rows held are this cluster's, in words where that is not known; a new answer does not compile until it is said. */
+function identityLine(identity: Identity, t: T): string | null {
+  switch (identity.says) {
+    case "known":
+    case "notChecked":
+      return null;
+    case "unknown":
+      return t("changes", "identityUnknown", { reason: identity.message });
+    case "unsettled":
+      return t("changes", "identityUnsettled");
+  }
+}
+
 /** Every way of keeping, in words where it is not kept between restarts; a new way does not compile until it is said. */
 function keepingLine(keeping: Keeping, t: T): string | null {
   switch (keeping.says) {
@@ -59,10 +72,8 @@ export function keepingWords(
   const lines: string[] = [];
   if (read.error)
     lines.push(t("changes", "readFailed", { reason: errorToShow(read.error) }));
-  if (read.identity?.says === "unknown")
-    lines.push(
-      t("changes", "identityUnknown", { reason: read.identity.message })
-    );
+  const identity = read.identity && identityLine(read.identity, t);
+  if (identity) lines.push(identity);
   const keeping = read.keeping && keepingLine(read.keeping, t);
   if (keeping) lines.push(keeping);
   if (read.unreadable > 0)
