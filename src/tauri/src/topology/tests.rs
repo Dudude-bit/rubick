@@ -960,24 +960,33 @@ fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
         }))
     };
     let mut kept = feed::Kept::default();
-    kept.keep(crate::feeds::Update::State {
-        slot: gateways.clone(),
-        state: Reading::Synced,
-    });
-    kept.keep(crate::feeds::Update::Whole {
-        slot: gateways.clone(),
-        why: crate::feeds::Whole::Fresh,
-        objects: vec![object("a", 1), object("b", 1)],
-    });
-    for version in 2..100 {
-        kept.keep(crate::feeds::Update::Applied {
+    kept.keep(
+        1,
+        crate::feeds::Update::State {
             slot: gateways.clone(),
-            object: object("c", version),
-        });
+            state: Reading::Synced,
+        },
+    );
+    kept.keep(
+        2,
+        crate::feeds::Update::Whole {
+            slot: gateways.clone(),
+            why: crate::feeds::Whole::Fresh,
+            objects: vec![object("a", 1), object("b", 1)],
+        },
+    );
+    for version in 2..100 {
+        kept.keep(
+            u64::from(version) + 1,
+            crate::feeds::Update::Applied {
+                slot: gateways.clone(),
+                object: object("c", version),
+            },
+        );
     }
     let replayed: Vec<String> = kept
         .replay()
-        .map(|update| match update {
+        .map(|(_, update)| match update {
             crate::feeds::Update::State { .. } => "state".to_string(),
             crate::feeds::Update::Whole { objects, .. } => format!("whole {}", objects.len()),
             crate::feeds::Update::Applied { object, .. } => format!(
@@ -990,15 +999,21 @@ fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
     assert_eq!(replayed, ["state", "whole 2", "applied 99"]);
 
     let mut kept = feed::Kept::default();
-    kept.keep(crate::feeds::Update::Applied {
-        slot: gateways.clone(),
-        object: object("c", 1),
-    });
-    kept.keep(crate::feeds::Update::Whole {
-        slot: gateways.clone(),
-        why: crate::feeds::Whole::Relist,
-        objects: vec![object("a", 2)],
-    });
+    kept.keep(
+        1,
+        crate::feeds::Update::Applied {
+            slot: gateways.clone(),
+            object: object("c", 1),
+        },
+    );
+    kept.keep(
+        2,
+        crate::feeds::Update::Whole {
+            slot: gateways.clone(),
+            why: crate::feeds::Whole::Relist,
+            objects: vec![object("a", 2)],
+        },
+    );
     assert_eq!(
         kept.replay().count(),
         1,
@@ -1162,4 +1177,93 @@ async fn a_kind_discovery_later_says_is_not_served_is_not_read_as_empty() {
     );
     drop(tx);
     pumping.await.expect("the pump ends");
+}
+
+/// Gateways in `infra` the map draws once discovery names the kind, with
+/// the cluster's state and then `sent` held for it until then.
+async fn gateways_drawn_after(sent: Vec<crate::feeds::Update>) -> Option<usize> {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let answers = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resolve: Resolve = {
+        let answers = answers.clone();
+        Arc::new(move |_| {
+            let fails = !answers.load(std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if fails {
+                    return Err("the server is currently unable to handle the request".into());
+                }
+                Ok(Some(kube::discovery::ApiResource::from_gvk_with_plural(
+                    &kube::core::GroupVersionKind::gvk(
+                        "gateway.networking.k8s.io",
+                        "v1",
+                        "Gateway",
+                    ),
+                    "gateways",
+                )))
+            })
+        })
+    };
+    let pumping = tokio::spawn(pump(
+        rx,
+        map.clone(),
+        std::collections::BTreeMap::new(),
+        BTreeSet::from([Kind::Gateway]),
+        Some(resolve),
+        std::time::Duration::from_millis(20),
+    ));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Gateway, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    for update in sent {
+        tx.send(update).await.expect("sent");
+    }
+    let failed = || {
+        matches!(
+            reading_of(&map, "Gateway"),
+            Some(MapKindReading::Failed { .. })
+        )
+    };
+    assert!(within_seconds(failed).await);
+    answers.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(within_seconds(|| !failed()).await);
+    let drawn = map
+        .stores()
+        .held("infra", OtherPolicies::none(), now())
+        .gateways_here
+        .map(|list| list.len());
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    drawn
+}
+
+/// What was held for a kind discovery could not name was drawn slot by
+/// slot, the cluster's list first, so a namespace's list that came before
+/// it put back a Gateway the cluster's had already left out. Fails if held
+/// lists are not drawn in the order they came, in either order.
+#[tokio::test]
+async fn a_kind_discovery_names_later_is_drawn_in_the_order_its_lists_came() {
+    let infra = |objects| crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, Some("infra")),
+        why: crate::feeds::Whole::Fresh,
+        objects,
+    };
+    let cluster = |objects| crate::feeds::Update::Whole {
+        slot: slot(Kind::Gateway, None),
+        why: crate::feeds::Whole::Relist,
+        objects,
+    };
+    assert_eq!(
+        gateways_drawn_after(vec![infra(vec![gateway_object("edge")]), cluster(vec![])]).await,
+        Some(0),
+        "the cluster's later list left edge out"
+    );
+    assert_eq!(
+        gateways_drawn_after(vec![cluster(vec![]), infra(vec![gateway_object("edge")])]).await,
+        Some(1),
+        "infra's later list holds edge"
+    );
 }

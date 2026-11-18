@@ -116,36 +116,36 @@ pub type Resolve = Arc<
 
 /// What a slot of a kind discovery cannot name yet is held as: its last
 /// state, its last whole set, and since that set the last word on each
-/// object. A new set or a change to one object replaces what it outdates,
-/// so a kind discovery never names holds no more than one copy of its list.
+/// object, each with the place it arrived in. A new set or a change to one
+/// object replaces what it outdates, so a slot of a kind discovery never
+/// names holds no more than one copy of its list.
 #[derive(Default)]
 pub(super) struct Kept {
-    state: Option<Update>,
-    whole: Option<Update>,
-    since: BTreeMap<(String, String), Update>,
+    state: Option<(u64, Update)>,
+    whole: Option<(u64, Update)>,
+    since: BTreeMap<(String, String), (u64, Update)>,
 }
 
 impl Kept {
-    pub(super) fn keep(&mut self, update: Update) {
+    pub(super) fn keep(&mut self, at: u64, update: Update) {
         match &update {
-            Update::State { .. } => self.state = Some(update),
+            Update::State { .. } => self.state = Some((at, update)),
             Update::Whole { .. } => {
                 self.since.clear();
-                self.whole = Some(update);
+                self.whole = Some((at, update));
             }
             Update::Applied { object, .. } | Update::Deleted { object, .. } => {
                 let key = (
                     object.metadata.namespace.clone().unwrap_or_default(),
                     object.metadata.name.clone().unwrap_or_default(),
                 );
-                self.since.insert(key, update);
+                self.since.insert(key, (at, update));
             }
             Update::HandedOver => {}
         }
     }
 
-    /// In the order the map reads them: the state, the set, the changes.
-    pub(super) fn replay(self) -> impl Iterator<Item = Update> {
+    pub(super) fn replay(self) -> impl Iterator<Item = (u64, Update)> {
         self.state
             .into_iter()
             .chain(self.whole)
@@ -304,10 +304,11 @@ pub async fn pump(
     let Some(resolve) = resolve else {
         return pump_resolved(updates, map, types).await;
     };
-    // What arrived for a kind discovery could not name, in the order it came:
-    // parsed without its type it would be dropped, and its list read as empty.
+    // What arrived for a kind discovery could not name: parsed without its
+    // type it would be dropped, and its list read as empty.
     let mut held: BTreeMap<Kind, BTreeMap<crate::ownership::SlotKey, Kept>> = BTreeMap::new();
     let mut said: BTreeMap<Kind, String> = BTreeMap::new();
+    let mut arrived: u64 = 0;
     // A kind discovery says is not served is not a kind read and empty, whatever
     // the layer last said of it: its objects cannot be parsed without a type.
     let mut unserved: BTreeSet<Kind> = Kind::ALL
@@ -357,13 +358,16 @@ pub async fn pump(
             .copied()
             .filter(|kind| !unresolved.contains(kind))
             .collect();
-        let replayed: Vec<Update> = named
+        let mut replayed: Vec<(u64, Update)> = named
             .iter()
             .flat_map(|kind| held.remove(kind).unwrap_or_default().into_values())
             .flat_map(Kept::replay)
             .collect();
+        // In the order it came: the cluster's list and a namespace's overlap,
+        // and the later replaces the earlier.
+        replayed.sort_by_key(|(at, _)| *at);
         let mut ready = Vec::new();
-        for update in replayed.into_iter().chain(batch) {
+        for update in replayed.into_iter().map(|(_, update)| update).chain(batch) {
             match kind_of(&update) {
                 Some(kind) if unserved.contains(&kind) => {
                     if let Update::State { slot, .. } = update {
@@ -385,11 +389,12 @@ pub async fn pump(
                         });
                     }
                     if let Some(slot) = slot_of(&update).cloned() {
+                        arrived += 1;
                         held.entry(kind)
                             .or_default()
                             .entry(slot)
                             .or_default()
-                            .keep(update);
+                            .keep(arrived, update);
                     }
                 }
                 _ => ready.push(update),
