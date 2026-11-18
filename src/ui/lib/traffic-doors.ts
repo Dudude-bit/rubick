@@ -16,6 +16,7 @@ import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
 import { doorDoubt, refusedStop, type DoorAsk } from "@/lib/policy-door";
 import { publishedFor } from "@/lib/published";
+import { stopMood } from "@/lib/stop-mood";
 import type {
   ChainStop,
   GatewayInfo,
@@ -133,7 +134,12 @@ export function trafficDoors(
   // Refs failures carry no gateway and apply to every door of the route.
   const brokenPerGateway = new Map<string, string>();
   const brokenPerRoute = new Map<string, string>();
+  // The (route, gateway) pairs a stop says could not be judged: a class
+  // nobody could read leaves the door unknown, never checked and fine.
+  const unjudged = new Set<string>();
   for (const stop of conns.stops) {
+    if (stopMood(stop) === "unchecked" && "route" in stop && "gateway" in stop)
+      unjudged.add(`${key(stop.route)}@${key(stop.gateway)}`);
     const word = brokenWord(stop, t);
     if (!word || !("route" in stop)) continue;
     if ("gateway" in stop) {
@@ -256,13 +262,19 @@ export function trafficDoors(
               ? t("empty", "stopPolicyShutUnder")
               : null);
         const note = doubt && !broken ? t("empty", "doorNotChecked") : null;
+        // Judged only where the Gateway, its class and the NetworkPolicies
+        // over the backend were all read.
+        const checked =
+          gateway.existence !== "notChecked" &&
+          !unjudged.has(`${key(edge.from)}@${key(gateway)}`) &&
+          !doubt;
         if (edge.relation.hostnames.length > 0) {
           for (const host of edge.relation.hostnames) {
             entry.doors.push({
               host,
               copy: host,
               broken,
-              checked: true,
+              checked,
               route: doorRef(edge.from),
               note,
             });
@@ -289,7 +301,7 @@ export function trafficDoors(
             // alone dials nothing.
             copy: listener && address ? `${address}:${listener.port}` : null,
             broken,
-            checked: true,
+            checked,
             route: doorRef(edge.from),
             note,
           });
