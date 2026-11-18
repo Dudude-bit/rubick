@@ -1061,7 +1061,7 @@ describe("watching several namespaces at once", () => {
 describe("a cluster that has been renamed", () => {
   beforeEach(() => {
     useClusterIdentityStore.setState({
-      marks: { "k3d-dev": { alias: "payments" } },
+      marks: named({ "k3d-dev": { alias: "payments" } }),
     });
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" }), tab({ id: "b", context: "prod-eu" })],

@@ -133,7 +133,7 @@ describe("narrowing the cluster list", () => {
   it("finds a cluster by the name its user renamed it to", async () => {
     const user = userEvent.setup();
     useClusterIdentityStore.setState({
-      marks: { [ARN]: { alias: "payments" } },
+      marks: named({ [ARN]: { alias: "payments" } }),
     });
     render(<Harness />);
 
