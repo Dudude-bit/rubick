@@ -340,6 +340,23 @@ describe("a bound, as a number", () => {
       }
     );
     expect(efficiencyWords(peak, t)).toBe("10% average, at most 17% peak");
+    const used = (peak: number, kind: "cpu" | "memory") =>
+      usedLines(
+        efficiencyOf(
+          4 * 1024 ** 3,
+          100,
+          peak,
+          "2020-01-01T00:00:00Z",
+          Date.now(),
+          {
+            peakAtMost: true,
+          }
+        ),
+        kind,
+        t
+      )[1];
+    expect(used(812.4, "cpu")).toBe("at most 813m peak");
+    expect(used(1.24 * 1024 ** 3, "memory")).toBe("at most 1.3Gi peak");
     expect(amountWords({ perHour: 0.01236, atLeast: true }, "", t)).toBe(
       "at least 0.0123"
     );
