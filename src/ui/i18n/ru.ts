@@ -1884,6 +1884,7 @@ export const ru: Catalogue = {
   topology: {
     title: "Топология",
     canvasLabel: "Карта кластера",
+    litEdges: "Связи {name}",
     layoutFailed:
       "Карту не удалось разложить, поэтому на ней может не хватать объектов: {said}",
     expandGroup: "Развернуть {name}",
@@ -1933,15 +1934,15 @@ export const ru: Catalogue = {
     exported: "Карта сохранена в {path}",
     exportFailed: "Не удалось сохранить карту",
     failed: "Не удалось прочитать карту: {said}",
-    notLookedAt: "Не прочитано: {kinds}",
-    edgesAbsent: "{kind} не прочитаны: связи с ними здесь не нарисованы.",
+    edgesAbsent: "Связи с {kinds} здесь не нарисованы: они не прочитаны.",
+    notLookedLine: "{state}: {kinds}",
+    clusterSaid: "Что ответил кластер",
     otherEngines:
       "{kinds} здесь действует, но не нарисован: нагрузку, которую не выбирает ни одна NetworkPolicy, может держать он.",
     noMatch: "На карте нет ничего с таким именем",
     stillListing: "Ещё читается: {kinds}",
     nothingToDraw:
       "Рисовать нечего в {scope}: нет ни маршрутов, ни Services, ни нагрузок.",
-    shareNotRead: "Не прочитано, поэтому нет на карте: {kinds}",
     outsideScope:
       "{namespaces}: не прочитано, это пространство имён вне области карты, поэтому здесь только то, на что ссылаются из неё",
     shareStillOpening:
@@ -2563,6 +2564,33 @@ export const ru: Catalogue = {
     nothingOnReached:
       "{sources}: на узлах, до которых он достаёт, потоков в {scope} нет ({window}).",
     panelDenied: "запрещено: {policies}",
+    readingByApp: "Так политики NetworkPolicy читает приложение, а не Hubble:",
+    readingNoIngress: {
+      one: "{held} выбирается политикой {policies}; ни одно её правило не пропускает {other}.",
+      few: "{held} выбирается политиками {policies}; ни одно их правило не пропускает {other}.",
+      many: "{held} выбирается политиками {policies}; ни одно их правило не пропускает {other}.",
+      other:
+        "{held} выбирается политиками {policies}; ни одно их правило не пропускает {other}.",
+    },
+    readingNoEgress: {
+      one: "Исходящий трафик {held} ограничен политикой {policies}; ни одно её правило не пропускает его к {other}.",
+      few: "Исходящий трафик {held} ограничен политиками {policies}; ни одно их правило не пропускает его к {other}.",
+      many: "Исходящий трафик {held} ограничен политиками {policies}; ни одно их правило не пропускает его к {other}.",
+      other:
+        "Исходящий трафик {held} ограничен политиками {policies}; ни одно их правило не пропускает его к {other}.",
+    },
+    readingUnsettled:
+      "{held} выбирается политиками {policies}, и одно из правил может пропускать {other}: решает порт или адрес, а их приложение здесь не читает.",
+    readingNotSelected:
+      "Ни одна NetworkPolicy не ограничивает входящий трафик {to} и исходящий {from}; отбросила политика другого механизма или сам Hubble.",
+    readingUnread:
+      "Политики NetworkPolicy на этом пути прочитать не удалось: {why}",
+    readingUnreadBare:
+      "Политики NetworkPolicy на этом пути прочитать не удалось.",
+    readingOthers:
+      "Здесь действуют и политики вида {kinds}, их приложение не читает.",
+    readingOthersUnread:
+      "Действуют ли здесь политики других механизмов, прочитать не удалось: {why}",
     panelL7Denied: "HTTP-запросы, отклонённые правилом L7: {v}/с",
     window5m: "последние 5 минут",
     window15m: "последние 15 минут",
@@ -2626,7 +2654,7 @@ export const ru: Catalogue = {
     panelErrorsHttp:
       "из них HTTP 5xx: {share} (неудачный вызов gRPC отвечает кодом 200 и не учитывается)",
     panelBytes: "{v}",
-    panelEvents: "{v} событий потоков/с",
+    panelEvents: "{v} пересланных потоков/с",
     panelDrops: "{v} отброшенных/с",
     panelProtocols: "протоколы: {list}",
     panelBuckets: "Перцентили по бакетам гистограммы {source}.",
@@ -2638,13 +2666,13 @@ export const ru: Catalogue = {
     panelSideBoth:
       "По данным прокси сервера и вызовы, которые видел только прокси вызывающей стороны: они не дошли до сервера.",
     subRequests: "{v} запр./с",
-    subEvents: "{v} событий/с",
+    subEvents: "{v} переслано/с",
     subErrors: "{share} ошибок",
     subDrops: "{v} отброшено/с",
     columnFrom: "Откуда",
     columnTo: "Куда",
     columnRequests: "Запросы/с",
-    columnEvents: "Потоки/с",
+    columnEvents: "Переслано/с",
     columnErrors: "Ошибки",
     columnBytes: "Байты/с",
     columnDrops: "Отброшено/с",

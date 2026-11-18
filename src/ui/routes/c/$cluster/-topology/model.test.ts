@@ -13,6 +13,7 @@ import {
   newMemo,
   notLookedAt,
   OWNERLESS,
+  readingOf,
   type ModelSettings,
 } from "./model";
 import { topologySection } from "./topology-share";
@@ -267,6 +268,64 @@ describe("the cluster map's model", () => {
     ).not.toBe("unknown");
   });
 
+  /**
+   * A route red on the map said nothing of why, while the Routes page named
+   * the class nothing claims. Fails if what another page says of a node is
+   * not on the line under it, or stays there once the page says otherwise.
+   */
+  it("puts what the route's page says on the line under it, and follows it", () => {
+    const memo = newMemo();
+    const route = node("HTTPRoute", "web");
+    const draw = (says: string | null) =>
+      modelOf(
+        new Map([[route.id, route]]),
+        new Map(),
+        new Map([["shop", read("shop")]]),
+        settings({ pageSays: () => says }),
+        () => "err",
+        t,
+        memo
+      ).nodes[0].sub;
+    expect(draw("nothing claims class live-check")).toContain(
+      "nothing claims class live-check"
+    );
+    expect(draw(null) ?? "").not.toContain("live-check");
+  });
+
+  /**
+   * The Gateway's card was packed after its route's whenever its namespace
+   * sorted later, and the line ran back across both. Fails if a group a
+   * route elsewhere attaches to is not packed first.
+   */
+  it("packs the group of a Gateway a route attaches to before the route's", () => {
+    const route = node("HTTPRoute", "web", "shop");
+    const gateway = node("Gateway", "public", "zones");
+    const model = of(
+      [route, gateway],
+      [read("shop"), read("zones"), read("billing")],
+      [
+        {
+          id: "attach",
+          from: route.id,
+          to: gateway.id,
+          relations: [
+            {
+              verb: "attachesTo",
+              sectionName: null,
+              port: null,
+              listenerSet: null,
+            },
+          ],
+        },
+      ]
+    );
+    expect(model.groups.map((group) => group.id)).toEqual([
+      "zones",
+      "billing",
+      "shop",
+    ]);
+  });
+
   /** A hidden kind leaves the map with its edges, and NetworkPolicies wait for the overlay. */
   it("leaves out hidden kinds, and NetworkPolicies until the overlay is on", () => {
     const nodes = [
@@ -351,12 +410,55 @@ describe("the cluster map's model", () => {
       { kind: "Deployment", reading: { says: "live" } },
       { kind: "HTTPRoute", reading: { says: "notServed" } },
     ];
-    const lines = notLookedAt(kinds, t);
-    expect(lines.map((line) => [line.kind, line.edges])).toEqual([
-      ["Service", true],
-      ["Secret", false],
+    const lines = notLookedAt(kinds, t, null);
+    expect(lines.map((line) => [line.kinds, line.edges])).toEqual([
+      [["Service", "Secret"], ["Service"]],
     ]);
-    expect(lines[0].line).toContain("services is forbidden");
+    expect(lines[0].said).toEqual([
+      "services is forbidden",
+      "secrets is forbidden",
+    ]);
+  });
+
+  /**
+   * As a reader bound to audit-test, the strip was one paragraph of twenty
+   * kinds, each "read only in audit-test" with the API server's whole
+   * sentence, and the map was left 200 px high. Fails if a kind read in
+   * every namespace the window is on is listed, if the kinds are not one
+   * line a state, or if one sentence the cluster said is repeated.
+   */
+  it("lists what was not read one line a state, each sentence once, leaving out what the window's scope read", () => {
+    const forbidden = (plural: string) =>
+      `${plural} is forbidden: User "audit-reader" cannot list resource "${plural}" at the cluster scope`;
+    const kinds: MapKindState[] = [
+      {
+        kind: "Pod",
+        reading: {
+          says: "namespacesOnly",
+          namespaces: ["audit-test"],
+          said: forbidden("pods"),
+        },
+      },
+      {
+        kind: "Ingress",
+        reading: { says: "refused", said: forbidden("ingresses") },
+      },
+      {
+        kind: "EndpointSlice",
+        reading: { says: "refused", said: forbidden("ingresses") },
+      },
+      { kind: "Job", reading: { says: "failed", said: "the read timed out" } },
+    ];
+    const lines = notLookedAt(kinds, t, ["audit-test"]);
+    expect(lines.map((line) => line.line)).toEqual([
+      "Refused: Ingress, EndpointSlice",
+      "No answer: Job",
+    ]);
+    expect(lines[0].said).toEqual([forbidden("ingresses")]);
+    expect(readingOf("Pod", kinds, ["audit-test"])).toEqual({ says: "live" });
+    expect(
+      notLookedAt(kinds, t, ["audit-test", "billing"]).map((line) => line.kinds)
+    ).toContainEqual(["Pod"]);
   });
 
   /** Share carries a row a group and names what was not read above the rows, so the file never reads as a smaller cluster. */

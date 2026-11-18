@@ -109,7 +109,7 @@ describe("flows on the map", () => {
         from: loose.id,
         to: cart.id,
         tone: "mute",
-        flow: "forward",
+        flow: "none",
       }),
     ]);
     expect(drawn.nodes.find((node) => node.id === cart.id)?.tone).toBe("ok");

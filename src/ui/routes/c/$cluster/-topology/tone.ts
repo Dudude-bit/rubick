@@ -15,6 +15,7 @@ import { programmedWord } from "@/lib/route-trace";
 import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { workloadRole } from "@/lib/workload-status";
+import type { MapVerdicts } from "./route-verdicts";
 
 /** A page's role as the map's tone: a role nobody rates is quiet, never green. */
 export const ROLE_TONE: Record<StatusRole, MapTone> = {
@@ -56,6 +57,13 @@ export interface ToneInputs {
   ingress: (row: IngressInfo) => IngressHealth | null;
   /** Kinds whose read broke: what is drawn of them is from then. */
   stale: ReadonlySet<string>;
+  /**
+   * The Routes and Gateways pages' verdicts, which a route and a Gateway take
+   * their tone from where they are given: without them, a route whose own
+   * status says Accepted is all the map can read, and that vouches for
+   * nothing past its parent.
+   */
+  verdicts?: MapVerdicts;
 }
 
 type Says = NodeVerdict["says"];
@@ -103,15 +111,26 @@ const TONE_OF: Toner = {
     const health = ingress(row);
     return health ? ROLE_TONE[ingressHealthWords(health, t).role] : "unknown";
   },
-  route: ({ stops, accepted }) =>
-    stops.length > 0
-      ? loudest(stops.map((stop) => HOP_TONE[stopTone(stop)]))
-      : accepted === null
-        ? "unknown"
-        : accepted
-          ? "ok"
-          : "err",
-  gateway: ({ row }, _node, { t }) => ROLE_TONE[programmedWord(row, t).role],
+  route: ({ stops, accepted }, node, { verdicts }) => {
+    const page = verdicts?.route({
+      kind: node.ref.kind,
+      name: node.ref.name,
+      namespace: node.ref.namespace ?? "",
+    });
+    if (page) return page.tone;
+    const own =
+      stops.length > 0
+        ? loudest(stops.map((stop) => HOP_TONE[stopTone(stop)]))
+        : accepted === null
+          ? "unknown"
+          : accepted
+            ? "ok"
+            : "err";
+    return verdicts && own === "ok" ? "unknown" : own;
+  },
+  gateway: ({ row }, _node, { t, verdicts }) =>
+    verdicts?.gateway(row.namespace, row.name)?.tone ??
+    ROLE_TONE[programmedWord(row, t).role],
   claim: ({ phase }) =>
     phase === null ? "unknown" : ROLE_TONE[statusRole(phase)],
   autoscaler: (_verdict, node) => {

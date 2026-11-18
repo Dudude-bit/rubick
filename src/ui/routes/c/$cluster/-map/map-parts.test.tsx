@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { MapContext, type MapActions } from "./map-context";
-import { ObjectNode } from "./map-parts";
+import { DOUBLE_CLICK_MS, ObjectNode } from "./map-parts";
 import type { GraphNode } from "./types";
 
 vi.mock("@xyflow/react", async (original) => ({
@@ -40,17 +40,42 @@ function draw() {
 describe("a node on the map", () => {
   /** The brief's contract with the keyboard: Enter goes to the page, Space and a click open the peek, a double-click goes to the page. */
   it("opens its page on Enter and double-click, its peek on Space and click", () => {
-    const { actions, target } = draw();
-    fireEvent.keyDown(target, { key: "Enter" });
-    fireEvent.keyDown(target, { key: " " });
-    fireEvent.click(target);
-    fireEvent.doubleClick(target);
-    expect(vi.mocked(actions.open).mock.calls.map(([, how]) => how)).toEqual([
-      "page",
-      "peek",
-      "peek",
-      "page",
-    ]);
+    vi.useFakeTimers();
+    try {
+      const { actions, target } = draw();
+      fireEvent.keyDown(target, { key: "Enter" });
+      fireEvent.keyDown(target, { key: " " });
+      fireEvent.click(target, { detail: 1 });
+      vi.advanceTimersByTime(DOUBLE_CLICK_MS);
+      expect(vi.mocked(actions.open).mock.calls.map(([, how]) => how)).toEqual([
+        "page",
+        "peek",
+        "peek",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * A double click opened the peek, which narrowed the canvas and moved the
+   * node from under the second click, so the page never opened. Fails if a
+   * double click opens the peek at all, or does not open the page.
+   */
+  it("opens only the page on a double click, never the peek its first click would", () => {
+    vi.useFakeTimers();
+    try {
+      const { actions, target } = draw();
+      fireEvent.click(target, { detail: 1 });
+      fireEvent.click(target, { detail: 2 });
+      fireEvent.doubleClick(target);
+      vi.advanceTimersByTime(DOUBLE_CLICK_MS * 2);
+      expect(vi.mocked(actions.open).mock.calls.map(([, how]) => how)).toEqual([
+        "page",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /**

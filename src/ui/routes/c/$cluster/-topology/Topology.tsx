@@ -16,6 +16,7 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { usePeek } from "@/hooks/usePeek";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
+import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
@@ -46,6 +47,9 @@ import {
 import { toneOf, type ToneInputs } from "./tone";
 import { topologySection } from "./topology-share";
 import { useVendorLayers } from "./vendor-layers";
+import { mapVerdicts, verdictSay, withNamedGateways } from "./route-verdicts";
+
+const EVERY_NAMESPACE: readonly string[] = [];
 
 /** Past this many nodes in a scope of several namespaces, every group starts collapsed. */
 export const COLLAPSE_ABOVE = 400;
@@ -117,9 +121,25 @@ function TopologyMap() {
       ),
     [map.kinds]
   );
+  // The Routes page's own board, read cluster-wide for its Gateways and
+  // classes: a route and a Gateway are drawn by its verdict, and a Gateway a
+  // route names from outside the scope is read from its list.
+  const routes = useRoutesBoard(scope.wire ?? EVERY_NAMESPACE);
+  const verdicts = useMemo(
+    () =>
+      mapVerdicts(routes.board, routes.gatewaysAll.data, routes.topologyKnown),
+    [routes.board, routes.gatewaysAll.data, routes.topologyKnown]
+  );
+  const [namedGateways] = useState(
+    () => new WeakMap<TopologyNode, { from: unknown; node: TopologyNode }>()
+  );
+  const nodes = useMemo(
+    () => withNamedGateways(map.nodes, verdicts, namedGateways),
+    [map.nodes, verdicts, namedGateways]
+  );
   const toneInputs = useMemo<ToneInputs>(
-    () => ({ t, ingress: (row) => ingressHealth(row), stale }),
-    [t, ingressHealth, stale]
+    () => ({ t, ingress: (row) => ingressHealth(row), stale, verdicts }),
+    [t, ingressHealth, stale, verdicts]
   );
 
   const several = scope.wire === null || scope.wire.length > 1;
@@ -135,16 +155,25 @@ function TopologyMap() {
   const model = useMemo(
     () =>
       modelOf(
-        map.nodes,
+        nodes,
         map.edges,
         map.reads,
-        { grouping, hidden, policies, toggled, collapsedAtFirst },
+        {
+          grouping,
+          hidden,
+          policies,
+          toggled,
+          collapsedAtFirst,
+          pageSays: (node) => verdictSay(verdicts, node),
+        },
         (node) => toneOf(node, toneInputs),
         t,
         memo
       ),
     [
       map,
+      nodes,
+      verdicts,
       grouping,
       hidden,
       policies,
@@ -288,11 +317,11 @@ function TopologyMap() {
           kind,
           count,
           used,
-          reading: readingOf(kind, map.kinds),
+          reading: readingOf(kind, map.kinds, scope.wire),
           hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
         };
       }),
-    [map.reads, map.nodes, map.kinds, hidden, policies]
+    [map.reads, map.nodes, map.kinds, scope.wire, hidden, policies]
   );
   const rail: RailRow[] = [
     ...mapRail,
@@ -307,7 +336,10 @@ function TopologyMap() {
     })),
   ];
 
-  const notLooked = useMemo(() => notLookedAt(map.kinds, t), [map.kinds, t]);
+  const notLooked = useMemo(
+    () => notLookedAt(map.kinds, t, scope.wire),
+    [map.kinds, t, scope.wire]
+  );
   const syncing = map.kinds.filter(
     (kind) => kind.reading.says === "syncing" || kind.reading.says === "queued"
   );
@@ -320,6 +352,20 @@ function TopologyMap() {
         for (const kind of node.cover.kinds) kinds.add(kind);
     return [...kinds];
   }, [map, policies]);
+  const edgeless = notLooked.flatMap((entry) => entry.edges);
+  // What the screen says above the map is what Share and the image say too.
+  const caveats = [
+    ...notLooked.map((entry) => entry.line),
+    edgeless.length > 0 &&
+      t("topology", "edgesAbsent", { kinds: edgeless.join(", ") }),
+    ...vendor.unread,
+    others.length > 0 &&
+      t("topology", "otherEngines", { kinds: others.join(", ") }),
+    syncing.length > 0 &&
+      t("topology", "stillListing", {
+        kinds: syncing.map((kind) => kind.kind).join(", "),
+      }),
+  ].filter((line): line is string => typeof line === "string");
 
   const caption = [
     grouping === "app"
@@ -340,22 +386,7 @@ function TopologyMap() {
             : map.phase === "opening"
               ? t("topology", "shareStillOpening")
               : null,
-        notes: [
-          notLooked.length > 0 &&
-            t("topology", "shareNotRead", {
-              kinds: notLooked.map((entry) => entry.kind).join(", "),
-            }),
-          ...notLooked
-            .filter((entry) => entry.edges)
-            .map((entry) => t("topology", "edgesAbsent", { kind: entry.kind })),
-          ...vendor.unread,
-          others.length > 0 &&
-            t("topology", "otherEngines", { kinds: others.join(", ") }),
-          syncing.length > 0 &&
-            t("topology", "stillListing", {
-              kinds: syncing.map((kind) => kind.kind).join(", "),
-            }),
-        ].filter((line): line is string => typeof line === "string"),
+        notes: caveats,
       },
       t,
       caption
@@ -482,7 +513,7 @@ function TopologyMap() {
         matches !== null ||
         map.error !== null) && (
         <div
-          className="flex flex-col gap-0.5 px-1 text-[11.5px]"
+          className="flex max-h-[24vh] flex-none flex-col gap-0.5 overflow-y-auto scrollbar-lane px-1 text-[11.5px]"
           data-testid="topology-not-read"
         >
           {map.error !== null && (
@@ -490,20 +521,28 @@ function TopologyMap() {
               {t("topology", "failed", { said: errorToShow(map.error) })}
             </p>
           )}
-          {notLooked.length > 0 && (
-            <p className="text-warn">
-              {t("topology", "notLookedAt", {
-                kinds: notLooked.map((entry) => entry.line).join("; "),
-              })}
+          {notLooked.map((entry) => (
+            <div key={entry.line}>
+              <p className="text-warn">{entry.line}</p>
+              {entry.said.length > 0 && (
+                <details className="pl-3 text-fg-mut">
+                  <summary className="cursor-pointer select-none">
+                    {t("topology", "clusterSaid")}
+                  </summary>
+                  {entry.said.map((said) => (
+                    <p key={said} className="font-mono text-[10.5px]">
+                      {said}
+                    </p>
+                  ))}
+                </details>
+              )}
+            </div>
+          ))}
+          {edgeless.length > 0 && (
+            <p className="text-fg-mut">
+              {t("topology", "edgesAbsent", { kinds: edgeless.join(", ") })}
             </p>
           )}
-          {notLooked
-            .filter((entry) => entry.edges)
-            .map((entry) => (
-              <p key={entry.kind} className="text-fg-mut">
-                {t("topology", "edgesAbsent", { kind: entry.kind })}
-              </p>
-            ))}
           {vendor.unread.map((line) => (
             <p key={line} className="text-warn">
               {line}
@@ -552,6 +591,7 @@ function TopologyMap() {
             fitKey={`${grouping}${whole ? "\u0000whole" : ""}`}
             ariaLabel={t("topology", "canvasLabel")}
             summaryText={(group) => model.summaries.get(group.id) ?? ""}
+            caveats={caveats}
           />
           {(map.phase === "opening" ||
             (syncing.length > 0 && map.phase !== "ended")) && (

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import {
   afterEach,
@@ -20,6 +20,7 @@ import {
 } from "@/lib/traffic";
 import { useClusterStore } from "@/stores/clusterStore";
 import { vendorLink } from "@/lib/links";
+import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
 
 const traffic = vi.fn<() => TrafficState>();
@@ -61,10 +62,20 @@ vi.mock("../-map/useTopology", () => ({
   },
 }));
 vi.mock("../-map/GraphCanvas", () => ({
-  GraphCanvas: ({ edges }: { edges: { id: string; sub?: string }[] }) => (
+  GraphCanvas: ({
+    edges,
+    onOpenEdge,
+  }: {
+    edges: { id: string; sub?: string; flow?: string }[];
+    onOpenEdge?: (edge: { id: string }) => void;
+  }) => (
     <ul data-testid="canvas">
       {edges.map((edge) => (
-        <li key={edge.id}>{edge.sub}</li>
+        <li key={edge.id} data-flow={edge.flow}>
+          <button type="button" onClick={() => onOpenEdge?.(edge)}>
+            {edge.sub}
+          </button>
+        </li>
       ))}
     </ul>
   ),
@@ -265,7 +276,7 @@ describe("the Traffic page", () => {
       .map((header) => header.textContent);
     expect(headers.join(" ")).not.toContain("Bytes/s");
     expect(screen.getByTestId("columns-note").textContent).toBe(
-      "Not drawn, no source here measures them: Flows/s, Bytes/s, Drops/s"
+      "Not drawn, no source here measures them: Forwarded/s, Bytes/s, Drops/s"
     );
     page.unmount();
     const state = read({ requests: 12 });
@@ -279,6 +290,29 @@ describe("the Traffic page", () => {
     });
     await open();
     expect(screen.queryByTestId("columns-note")).toBeNull();
+  });
+
+  /**
+   * Moving dashes repaint the map every frame: fifteen of them held WebKit
+   * near 40% of a core on a page nobody touched. Only the flow open in the
+   * panel moves; the map is marked when the window is not focused, which
+   * holds that one still too.
+   */
+  it("moves only the flow open in the panel, and marks the map still while the window is not focused", async () => {
+    traffic.mockReturnValue(read({ requests: 12 }));
+    await open();
+    const edge = () => screen.getByTestId("canvas").querySelector("li")!;
+    expect(edge().dataset.flow).toBe("none");
+    fireEvent.click(edge().querySelector("button")!);
+    expect(edge().dataset.flow).toBe("forward");
+    expect(
+      screen.getByTestId("traffic-map").hasAttribute("data-unfocused")
+    ).toBe(false);
+    act(() => useWindowActivity.setState({ focused: false }));
+    expect(
+      screen.getByTestId("traffic-map").hasAttribute("data-unfocused")
+    ).toBe(true);
+    act(() => useWindowActivity.setState({ focused: true }));
   });
 
   /** A source that answered with nothing in the window says so, by name and window. */
@@ -374,7 +408,7 @@ describe("the Traffic page, live", () => {
     );
     await open();
     expect(screen.getByTestId("canvas").textContent).toContain(
-      "4 flow events/s · Hubble Relay"
+      "4 forwarded/s · Hubble Relay"
     );
     expect(
       screen.getByText(/Live from Hubble Relay kube-system\/hubble-relay/)

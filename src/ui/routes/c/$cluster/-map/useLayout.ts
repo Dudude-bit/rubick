@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   LayoutAnswer,
   LayoutGroupAsk,
+  LayoutLink,
   LayoutRequest,
   Point,
 } from "@/lib/map-layout";
 import { errorToShow } from "@/lib/error-utils";
 import { perf } from "@/lib/perf";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
+import { cardId } from "./visible";
 
 export const NODE_W = 208;
 export const NODE_H = 46;
@@ -31,6 +33,8 @@ export interface Placement {
   failed: string | null;
   /** Whether it answers what the canvas holds now, with no layout still being worked out. */
   settled: boolean;
+  /** Each edge the layout routed, as points on the map: around nodes, never through one. */
+  routes: ReadonlyMap<string, Point[]>;
 }
 
 interface Laid {
@@ -38,6 +42,8 @@ interface Laid {
   width: number;
   height: number;
   positions: Record<string, Point>;
+  /** Relative to the group; only for a group laid out on its own. */
+  routes?: Record<string, Point[]>;
 }
 
 let shared: Worker | null = null;
@@ -90,6 +96,18 @@ interface Ask {
   signatures: Map<string, string>;
 }
 
+/** How the groups were packed, and by which edges between them. */
+export const packingKey = (
+  sizes: readonly (readonly [string, number?, number?])[],
+  links: readonly LayoutLink[]
+) =>
+  JSON.stringify([
+    sizes,
+    links.map((link) => `${link.from}>${link.to}`).sort(),
+  ]);
+
+const CARD = cardId("");
+
 /** The groups in the order they are packed: the handed ones, then the nodes in none. */
 function members(
   groups: readonly GraphGroup[],
@@ -135,16 +153,42 @@ export function askFor(
   const groupOf = new Map(
     nodes.map((node) => [node.id, node.group ?? OUTSIDE])
   );
+  // An edge between two groups joins them: they are laid out together, the
+  // caller's before the callee's. A collapsed group's card stands for it.
+  const placeOf = (id: string) =>
+    id.startsWith(CARD)
+      ? { group: id.slice(CARD.length), at: id.slice(CARD.length) }
+      : { group: groupOf.get(id), at: id };
+  const links: LayoutLink[] = [];
+  for (const edge of edges) {
+    const [from, to] = edge.reversed
+      ? [placeOf(edge.to), placeOf(edge.from)]
+      : [placeOf(edge.from), placeOf(edge.to)];
+    if (!from.group || !to.group || from.group === to.group) continue;
+    links.push({
+      id: edge.id,
+      from: from.at,
+      to: to.at,
+      fromGroup: from.group,
+      toGroup: to.group,
+    });
+  }
+  const joined = new Set(
+    links.flatMap((link) => [link.fromGroup, link.toGroup])
+  );
   const asks: LayoutGroupAsk[] = [];
+  const sizes: [string, number?, number?][] = [];
   const signatures = new Map<string, string>();
   let changed = false;
   for (const group of members(groups, nodes)) {
     if (group.collapsed) {
       asks.push({ id: group.id, size: { width: CARD_W, height: CARD_H } });
+      sizes.push([group.id, CARD_W, CARD_H]);
       continue;
     }
     if (group.nodes.length === 0) {
       asks.push({ id: group.id, size: { width: CARD_W, height: 72 } });
+      sizes.push([group.id, CARD_W, 72]);
       continue;
     }
     const ordered = inModelOrder(group.nodes);
@@ -167,14 +211,26 @@ export function askFor(
       shaping.map((edge) => `${edge.from}>${edge.to}`).sort(),
     ]);
     const held = cache.get(group.id);
-    if (held?.signature === signature) {
-      asks.push({
-        id: group.id,
-        size: { width: held.width, height: held.height },
-      });
-      continue;
+    // A group last laid out with others holds no routes of its own; once it
+    // stands alone it is laid out again for them.
+    if (
+      held?.signature === signature &&
+      (joined.has(group.id) || held.routes !== undefined)
+    ) {
+      sizes.push([group.id, held.width, held.height]);
+      // A joined group is handed whole whenever anything is asked: the
+      // groups it is laid out with may have moved.
+      if (!joined.has(group.id)) {
+        asks.push({
+          id: group.id,
+          size: { width: held.width, height: held.height },
+        });
+        continue;
+      }
+    } else {
+      changed = true;
+      sizes.push([group.id]);
     }
-    changed = true;
     signatures.set(group.id, signature);
     asks.push({
       id: group.id,
@@ -187,17 +243,15 @@ export function askFor(
       previous: held?.positions,
     });
   }
-  const packed = JSON.stringify(
-    asks.map((ask) => [ask.id, ask.size?.width, ask.size?.height])
-  );
-  if (!changed && packed === lastPacked) return null;
-  return { request: { id: ++nextId, groups: asks }, signatures };
+  if (!changed && packingKey(sizes, links) === lastPacked) return null;
+  return { request: { id: ++nextId, groups: asks, links }, signatures };
 }
 
 const NONE: Omit<Placement, "settled"> = {
   groups: new Map(),
   nodes: new Map(),
   failed: null,
+  routes: new Map(),
 };
 
 /**
@@ -258,6 +312,13 @@ export function useLayout(
           const cache = new Map(was.cache);
           const boxes = new Map<string, Box>();
           const at = new Map<string, Point>();
+          const routes = new Map(Object.entries(answer.routes ?? {}));
+          const joined = new Set(
+            (ask.request.links ?? []).flatMap((link) => [
+              link.fromGroup,
+              link.toGroup,
+            ])
+          );
           for (const group of answer.groups) {
             boxes.set(group.id, group);
             const signature = ask.signatures.get(group.id);
@@ -267,21 +328,34 @@ export function useLayout(
                 width: group.width,
                 height: group.height,
                 positions: group.positions,
+                routes: group.routes,
               });
-            const positions =
-              group.positions ?? cache.get(group.id)?.positions ?? {};
+            const held = cache.get(group.id);
+            const positions = group.positions ?? held?.positions ?? {};
             for (const [id, point] of Object.entries(positions))
               at.set(id, point);
+            // A group laid out on its own routes its edges in its own frame;
+            // the joined ones came routed on the map.
+            if (!joined.has(group.id))
+              for (const [id, points] of Object.entries(held?.routes ?? {}))
+                routes.set(
+                  id,
+                  points.map((point) => ({
+                    x: point.x + group.x,
+                    y: point.y + group.y,
+                  }))
+                );
           }
           return {
-            placement: { groups: boxes, nodes: at, failed: null },
+            placement: { groups: boxes, nodes: at, failed: null, routes },
             failedAsk: null,
             cache,
-            packed: JSON.stringify(
+            packed: packingKey(
               ask.request.groups.map((group) => {
                 const box = boxes.get(group.id);
-                return [group.id, box?.width, box?.height];
-              })
+                return [group.id, box?.width, box?.height] as const;
+              }),
+              ask.request.links ?? []
             ),
           };
         });

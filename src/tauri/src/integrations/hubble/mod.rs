@@ -476,6 +476,18 @@ fn words_of(error: &(dyn std::error::Error + 'static)) -> String {
 /// How soon pods are read again when a flow names one the last read did not have.
 const OWNERS_AGAIN: u64 = 15;
 
+/// The namespaces whose pods name the live ends: the scope, and each one a
+/// flow names a peer pod in. Read for this alone; the scope of anything
+/// else stays the page's. `None` is every namespace.
+fn owners_reach(
+    scope: Option<&[String]>,
+    missing: &BTreeSet<(String, String)>,
+) -> Option<Vec<String>> {
+    let mut reach: BTreeSet<String> = scope?.iter().cloned().collect();
+    reach.extend(missing.iter().map(|(namespace, _)| namespace.clone()));
+    Some(reach.into_iter().collect())
+}
+
 /// The pods of the scope, as their workloads, from the overview's stores
 /// where they serve, by listing otherwise.
 async fn owners_in(
@@ -549,21 +561,17 @@ async fn run(
     };
     send(Vec::new(), Vec::new(), Some(found.at), &fold);
     let (owners_tx, mut owners_rx) = tokio::sync::mpsc::channel::<Owners>(1);
-    let read_owners = |tx: tokio::sync::mpsc::Sender<Owners>| {
-        let (clients, cache, context, scope) = (
-            clients.clone(),
-            cache.clone(),
-            context.to_string(),
-            scope.clone(),
-        );
+    let read_owners = |tx: tokio::sync::mpsc::Sender<Owners>, reach: Option<Vec<String>>| {
+        let (clients, cache, context) = (clients.clone(), cache.clone(), context.to_string());
         tokio::spawn(async move {
-            let owners = owners_in(&clients, &cache, &context, scope.as_deref()).await;
+            let owners = owners_in(&clients, &cache, &context, reach.as_deref()).await;
             let _ = tx.send(owners).await;
         });
     };
-    read_owners(owners_tx.clone());
+    read_owners(owners_tx.clone(), scope.clone());
     let mut asked_at = now_secs();
     let mut asking = true;
+    let mut asked: BTreeSet<String> = scope.iter().flatten().cloned().collect();
     let mut tick = tokio::time::interval(SEND_EVERY);
     loop {
         tokio::select! {
@@ -575,11 +583,16 @@ async fn run(
             }
             _ = tick.tick() => {
                 let now = now_secs();
+                let reach = owners_reach(scope.as_deref(), &fold.owners.missing);
+                let new_namespace = reach
+                    .as_ref()
+                    .is_some_and(|reach| reach.iter().any(|ns| !asked.contains(ns)));
                 if !asking
                     && !fold.owners.missing.is_empty()
-                    && now.saturating_sub(asked_at) >= OWNERS_AGAIN
+                    && (new_namespace || now.saturating_sub(asked_at) >= OWNERS_AGAIN)
                 {
-                    read_owners(owners_tx.clone());
+                    asked.extend(reach.iter().flatten().cloned());
+                    read_owners(owners_tx.clone(), reach);
                     asked_at = now;
                     asking = true;
                 }
@@ -1486,6 +1499,50 @@ mod tests {
         assert!(sent[70..].iter().all(|n| *n == 0), "{sent:?}");
         assert_eq!(figure(4.7412), 4.74);
         assert_eq!(figure(1234.4), 1234.0);
+    }
+
+    /// A peer's pod in a namespace outside the page's scope is read in its own
+    /// namespace too, for its owner and nothing else: the scope is not widened.
+    #[test]
+    fn a_peer_pod_outside_the_scope_is_read_in_its_own_namespace() {
+        let missing = BTreeSet::from([
+            (
+                "kube-system".to_string(),
+                "coredns-589f44dc88-5d2n7".to_string(),
+            ),
+            ("shop".to_string(), "caller-649d545b48-c74f8".to_string()),
+        ]);
+        assert_eq!(
+            owners_reach(Some(&["shop".to_string()]), &missing),
+            Some(vec!["kube-system".to_string(), "shop".to_string()])
+        );
+        assert_eq!(owners_reach(None, &missing), None);
+        let mut fold = Fold::new(0);
+        fold.owners_read(Owners {
+            of: HashMap::from([(
+                ("kube-system".into(), "coredns-589f44dc88-5d2n7".into()),
+                WorkloadKey {
+                    namespace: "kube-system".into(),
+                    group: "apps".into(),
+                    kind: "Deployment".into(),
+                    name: "coredns".into(),
+                },
+            )]),
+            ..Owners::default()
+        });
+        fold.add(
+            100,
+            &flow::Flow {
+                verdict: Verdict::Forwarded as i32,
+                source: Some(endpoint("shop", Some(("Deployment", "caller")), "")),
+                destination: Some(endpoint("kube-system", None, "coredns-589f44dc88-5d2n7")),
+                ..Default::default()
+            },
+        );
+        assert!(matches!(
+            &fold.tick(101).0[0].to,
+            FlowEnd::Workload { key } if key.kind == "Deployment" && key.name == "coredns"
+        ));
     }
 
     /// Past the cap a new pair is counted and not held.

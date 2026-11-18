@@ -1,4 +1,4 @@
-import { memo, type KeyboardEvent } from "react";
+import { memo, useEffect, useRef, type KeyboardEvent } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -15,8 +15,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import type { Point } from "@/lib/map-layout";
 import { useActions, useLight } from "./map-context";
 import { EDGE_TEXT, NODE_BORDER, TONE_TEXT } from "./tone-classes";
+import { routePath } from "./visible";
 import {
   subLine,
   type GraphEdge,
@@ -47,6 +49,13 @@ function Handles() {
 
 export type ObjectNodeType = Node<{ node: GraphNode }, "object">;
 
+/**
+ * How long a click waits for a second one before it opens the peek. The
+ * peek narrows the canvas and the map moves under the pointer, so a peek
+ * opened at once left a double click's second click on empty space.
+ */
+export const DOUBLE_CLICK_MS = 250;
+
 /** One object: click or Space for the peek, double-click or Enter for its page. */
 export const ObjectNode = memo(function ObjectNode({
   id,
@@ -56,6 +65,12 @@ export const ObjectNode = memo(function ObjectNode({
   const light = useLight();
   const { node } = data;
   const lit = light.lit(id);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settle = () => {
+    if (pending.current) clearTimeout(pending.current);
+    pending.current = null;
+  };
+  useEffect(() => settle, []);
   const onKey = (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -73,13 +88,24 @@ export const ObjectNode = memo(function ObjectNode({
       aria-label={[node.kind, node.label, node.sub].filter(Boolean).join(", ")}
       data-node={id}
       className={cn(
-        "flex h-full w-full cursor-pointer flex-col justify-center rounded-[5px] border bg-raise px-2 py-1 text-left transition-opacity duration-150",
+        "flex h-full w-full cursor-pointer flex-col justify-center rounded-[5px] border bg-raise px-2 py-1 text-left transition-opacity duration-150 select-none",
         "hover:bg-hover focus-visible:border-info focus-visible:outline-hidden",
         NODE_BORDER[node.tone],
         lit === false && "opacity-25"
       )}
-      onClick={() => actions.open(node, "peek")}
-      onDoubleClick={() => actions.open(node, "page")}
+      onClick={(event) => {
+        // The second click of a double click: the double click answers it.
+        if (event.detail > 1) return;
+        settle();
+        pending.current = setTimeout(() => {
+          pending.current = null;
+          actions.open(node, "peek");
+        }, DOUBLE_CLICK_MS);
+      }}
+      onDoubleClick={() => {
+        settle();
+        actions.open(node, "page");
+      }}
       onKeyDown={onKey}
       onMouseEnter={() => actions.setActive(id)}
       onMouseLeave={() => actions.setActive(null)}
@@ -168,7 +194,7 @@ export const GroupFrame = memo(function GroupFrame({
   const { group } = data;
   return (
     <div
-      className="h-full w-full rounded-lg border border-hair bg-canvas/40"
+      className="h-full w-full rounded-lg border border-hair bg-canvas/40 select-none"
       style={group.refused ? HATCH : undefined}
     >
       <div className="flex items-center gap-2 px-3 pt-2.5">
@@ -191,7 +217,7 @@ export const GroupCard = memo(function GroupCard({
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col gap-1 rounded-lg border bg-raise px-3 py-2.5",
+        "flex h-full w-full flex-col gap-1 rounded-lg border bg-raise px-3 py-2.5 select-none",
         NODE_BORDER[group.tone]
       )}
       style={group.refused ? HATCH : undefined}
@@ -205,7 +231,10 @@ export const GroupCard = memo(function GroupCard({
   );
 });
 
-export type MapEdgeType = Edge<{ edge: GraphEdge }, "map">;
+export type MapEdgeType = Edge<
+  { edge: GraphEdge; route?: readonly Point[] },
+  "map"
+>;
 
 /** One line, its words beside it while either end is singled out. */
 export const MapEdge = memo(function MapEdge({
@@ -219,14 +248,20 @@ export const MapEdge = memo(function MapEdge({
 }: EdgeProps<MapEdgeType>) {
   const actions = useActions();
   const light = useLight();
-  const [path, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // Routed by the layout around the nodes where it was; a straight curve
+  // between the two ports only for an edge the layout did not lay out.
+  const routed =
+    data?.route && data.route.length >= 2 ? routePath(data.route) : null;
+  const [path, labelX, labelY] = routed
+    ? [routed.path, routed.middle.x, routed.middle.y]
+    : getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      });
   if (!data) return null;
   const { edge } = data;
   const touched = light.touched(edge);
@@ -252,7 +287,8 @@ export const MapEdge = memo(function MapEdge({
               : undefined,
         }}
       />
-      {(actions.openEdge || (touched && words.length > 0)) && (
+      {/* The words of a lit line are listed beside its node, not drawn on it. */}
+      {actions.openEdge && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto absolute"
@@ -260,41 +296,29 @@ export const MapEdge = memo(function MapEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             }}
           >
-            {actions.openEdge ? (
-              <button
-                type="button"
-                aria-label={words.join(", ") || edge.id}
-                className={cn(
-                  "group flex items-center gap-1 rounded-sm border border-hair bg-raise px-1 text-[10px] text-fg-mut",
-                  "focus-visible:border-info focus-visible:outline-hidden"
-                )}
-                onClick={() => actions.openEdge?.(edge)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    actions.openEdge?.(edge);
-                  }
-                }}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-fg-fnt"
-                  aria-hidden
-                />
-                <span
-                  className={cn(
-                    "whitespace-nowrap",
-                    !touched &&
-                      "hidden group-hover:inline group-focus-visible:inline"
-                  )}
-                >
-                  {words.join(" · ")}
-                </span>
-              </button>
-            ) : (
-              <span className="whitespace-nowrap rounded-sm bg-raise/90 px-1 text-[10px] text-fg-mut">
+            <button
+              type="button"
+              aria-label={words.join(", ") || edge.id}
+              className={cn(
+                "group flex items-center gap-1 rounded-sm border border-hair bg-raise px-1 text-[10px] text-fg-mut",
+                "focus-visible:border-info focus-visible:outline-hidden"
+              )}
+              onClick={() => actions.openEdge?.(edge)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  actions.openEdge?.(edge);
+                }
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-fg-fnt"
+                aria-hidden
+              />
+              <span className="hidden whitespace-nowrap group-hover:inline group-focus-visible:inline">
                 {words.join(" · ")}
               </span>
-            )}
+            </button>
           </div>
         </EdgeLabelRenderer>
       )}

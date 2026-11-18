@@ -4,7 +4,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { LayoutAnswer, LayoutRequest } from "@/lib/map-layout";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
-import { askFor, useLayout } from "./useLayout";
+import { askFor, packingKey, useLayout } from "./useLayout";
+
+// ELK is loaded and run for real: under a loaded machine that alone outlasts
+// the default five seconds the waits below were written around.
+vi.setConfig({ testTimeout: 20_000 });
 
 /** Every layout asked, each waiting for the test to answer it. */
 const asked = vi.hoisted(
@@ -37,6 +41,7 @@ vi.mock("@/lib/map-layout", async (original) => ({
                           ])
                         )
                       : undefined,
+                    routes: each.nodes ? {} : undefined,
                   })),
                 }
           ),
@@ -79,10 +84,11 @@ describe("what the layout worker is asked", () => {
           width: 500,
           height: 120,
           positions: { svc: { x: 16, y: 40 }, web: { x: 280, y: 40 } },
+          routes: {},
         },
       ],
     ]);
-    const packed = JSON.stringify([["shop", 500, 120]]);
+    const packed = packingKey([["shop", 500, 120]], []);
     expect(
       askFor([group], [node("svc", "err"), node("web")], [edge], cache, packed)
     ).toBeNull();
@@ -96,6 +102,83 @@ describe("what the layout worker is asked", () => {
     expect(grown?.request.groups[0].previous).toEqual(
       cache.get("shop")!.positions
     );
+  });
+
+  /**
+   * Cards were packed without regard to the edges between them. Fails if an
+   * edge between two groups is not handed as a link the way it lays out, if
+   * a joined group is handed as a size while one alone is, or if nothing
+   * changed and the same layout is asked again for ever.
+   */
+  it("hands the edges between groups as links, and the groups they join whole", () => {
+    const shop = { ...group, id: "shop" };
+    const infra = { ...group, id: "infra" };
+    const quiet = { ...group, id: "quiet" };
+    const nodes = [
+      { ...node("web"), group: "shop" },
+      { ...node("gw"), group: "infra" },
+      { ...node("alone"), group: "quiet" },
+    ];
+    const attach: GraphEdge = {
+      id: "web>gw",
+      from: "web",
+      to: "gw",
+      tone: "ok",
+      reversed: true,
+    };
+    const first = askFor(
+      [shop, infra, quiet],
+      nodes,
+      [attach],
+      new Map(),
+      null
+    )!;
+    expect(first.request.links).toEqual([
+      {
+        id: "web>gw",
+        from: "gw",
+        to: "web",
+        fromGroup: "infra",
+        toGroup: "shop",
+      },
+    ]);
+
+    const laid = (id: string) => ({
+      signature: first.signatures.get(id)!,
+      width: 240,
+      height: 102,
+      positions: {},
+      routes: {},
+    });
+    const cache = new Map(
+      ["shop", "infra", "quiet"].map((id) => [id, laid(id)])
+    );
+    const packed = packingKey(
+      [
+        ["shop", 240, 102],
+        ["infra", 240, 102],
+        ["quiet", 240, 102],
+      ],
+      first.request.links!
+    );
+    expect(
+      askFor([shop, infra, quiet], nodes, [attach], cache, packed)
+    ).toBeNull();
+
+    const moved = askFor(
+      [shop, infra, quiet],
+      [...nodes, { ...node("api"), group: "quiet" }],
+      [attach],
+      cache,
+      packed
+    )!;
+    const asked = new Map(moved.request.groups.map((each) => [each.id, each]));
+    expect(asked.get("shop")?.nodes).toBeDefined();
+    expect(asked.get("infra")?.nodes).toBeDefined();
+    expect(asked.get("quiet")?.nodes?.map((each) => each.id)).toEqual([
+      "alone",
+      "api",
+    ]);
   });
 
   /** A collapsed group is packed as its card and nothing inside it is laid out. */

@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-11-17
+
+Five pages asked for in #331: a map of the cluster, who talks to whom, what
+the workloads are configured to risk, what the cluster costs, and a history
+that outlives the window. None of them installs anything into a cluster, and
+each says which of its sources it could not read.
+
+### Added
+
+- **Topology.** A map of what the cluster runs and how it hangs together:
+  routes and Ingresses into Services, Services into workloads, the
+  ConfigMaps, Secrets and volumes a workload uses, and the autoscalers and
+  disruption budgets that govern it. Group it by namespace or by app, find
+  an object with `/`, lay NetworkPolicies over it, export it as an image. A
+  route or a Gateway is toned by the verdict its own page gives, and a kind
+  the cluster refused is named, with the lines it takes away.
+
+- **Traffic.** Who calls whom, with request rate, share of errors and
+  latency where the source measures them. It reads Istio, Hubble, Beyla and
+  Caretta series from the Prometheus the cluster is connected to, and live
+  flows from Hubble Relay, dropped ones with their reason and the
+  NetworkPolicies that select the pod they were bound for. A workload's
+  page and peek show who calls it and whom it calls. A workload a source
+  cannot see is "not observed", never "no traffic".
+
+- **Audit.** Over forty rules across security, reliability, efficiency and
+  upgrade: what the Pod Security Standards refuse, bindings that hand out
+  cluster-admin, missing probes and budgets, requests far above measured
+  use, and API versions a Helm release or a writer still uses that the next
+  Kubernetes removes. A finding names the field and its value, and a rule
+  that could not be checked says so instead of passing. Every workload page
+  has an Audit tab.
+
+- **Cost.** Per hour, per month and idle, by namespace, workload and node,
+  from OpenCost's series in the connected Prometheus, or from prices you
+  enter where there is none. A workload's and a namespace's page carry
+  their own cost line, and efficiency compares requests with a day of use.
+  A part without a price is "not priced" and makes the total "at least".
+
+### Changed
+
+- **Changes keeps its history.** What changed in the cluster is recorded
+  while the app is connected and kept for seven days on this machine, so it
+  is still there after a restart; a stretch the app was not watching is
+  drawn as one. Events stand beside changes on one clock, and every object
+  has a Changes tab. Values of Secrets, ConfigMaps and environment
+  variables are never kept, only that they changed. Settings › Diagnostics
+  shows what is kept and clears it.
+
+- **Wide tables open faster.** Column widths are measured in one pass
+  rather than once per value.
+
+### Fixed
+
+These were in 5.0 too.
+
+- **A cluster made again under the same name is taken without a restart.**
+  When a connected context's entry in the kubeconfig changed (a new
+  address, certificate or user), the app went on dialling the old one.
+
+- A Prometheus that was still being probed was offered as missing, and one
+  that did not answer was never asked again; the page now asks again.
+
+- A Service's or a workload's Connections tab did not say that a route's
+  Gateway names a class no controller has accepted, which the Routes page
+  did.
+
+- Changes dropped rows past its limit without saying so.
+
 ## [5.0.0] - 2026-11-12
 
 Rubick 5 is a rewrite of how the app reads a cluster and how it says what it

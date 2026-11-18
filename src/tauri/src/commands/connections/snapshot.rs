@@ -60,6 +60,11 @@ pub(super) struct Snapshot {
     /// ordinarily attaches to a Gateway in another one, and a
     /// namespace-scoped list would call every such parent missing.
     pub(super) gateways: Option<Vec<crate::resources::GatewayInfo>>,
+    /// Every `GatewayClass`, read by the reader the Gateways pages use: `Err`
+    /// with the cluster's words where the list was refused or failed, and
+    /// `None` where this caller does not ask about classes at all.
+    pub(super) gateway_classes:
+        Option<std::result::Result<Vec<crate::resources::GatewayClassInfo>, String>>,
     /// The Gateway API kinds whose list failed.
     pub(super) gateway_unread: Vec<UnexploredKind>,
 }
@@ -420,7 +425,8 @@ impl Snapshot {
             Ok(_) => Err("the slices answered".to_string()),
             Err(_) => read_live(ctx.namespaced_api::<Endpoints>().list(&params).await)?,
         };
-        let (gateway_routes, gateways, gateway_unread) = gateway_lists(ctx, gateway).await?;
+        let (gateway_routes, gateways, gateway_classes, gateway_unread) =
+            gateway_lists(ctx, gateway).await?;
         Ok(Self {
             pods: read_live(pods)?,
             services: read_live(services)?,
@@ -439,6 +445,7 @@ impl Snapshot {
             taken_at,
             gateway_routes,
             gateways,
+            gateway_classes,
             gateway_unread,
         })
     }
@@ -479,6 +486,7 @@ impl Snapshot {
                 taken_at: held.taken_at,
                 gateway_routes: held.gateway_routes,
                 gateways: held.gateways,
+                gateway_classes: None,
                 gateway_unread: held.gateway_unread,
             },
             super::map::Beside {
@@ -607,12 +615,13 @@ pub(super) async fn gateway_lists(
 ) -> Result<(
     Vec<crate::resources::RouteInfo>,
     Option<Vec<crate::resources::GatewayInfo>>,
+    Option<std::result::Result<Vec<crate::resources::GatewayClassInfo>, String>>,
     Vec<UnexploredKind>,
 )> {
-    use crate::resources::{GatewayInfo, ListenerSetInfo, RouteInfo};
+    use crate::resources::{GatewayClassInfo, GatewayInfo, ListenerSetInfo, RouteInfo};
 
     let Some(detection) = gateway.filter(|d| d.installed) else {
-        return Ok((Vec::new(), None, Vec::new()));
+        return Ok((Vec::new(), None, None, Vec::new()));
     };
 
     let params = ListParams::default();
@@ -659,6 +668,10 @@ pub(super) async fn gateway_lists(
     // found none are different facts, and the graph reports a route's
     // Gateway missing on the strength of the second.
     let mut sets: Option<Vec<ListenerSetInfo>> = None;
+    // As the Routes page reads them: a cluster that serves no GatewayClass
+    // has none, and a list that was refused or failed is said so, never
+    // taken for "every class is claimed".
+    let mut classes: std::result::Result<Vec<GatewayClassInfo>, String> = Ok(Vec::new());
     let mut unread = Vec::new();
     for (kind, api_resource, list, here) in futures::future::join_all(fetches).await {
         let items = match (list, here) {
@@ -677,6 +690,9 @@ pub(super) async fn gateway_lists(
                 list.items
             }
             (Err(failed), _) => {
+                if kind == "GatewayClass" {
+                    classes = Err(failed.said());
+                }
                 unread.push(UnexploredKind::unanswered(
                     &kind,
                     &api_resource.api_version,
@@ -698,6 +714,9 @@ pub(super) async fn gateway_lists(
                         GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
                     }));
             }
+            "GatewayClass" => {
+                classes = Ok(items.iter().map(GatewayClassInfo::read).collect());
+            }
             "ListenerSet" => {
                 sets.get_or_insert_with(Vec::new)
                     .extend(items.into_iter().map(|obj| {
@@ -718,7 +737,7 @@ pub(super) async fn gateway_lists(
             gateway.merge_listener_sets(sets.as_deref());
         }
     }
-    Ok((routes, gateways, unread))
+    Ok((routes, gateways, Some(classes), unread))
 }
 
 #[cfg(test)]
@@ -876,6 +895,7 @@ mod refused_list_tests {
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
             gateways: None,
+            gateway_classes: None,
             gateway_routes: Vec::new(),
             gateway_unread: Vec::new(),
         }
@@ -1133,6 +1153,7 @@ mod refused_list_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_classes: None,
             gateway_unread: Vec::new(),
         };
         assert_eq!(
@@ -1164,6 +1185,7 @@ mod refused_list_tests {
             taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_classes: None,
             gateway_unread: Vec::new(),
         };
 
