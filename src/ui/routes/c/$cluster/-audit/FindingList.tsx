@@ -84,7 +84,7 @@ export function RuleExplained({
   const t = useT();
   const copy = useCopyToClipboard();
   const cli = useCliTarget();
-  const yaml = fixYaml(rule, kind, finding, subject, cli);
+  const yaml = fixYaml(rule, kind, finding, subject, cli, t);
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div>

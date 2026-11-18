@@ -1,11 +1,14 @@
 import type { AuditFinding, RuleId, Subject, What } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { cliLine, cliPipe, type CliTarget } from "@/lib/kubectl";
 
 /**
  * A YAML fragment that fixes a finding, laid out at the path the object's
  * kind keeps its pod spec at and naming the container it is about, so it
  * can be merged as it is. Field names are the API's and are never
- * translated; nothing here is a sentence.
+ * translated; the one sentence, the condition on a step run by hand, comes
+ * from the catalogue through `t`.
  */
 
 /** Where each kind keeps its pod spec. */
@@ -158,7 +161,8 @@ export function fixYaml(
   kind: string,
   finding?: AuditFinding,
   subject?: Subject,
-  cli: CliTarget = { context: null, files: null }
+  cli: CliTarget = { context: null, files: null },
+  t: T = (section, key, values) => translate("en", section, key, values)
 ): string {
   const pod = (body: string) => underPodSpec(kind, body);
   const kubectl = (args: string) => cliLine("kubectl", cli, args);
@@ -354,7 +358,7 @@ export function fixYaml(
         return `${cliPipe(cli, [
           ["kubectl", `get ${crd} --all-namespaces -o json`],
           ["kubectl", "replace -f -"],
-        ])}\n# ${kubectl(`patch customresourcedefinitions ${crd} --subresource=status --type=merge -p 'status: {storedVersions: [${storage}]}'`)}`;
+        ])}\n# ${t("audit", "patchOnceReplaced")}\n# ${kubectl(`patch customresourcedefinitions ${crd} --subresource=status --type=merge -p 'status: {storedVersions: [${storage}]}'`)}`;
       }
       const current =
         at?.current.find((v) => v === at.storage) ?? at?.current[0] ?? storage;
