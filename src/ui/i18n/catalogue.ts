@@ -2023,6 +2023,8 @@ export const en = {
     why: "Why",
     fix: "How to fix",
     copyFix: "Copy",
+    cliFilesUnread:
+      "Which kubeconfig files hold this cluster could not be told, so the command says FILES: {why}",
     objectsOf: {
       one: "{n} object",
       other: "{n} objects",

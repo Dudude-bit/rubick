@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { kindFacts } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -14,6 +15,10 @@ import { useClusterStore } from "@/stores/clusterStore";
 export interface CliTarget {
   context: string | null;
   files: string | null;
+  /** Why the files could not be named, where the last ask failed. */
+  why?: string | null;
+  /** Asks for the files again. */
+  retry?: () => void;
 }
 
 /** A shell word as written, quoted where the shell would read it otherwise. */
@@ -48,8 +53,15 @@ export function useCliTarget(): CliTarget {
     enabled: context !== null,
     staleTime: Infinity,
   });
-  const read = files.data ?? null;
-  return useMemo(() => ({ context, files: read }), [context, read]);
+  // After a failed ask the last answer is held still, and may name files
+  // the app no longer reads the context from: no files, and why.
+  const read = files.isError ? null : (files.data ?? null);
+  const why = files.isError ? errorToShow(files.error) : null;
+  const { refetch } = files;
+  return useMemo(
+    () => ({ context, files: read, why, retry: () => void refetch() }),
+    [context, read, why, refetch]
+  );
 }
 
 /** Groups kubectl resolves by the bare kind; anything else could be two CRDs. */
