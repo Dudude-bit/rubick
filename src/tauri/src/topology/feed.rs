@@ -120,14 +120,14 @@ pub type Resolve = Arc<
 /// object replaces what it outdates, so a slot of a kind discovery never
 /// names holds no more than one copy of its list.
 #[derive(Default)]
-pub(super) struct Kept {
+struct Kept {
     state: Option<(u64, Update)>,
     whole: Option<(u64, Update)>,
     since: BTreeMap<(String, String), (u64, Update)>,
 }
 
 impl Kept {
-    pub(super) fn keep(&mut self, at: u64, update: Update) {
+    fn keep(&mut self, at: u64, update: Update) {
         match &update {
             Update::State { .. } => self.state = Some((at, update)),
             Update::Whole { .. } => {
@@ -145,7 +145,7 @@ impl Kept {
         }
     }
 
-    pub(super) fn replay(self) -> impl Iterator<Item = (u64, Update)> {
+    fn replay(self) -> impl Iterator<Item = (u64, Update)> {
         self.state
             .into_iter()
             .chain(self.whole)
@@ -448,4 +448,93 @@ async fn feed_batch(
     };
     map.feed(feeds);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// A kind discovery could not name for long kept every update for it: each
+    /// relist on top of the last, each change to one object again, a bounded
+    /// channel turned into a store that only grew. Fails if a newer set does
+    /// not replace an older one with its changes, or a newer word on an object
+    /// does not replace the older.
+    #[test]
+    fn a_kind_discovery_cannot_name_keeps_one_copy_of_its_list() {
+        let gateways = crate::ownership::SlotKey {
+            kind: Kind::Gateway.key(),
+            namespace: None,
+        };
+        let object = |name: &str, version: u32| {
+            Arc::new(
+                serde_json::from_value::<DynamicObject>(json!({
+                    "metadata": { "name": name, "namespace": "infra", "resourceVersion": version.to_string() },
+                    "spec": { "gatewayClassName": "envoy", "listeners": [] },
+                }))
+                .expect("a dynamic object"),
+            )
+        };
+        let mut kept = Kept::default();
+        kept.keep(
+            1,
+            Update::State {
+                slot: gateways.clone(),
+                state: Reading::Synced,
+            },
+        );
+        kept.keep(
+            2,
+            Update::Whole {
+                slot: gateways.clone(),
+                why: crate::feeds::Whole::Fresh,
+                objects: vec![object("a", 1), object("b", 1)],
+            },
+        );
+        for version in 2..100 {
+            kept.keep(
+                u64::from(version) + 1,
+                Update::Applied {
+                    slot: gateways.clone(),
+                    object: object("c", version),
+                },
+            );
+        }
+        let replayed: Vec<String> = kept
+            .replay()
+            .map(|(_, update)| match update {
+                Update::State { .. } => "state".to_string(),
+                Update::Whole { objects, .. } => format!("whole {}", objects.len()),
+                Update::Applied { object, .. } => format!(
+                    "applied {}",
+                    object.metadata.resource_version.clone().unwrap_or_default()
+                ),
+                other => format!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(replayed, ["state", "whole 2", "applied 99"]);
+
+        let mut kept = Kept::default();
+        kept.keep(
+            1,
+            Update::Applied {
+                slot: gateways.clone(),
+                object: object("c", 1),
+            },
+        );
+        kept.keep(
+            2,
+            Update::Whole {
+                slot: gateways.clone(),
+                why: crate::feeds::Whole::Relist,
+                objects: vec![object("a", 2)],
+            },
+        );
+        assert_eq!(
+            kept.replay().count(),
+            1,
+            "a newer set outdates what came before"
+        );
+    }
 }
