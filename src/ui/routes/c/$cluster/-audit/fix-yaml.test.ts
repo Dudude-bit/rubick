@@ -226,7 +226,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
     );
     const loose: AuditFinding = {
       ...held,

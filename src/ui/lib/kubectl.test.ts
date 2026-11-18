@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cliLine, kubectlGet } from "./kubectl";
+import { setHostOs } from "./platform";
+import { cliLine, cliPipe, kubectlGet } from "./kubectl";
 
 const at = { context: "default", files: "/home/me/.kube/k3s.yaml" };
 const on = "KUBECONFIG=/home/me/.kube/k3s.yaml kubectl --context default";
@@ -56,6 +57,62 @@ describe("a line the app hands out to run", () => {
   it("puts a stand-in where the cluster is not known", () => {
     expect(cliLine("kubectl", { context: null, files: null }, "get pods")).toBe(
       "KUBECONFIG=FILES kubectl --context CONTEXT get pods"
+    );
+  });
+});
+
+describe("a line for PowerShell", () => {
+  /**
+   * `KUBECONFIG=… kubectl` is a POSIX form: pasted into PowerShell, the
+   * Windows terminal, it runs nothing. Fails if a Windows line is written
+   * in it, or leaves the terminal's KUBECONFIG changed after it.
+   */
+  it("sets the files around the command and puts back what was there", () => {
+    expect(
+      cliLine(
+        "kubectl",
+        { context: "default", files: "C:\\Users\\me\\.kube\\k3s.yaml" },
+        "get pods",
+        "powershell"
+      )
+    ).toBe(
+      "& { $was = $env:KUBECONFIG; $env:KUBECONFIG = 'C:\\Users\\me\\.kube\\k3s.yaml'; try { kubectl --context 'default' get pods } finally { $env:KUBECONFIG = $was } }"
+    );
+    expect(
+      cliLine("helm", { context: "o'brien", files: null }, "list", "powershell")
+    ).toBe(
+      "& { $was = $env:KUBECONFIG; $env:KUBECONFIG = 'FILES'; try { helm list --kube-context 'o''brien' } finally { $env:KUBECONFIG = $was } }"
+    );
+  });
+
+  /** On Windows a line is written for PowerShell without being asked; elsewhere for a POSIX shell. */
+  it("writes for PowerShell on a Windows host and for a POSIX shell on any other", () => {
+    try {
+      setHostOs("windows");
+      expect(cliLine("kubectl", at, "get pods")).toMatch(/^& \{ \$was = /);
+    } finally {
+      setHostOs("linux");
+    }
+    expect(cliLine("kubectl", at, "get pods")).toBe(`${on} get pods`);
+  });
+
+  /**
+   * Each stage of a pipe setting the files for itself races the others over
+   * the one environment, and the last to put it back wins. Fails if a pipe
+   * sets them more than once, or a POSIX pipe leaves a stage without them.
+   */
+  it("sets the files once around a whole pipe, and on each POSIX command", () => {
+    const steps = [
+      ["kubectl", "get crontabs -o json"],
+      ["kubectl", "replace -f -"],
+    ] as const;
+    const shell = cliPipe(at, steps, "powershell");
+    expect(shell.match(/\$env:KUBECONFIG = '/g)).toHaveLength(1);
+    expect(shell).toContain(
+      "try { kubectl --context 'default' get crontabs -o json | kubectl --context 'default' replace -f - }"
+    );
+    expect(cliPipe(at, steps, "posix")).toBe(
+      `${on} get crontabs -o json | ${on} replace -f -`
     );
   });
 });

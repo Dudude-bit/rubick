@@ -21,6 +21,10 @@ export function isMac(os: string = hostOs): boolean {
   return os === "macos";
 }
 
+export function isWindows(os: string = hostOs): boolean {
+  return os === "windows";
+}
+
 /**
  * Render a logical shortcut for display on a given platform.
  *

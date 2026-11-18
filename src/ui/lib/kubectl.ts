@@ -5,6 +5,7 @@ import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { kindFacts } from "@/lib/resource-registry";
+import { isWindows } from "@/lib/platform";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -25,6 +26,20 @@ export interface CliTarget {
 export const word = (text: string) =>
   /^[\w.:/@=+-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`;
 
+/** A PowerShell literal: single-quoted, a quote inside written twice. */
+const psWord = (text: string) => `'${text.replaceAll("'", "''")}'`;
+
+/** The shell a line is written for: Windows opens PowerShell. */
+export type Shell = "posix" | "powershell";
+const hostShell = (): Shell => (isWindows() ? "powershell" : "posix");
+
+type Step = readonly [tool: "kubectl" | "helm", args: string];
+
+const run = ([tool, args]: Step, context: string) =>
+  tool === "kubectl"
+    ? `kubectl --context ${context} ${args}`
+    : `helm ${args} --kube-context ${context}`;
+
 /**
  * Every kubectl or helm line the app gives the reader to copy or to run.
  * Without the context the tool acts on its kubeconfig's current one, and
@@ -35,13 +50,32 @@ export const word = (text: string) =>
 export function cliLine(
   tool: "kubectl" | "helm",
   at: CliTarget,
-  args: string
+  args: string,
+  shell: Shell = hostShell()
 ): string {
-  const files = `KUBECONFIG=${word(at.files ?? "FILES")}`;
-  const context = word(at.context ?? "CONTEXT");
-  return tool === "kubectl"
-    ? `${files} kubectl --context ${context} ${args}`
-    : `${files} helm ${args} --kube-context ${context}`;
+  return cliPipe(at, [[tool, args]], shell);
+}
+
+/**
+ * Commands piped one into the next, each acting on `at`. A POSIX shell
+ * takes `KUBECONFIG=` before each command, for that command alone.
+ * PowerShell has no such form: the files are set once around the whole
+ * pipe and what was there put back, since a stage setting them for itself
+ * races the other stages over the one environment they share.
+ */
+export function cliPipe(
+  at: CliTarget,
+  steps: readonly Step[],
+  shell: Shell = hostShell()
+): string {
+  const files = at.files ?? "FILES";
+  const context = at.context ?? "CONTEXT";
+  if (shell === "posix")
+    return steps
+      .map((step) => `KUBECONFIG=${word(files)} ${run(step, word(context))}`)
+      .join(" | ");
+  const pipe = steps.map((step) => run(step, psWord(context))).join(" | ");
+  return `& { $was = $env:KUBECONFIG; $env:KUBECONFIG = ${psWord(files)}; try { ${pipe} } finally { $env:KUBECONFIG = $was } }`;
 }
 
 /** The cluster on screen and the files it was read from, for {@link cliLine}. */
