@@ -379,6 +379,7 @@ impl ClusterTimeline {
         let mut inner = self.inner.lock();
         if inner.holds_any() && inner.checked == Identity::Known {
             inner.checked = Identity::NotChecked;
+            inner.told.spans = true;
         }
     }
 
