@@ -4,6 +4,7 @@
  * the other engines' policies it does not read.
  */
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { Fragment } from "react";
 
 import type { FlowEnd, WorkloadKey } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -21,6 +22,7 @@ import {
   type PolicyReading,
   type WorkloadPod,
 } from "./policy-reading";
+import { TONE_TEXT } from "../-map/tone-classes";
 import { readingWords } from "./traffic-words";
 
 export type Read = PolicyReading & { others: Known<string[]> };
@@ -105,7 +107,14 @@ export function ReadingText({
       className="mt-0.5 block text-[11px] text-fg-mut"
       data-testid="policy-reading"
     >
-      {readingWords(read, read.others, from, to, t).join(" ")}
+      {readingWords(read, read.others, from, to, t).map((part, at) => (
+        <Fragment key={at}>
+          {at > 0 && " "}
+          <span className={part.known ? undefined : TONE_TEXT.unknown}>
+            {part.text}
+          </span>
+        </Fragment>
+      ))}
     </span>
   );
 }

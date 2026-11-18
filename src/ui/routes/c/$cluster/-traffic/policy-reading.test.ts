@@ -176,7 +176,9 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
         intruder,
         db,
         t
-      ).join(" ")
+      )
+        .map((part) => part.text)
+        .join(" ")
     ).toBe(
       "The app's reading of the NetworkPolicies, not Hubble's: db is selected by NetworkPolicy shop/db-from-caller-only; none of its rules admits intruder."
     );
@@ -187,7 +189,7 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
         intruder,
         db,
         t
-      ).at(-1)
+      ).at(-1)?.text
     ).toBe(
       "Policies of kind CiliumNetworkPolicy also apply here, and the app does not read them."
     );
@@ -198,7 +200,7 @@ describe("the app's reading of the policies on a drop Hubble named none for", ()
         intruder,
         db,
         t
-      ).at(-1)
+      ).at(-1)?.text
     ).toBe(
       "Whether another engine's policies apply here could not be read: forbidden"
     );
