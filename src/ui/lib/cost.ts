@@ -639,7 +639,8 @@ export function readingPicture(
     return {
       key: w.key,
       pods: w.pods,
-      // A failed read priced nothing it could vouch for: no total at all.
+      // A failed read priced nothing it could vouch for: no total at all,
+      // and every part it holds not known rather than not priced.
       ...(fold
         ? floorWhere(
             partly(i),
@@ -649,7 +650,13 @@ export function readingPicture(
               unreadIn(w.key.namespace)
             )
           )
-        : { perHour: null, atLeast: false, parts, unpriced: [], unknown: [] }),
+        : {
+            perHour: null,
+            atLeast: false,
+            parts,
+            unpriced: [],
+            unknown: heldParts({ ...w, storageBytes: w.claimBytes }),
+          }),
       requests: { cpu: w.cpu, memory: w.memory },
     };
   });

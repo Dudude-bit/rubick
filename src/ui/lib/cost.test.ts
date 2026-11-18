@@ -422,6 +422,9 @@ describe("a picture from OpenCost's prices", () => {
     expect(picture.workloadsFailed).toBe("timed out after 20s");
     expect(picture.workloads[0]!.perHour).toBeNull();
     expect(picture.cluster!.perHour).toBeCloseTo(0.2);
+    // Not read, so not known: its total, share and parts are not "not priced".
+    expect(picture.workloads[0]!.unknown).toEqual(["cpu", "memory"]);
+    expect(totalUnknown(picture.workloads[0]!)).toBe(true);
   });
 
   /**
