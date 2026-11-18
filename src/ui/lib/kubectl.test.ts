@@ -97,6 +97,24 @@ describe("a line for PowerShell", () => {
   });
 
   /**
+   * PowerShell ends a single-quoted literal at a typographic quote too: a
+   * path through O’Brien's home closed the literal there, and the rest of
+   * the name was read as code. Fails if any of the four is left single.
+   */
+  it("doubles every quote PowerShell ends a literal at, typographic ones too", () => {
+    expect(
+      cliLine(
+        "kubectl",
+        { context: "a‘b‚c‛d", files: "C:\\Users\\O’Brien\\.kube\\config" },
+        "get pods",
+        "powershell"
+      )
+    ).toContain(
+      "$env:KUBECONFIG = 'C:\\Users\\O’’Brien\\.kube\\config'; try { kubectl --context 'a‘‘b‚‚c‛‛d' get pods }"
+    );
+  });
+
+  /**
    * Each stage of a pipe setting the files for itself races the others over
    * the one environment, and the last to put it back wins. Fails if a pipe
    * sets them more than once, or a POSIX pipe leaves a stage without them.
