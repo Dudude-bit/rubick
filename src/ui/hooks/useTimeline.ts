@@ -167,6 +167,9 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     if (!enabled) return;
     let reading = false;
     let again = false;
+    // An answer to a question this surface no longer asks says nothing of
+    // the one it asks now: neither its failure nor its success is written.
+    let active = true;
     const catchUp = async () => {
       if (reading) {
         again = true;
@@ -179,7 +182,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         const page = await commands.timelineRead(
           question({ after: held.newest })
         );
-        setBehind(null);
+        if (active) setBehind(null);
         // The rows started over, for another cluster under the name or a
         // clear: what is held is not this timeline's any more.
         if (page.epoch !== held.epoch) {
@@ -211,10 +214,12 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         );
       } catch (error) {
         // The next change asks again; until it answers, what is held is old.
-        setBehind({
-          key,
-          error: error instanceof Error ? error : new Error(errorToShow(error)),
-        });
+        if (active)
+          setBehind({
+            key,
+            error:
+              error instanceof Error ? error : new Error(errorToShow(error)),
+          });
       } finally {
         reading = false;
         if (again) {
@@ -232,7 +237,10 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
     void off.then(() => {
       if (hasData) void catchUp();
     });
-    return () => void off.then((unlisten) => unlisten());
+    return () => {
+      active = false;
+      void off.then((unlisten) => unlisten());
+    };
   }, [enabled, client, key, question, context, hasData, ask.windowMs]);
 
   const data = query.data;

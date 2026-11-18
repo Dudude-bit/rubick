@@ -1034,6 +1034,25 @@ fn keeping_off_is_said_after_a_flush_that_read_it_on() {
     assert_eq!(cluster.page(&query(Show::All)).keeping, Keeping::Off);
 }
 
+/// The client behind the name was replaced, and the window went on holding
+/// "known" until something else changed: it reads a page only when told.
+/// Fails if a replaced client is not told to the window.
+#[test]
+fn a_replaced_client_is_told_to_the_window() {
+    let (timelines, mut rx) = holder(None, false);
+    let cluster = timelines.cluster("kind");
+    cluster.seen_cluster("uid-a".into());
+    cluster.spans(|spans, now| spans.begin(Source::Followed, now, Cover::default()));
+    timelines.flush();
+    while rx.try_recv().is_ok() {}
+    timelines.client_replaced("kind");
+    timelines.flush();
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(AppEvent::TimelineChanged { spans: true, .. })
+    ));
+}
+
 /// Keeping off writes nothing and says the timeline lasts this session.
 #[test]
 fn with_keeping_off_nothing_is_written() {
