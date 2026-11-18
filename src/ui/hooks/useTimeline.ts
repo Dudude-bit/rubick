@@ -194,7 +194,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
         // The rows started over, for another cluster under the name or a
         // clear: what is held is not this timeline's any more.
         if (page.epoch !== held.epoch) {
-          await startOver(client, key, held.epoch);
+          await startOver(client, key, page.epoch);
           return;
         }
         if (page.more) {
@@ -260,7 +260,7 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
       .timelineRead(question({ before: { at: last.at, seq: last.seq } }))
       .then((page) => {
         if (page.epoch !== held.epoch) {
-          void startOver(client, key, held.epoch);
+          void startOver(client, key, page.epoch);
           return;
         }
         client.setQueryData<TimelinePage>(key, (now) => {
@@ -299,12 +299,14 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
 const NO_SCOPE: readonly string[] = [];
 
 /**
- * Rows held of the numbering `from` read again from the top. Ones of
- * another are left: a reader already read the new numbering since this
- * answer was asked, and resetting them again drops what it read.
+ * Rows held of a numbering older than `epoch`, the one an answer came
+ * from, read again from the top. Ones of it or later are left: a reader
+ * already read them since this answer was asked, and resetting them again
+ * drops what it read. A cluster's numbering only ever moves up.
  */
-function startOver(client: QueryClient, key: QueryKey, from: number) {
-  return client.getQueryData<TimelinePage>(key)?.epoch === from
+function startOver(client: QueryClient, key: QueryKey, epoch: number) {
+  const held = client.getQueryData<TimelinePage>(key)?.epoch;
+  return held !== undefined && held < epoch
     ? client.resetQueries({ queryKey: key, exact: true })
     : Promise.resolve();
 }
