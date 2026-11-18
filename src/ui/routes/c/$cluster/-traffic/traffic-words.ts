@@ -248,8 +248,16 @@ export function sourceLines(line: SourceLine, t: T): PanelLine[] {
     say(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
   if (drops !== null) say(t("traffic", "panelDrops", { v: rate(drops) }));
+  // A pair is below HTTP only where its source read HTTP and had none of it.
   if (requests === null && line.source.measures.includes("requests"))
-    say(t("traffic", "panelBelowHttp"));
+    say(
+      t(
+        "traffic",
+        line.unread.includes("requests")
+          ? "panelRequestsUnread"
+          : "panelBelowHttp"
+      )
+    );
   if (line.protocols.length > 0)
     say(t("traffic", "panelProtocols", { list: line.protocols.join(", ") }));
   return out;

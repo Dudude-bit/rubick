@@ -235,6 +235,66 @@ describe("a flow opened from its edge", () => {
   });
 
   /**
+   * Hubble's requests query failed while its flow events came back: the
+   * pair has no requests because they were not read, not because it is
+   * below HTTP, and the panel says the first.
+   */
+  it("says a pair's requests were not read, not that it is below HTTP, where their query failed", async () => {
+    const hubble: FlowSource = {
+      id: "hubble",
+      name: "Hubble",
+      state: { says: "present" },
+      measures: ["events", "requests", "errors"],
+      found: [],
+      need: "needHubble",
+      marks: false,
+      nodeAgent: true,
+      needsPods: false,
+      grpcErrors: false,
+    };
+    const [row] = pairRows({
+      sources: [hubble],
+      window: "5m",
+      answer: {
+        ends: [end("caller"), end("db")],
+        flows: [
+          {
+            source: 0,
+            from: 0,
+            to: 1,
+            protocols: [],
+            sides: [],
+            values: MEASURES.map((m) => (m === "events" ? 2 : null)),
+            reasons: [],
+          },
+        ],
+        reads: [
+          {
+            source: 0,
+            measure: "requests",
+            state: { says: "failed", code: "PROMETHEUS", message: "timed out" },
+          },
+        ],
+        observed: null,
+        coverage: [],
+        podsUnread: [],
+        podsFailed: null,
+        cut: 0,
+      },
+    }).rows;
+    await renderWithRouter(
+      <FlowPanel row={row} window="last 5 minutes" onClose={() => {}} />,
+      { at: "/c/prod/traffic", route: "/c/$cluster/traffic" }
+    );
+    expect(
+      screen.getByText(
+        "Its requests could not be read, so whether this pair is seen above HTTP is not known."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Seen only below HTTP/)).toBeNull();
+  });
+
+  /**
    * A default deny names no policy in Hubble's drop: the panel gives the
    * app's reading of the policies there, where Hubble named one its name
    * leads, and a zero of forwarded flows beside the drops is left out.
