@@ -96,8 +96,23 @@ where
     Fut: Future<Output = kube::Result<T>>,
 {
     // Discovery is a wait, and a delete follows it.
-    let here = state.here()?;
-    let api_resource = served_on(kind, &here).await?;
+    on_served_at(&state.here()?, kind, namespace, listing, request).await
+}
+
+/// [`on_served`] on the cluster a caller already holds: a check made before
+/// and the request after are then about one cluster, whatever is switched
+/// to between them.
+async fn on_served_at<T, Fut>(
+    here: &crate::state::Here<'_>,
+    kind: &str,
+    namespace: Option<String>,
+    listing: bool,
+    request: impl FnOnce(Api<DynamicObject>) -> Fut,
+) -> Result<(T, ApiResource)>
+where
+    Fut: Future<Output = kube::Result<T>>,
+{
+    let api_resource = served_on(kind, here).await?;
 
     let cluster_scoped = is_cluster_scoped(kind);
     let ctx = if cluster_scoped {
@@ -254,10 +269,11 @@ async fn every_listener_set(state: &AppState) -> Result<Vec<ListenerSetInfo>> {
         {
             return Ok(Vec::new());
         }
-        let (list, api_resource) = on_served(state, "ListenerSet", None, true, |api| async move {
-            api.list(&build_list_params(None, None, None)).await
-        })
-        .await?;
+        let (list, api_resource) =
+            on_served_at(&here, "ListenerSet", None, true, |api| async move {
+                api.list(&build_list_params(None, None, None)).await
+            })
+            .await?;
         Ok(list
             .items
             .into_iter()
@@ -702,6 +718,53 @@ mod tests {
             .await
             .expect_err("a refused list is not an empty one");
         assert!(refusal.is_refusal(), "{refusal:?}");
+    }
+
+    /// The check that the kind is served and the list after it asked the
+    /// current cluster twice, so a switch between them listed another
+    /// cluster's sets, or failed on one with no client. Fails if the list is
+    /// not read from the cluster the check was made on.
+    #[tokio::test]
+    async fn the_listener_sets_are_read_from_the_cluster_their_kind_was_checked_on() {
+        let switched = std::sync::Arc::new(std::sync::OnceLock::<
+            std::sync::Arc<crate::state::AppState>,
+        >::new());
+        let switch = switched.clone();
+        let (state, _) = connected(ServedIndex::scaled(300), move |path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            V1 => {
+                // The reader switches clusters while discovery answers.
+                if let Some(state) = switch.get() {
+                    state.set_current_context(Some("elsewhere".to_string()));
+                }
+                (
+                    200,
+                    resources("v1", &[("listenersets", "ListenerSet", true)]),
+                )
+            }
+            "/apis/gateway.networking.k8s.io/v1/listenersets" => (
+                200,
+                serde_json::json!({
+                    "kind": "ListenerSetList",
+                    "apiVersion": "gateway.networking.k8s.io/v1",
+                    "metadata": {},
+                    "items": [{ "metadata": { "name": "team", "namespace": "shop" },
+                                "spec": { "parentRef": { "name": "edge" } } }],
+                })
+                .to_string(),
+            ),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let state = std::sync::Arc::new(state);
+        assert!(switched.set(state.clone()).is_ok());
+        let sets = super::every_listener_set(&state)
+            .await
+            .expect("read from the cluster checked");
+        assert_eq!(
+            sets.iter().map(|set| set.name.as_str()).collect::<Vec<_>>(),
+            ["team"]
+        );
     }
 
     /// Would re-read Gateway API discovery on every Gateway poll of a
