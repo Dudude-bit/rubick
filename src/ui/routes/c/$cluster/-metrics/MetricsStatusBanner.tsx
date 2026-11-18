@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import type { MetricsStatus, UnreadNamespace } from "@/generated/types";
+import { entryOf } from "@/lib/named";
 
 interface MetricsStatusBannerProps {
   status?: MetricsStatus | null;
@@ -72,8 +73,9 @@ export function MetricsStatusBanner({
   const checking = useIsFetching({ queryKey: queryKeys.metrics.all() }) > 0;
   const context = useClusterStore((s) => s.currentContext);
   const hidden =
-    useMetricsNoticeStore((s) => (context ? s.hidden[context] : undefined)) ??
-    NONE_HIDDEN;
+    useMetricsNoticeStore((s) =>
+      context ? entryOf(s.hidden, context) : undefined
+    ) ?? NONE_HIDDEN;
   const hide = useMetricsNoticeStore((s) => s.hide);
   const absence = absenceOf(status);
 
