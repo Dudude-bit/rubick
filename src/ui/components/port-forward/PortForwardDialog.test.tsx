@@ -31,6 +31,7 @@ import { PortForwardDialog, type ForwardTarget } from "./PortForwardDialog";
 import { useClusterStore } from "@/stores/clusterStore";
 import { marcoReview } from "@/test/marco";
 import type { AccessQuery } from "@/generated/types";
+import { named } from "@/lib/named";
 
 const POD: ForwardTarget = {
   kind: "Pod",
@@ -51,7 +52,7 @@ beforeEach(() => {
   usePortForwardStore.setState({
     sessions: [],
     configs: [],
-    statusBySession: {},
+    statusBySession: named(),
     failed: [],
   });
 });
