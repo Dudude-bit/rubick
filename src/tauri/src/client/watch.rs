@@ -137,8 +137,16 @@ pub(crate) async fn look(
     manager: &K8sClientManager,
     seen: &mut Seen,
     overrides: Vec<PathBuf>,
-) -> Option<Vec<String>> {
+) -> Option<Looked> {
     look_then(manager, seen, overrides, || {}).await
+}
+
+/// What a look found on disk: the contexts whose entry changed or went, and
+/// whether any context was added or went, which the window's list shows.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Looked {
+    pub changed: Vec<String>,
+    pub named: bool,
 }
 
 /// [`look`], with `read` run once the files are read: where a test writes
@@ -148,7 +156,7 @@ async fn look_then(
     seen: &mut Seen,
     overrides: Vec<PathBuf>,
     read: impl FnOnce(),
-) -> Option<Vec<String>> {
+) -> Option<Looked> {
     // Stated before the read and kept: a file written again after it reads
     // as moved at the next look, not as the one read.
     let now = stamp(&manager.loaded_files().await);
@@ -173,8 +181,12 @@ async fn look_then(
         .filter(|(context, print)| prints.get(*context) != Some(*print))
         .map(|(context, _)| context.clone())
         .collect();
+    let named = prints.len() != seen.prints.len()
+        || prints
+            .keys()
+            .any(|context| !seen.prints.contains_key(context));
     *seen = Seen { stamp: now, prints };
-    Some(changed)
+    Some(Looked { changed, named })
 }
 
 /// Looks every two seconds for as long as the app runs, and tells the
@@ -185,8 +197,8 @@ pub async fn run(manager: Arc<K8sClientManager>, events: broadcast::Sender<AppEv
     loop {
         tokio::time::sleep(LOOK_EVERY).await;
         let overrides = crate::commands::cluster::read_kubeconfig_overrides();
-        if let Some(changed) = look(&manager, &mut seen, overrides).await {
-            if !changed.is_empty() {
+        if let Some(Looked { changed, named }) = look(&manager, &mut seen, overrides).await {
+            if !changed.is_empty() || named {
                 let _ = events.send(AppEvent::KubeconfigChanged { changed });
             }
         }
@@ -234,9 +246,41 @@ mod tests {
         replace(&path, &config("https://127.0.0.1:41002", &token()));
         assert_eq!(
             look(&manager, &mut seen, pinned.clone()).await,
-            Some(vec!["kind-x".to_string()])
+            Some(Looked {
+                changed: vec!["kind-x".to_string()],
+                named: false
+            })
         );
         assert_eq!(look(&manager, &mut seen, pinned).await, None);
+    }
+
+    /// A context added to the file is said, so the window's list shows it,
+    /// with no entry changed. Fails if a CLI's new context waits for a
+    /// restart to appear.
+    #[tokio::test]
+    async fn a_context_added_to_the_file_is_said() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("config");
+        let token = format!("t{}", "1".repeat(12));
+        std::fs::write(&path, config("https://127.0.0.1:41001", &token)).expect("write");
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_from_path(path.clone())
+            .await
+            .expect("load");
+        let mut seen = manager.seen().await;
+        let added = config("https://127.0.0.1:41001", &token).replace(
+            "contexts: [",
+            "contexts: [{name: dev, context: {cluster: other, user: kind-x}}, ",
+        );
+        replace(&path, &added);
+        assert_eq!(
+            look(&manager, &mut seen, vec![path]).await,
+            Some(Looked {
+                changed: Vec::new(),
+                named: true
+            })
+        );
     }
 
     /// A file written again while the last version was being read is looked
@@ -260,10 +304,13 @@ mod tests {
             replace(&path, &again);
         })
         .await;
-        assert!(looked.is_some_and(|looked| looked == vec!["kind-x".to_string()]));
+        assert!(looked.is_some_and(|looked| looked.changed == vec!["kind-x".to_string()]));
         assert_eq!(
             look(&manager, &mut seen, vec![path]).await,
-            Some(vec!["kind-x".to_string()])
+            Some(Looked {
+                changed: vec!["kind-x".to_string()],
+                named: false
+            })
         );
     }
 
@@ -291,7 +338,10 @@ mod tests {
         );
         assert_eq!(
             look(&manager, &mut seen, vec![path]).await,
-            Some(Vec::new())
+            Some(Looked {
+                changed: Vec::new(),
+                named: false
+            })
         );
     }
 }

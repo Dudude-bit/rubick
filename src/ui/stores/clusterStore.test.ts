@@ -287,6 +287,29 @@ describe("a kubeconfig entry that changed on disk", () => {
   });
 });
 
+describe("a context added to the kubeconfig", () => {
+  /**
+   * A context added, none changed: the list is read again and nothing else
+   * moves. Fails if what the window keeps under every name is let go, or a
+   * cluster is connected again, for a context someone added.
+   */
+  it("reads the list again and keeps what is kept by name", async () => {
+    const list = vi.mocked(commands.listContexts);
+    const connect = vi.mocked(commands.connectCluster);
+    list.mockClear();
+    connect.mockClear();
+    let forgotten = 0;
+    const release = keptByName(() => {
+      forgotten += 1;
+    });
+    await state().entriesChanged([]);
+    release();
+    expect(list).toHaveBeenCalled();
+    expect(forgotten).toBe(0);
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
+
 describe("a changed kubeconfig entry while the reader moves", () => {
   /**
    * The held cluster's disconnect takes a moment, and the reader connects

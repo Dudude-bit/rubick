@@ -573,6 +573,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   entriesChanged: async (changed: string[]) => {
     await get().loadContexts();
+    // Contexts added or gone, none of them changed: the list is all.
+    if (changed.length === 0) return;
     namesRebound();
     const moved = new Set(changed);
     const before = get();
