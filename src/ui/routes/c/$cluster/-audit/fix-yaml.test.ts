@@ -79,13 +79,20 @@ describe("the fix Audit offers to copy", () => {
         { kind: "Pod", namespace: "shop", name: "web-x" }
       )
     ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
-    const single = (autoscaler: string | null): AuditFinding => ({
+    const single = (
+      autoscaler: string | null,
+      ceiling: number | null = null
+    ): AuditFinding => ({
       rule: "single-replica",
       severity: "medium",
-      what: [{ says: "replicas", replicas: 1, autoscaler }],
+      what: [{ says: "replicas", replicas: 1, autoscaler, ceiling }],
     });
-    expect(fixYaml("single-replica", "Deployment", single("web"))).toBe(
+    expect(fixYaml("single-replica", "Deployment", single("web", 6))).toBe(
       "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web\nspec:\n  minReplicas: 2"
+    );
+    // A ceiling of one is raised with the floor, or the pair is refused.
+    expect(fixYaml("single-replica", "Deployment", single("web", 1))).toBe(
+      "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web\nspec:\n  minReplicas: 2\n  maxReplicas: 2"
     );
     expect(fixYaml("single-replica", "Deployment", single(null))).toBe(
       "spec:\n  replicas: 2"

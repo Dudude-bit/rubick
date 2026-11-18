@@ -288,10 +288,14 @@ export function fixYaml(
         })
       );
     case "single-replica": {
-      // An autoscaler's floor is the replica count; the workload's is overridden.
-      const autoscaler = first(finding, "replicas")?.autoscaler;
+      // An autoscaler's floor is the replica count; the workload's is
+      // overridden. A ceiling under the new floor is raised with it, or the
+      // API server refuses the pair.
+      const replicas = first(finding, "replicas");
+      const autoscaler = replicas?.autoscaler;
+      const ceiling = replicas?.ceiling;
       return autoscaler
-        ? `apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: ${autoscaler}\nspec:\n  minReplicas: 2`
+        ? `apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: ${autoscaler}\nspec:\n  minReplicas: 2${ceiling !== null && ceiling !== undefined && ceiling < 2 ? "\n  maxReplicas: 2" : ""}`
         : "spec:\n  replicas: 2";
     }
     case "no-disruption-budget":

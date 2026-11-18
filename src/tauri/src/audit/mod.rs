@@ -119,10 +119,12 @@ pub enum What {
         at: At,
         image: String,
     },
-    /// The replicas a workload keeps at least: its own, or its autoscaler's floor.
+    /// The replicas a workload keeps at least: its own, or its autoscaler's
+    /// floor, beside that autoscaler's ceiling.
     Replicas {
         replicas: i32,
         autoscaler: Option<String>,
+        ceiling: Option<i32>,
     },
     Budget {
         required: i32,

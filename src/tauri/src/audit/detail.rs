@@ -72,6 +72,7 @@ async fn read_beside(client: &Client, namespace: &str) -> Beside {
                         kind: spec.scale_target_ref.kind,
                         target: spec.scale_target_ref.name,
                         min: spec.min_replicas.unwrap_or(1),
+                        max: spec.max_replicas,
                     })
                 })
                 .collect()

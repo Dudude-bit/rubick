@@ -332,6 +332,7 @@ pub(super) fn entry_of(kind: &str, object: DynamicObject, minor: Option<u32>) ->
                 kind: spec.scale_target_ref.kind.clone(),
                 target: spec.scale_target_ref.name.clone(),
                 min: spec.min_replicas.unwrap_or(1),
+                max: spec.max_replicas,
             };
             (objects::autoscaler(&it), Body::Autoscaler(scales))
         }
