@@ -2096,6 +2096,8 @@ export const ru: Catalogue = {
     why: "Почему это важно",
     fix: "Как исправить",
     copyFix: "Скопировать",
+    cliFilesUnread:
+      "Не удалось узнать, в каких файлах kubeconfig этот кластер, поэтому в команде стоит FILES: {why}",
     objectsOf: {
       one: "{n} объект",
       few: "{n} объекта",

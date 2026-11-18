@@ -226,7 +226,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "KUBECONFIG=FILES kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | KUBECONFIG=FILES kubectl --context CONTEXT replace -f -\nKUBECONFIG=FILES kubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource=status --type=merge -p 'status: {storedVersions: [v1]}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -245,6 +245,57 @@ describe("the fix Audit offers to copy", () => {
     expect(fixYaml(loose.rule, crd.kind, loose, crd)).toBe(
       "apiVersion: example.com/v1\nkind: CronTab"
     );
+  });
+
+  /**
+   * The migration pipes one kubectl into another and patches with a third:
+   * each of the three runs on its own, so each names the files and the
+   * context. Fails if either side of the pipe, or the patch, is left to the
+   * terminal's own kubeconfig, which a check on the start of the line misses.
+   */
+  it("names the files and the context on each side of the CRD migration's pipe and on its patch", () => {
+    const files = "/home/me/.kube/k3s.yaml:/home/me/.kube/config";
+    const finding: AuditFinding = {
+      rule: "crd-version-deprecated",
+      severity: "medium",
+      what: [
+        {
+          says: "deprecated",
+          version: "v1alpha1",
+          warning: null,
+          stored: true,
+          storage: false,
+        },
+        {
+          says: "storedAs",
+          group: "example.com",
+          kind: "CronTab",
+          storage: "v1",
+          stored: ["v1alpha1", "v1"],
+          current: ["v1"],
+        },
+      ],
+    };
+    const commands = fixYaml(
+      finding.rule,
+      "CustomResourceDefinition",
+      finding,
+      {
+        kind: "CustomResourceDefinition",
+        namespace: null,
+        name: "crontabs.example.com",
+      },
+      { context: "default", files }
+    ).split(/\n| \| /);
+    expect(commands.map((command) => command.split(" ")[4])).toEqual([
+      "get",
+      "replace",
+      "patch",
+    ]);
+    for (const command of commands)
+      expect(command).toMatch(
+        new RegExp(`^KUBECONFIG=${files} kubectl --context default \\w`)
+      );
   });
 
   /** A client asking for a deprecated API moves to its replacement where the guide names one. */
