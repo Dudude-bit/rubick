@@ -97,13 +97,13 @@ function verdictOf(e: { cpu: Efficiency; memory: Efficiency }): UseVerdict {
   const fresh = [e.cpu, e.memory].find(young);
   if (fresh?.state === "measured" || fresh?.state === "noSamples")
     return { says: "young", since: fresh.since };
-  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
-    return { says: "noSamples" };
   // A peak nobody read judges nothing, though the average was read: that
-  // is its own reason, not that no sample was held.
+  // is its own reason, and before "no sample", which a read average belies.
   const peakless = (one: Efficiency) =>
     one.state === "measured" && one.peakRatio === null;
   if (peakless(e.cpu) || peakless(e.memory)) return { says: "peakUnread" };
+  if (e.cpu.state === "noSamples" || e.memory.state === "noSamples")
+    return { says: "noSamples" };
   // Measured from some of its pods: neither its figure nor a bound on it.
   for (const one of [e.cpu, e.memory])
     if (one.state === "measured" && one.podsRead)

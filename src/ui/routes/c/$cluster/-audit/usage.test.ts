@@ -259,6 +259,13 @@ describe("Audit's reading of requests against use", () => {
     const read = usageRead(one, null, peakless);
     if (read.state !== "read") throw new Error(read.state);
     expect(read.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
+
+    // Its CPU average read and its memory not sampled at all: "no sample of
+    // its pods" is belied by the CPU average.
+    const memoryless = reading(one, [[200, null, null, null]]);
+    const mixed = usageRead(one, null, memoryless);
+    if (mixed.state !== "read") throw new Error(mixed.state);
+    expect(mixed.workloads[0]!.verdict).toEqual({ says: "peakUnread" });
   });
 
   /**
