@@ -1,5 +1,6 @@
 import type { ConfigData, Withheld } from "@/generated/types";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
+import { entryOf } from "@/lib/named";
 
 /** A ConfigMap or Secret a container's environment names, as the read of it answered. */
 export type RefObject =
@@ -78,13 +79,13 @@ export function heldOf(
 ): Held {
   const data = query?.data;
   if (data) {
-    if (key in data.values) return { is: "value", value: data.values[key] };
-    if (key in data.withheld) {
-      return { is: "withheld", reason: data.withheld[key] };
-    }
-    if (key in data.binary) {
-      return { is: "binary", bytes: data.binary[key].bytes };
-    }
+    // The key is the reader's: `constructor` is not one because objects have it.
+    const value = entryOf(data.values, key);
+    if (value !== undefined) return { is: "value", value };
+    const reason = entryOf(data.withheld, key);
+    if (reason !== undefined) return { is: "withheld", reason };
+    const blob = entryOf(data.binary, key);
+    if (blob !== undefined) return { is: "binary", bytes: blob.bytes };
     return { is: "absent" };
   }
   if (!query?.error) return { is: "reading" };

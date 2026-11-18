@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { refObjectOf, verdictOf } from "./env-refs";
+import type { ConfigData } from "@/generated/types";
+
+import { heldOf, refObjectOf, verdictOf } from "./env-refs";
 
 describe("a reference settled against its object", () => {
   /** A 404 is the object gone; a 403 is not knowing. Collapsing them draws a
@@ -41,5 +43,24 @@ describe("a reference settled against its object", () => {
     expect(verdictOf(undefined, "DB_PASSWORD")).toEqual({
       verdict: "reading",
     });
+  });
+});
+
+describe("what an object holds under the key an env var names", () => {
+  /**
+   * A data key is the cluster's to choose: `__proto__` can be one, and
+   * `constructor` or `toString` can be asked for without being there.
+   * Fails if a key every object has reads as present, with `Object`'s
+   * function as its value, or a key that is there under `__proto__` reads
+   * as absent.
+   */
+  it("finds a key only where the object holds it", () => {
+    const data = JSON.parse(
+      '{"values":{"__proto__":"one","host":"db"},"withheld":{"tls.key":{"says":"privateKey"}},"binary":{}}'
+    ) as ConfigData;
+    const query = { data, error: null };
+    expect(heldOf(query, "__proto__")).toEqual({ is: "value", value: "one" });
+    for (const key of ["constructor", "toString", "hasOwnProperty"])
+      expect(heldOf(query, key)).toEqual({ is: "absent" });
   });
 });

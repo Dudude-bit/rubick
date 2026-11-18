@@ -34,8 +34,14 @@ export function storedEntries(stored: unknown): [string, unknown][] {
     : [];
 }
 
-/** The entry under `name`; never a property every object has. */
-export function entryOf<T>(record: Named<T>, name: string): T | undefined {
+/**
+ * The entry under `name`; never a property every object has. Takes a plain
+ * record too, as the cluster's answer arrives keyed by its own names.
+ */
+export function entryOf<T>(
+  record: Named<T> | Readonly<Plain<T>>,
+  name: string
+): T | undefined {
   return Object.hasOwn(record, name) ? (record as Plain<T>)[name] : undefined;
 }
 
