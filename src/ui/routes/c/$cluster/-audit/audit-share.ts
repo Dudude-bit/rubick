@@ -41,16 +41,23 @@ const ROLE: Record<AuditSeverity, StatusRole> = {
   low: "neutral",
 };
 
-/** The filters a page's rows were narrowed by, in words; `null` for every row. */
+/**
+ * What a page's rows were narrowed to, in words: the system's own part,
+ * and the filters; `null` for every row of the scope's own part.
+ */
 export function filterWords(query: AuditQuery, t: T): string | null {
   const filters = [
     ...query.severities.map((severity) => t("audit", SEVERITY_WORDS[severity])),
     ...query.categories.map((category) => t("audit", CATEGORY_WORDS[category])),
     ...query.rules.map((rule) => ruleTitle(rule, t)),
   ];
-  return filters.length > 0
-    ? t("audit", "sharedOnly", { filters: filters.join(", ") })
-    : null;
+  const said = [
+    query.system ? t("audit", "systemShown") + "." : null,
+    filters.length > 0
+      ? t("audit", "sharedOnly", { filters: filters.join(", ") })
+      : null,
+  ].filter(Boolean);
+  return said.length > 0 ? said.join(" ") : null;
 }
 
 /** Everything the screen says was not read, or not read whole, in its words. */

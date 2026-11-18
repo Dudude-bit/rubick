@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AuditFinding } from "@/generated/types";
+import type { AuditFinding, RuleId } from "@/generated/types";
 import { fixYaml } from "./fix-yaml";
 import { RULE_IDS } from "./rules";
 
@@ -78,14 +78,21 @@ describe("the fix Audit offers to copy", () => {
         root({ list: "ephemeralContainers", container: "debugger" }),
         { kind: "Pod", namespace: "shop", name: "web-x" }
       )
-    ).toBe("kubectl delete pod web-x --namespace shop");
-    const single = (autoscaler: string | null): AuditFinding => ({
+    ).toBe("kubectl --context CONTEXT delete pod web-x --namespace shop");
+    const single = (
+      autoscaler: string | null,
+      ceiling: number | null = null
+    ): AuditFinding => ({
       rule: "single-replica",
       severity: "medium",
-      what: [{ says: "replicas", replicas: 1, autoscaler }],
+      what: [{ says: "replicas", replicas: 1, autoscaler, ceiling }],
     });
-    expect(fixYaml("single-replica", "Deployment", single("web"))).toBe(
+    expect(fixYaml("single-replica", "Deployment", single("web", 6))).toBe(
       "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web\nspec:\n  minReplicas: 2"
+    );
+    // A ceiling of one is raised with the floor, or the pair is refused.
+    expect(fixYaml("single-replica", "Deployment", single("web", 1))).toBe(
+      "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web\nspec:\n  minReplicas: 2\n  maxReplicas: 2"
     );
     expect(fixYaml("single-replica", "Deployment", single(null))).toBe(
       "spec:\n  replicas: 2"
@@ -129,7 +136,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(gone.rule, release.kind, gone, release)).toBe(
-      "helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis web --namespace shop\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
+      "helm plugin install https://github.com/helm/helm-mapkubeapis\nhelm mapkubeapis web --namespace shop --kube-context CONTEXT\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress"
     );
     const due: AuditFinding = {
       ...gone,
@@ -199,7 +206,7 @@ describe("the fix Audit offers to copy", () => {
       ],
     };
     expect(fixYaml(held.rule, crd.kind, held, crd)).toBe(
-      "kubectl get crontabs.example.com --all-namespaces -o json | kubectl replace -f -\nkubectl patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
+      "kubectl --context CONTEXT get crontabs.example.com --all-namespaces -o json | kubectl --context CONTEXT replace -f -\nkubectl --context CONTEXT patch customresourcedefinitions crontabs.example.com --subresource='status' --type='merge' -p '{\"status\":{\"storedVersions\":[\"v1\"]}}'"
     );
     const loose: AuditFinding = {
       ...held,
@@ -249,10 +256,124 @@ describe("the fix Audit offers to copy", () => {
         namespace: null,
         name: "example.com/v1beta1 widgets/status",
       })
-    ).toBe("kubectl api-resources --api-group=example.com");
+    ).toBe("kubectl --context CONTEXT api-resources --api-group=example.com");
   });
 
   /** Fails if a rule has no fix, or one with a word of prose in it. */
+  /**
+   * One finding about two containers is fixed in both: the backend folds
+   * every container a rule found into one finding. Fails if the second
+   * container keeps its setting, its literal or its floating image.
+   */
+  it("fixes every container a finding names, each with its own values", () => {
+    const seat = (container: string) => ({
+      list: "containers" as const,
+      container,
+    });
+    const unconfined: AuditFinding = {
+      rule: "pss-seccomp-unconfined",
+      severity: "medium",
+      what: [
+        {
+          says: "set",
+          at: seat("app"),
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+        {
+          says: "set",
+          at: seat("proxy"),
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+      ],
+    };
+    const both = fixYaml("pss-seccomp-unconfined", "Pod", {
+      ...unconfined,
+      what: [
+        {
+          says: "set",
+          at: null,
+          field: "securityContext.seccompProfile.type",
+          value: "Unconfined",
+        },
+        unconfined.what[0],
+      ],
+    });
+    expect(both).toMatch(/^spec:\n {2}securityContext:\n {4}seccompProfile:/);
+    expect(both).toContain("- name: app\n      securityContext:");
+    const fix = fixYaml("pss-seccomp-unconfined", "Pod", unconfined);
+    expect(fix).toContain(
+      "- name: app\n      securityContext:\n        seccompProfile:"
+    );
+    expect(fix).toContain(
+      "- name: proxy\n      securityContext:\n        seccompProfile:"
+    );
+    const images: AuditFinding = {
+      rule: "image-tag-latest",
+      severity: "low",
+      what: [
+        { says: "image", at: seat("app"), image: "web:latest" },
+        { says: "image", at: seat("proxy"), image: "envoy" },
+      ],
+    };
+    const pinned = fixYaml("image-tag-latest", "Pod", images);
+    expect(pinned).toContain("- name: app\n      image: web:1.2.3");
+    expect(pinned).toContain("- name: proxy\n      image: envoy:1.2.3");
+    const literals: AuditFinding = {
+      rule: "env-secret-literal",
+      severity: "medium",
+      what: [
+        { says: "envLiteral", at: seat("app"), variable: "DB_PASSWORD" },
+        { says: "envLiteral", at: seat("worker"), variable: "API_TOKEN" },
+      ],
+    };
+    const env = fixYaml("env-secret-literal", "Pod", literals);
+    expect(env).toMatch(/- name: app\n {6}env:\n {8}- name: DB_PASSWORD/);
+    expect(env).toMatch(/- name: worker\n {6}env:\n {8}- name: API_TOKEN/);
+  });
+
+  /**
+   * kubectl and helm act on their kubeconfig's current context unless told:
+   * a pod deleted by name in the terminal's cluster may be another one's.
+   * Fails if any command the fix offers leaves out the cluster on screen.
+   */
+  it("names the cluster on screen in every command it offers", () => {
+    const ephemeral: AuditFinding = {
+      rule: "pss-privileged",
+      severity: "high",
+      what: [
+        {
+          says: "set",
+          at: { list: "ephemeralContainers", container: "debugger" },
+          field: "securityContext.privileged",
+          value: "true",
+        },
+      ],
+    };
+    const pod = { kind: "Pod", namespace: "shop", name: "web-x" };
+    expect(fixYaml("pss-privileged", "Pod", ephemeral, pod, "kind-prod")).toBe(
+      "kubectl --context kind-prod delete pod web-x --namespace shop"
+    );
+    expect(
+      fixYaml("pss-privileged", "Pod", ephemeral, pod, "my cluster's prod")
+    ).toBe(
+      "kubectl --context 'my cluster'\\''s prod' delete pod web-x --namespace shop"
+    );
+    const commands = (RULE_IDS as readonly RuleId[])
+      .map((rule) =>
+        fixYaml(rule, "Deployment", undefined, undefined, "kind-prod")
+      )
+      .flatMap((text) => text.split("\n"))
+      .filter(
+        (line) =>
+          /^(kubectl|helm) /.test(line) && !line.startsWith("helm plugin")
+      );
+    expect(commands.length).toBeGreaterThan(0);
+    for (const line of commands)
+      expect(line).toMatch(/--(kube-)?context kind-prod/);
+  });
+
   it("offers a fix for every rule, written in the API's fields only", () => {
     for (const rule of RULE_IDS) {
       const yaml = fixYaml(rule, "Deployment");

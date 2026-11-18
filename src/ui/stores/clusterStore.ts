@@ -573,19 +573,35 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   entriesChanged: async (changed: string[]) => {
     await get().loadContexts();
+    // Contexts added or gone, none of them changed: the list is all.
+    if (changed.length === 0) return;
     namesRebound();
     const moved = new Set(changed);
-    const { currentContext, live, wayBack } = get();
-    const held = live.filter(
-      (name) => moved.has(name) && name !== currentContext
+    const before = get();
+    const held = before.live.filter(
+      (name) => moved.has(name) && name !== before.currentContext
     );
-    for (const name of held)
+    const dropped: string[] = [];
+    for (const name of held) {
+      // One the reader went to meanwhile is theirs now, not a held one.
+      if (get().currentContext === name) continue;
       await commands.disconnectCluster(name).catch(() => null);
+      dropped.push(name);
+    }
+    const now = get();
     set({
-      live: get().live.filter((name) => !held.includes(name)),
-      wayBack: wayBack !== null && moved.has(wayBack) ? null : wayBack,
+      live: now.live.filter((name) => !dropped.includes(name)),
+      wayBack:
+        now.wayBack !== null && moved.has(now.wayBack) ? null : now.wayBack,
     });
-    const { contexts, isConnected, isAuthenticating } = get();
+    // The reader connected elsewhere while those were let go: the window
+    // follows them, not the cluster it showed when the file changed.
+    if (
+      now.connectionAttemptId !== before.connectionAttemptId ||
+      now.currentContext !== before.currentContext
+    )
+      return;
+    const { currentContext, contexts, isConnected, isAuthenticating } = now;
     if (!currentContext || !moved.has(currentContext)) return;
     if (!isConnected && !isAuthenticating) return;
     if (!contexts.some((c) => c.name === currentContext)) {

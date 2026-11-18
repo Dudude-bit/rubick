@@ -345,6 +345,10 @@ export const queryKeys = {
 
   // Contexts and what is bound to them
   contexts: (): string[] => ["contexts"],
+  // The kubeconfig files read, pinned or found, and where they came from.
+  kubeconfigPath: (): string[] => ["kubeconfig-path"],
+  kubeconfigPaths: (): string[] => ["kubeconfig-paths"],
+  kubeconfigSource: (): string[] => ["kubeconfig-source"],
   contextBindings: (): string[] => ["context-bindings"],
   contextBinding: (context: string | null): (string | null)[] => [
     "context-bindings",

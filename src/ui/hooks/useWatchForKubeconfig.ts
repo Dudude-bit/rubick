@@ -16,7 +16,9 @@ export function useWatchForKubeconfig(): void {
   useEffect(() => {
     const pending = listenEvent("kubeconfig-changed", (event) => {
       void client.invalidateQueries({ queryKey: queryKeys.contexts() });
-      void client.invalidateQueries({ queryKey: ["kubeconfig-source"] });
+      void client.invalidateQueries({
+        queryKey: queryKeys.kubeconfigSource(),
+      });
       void useClusterStore.getState().entriesChanged(event.payload.changed);
     });
     return () => {

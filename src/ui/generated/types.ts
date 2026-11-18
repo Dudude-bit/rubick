@@ -4068,7 +4068,12 @@ export type What =
   | { says: "envLiteral"; at: At; variable: string }
   | { says: "key"; key: string; net: Withheld }
   | { says: "image"; at: At; image: string }
-  | { says: "replicas"; replicas: number; autoscaler: string | null }
+  | {
+      says: "replicas";
+      replicas: number;
+      autoscaler: string | null;
+      ceiling: number | null;
+    }
   | { says: "budget"; required: number; selected: number }
   | { says: "token"; by: TokenBy }
   | {

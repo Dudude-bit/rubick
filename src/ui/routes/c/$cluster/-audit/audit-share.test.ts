@@ -83,6 +83,20 @@ describe("Audit in a shared file", () => {
         t
       )
     ).toBeNull();
+    // The system's own part is a narrowing too: not the cluster's findings.
+    expect(
+      filterWords(
+        {
+          by: "rule",
+          severities: ["high"],
+          categories: [],
+          rules: [],
+          system: true,
+          offset: 0,
+        },
+        t
+      )
+    ).toBe("Showing the system's namespaces and roles. Only High.");
   });
 
   /**
