@@ -138,6 +138,19 @@ pub(crate) async fn look(
     seen: &mut Seen,
     overrides: Vec<PathBuf>,
 ) -> Option<Vec<String>> {
+    look_then(manager, seen, overrides, || {}).await
+}
+
+/// [`look`], with `read` run once the files are read: where a test writes
+/// the file again in between.
+async fn look_then(
+    manager: &K8sClientManager,
+    seen: &mut Seen,
+    overrides: Vec<PathBuf>,
+    read: impl FnOnce(),
+) -> Option<Vec<String>> {
+    // Stated before the read and kept: a file written again after it reads
+    // as moved at the next look, not as the one read.
     let now = stamp(&manager.loaded_files().await);
     if now == seen.stamp {
         return None;
@@ -152,6 +165,7 @@ pub(crate) async fn look(
     }
     // A file caught half written does not parse: looked at again next time.
     manager.load_kubeconfig_resolved(overrides).await.ok()?;
+    read();
     let prints = manager.loaded_prints().await;
     let changed = seen
         .prints
@@ -159,10 +173,7 @@ pub(crate) async fn look(
         .filter(|(context, print)| prints.get(*context) != Some(*print))
         .map(|(context, _)| context.clone())
         .collect();
-    *seen = Seen {
-        stamp: stamp(&manager.loaded_files().await),
-        prints,
-    };
+    *seen = Seen { stamp: now, prints };
     Some(changed)
 }
 
@@ -226,6 +237,34 @@ mod tests {
             Some(vec!["kind-x".to_string()])
         );
         assert_eq!(look(&manager, &mut seen, pinned).await, None);
+    }
+
+    /// A file written again while the last version was being read is looked
+    /// at again. Fails if the stamp kept is the newer file's beside the older
+    /// file's entries, which left the client on the old entry for good.
+    #[tokio::test]
+    async fn a_file_written_again_during_a_read_is_read_again() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("config");
+        let token = format!("t{}", "1".repeat(12));
+        std::fs::write(&path, config("https://127.0.0.1:41001", &token)).expect("write");
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_from_path(path.clone())
+            .await
+            .expect("load");
+        let mut seen = manager.seen().await;
+        replace(&path, &config("https://127.0.0.1:41002", &token));
+        let again = config("https://127.0.0.1:41003", &token);
+        let looked = look_then(&manager, &mut seen, vec![path.clone()], || {
+            replace(&path, &again);
+        })
+        .await;
+        assert!(looked.is_some_and(|looked| looked == vec!["kind-x".to_string()]));
+        assert_eq!(
+            look(&manager, &mut seen, vec![path]).await,
+            Some(vec!["kind-x".to_string()])
+        );
     }
 
     /// A token an auth provider refreshed in place changes the file and no
