@@ -68,6 +68,7 @@ pub async fn open_topology(
         types,
         unresolved,
         Some(resolve),
+        crate::topology::RESOLVE_AGAIN,
     ));
     let stream_id = generate_id("map");
     let mut opened = state.topology_streams.open(stream_id.clone());
