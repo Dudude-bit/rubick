@@ -26,8 +26,14 @@ export interface CliTarget {
 export const word = (text: string) =>
   /^[\w.:/@=+-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`;
 
-/** A PowerShell literal: single-quoted, a quote inside written twice. */
-const psWord = (text: string) => `'${text.replaceAll("'", "''")}'`;
+/**
+ * A PowerShell literal: single-quoted, a quote inside written twice. Every
+ * character PowerShell takes for a single quote counts (U+0027 and U+2018
+ * to U+201B): an O’Brien left alone ends the literal, and what follows it
+ * is read as code.
+ */
+const psWord = (text: string) =>
+  `'${text.replace(/['\u2018\u2019\u201a\u201b]/g, (quote) => quote + quote)}'`;
 
 /** The shell a line is written for: Windows opens PowerShell. */
 export type Shell = "posix" | "powershell";
